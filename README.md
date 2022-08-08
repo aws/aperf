@@ -1,11 +1,6 @@
-## My Project
+## Performance Data Assistant
 
-TODO: Fill this README out!
-
-Be sure to:
-
-* Change the title in this README
-* Edit your repository description on GitHub
+A CLI tool to gather many pieces of performance data in one go.
 
 ## Security
 
