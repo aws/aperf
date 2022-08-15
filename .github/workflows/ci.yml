@@ -20,7 +20,7 @@ jobs:
       - uses: Swatinem/rust-cache@v1
       - uses: actions-rs/cargo@v1
       - name: Install gcc
-        run: sudo apt install build-essential
+        run: sudo apt install -y build-essential
       - name: Build
         run: cargo build --verbose
       - name: Run tests
@@ -39,7 +39,7 @@ jobs:
       - uses: Swatinem/rust-cache@v1
       - uses: actions-rs/cargo@v1
       - name: Install gcc
-        run: sudo apt install build-essential
+        run: sudo apt install -y build-essential
       - name: Build
         run: cargo build --verbose
       - name: Run tests
