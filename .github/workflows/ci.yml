@@ -10,13 +10,13 @@ jobs:
     runs-on: [self-hosted, Linux, X64]
     steps:
       - name: Checkout repository
-          uses: actions/checkout@v3
-            - name: Install Rust toolchain
-              uses: actions-rs/toolchain@v1
-              with:
-                toolchain: stable
-                profile: minimal
-                override: true
+        uses: actions/checkout@v3
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+            toolchain: stable
+            profile: minimal
+            override: true
       - uses: Swatinem/rust-cache@v1
       - uses: actions-rs/cargo@v1
       - name: Build
@@ -27,13 +27,13 @@ jobs:
     runs-on: [ self-hosted, Linux, ARM64 ]
     steps:
       - name: Checkout repository
-          uses: actions/checkout@v3
-                  - name: Install Rust toolchain
-                  uses: actions-rs/toolchain@v1
-                  with:
-                    toolchain: stable
-                    profile: minimal
-                    override: true
+        uses: actions/checkout@v3
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+            toolchain: stable
+            profile: minimal
+            override: true
       - uses: Swatinem/rust-cache@v1
       - uses: actions-rs/cargo@v1
       - name: Build
