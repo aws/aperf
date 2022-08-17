@@ -68,24 +68,6 @@ mod tests {
     use crate::data::{CollectData, Data, DataType};
 
     #[test]
-    fn test_init() {
-        let vmstat = DataType {
-            data: Data::Vmstat(Vmstat::new()),
-            file_handle: None,
-            file_name: "vmstat".to_string(),
-            full_path: String::new(),
-            dir_name: String::new(),
-        };
-
-        match vmstat.data {
-            Data::Vmstat(_) => assert!(true),
-            _ => assert!(false, "Vmstat enum type error"),
-        }
-        assert!(vmstat.file_handle.is_none());
-        assert!(vmstat.file_name == "vmstat");
-    }
-
-    #[test]
     fn test_collect_data() {
         let mut vmstat = Vmstat::new();
 
