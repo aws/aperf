@@ -57,25 +57,27 @@ pub struct DiskStat {
     pub weighted_time_in_progress: u64,
 
     /// Discards completed successfully
-    ///
     /// (since kernel 4.18)
     pub discards: u64,
 
     /// Discards merged
+    /// (since kernel 4.18)
     pub discards_merged: u64,
 
     /// Sectors discarded
+    /// (since kernel 4.18)
     pub sectors_discarded: u64,
 
     /// Time spent discarding
+    /// (since kernel 4.18)
     pub time_discarding: u64,
 
     /// Flush requests completed successfully
-    ///
     /// (since kernel 5.5)
     pub flushes: u64,
 
     /// Time spent flushing
+    /// (since kernel 5.5)
     pub time_flushing: u64,
 }
 
