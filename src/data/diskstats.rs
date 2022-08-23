@@ -12,12 +12,6 @@ use serde::{Deserialize, Serialize};
 // Same as DiskStat from procfs/diskstats.rs
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DiskStat {
-    /// The device major number
-    pub major: i32,
-
-    /// The device minor number
-    pub minor: i32,
-
     /// Device name
     pub name: String,
 
@@ -110,8 +104,6 @@ impl CollectData for Diskstats {
         let mut data = Vec::<DiskStat>::new();
         for disk in stats {
             let stat = DiskStat {
-                major: disk.major,
-                minor: disk.minor,
                 name: disk.name,
                 reads: disk.reads,
                 merged: disk.merged,
