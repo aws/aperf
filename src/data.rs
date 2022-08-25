@@ -1,5 +1,6 @@
 pub mod cpu_utilization;
 pub mod vmstat;
+pub mod diskstats;
 
 use crate::{InitParams, PDResult};
 use cpu_utilization::CpuUtilization;
@@ -8,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_yaml::{self};
 use std::fs::{File, OpenOptions};
 use vmstat::Vmstat;
+use diskstats::Diskstats;
 
 pub struct DataType {
     pub data: Data,
@@ -77,7 +79,7 @@ macro_rules! data {
     };
 }
 
-data!(CpuUtilization, Vmstat);
+data!(CpuUtilization, Vmstat, Diskstats);
 
 pub trait CollectData {
     fn collect_data(&mut self) -> PDResult;

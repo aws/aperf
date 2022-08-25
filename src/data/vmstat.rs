@@ -65,7 +65,7 @@ fn init_vmstat() {
 #[cfg(test)]
 mod tests {
     use super::Vmstat;
-    use crate::data::{CollectData, Data, DataType};
+    use crate::data::CollectData;
 
     #[test]
     fn test_collect_data() {
