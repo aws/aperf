@@ -10,6 +10,8 @@ use procfs::vmstat;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+pub static VMSTAT_FILE_NAME: &str = "vmstat";
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Vmstat {
     pub time: DateTime<Utc>,
@@ -47,15 +49,11 @@ impl CollectData for Vmstat {
 
 #[ctor]
 fn init_vmstat() {
-    let vmstat = Vmstat::new();
+    let dt = DataType::new(
+        Data::Vmstat(Vmstat::new()),
+        VMSTAT_FILE_NAME.to_string()
+    );
 
-    let dt = DataType {
-        data: Data::Vmstat(vmstat),
-        file_handle: None,
-        file_name: "vmstat".to_string(),
-        dir_name: String::new(),
-        full_path: String::new(),
-    };
     PERFORMANCE_DATA
         .lock()
         .unwrap()

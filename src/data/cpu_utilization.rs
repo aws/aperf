@@ -9,7 +9,9 @@ use log::debug;
 use procfs::{CpuTime, KernelStats};
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+pub static CPU_UTILIZATION_FILE_NAME: &str = "cpu_utilization";
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct CpuData {
     pub time: DateTime<Utc>,
     pub cpu: i64,
@@ -113,15 +115,11 @@ impl Default for CpuUtilization {
 
 #[ctor]
 fn init_cpu_utilization() {
-    let cpu_utilization = CpuUtilization::new();
+    let dt = DataType::new(
+        Data::CpuUtilization(CpuUtilization::new()),
+        CPU_UTILIZATION_FILE_NAME.to_string()
+    );
 
-    let dt = DataType {
-        data: Data::CpuUtilization(cpu_utilization),
-        file_handle: None,
-        file_name: "cpu_utilization".to_string(),
-        dir_name: String::new(),
-        full_path: String::new(),
-    };
     PERFORMANCE_DATA
         .lock()
         .unwrap()
