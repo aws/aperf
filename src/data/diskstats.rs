@@ -9,6 +9,8 @@ use log::debug;
 use procfs::diskstats;
 use serde::{Deserialize, Serialize};
 
+pub static DISKSTATS_FILE_NAME: &str = "disk_stats";
+
 // Same as DiskStat from procfs/diskstats.rs
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DiskStat {
@@ -136,15 +138,11 @@ impl CollectData for Diskstats {
 
 #[ctor]
 fn init_diskstats() {
-    let disk_stats = Diskstats::new();
+    let dt = DataType::new(
+        Data::Diskstats(Diskstats::new()),
+        DISKSTATS_FILE_NAME.to_string()
+    );
 
-    let dt = DataType {
-        data: Data::Diskstats(disk_stats),
-        file_handle: None,
-        file_name: "disk_stats".to_string(),
-        dir_name: String::new(),
-        full_path: String::new(),
-    };
     PERFORMANCE_DATA
         .lock()
         .unwrap()

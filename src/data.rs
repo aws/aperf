@@ -20,6 +20,20 @@ pub struct DataType {
 }
 
 impl DataType {
+    pub fn new(data: Data, file_name: String) -> Self {
+        DataType {
+            data: data,
+            file_handle: None,
+            file_name: file_name,
+            full_path: String::new(),
+            dir_name: String::new(),
+        }
+    }
+
+    pub fn set_file_handle(&mut self, handle: Option<File>) {
+        self.file_handle = handle;
+    }
+
     pub fn init_data_type(&mut self, param: InitParams) -> PDResult {
         debug!("Initializing data type...");
         let name = format!("{}_{}.yaml", self.file_name, param.time_str);
@@ -46,6 +60,7 @@ impl DataType {
         self.data.collect_data()?;
         Ok(())
     }
+
     pub fn print_to_file(&mut self) -> PDResult {
         debug!("Printing to YAML file...");
         let file_handle = self.file_handle.as_ref().unwrap();
