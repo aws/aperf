@@ -129,25 +129,7 @@ fn init_cpu_utilization() {
 #[cfg(test)]
 mod tests {
     use super::CpuUtilization;
-    use crate::data::{CollectData, Data, DataType};
-
-    #[test]
-    fn test_init() {
-        let cpu_utilization = DataType {
-            data: Data::CpuUtilization(CpuUtilization::new()),
-            file_handle: None,
-            file_name: "cpu_utilization".to_string(),
-            full_path: String::new(),
-            dir_name: String::new(),
-        };
-
-        match cpu_utilization.data {
-            Data::CpuUtilization(_) => assert!(true),
-            _ => assert!(false, "CPU Utilization enum type error"),
-        }
-        assert!(cpu_utilization.file_handle.is_none());
-        assert!(cpu_utilization.file_name == "cpu_utilization");
-    }
+    use crate::data::CollectData;
 
     #[test]
     fn test_collect_data() {
