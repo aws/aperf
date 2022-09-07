@@ -1,6 +1,6 @@
 extern crate ctor;
 
-use crate::data::{CollectData, Data, DataType};
+use crate::data::{CollectData, Data, DataType, TimeEnum};
 use crate::PDResult;
 use crate::PERFORMANCE_DATA;
 use chrono::prelude::*;
@@ -13,7 +13,7 @@ pub static CPU_UTILIZATION_FILE_NAME: &str = "cpu_utilization";
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct CpuData {
-    pub time: DateTime<Utc>,
+    pub time: TimeEnum,
     pub cpu: i64,
     pub user: u64,
     pub nice: u64,
@@ -28,7 +28,7 @@ pub struct CpuData {
 impl CpuData {
     fn new() -> Self {
         CpuData {
-            time: Utc::now(),
+            time: TimeEnum::DateTime(Utc::now()),
             cpu: 0,
             user: 0,
             nice: 0,
@@ -41,9 +41,8 @@ impl CpuData {
         }
     }
 
-    fn set_data(&mut self, cpu: i64, time: DateTime<Utc>, cpu_time: &CpuTime) {
+    fn set_data(&mut self, cpu: i64, cpu_time: &CpuTime) {
         self.cpu = cpu;
-        self.time = time;
         self.user = cpu_time.user;
         self.nice = cpu_time.nice;
         self.system = cpu_time.system;
@@ -52,6 +51,10 @@ impl CpuData {
         self.idle = cpu_time.idle;
         self.iowait = cpu_time.iowait.unwrap_or_default();
         self.steal = cpu_time.steal.unwrap_or_default();
+    }
+
+    fn set_time(&mut self, time: TimeEnum) {
+        self.time = time;
     }
 }
 
@@ -69,8 +72,12 @@ impl CpuUtilization {
         }
     }
 
-    fn set_total(&mut self, cpu: i64, time: DateTime<Utc>, total: CpuTime) {
-        self.total.set_data(cpu, time, &total);
+    fn set_total(&mut self, cpu: i64, total: CpuTime) {
+        self.total.set_data(cpu, &total);
+    }
+
+    fn set_total_time(&mut self, time: DateTime<Utc>) {
+        self.total.set_time(TimeEnum::DateTime(time));
     }
 
     fn add_per_cpu_data(&mut self, cpu_data: CpuData) {
@@ -89,7 +96,8 @@ impl CollectData for CpuUtilization {
         self.clear_per_cpu_data();
 
         /* Get total numbers */
-        self.set_total(-1, time_now, stat.total);
+        self.set_total(-1, stat.total);
+        self.set_total_time(time_now);
 
         debug!("Total CPU Utilization: {:#?}", self.total);
         /* Get per_cpu numbers */
@@ -97,7 +105,8 @@ impl CollectData for CpuUtilization {
             let mut current_cpu_data = CpuData::new();
 
             /* Set this CPU's data */
-            current_cpu_data.set_data(i as i64, time_now, cpu);
+            current_cpu_data.set_data(i as i64, cpu);
+            current_cpu_data.set_time(TimeEnum::DateTime(time_now));
 
             /* Push to Vec of per_cpu data */
             self.add_per_cpu_data(current_cpu_data);
