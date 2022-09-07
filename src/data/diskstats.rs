@@ -1,6 +1,6 @@
 extern crate ctor;
 
-use crate::data::{CollectData, Data, DataType};
+use crate::data::{CollectData, Data, DataType, TimeEnum};
 use crate::PDResult;
 use crate::PERFORMANCE_DATA;
 use chrono::prelude::*;
@@ -85,20 +85,24 @@ pub struct DiskStat {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Diskstats {
-    pub time: DateTime<Utc>,
+    pub time: TimeEnum,
     pub disk_stats: Vec<DiskStat>,
 }
 
 impl Diskstats {
     fn new() -> Self {
         Diskstats {
-            time: Utc::now(),
+            time: TimeEnum::DateTime(Utc::now()),
             disk_stats: Vec::new(),
         }
     }
 
     fn set_data(&mut self, data: Vec<DiskStat>) {
         self.disk_stats = data;
+    }
+
+    fn set_time(&mut self, time: TimeEnum) {
+        self.time = time;
     }
 }
 
@@ -132,6 +136,7 @@ impl CollectData for Diskstats {
 
         debug!("Diskstats:\n{:#?}", self);
         self.set_data(data);
+        self.set_time(TimeEnum::DateTime(Utc::now()));
         Ok(())
     }
 }

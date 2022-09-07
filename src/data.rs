@@ -3,6 +3,7 @@ pub mod vmstat;
 pub mod diskstats;
 
 use crate::{InitParams, PDResult};
+use chrono::prelude::*;
 use cpu_utilization::CpuUtilization;
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -10,6 +11,7 @@ use serde_yaml::{self};
 use std::fs::{File, OpenOptions};
 use vmstat::Vmstat;
 use diskstats::Diskstats;
+use std::ops::Sub;
 
 pub struct DataType {
     pub data: Data,
@@ -69,6 +71,32 @@ impl DataType {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+pub enum TimeEnum {
+    DateTime(DateTime<Utc>),
+    TimeDiff(u64),
+}
+
+impl Sub for TimeEnum {
+    type Output = TimeEnum;
+
+    fn sub(self, rhs: TimeEnum) -> TimeEnum {
+        let self_time;
+        let other_time;
+        match self {
+            TimeEnum::DateTime(value) => self_time = value,
+            _ => panic!("Cannot perform subtract op on TimeEnum::TimeDiff"),
+        }
+        match rhs {
+            TimeEnum::DateTime(value) => other_time = value,
+             _ => panic!("Cannot perform subtract op on TimeEnum::TimeDiff"),
+        }
+        let time_diff = (self_time - other_time).num_milliseconds() as u64;
+        // Round up to the nearest second
+        TimeEnum::TimeDiff((time_diff + 500) / 1000)
+    }
+}
+
 /// Create a Data Enum
 ///
 /// Each enum type will have a collect_data implemented for it.
@@ -103,9 +131,9 @@ pub trait CollectData {
 #[cfg(test)]
 mod tests {
     use super::cpu_utilization::CpuUtilization;
-    use super::Data;
-    use super::DataType;
+    use super::{Data, DataType, TimeEnum};
     use crate::InitParams;
+    use chrono::prelude::*;
     use serde::Deserialize;
     use serde_yaml::{self};
     use std::fs;
@@ -171,5 +199,85 @@ mod tests {
         }
         fs::remove_file(dt.full_path).unwrap();
         fs::remove_dir_all(dt.dir_name).unwrap();
+    }
+
+    #[test]
+    fn test_time_diff_second() {
+        let time_zero = Utc::now();
+        let one_second = chrono::Duration::seconds(1);
+        let time_one = time_zero + one_second;
+
+        let time_t0 = TimeEnum::DateTime(time_zero);
+        let time_t1 = TimeEnum::DateTime(time_one);
+
+        let time_diff = time_t1 - time_t0;
+        match time_diff {
+            TimeEnum::TimeDiff(value) => assert!(value == 1, "Time diff was expected to be 1"),
+            _ => assert!(false),
+        }
+    }
+
+    #[test]
+    fn test_time_diff_one_milli_second() {
+        let time_zero = Utc::now();
+        let one_millisecond = chrono::Duration::milliseconds(1);
+        let time_one = time_zero + one_millisecond;
+
+        let time_t0 = TimeEnum::DateTime(time_zero);
+        let time_t1 = TimeEnum::DateTime(time_one);
+
+        let time_diff = time_t1 - time_t0;
+        match time_diff {
+            TimeEnum::TimeDiff(value) => assert!(value == 0, "Time diff was expected to be 0"),
+            _ => assert!(false),
+        }
+    }
+
+    #[test]
+    fn test_time_diff_just_less_than_one_second() {
+        let time_zero = Utc::now();
+        let just_less_than_one_second = chrono::Duration::milliseconds(992);
+        let time_one = time_zero + just_less_than_one_second;
+
+        let time_t0 = TimeEnum::DateTime(time_zero);
+        let time_t1 = TimeEnum::DateTime(time_one);
+
+        let time_diff = time_t1 - time_t0;
+        match time_diff {
+            TimeEnum::TimeDiff(value) => assert!(value == 1, "Time diff was expected to be 1"),
+            _ => assert!(false),
+        }
+    }
+
+    #[test]
+    fn test_time_diff_half_second() {
+        let time_zero = Utc::now();
+        let half_second = chrono::Duration::milliseconds(500);
+        let time_one = time_zero + half_second;
+
+        let time_t0 = TimeEnum::DateTime(time_zero);
+        let time_t1 = TimeEnum::DateTime(time_one);
+
+        let time_diff = time_t1 - time_t0;
+        match time_diff {
+            TimeEnum::TimeDiff(value) => assert!(value == 1, "Time diff was expected to be 1"),
+            _ => assert!(false),
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_time_diff_unsupported_sub_op() {
+        let time_t0 = TimeEnum::TimeDiff(0);
+        let time_t1 = TimeEnum::TimeDiff(1);
+        let _diff = time_t1 - time_t0;
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_time_diff_mixed_type_sub_op() {
+        let time_t0 = TimeEnum::TimeDiff(0);
+        let time_t1 = TimeEnum::DateTime(Utc::now());
+        let _diff = time_t1 - time_t0;
     }
 }

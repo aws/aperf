@@ -20,6 +20,9 @@ pub enum PDError {
         source: std::io::Error,
     },
 
+    #[error("Time Error")]
+    TimeError,
+
     #[error(transparent)]
     YAMLError(#[from] serde_yaml::Error),
 }

@@ -1,6 +1,6 @@
 extern crate ctor;
 
-use crate::data::{CollectData, Data, DataType};
+use crate::data::{CollectData, Data, DataType, TimeEnum};
 use crate::PDResult;
 use crate::PERFORMANCE_DATA;
 use chrono::prelude::*;
@@ -14,19 +14,19 @@ pub static VMSTAT_FILE_NAME: &str = "vmstat";
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Vmstat {
-    pub time: DateTime<Utc>,
+    pub time: TimeEnum,
     pub vmstat_data: HashMap<String, i64>,
 }
 
 impl Vmstat {
     fn new() -> Self {
         Vmstat {
-            time: Utc::now(),
+            time: TimeEnum::DateTime(Utc::now()),
             vmstat_data: HashMap::new(),
         }
     }
 
-    fn set_time(&mut self, time: DateTime<Utc>) {
+    fn set_time(&mut self, time: TimeEnum) {
         self.time = time;
     }
 
@@ -40,7 +40,7 @@ impl CollectData for Vmstat {
         let time_now = Utc::now();
         let vmstat_data = vmstat().unwrap();
 
-        self.set_time(time_now);
+        self.set_time(TimeEnum::DateTime(time_now));
         self.set_data(vmstat_data);
         debug!("Vmstat data: {:#?}", self);
         Ok(())
