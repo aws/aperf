@@ -1,6 +1,7 @@
 pub mod cpu_utilization;
 pub mod vmstat;
 pub mod diskstats;
+pub mod systeminfo;
 
 use crate::{InitParams, PDResult};
 use chrono::prelude::*;
@@ -12,6 +13,7 @@ use std::fs::{File, OpenOptions};
 use vmstat::Vmstat;
 use diskstats::Diskstats;
 use std::ops::Sub;
+use systeminfo::SystemInfo;
 
 pub struct DataType {
     pub data: Data,
@@ -19,6 +21,7 @@ pub struct DataType {
     pub file_name: String,
     pub full_path: String,
     pub dir_name: String,
+    pub collect_once:  bool
 }
 
 impl DataType {
@@ -29,6 +32,7 @@ impl DataType {
             file_name: file_name,
             full_path: String::new(),
             dir_name: String::new(),
+            collect_once: false
         }
     }
 
@@ -122,7 +126,7 @@ macro_rules! data {
     };
 }
 
-data!(CpuUtilization, Vmstat, Diskstats);
+data!(CpuUtilization, Vmstat, Diskstats, SystemInfo);
 
 pub trait CollectData {
     fn collect_data(&mut self) -> PDResult;
@@ -149,6 +153,7 @@ mod tests {
             file_name: "cpu_utilization".to_string(),
             full_path: String::new(),
             dir_name: String::new(),
+            collect_once: false
         };
 
         param.dir_name = format!("./performance_data_init_test_{}", param.time_str);
@@ -174,6 +179,7 @@ mod tests {
             file_name: "cpu_utilization".to_string(),
             full_path: String::new(),
             dir_name: String::new(),
+            collect_once: false
         };
 
         param.dir_name = format!("./performance_data_print_test_{}", param.time_str);

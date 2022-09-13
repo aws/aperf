@@ -30,6 +30,12 @@ fn start_collection_serial() -> PDResult {
     Ok(())
 }
 
+fn collect_data_once() -> PDResult {
+    info!("Collecting data only once...");
+    PERFORMANCE_DATA.lock().unwrap().collect_data_once()?;
+    Ok(())
+}
+
 fn main() -> PDResult {
     let args = Args::parse();
     let mut params = InitParams::new();
@@ -42,6 +48,7 @@ fn main() -> PDResult {
     PERFORMANCE_DATA.lock().unwrap().set_params(params);
     PERFORMANCE_DATA.lock().unwrap().init_collectors()?;
     info!("Starting Performance Data collection:");
+    collect_data_once()?;
     start_collection_serial()?;
     Ok(())
 }
