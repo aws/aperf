@@ -2,6 +2,7 @@ pub mod cpu_utilization;
 pub mod vmstat;
 pub mod diskstats;
 pub mod systeminfo;
+pub mod kernel_config;
 
 use crate::{InitParams, PDResult};
 use chrono::prelude::*;
@@ -14,6 +15,7 @@ use vmstat::Vmstat;
 use diskstats::Diskstats;
 use std::ops::Sub;
 use systeminfo::SystemInfo;
+use kernel_config::KernelConfig;
 
 pub struct DataType {
     pub data: Data,
@@ -126,7 +128,7 @@ macro_rules! data {
     };
 }
 
-data!(CpuUtilization, Vmstat, Diskstats, SystemInfo);
+data!(CpuUtilization, Vmstat, Diskstats, SystemInfo, KernelConfig);
 
 pub trait CollectData {
     fn collect_data(&mut self) -> PDResult;
