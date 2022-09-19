@@ -67,6 +67,18 @@ impl PerformanceData {
         Ok(())
     }
 
+    pub fn collect_static_data(&mut self) -> PDResult {
+        for (_name, datatype) in self.collectors.iter_mut() {
+            if !datatype.is_static {
+                continue;
+            }
+            datatype.collect_data()?;
+            datatype.print_to_file()?;
+        }
+
+        Ok(())
+    }
+
     pub fn collect_data_serial(&mut self) -> PDResult {
         let start = time::Instant::now();
         let mut current = time::Instant::now();
@@ -88,6 +100,9 @@ impl PerformanceData {
             info!("Time elapsed: {:?}", start.elapsed());
             current += time::Duration::from_secs(ret);
             for (_name, datatype) in self.collectors.iter_mut() {
+                if datatype.is_static {
+                    continue;
+                }
                 datatype.collect_data()?;
                 datatype.print_to_file()?;
             }

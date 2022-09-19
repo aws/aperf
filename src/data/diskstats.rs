@@ -145,7 +145,8 @@ impl CollectData for Diskstats {
 fn init_diskstats() {
     let dt = DataType::new(
         Data::Diskstats(Diskstats::new()),
-        DISKSTATS_FILE_NAME.to_string()
+        DISKSTATS_FILE_NAME.to_string(),
+        false
     );
 
     PERFORMANCE_DATA
