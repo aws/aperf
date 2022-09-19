@@ -25,10 +25,10 @@ impl SystemInfo {
     fn new() -> Self {
         SystemInfo {
             time: TimeEnum::DateTime(Utc::now()),
-            system_name: "".to_string(),
-            kernel_version: "".to_string(),
-            os_version: "".to_string(),
-            host_name: "".to_string(),
+            system_name: String::new(),
+            kernel_version: String::new(),
+            os_version: String::new(),
+            host_name: String::new(),
             total_cpus: 0
         }
     }
@@ -94,9 +94,9 @@ mod tests {
 
         assert!(systeminfo.collect_data().unwrap() == ());
         assert!(systeminfo.total_cpus != 0);
-        assert!(systeminfo.system_name != "".to_string());
-        assert!(systeminfo.kernel_version != "".to_string());
-        assert!(systeminfo.os_version != "".to_string());
-        assert!(systeminfo.host_name != "".to_string());
+        assert!(systeminfo.system_name != String::new());
+        assert!(systeminfo.kernel_version != String::new());
+        assert!(systeminfo.os_version != String::new());
+        assert!(systeminfo.host_name != String::new());
     }
 }
