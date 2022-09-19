@@ -67,9 +67,9 @@ impl PerformanceData {
         Ok(())
     }
 
-    pub fn collect_data_once(&mut self) -> PDResult {
+    pub fn collect_static_data(&mut self) -> PDResult {
         for (_name, datatype) in self.collectors.iter_mut() {
-            if !datatype.collect_once {
+            if !datatype.is_static {
                 continue;
             }
             datatype.collect_data()?;
@@ -100,7 +100,7 @@ impl PerformanceData {
             info!("Time elapsed: {:?}", start.elapsed());
             current += time::Duration::from_secs(ret);
             for (_name, datatype) in self.collectors.iter_mut() {
-                if datatype.collect_once {
+                if datatype.is_static {
                     continue;
                 }
                 datatype.collect_data()?;

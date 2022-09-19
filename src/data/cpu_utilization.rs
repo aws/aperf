@@ -126,7 +126,8 @@ impl Default for CpuUtilization {
 fn init_cpu_utilization() {
     let dt = DataType::new(
         Data::CpuUtilization(CpuUtilization::new()),
-        CPU_UTILIZATION_FILE_NAME.to_string()
+        CPU_UTILIZATION_FILE_NAME.to_string(),
+        false
     );
 
     PERFORMANCE_DATA

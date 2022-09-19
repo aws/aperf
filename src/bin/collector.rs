@@ -30,9 +30,9 @@ fn start_collection_serial() -> PDResult {
     Ok(())
 }
 
-fn collect_data_once() -> PDResult {
+fn collect_static_data() -> PDResult {
     info!("Collecting data only once...");
-    PERFORMANCE_DATA.lock().unwrap().collect_data_once()?;
+    PERFORMANCE_DATA.lock().unwrap().collect_static_data()?;
     Ok(())
 }
 
@@ -48,7 +48,7 @@ fn main() -> PDResult {
     PERFORMANCE_DATA.lock().unwrap().set_params(params);
     PERFORMANCE_DATA.lock().unwrap().init_collectors()?;
     info!("Starting Performance Data collection:");
-    collect_data_once()?;
+    collect_static_data()?;
     start_collection_serial()?;
     Ok(())
 }

@@ -23,18 +23,18 @@ pub struct DataType {
     pub file_name: String,
     pub full_path: String,
     pub dir_name: String,
-    pub collect_once:  bool
+    pub is_static:  bool
 }
 
 impl DataType {
-    pub fn new(data: Data, file_name: String) -> Self {
+    pub fn new(data: Data, file_name: String, is_static: bool) -> Self {
         DataType {
-            data: data,
+            data,
             file_handle: None,
-            file_name: file_name,
+            file_name,
             full_path: String::new(),
             dir_name: String::new(),
-            collect_once: false
+            is_static
         }
     }
 
@@ -155,7 +155,7 @@ mod tests {
             file_name: "cpu_utilization".to_string(),
             full_path: String::new(),
             dir_name: String::new(),
-            collect_once: false
+            is_static: false
         };
 
         param.dir_name = format!("./performance_data_init_test_{}", param.time_str);
@@ -181,7 +181,7 @@ mod tests {
             file_name: "cpu_utilization".to_string(),
             full_path: String::new(),
             dir_name: String::new(),
-            collect_once: false
+            is_static: false
         };
 
         param.dir_name = format!("./performance_data_print_test_{}", param.time_str);

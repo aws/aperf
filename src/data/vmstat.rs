@@ -51,7 +51,8 @@ impl CollectData for Vmstat {
 fn init_vmstat() {
     let dt = DataType::new(
         Data::Vmstat(Vmstat::new()),
-        VMSTAT_FILE_NAME.to_string()
+        VMSTAT_FILE_NAME.to_string(),
+        false
     );
 
     PERFORMANCE_DATA
