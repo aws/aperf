@@ -1,7 +1,7 @@
 extern crate ctor;
 
+use anyhow::Result;
 use crate::data::{CollectData, Data, DataType, TimeEnum};
-use crate::PDResult;
 use crate::PERFORMANCE_DATA;
 use chrono::prelude::*;
 use ctor::ctor;
@@ -107,7 +107,7 @@ impl Diskstats {
 }
 
 impl CollectData for Diskstats {
-    fn collect_data(&mut self) -> PDResult {
+    fn collect_data(&mut self) -> Result<()> {
         let stats = diskstats().unwrap();
         let mut data = Vec::<DiskStat>::new();
         for disk in stats {

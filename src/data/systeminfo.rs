@@ -1,8 +1,8 @@
 extern crate ctor;
 
+use anyhow::Result;
 use sysinfo::{System, SystemExt};
 use crate::data::{CollectData, Data, DataType, TimeEnum};
-use crate::PDResult;
 use crate::PERFORMANCE_DATA;
 use chrono::prelude::*;
 use ctor::ctor;
@@ -55,7 +55,7 @@ impl SystemInfo {
 }
 
 impl CollectData for SystemInfo {
-    fn collect_data(&mut self) -> PDResult {
+    fn collect_data(&mut self) -> Result<()> {
         let mut sys = System::new_all();
         sys.refresh_all();
 

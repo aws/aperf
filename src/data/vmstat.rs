@@ -1,7 +1,7 @@
 extern crate ctor;
 
+use anyhow::Result;
 use crate::data::{CollectData, Data, DataType, TimeEnum};
-use crate::PDResult;
 use crate::PERFORMANCE_DATA;
 use chrono::prelude::*;
 use ctor::ctor;
@@ -36,7 +36,7 @@ impl Vmstat {
 }
 
 impl CollectData for Vmstat {
-    fn collect_data(&mut self) -> PDResult {
+    fn collect_data(&mut self) -> Result<()> {
         let time_now = Utc::now();
         let vmstat_data = vmstat().unwrap();
 

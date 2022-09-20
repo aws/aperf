@@ -14,12 +14,12 @@ cargo run
 
 ## Usage
 ```
-./performance-data-assistant -h
+./performance-data-collector -h
 ```
 
 ## Example
 ```
-./performance-data-assistant -i 1 -p 10
+./performance-data-collector -i 1 -p 10
 ```
 * This collects the performance data in 1 second time intervals for 10 seconds.
 
