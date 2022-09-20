@@ -16,6 +16,10 @@ struct Args {
     /// Time (in seconds) for which the performance data is to be collected.
     #[clap(short, long, value_parser, default_value_t = 10)]
     period: u64,
+
+    /// Name of the run.
+    #[clap(short, long, value_parser)]
+    run_name: String,
 }
 
 fn init_logger() {
@@ -45,6 +49,7 @@ fn main() -> Result<()> {
 
     params.period = args.period;
     params.interval = args.interval;
+    params.run_name = args.run_name;
     PERFORMANCE_DATA.lock().unwrap().set_params(params);
     PERFORMANCE_DATA.lock().unwrap().init_collectors()?;
     info!("Starting Performance Data collection:");

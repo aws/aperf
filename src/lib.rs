@@ -5,10 +5,10 @@ pub mod data;
 use anyhow::Result;
 use chrono::prelude::*;
 use log::{error, info};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs;
+use std::{fs, time};
 use std::sync::Mutex;
-use std::time;
 use thiserror::Error;
 use timerfd::{SetTimeFlags, TimerFd, TimerState};
 
@@ -47,6 +47,19 @@ impl PerformanceData {
 
     pub fn init_collectors(&mut self) -> Result<()> {
         let _ret = fs::create_dir_all(self.init_params.dir_name.clone()).unwrap();
+
+        /*
+         * Create a meta_data.yaml to hold the InitParams that was used by the collector.
+         * This will help when we visualize the data and we don't have to guess these values.
+         */
+        let meta_data_path = format!("{}/meta_data.yaml", self.init_params.dir_name.clone());
+        let meta_data_handle = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open(meta_data_path.clone())
+            .expect("Could not create meta-data file");
+
+        serde_yaml::to_writer(meta_data_handle, &self.init_params)?;
 
         for (_name, datatype) in self.collectors.iter_mut() {
             datatype.init_data_type(self.init_params.clone())?;
@@ -107,13 +120,14 @@ impl Default for PerformanceData {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct InitParams {
     pub time_now: DateTime<Utc>,
     pub time_str: String,
     pub dir_name: String,
     pub period: u64,
     pub interval: u64,
+    pub run_name: String,
 }
 
 impl InitParams {
@@ -128,6 +142,7 @@ impl InitParams {
             dir_name,
             period: 0,
             interval: 0,
+            run_name: String::new(),
         }
     }
 }
@@ -162,8 +177,11 @@ mod tests {
         params.dir_name = format!("./performance_data_dir_creation_{}", params.time_str);
 
         let mut pd = PerformanceData::new();
+        pd.set_params(params.clone());
         pd.init_collectors().unwrap();
         assert!(Path::new(&pd.init_params.dir_name).exists());
+        let full_path = format!("{}/meta_data.yaml", params.dir_name.clone());
+        assert!(Path::new(&full_path).exists());
         fs::remove_dir_all(pd.init_params.dir_name).unwrap();
     }
 }
