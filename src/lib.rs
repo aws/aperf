@@ -2,6 +2,7 @@
 extern crate lazy_static;
 
 pub mod data;
+use anyhow::Result;
 use chrono::prelude::*;
 use log::{error, info};
 use std::collections::HashMap;
@@ -11,23 +12,9 @@ use std::time;
 use thiserror::Error;
 use timerfd::{SetTimeFlags, TimerFd, TimerState};
 
-#[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum PDError {
-    #[error("File Error")]
-    FileError {
-        #[from]
-        source: std::io::Error,
-    },
-
-    #[error("Time Error")]
-    TimeError,
-
-    #[error(transparent)]
-    YAMLError(#[from] serde_yaml::Error),
 }
-
-pub type PDResult = Result<(), PDError>;
 
 lazy_static! {
     pub static ref PERFORMANCE_DATA: Mutex<PerformanceData> = Mutex::new(PerformanceData::new());
@@ -58,7 +45,7 @@ impl PerformanceData {
         self.collectors.insert(name, dt);
     }
 
-    pub fn init_collectors(&mut self) -> PDResult {
+    pub fn init_collectors(&mut self) -> Result<()> {
         let _ret = fs::create_dir_all(self.init_params.dir_name.clone()).unwrap();
 
         for (_name, datatype) in self.collectors.iter_mut() {
@@ -67,7 +54,7 @@ impl PerformanceData {
         Ok(())
     }
 
-    pub fn collect_static_data(&mut self) -> PDResult {
+    pub fn collect_static_data(&mut self) -> Result<()> {
         for (_name, datatype) in self.collectors.iter_mut() {
             if !datatype.is_static {
                 continue;
@@ -79,7 +66,7 @@ impl PerformanceData {
         Ok(())
     }
 
-    pub fn collect_data_serial(&mut self) -> PDResult {
+    pub fn collect_data_serial(&mut self) -> Result<()> {
         let start = time::Instant::now();
         let mut current = time::Instant::now();
         let end = current + time::Duration::from_secs(self.init_params.period);

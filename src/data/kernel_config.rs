@@ -1,7 +1,7 @@
 extern crate ctor;
 
+use anyhow::Result;
 use crate::data::{CollectData, Data, DataType, TimeEnum};
-use crate::PDResult;
 use crate::PERFORMANCE_DATA;
 use chrono::prelude::*;
 use ctor::ctor;
@@ -37,7 +37,7 @@ impl KernelConfig {
 }
 
 impl CollectData for KernelConfig {
-    fn collect_data(&mut self) -> PDResult {
+    fn collect_data(&mut self) -> Result<()> {
         let time_now = Utc::now();
         let kernel_config_data = kernel_config().unwrap();
         let mut kernel_data_processed: HashMap<String, String> = HashMap::new();

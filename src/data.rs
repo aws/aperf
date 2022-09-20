@@ -4,7 +4,8 @@ pub mod diskstats;
 pub mod systeminfo;
 pub mod kernel_config;
 
-use crate::{InitParams, PDResult};
+use anyhow::Result;
+use crate::InitParams;
 use chrono::prelude::*;
 use cpu_utilization::CpuUtilization;
 use log::debug;
@@ -42,7 +43,7 @@ impl DataType {
         self.file_handle = handle;
     }
 
-    pub fn init_data_type(&mut self, param: InitParams) -> PDResult {
+    pub fn init_data_type(&mut self, param: InitParams) -> Result<()> {
         debug!("Initializing data type...");
         let name = format!("{}_{}.yaml", self.file_name, param.time_str);
         let full_path = format!("{}/{}", param.dir_name, name);
@@ -63,13 +64,13 @@ impl DataType {
         Ok(())
     }
 
-    pub fn collect_data(&mut self) -> PDResult {
+    pub fn collect_data(&mut self) -> Result<()> {
         debug!("Collecting Data...");
         self.data.collect_data()?;
         Ok(())
     }
 
-    pub fn print_to_file(&mut self) -> PDResult {
+    pub fn print_to_file(&mut self) -> Result<()> {
         debug!("Printing to YAML file...");
         let file_handle = self.file_handle.as_ref().unwrap();
         serde_yaml::to_writer(file_handle.try_clone()?, &self.data)?;
@@ -116,7 +117,7 @@ macro_rules! data {
         }
 
         impl Data {
-            fn collect_data(&mut self) -> PDResult {
+            fn collect_data(&mut self) -> Result<()> {
                 match self {
                     $(
                         Data::$x(ref mut value) => value.collect_data()?,
@@ -131,7 +132,7 @@ macro_rules! data {
 data!(CpuUtilization, Vmstat, Diskstats, SystemInfo, KernelConfig);
 
 pub trait CollectData {
-    fn collect_data(&mut self) -> PDResult;
+    fn collect_data(&mut self) -> Result<()>;
 }
 
 #[cfg(test)]

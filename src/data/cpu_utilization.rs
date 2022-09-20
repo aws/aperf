@@ -1,7 +1,7 @@
 extern crate ctor;
 
+use anyhow::Result;
 use crate::data::{CollectData, Data, DataType, TimeEnum};
-use crate::PDResult;
 use crate::PERFORMANCE_DATA;
 use chrono::prelude::*;
 use ctor::ctor;
@@ -90,7 +90,7 @@ impl CpuUtilization {
 }
 
 impl CollectData for CpuUtilization {
-    fn collect_data(&mut self) -> PDResult {
+    fn collect_data(&mut self) -> Result<()> {
         let stat = KernelStats::new().unwrap();
         let time_now = Utc::now();
         self.clear_per_cpu_data();

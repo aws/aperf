@@ -1,10 +1,10 @@
 #[macro_use]
 extern crate log;
-use env_logger::Env;
 
+use anyhow::Result;
+use env_logger::Env;
 use clap::Parser;
-use performance_data::PERFORMANCE_DATA;
-use performance_data::{InitParams, PDResult};
+use performance_data::{InitParams, PERFORMANCE_DATA};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -24,19 +24,19 @@ fn init_logger() {
     env_logger::init_from_env(env);
 }
 
-fn start_collection_serial() -> PDResult {
+fn start_collection_serial() -> Result<()> {
     info!("Collecting data serially...");
     PERFORMANCE_DATA.lock().unwrap().collect_data_serial()?;
     Ok(())
 }
 
-fn collect_static_data() -> PDResult {
+fn collect_static_data() -> Result<()> {
     info!("Collecting data only once...");
     PERFORMANCE_DATA.lock().unwrap().collect_static_data()?;
     Ok(())
 }
 
-fn main() -> PDResult {
+fn main() -> Result<()> {
     let args = Args::parse();
     let mut params = InitParams::new();
 
