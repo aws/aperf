@@ -128,6 +128,8 @@ pub struct InitParams {
     pub period: u64,
     pub interval: u64,
     pub run_name: String,
+    pub collector_version: String,
+    pub commit_sha_short: String,
 }
 
 impl InitParams {
@@ -135,6 +137,8 @@ impl InitParams {
         let time_now = Utc::now();
         let time_str = time_now.format("%Y-%m-%d_%H_%M_%S").to_string();
         let dir_name = format!("./performance_data_{}", time_str);
+        let collector_version = env!("CARGO_PKG_VERSION").to_string();
+        let commit_sha_short = env!("VERGEN_GIT_SHA_SHORT").to_string();
 
         InitParams {
             time_now,
@@ -143,6 +147,8 @@ impl InitParams {
             period: 0,
             interval: 0,
             run_name: String::new(),
+            collector_version,
+            commit_sha_short,
         }
     }
 }
