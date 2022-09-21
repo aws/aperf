@@ -2,7 +2,8 @@ extern crate ctor;
 
 use anyhow::Result;
 use crate::data::{CollectData, Data, DataType, TimeEnum};
-use crate::PERFORMANCE_DATA;
+use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::visualizer::{DataVisualizer, GetData};
 use chrono::prelude::*;
 use ctor::ctor;
 use log::debug;
@@ -141,18 +142,34 @@ impl CollectData for Diskstats {
     }
 }
 
+impl GetData for Diskstats {}
+
 #[ctor]
 fn init_diskstats() {
+    let diskstats = Diskstats::new();
+    let file_name = DISKSTATS_FILE_NAME.to_string();
     let dt = DataType::new(
-        Data::Diskstats(Diskstats::new()),
-        DISKSTATS_FILE_NAME.to_string(),
+        Data::Diskstats(diskstats.clone()),
+        file_name.clone(),
         false
+    );
+    let dv = DataVisualizer::new(
+        Data::Diskstats(diskstats),
+        file_name.clone(),
+        String::new(),
+        String::new(),
+        file_name.clone(),
     );
 
     PERFORMANCE_DATA
         .lock()
         .unwrap()
-        .add_datatype("Disk Stats".to_string(), dt);
+        .add_datatype(file_name.clone(), dt);
+
+    VISUALIZATION_DATA
+        .lock()
+        .unwrap()
+        .add_visualizer(file_name.clone(), dv);
 }
 
 #[cfg(test)]
