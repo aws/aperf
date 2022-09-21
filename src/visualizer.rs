@@ -55,6 +55,6 @@ impl DataVisualizer {
 
 pub trait GetData {
     fn get_data(&mut self, _values: Vec<Data>, _query: String) -> Result<String> {
-        todo!();
+        unimplemented!();
     }
 }
