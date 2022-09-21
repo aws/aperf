@@ -2,7 +2,8 @@ extern crate ctor;
 
 use anyhow::Result;
 use crate::data::{CollectData, Data, DataType, TimeEnum};
-use crate::PERFORMANCE_DATA;
+use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::visualizer::{DataVisualizer, GetData};
 use chrono::prelude::*;
 use ctor::ctor;
 use log::debug;
@@ -47,18 +48,34 @@ impl CollectData for Vmstat {
     }
 }
 
+impl GetData for Vmstat {}
+
 #[ctor]
 fn init_vmstat() {
+    let vmstat = Vmstat::new();
+    let file_name = VMSTAT_FILE_NAME.to_string();
     let dt = DataType::new(
-        Data::Vmstat(Vmstat::new()),
-        VMSTAT_FILE_NAME.to_string(),
+        Data::Vmstat(vmstat.clone()),
+        file_name.clone(),
         false
+    );
+    let dv = DataVisualizer::new(
+        Data::Vmstat(vmstat.clone()),
+        file_name.clone(),
+        String::new(),
+        String::new(),
+        file_name.clone(),
     );
 
     PERFORMANCE_DATA
         .lock()
         .unwrap()
-        .add_datatype("Vmstat".to_string(), dt);
+        .add_datatype(file_name.clone(), dt);
+
+    VISUALIZATION_DATA
+        .lock()
+        .unwrap()
+        .add_visualizer(file_name.clone(), dv);
 }
 
 #[cfg(test)]

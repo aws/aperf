@@ -6,6 +6,7 @@ pub mod kernel_config;
 
 use anyhow::Result;
 use crate::InitParams;
+use crate::visualizer::GetData;
 use chrono::prelude::*;
 use cpu_utilization::CpuUtilization;
 use log::debug;
@@ -109,7 +110,7 @@ impl Sub for TimeEnum {
 /// Each enum type will have a collect_data implemented for it.
 macro_rules! data {
     ( $( $x:ident ),* ) => {
-        #[derive(Serialize, Deserialize, Debug)]
+        #[derive(Clone, Debug, Deserialize, Serialize)]
         pub enum Data {
             $(
                 $x($x),
@@ -124,6 +125,14 @@ macro_rules! data {
                     )*
                 }
                 Ok(())
+            }
+
+            pub fn get_data(&mut self, values: Vec<Data>, query: String) -> Result<String> {
+                match self {
+                    $(
+                        Data::$x(ref mut value) => Ok(value.get_data(values, query)?),
+                    )*
+                }
             }
         }
     };

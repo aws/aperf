@@ -2,7 +2,8 @@ extern crate ctor;
 
 use anyhow::Result;
 use crate::data::{CollectData, Data, DataType, TimeEnum};
-use crate::PERFORMANCE_DATA;
+use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::visualizer::{DataVisualizer, GetData};
 use chrono::prelude::*;
 use ctor::ctor;
 use log::debug;
@@ -122,18 +123,34 @@ impl Default for CpuUtilization {
     }
 }
 
+impl GetData for CpuUtilization {}
+
 #[ctor]
 fn init_cpu_utilization() {
+    let cpu_utilization = CpuUtilization::new();
+    let file_name = CPU_UTILIZATION_FILE_NAME.to_string();
     let dt = DataType::new(
-        Data::CpuUtilization(CpuUtilization::new()),
-        CPU_UTILIZATION_FILE_NAME.to_string(),
+        Data::CpuUtilization(cpu_utilization.clone()),
+        file_name.clone(),
         false
+    );
+    let dv = DataVisualizer::new(
+        Data::CpuUtilization(cpu_utilization),
+        file_name.clone(),
+        String::new(),
+        String::new(),
+        file_name.clone(),
     );
 
     PERFORMANCE_DATA
         .lock()
         .unwrap()
-        .add_datatype("CPU Utilization".to_string(), dt);
+        .add_datatype(file_name.clone(), dt);
+
+    VISUALIZATION_DATA
+        .lock()
+        .unwrap()
+        .add_visualizer(file_name.clone(), dv);
 }
 
 #[cfg(test)]
