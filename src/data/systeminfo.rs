@@ -1,13 +1,15 @@
 extern crate ctor;
 
+use std::collections::HashMap;
 use sysinfo::{System, SystemExt};
 use crate::data::{CollectData, Data, DataType, TimeEnum};
 use crate::PDResult;
 use crate::PERFORMANCE_DATA;
 use chrono::prelude::*;
 use ctor::ctor;
-use log::debug;
+use log::{debug};
 use serde::{Deserialize, Serialize};
+use cmd_lib::run_fun;
 
 pub static SYSTEMINFO_FILE_NAME: &str = "system_info";
 
@@ -19,6 +21,7 @@ pub struct SystemInfo {
     pub os_version: String,
     pub host_name: String,
     pub total_cpus: usize,
+    pub instance_metadata: HashMap<String, String>
 }
 
 impl SystemInfo {
@@ -29,7 +32,8 @@ impl SystemInfo {
             kernel_version: String::new(),
             os_version: String::new(),
             host_name: String::new(),
-            total_cpus: 0
+            total_cpus: 0,
+            instance_metadata: HashMap::new()
         }
     }
 
@@ -52,7 +56,25 @@ impl SystemInfo {
     fn set_total_cpus(&mut self, total_cpus: usize) {
         self.total_cpus = total_cpus;
     }
+
+    fn set_instance_metadata(&mut self, instance_metadata: HashMap<String, String>) {
+        self.instance_metadata = instance_metadata;
+    }
 }
+
+
+fn get_instance_metadata() -> HashMap<String, String>{
+    let metadata_collection_list = ["ami-id".to_string(), "instance-id".to_string(), "local-hostname".to_string(),
+        "instance-type".to_string(), "placement/region".to_string()];
+    let mut metadata = HashMap::new();
+    let instance_token = run_fun!(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600").unwrap();
+    for item in metadata_collection_list.iter() {
+        let item_value = run_fun!(curl -H "X-aws-ec2-metadata-token: $instance_token" -v "http://169.254.169.254/latest/meta-data/$item").unwrap();
+        metadata.insert(item.to_string(), item_value.to_string());
+    }
+    return metadata;
+}
+
 
 impl CollectData for SystemInfo {
     fn collect_data(&mut self) -> PDResult {
@@ -64,7 +86,10 @@ impl CollectData for SystemInfo {
         self.set_os_version(sys.os_version().unwrap());
         self.set_host_name(sys.host_name().unwrap());
         self.set_total_cpus(sys.cpus().len());
+        self.set_instance_metadata(get_instance_metadata());
+
         debug!("SysInfo:\n{:#?}", self);
+
         Ok(())
     }
 }

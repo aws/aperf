@@ -31,7 +31,7 @@ fn start_collection_serial() -> PDResult {
 }
 
 fn collect_static_data() -> PDResult {
-    info!("Collecting data only once...");
+    info!("Collecting static data...");
     PERFORMANCE_DATA.lock().unwrap().collect_static_data()?;
     Ok(())
 }
