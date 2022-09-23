@@ -1,13 +1,15 @@
 #[macro_use]
 extern crate log;
-use env_logger::Env;
 
+use anyhow::Result;
+use env_logger::Env;
 use clap::Parser;
-use performance_data::PERFORMANCE_DATA;
-use performance_data::{InitParams, PDResult};
+use performance_data::{InitParams, PERFORMANCE_DATA};
 
 #[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
+#[clap(author, about, long_about = None)]
+#[clap(name = "performance-data-collector")]
+#[clap(version = concat!(env!("CARGO_PKG_VERSION"), " (", env!("VERGEN_GIT_SHA_SHORT"), ")"))]
 struct Args {
     /// Interval (in seconds) at which performance data is to be collected.
     #[clap(short, long, value_parser, default_value_t = 1)]
@@ -16,6 +18,10 @@ struct Args {
     /// Time (in seconds) for which the performance data is to be collected.
     #[clap(short, long, value_parser, default_value_t = 10)]
     period: u64,
+
+    /// Name of the run.
+    #[clap(short, long, value_parser)]
+    run_name: String,
 }
 
 fn init_logger() {
@@ -24,7 +30,7 @@ fn init_logger() {
     env_logger::init_from_env(env);
 }
 
-fn start_collection_serial() -> PDResult {
+fn start_collection_serial() -> Result<()> {
     info!("Collecting data serially...");
     PERFORMANCE_DATA.lock().unwrap().collect_data_serial()?;
     Ok(())
@@ -36,7 +42,7 @@ fn collect_static_data() -> PDResult {
     Ok(())
 }
 
-fn main() -> PDResult {
+fn main() -> Result<()> {
     let args = Args::parse();
     let mut params = InitParams::new();
 
@@ -45,6 +51,7 @@ fn main() -> PDResult {
 
     params.period = args.period;
     params.interval = args.interval;
+    params.run_name = args.run_name;
     PERFORMANCE_DATA.lock().unwrap().set_params(params);
     PERFORMANCE_DATA.lock().unwrap().init_collectors()?;
     info!("Starting Performance Data collection:");

@@ -1,10 +1,11 @@
 extern crate ctor;
 
 use std::collections::HashMap;
+use anyhow::Result;
 use sysinfo::{System, SystemExt};
 use crate::data::{CollectData, Data, DataType, TimeEnum};
-use crate::PDResult;
-use crate::PERFORMANCE_DATA;
+use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::visualizer::{DataVisualizer, GetData};
 use chrono::prelude::*;
 use ctor::ctor;
 use log::{debug};
@@ -77,7 +78,7 @@ fn get_instance_metadata() -> HashMap<String, String>{
 
 
 impl CollectData for SystemInfo {
-    fn collect_data(&mut self) -> PDResult {
+    fn collect_data(&mut self) -> Result<()> {
         let mut sys = System::new_all();
         sys.refresh_all();
 
@@ -94,18 +95,34 @@ impl CollectData for SystemInfo {
     }
 }
 
+impl GetData for SystemInfo {}
+
 #[ctor]
 fn init_systeminfo() {
+    let system_info = SystemInfo::new();
+    let file_name = SYSTEMINFO_FILE_NAME.to_string();
     let dt = DataType::new(
-        Data::SystemInfo(SystemInfo::new()),
-        SYSTEMINFO_FILE_NAME.to_string(),
+        Data::SystemInfo(system_info.clone()),
+        file_name.clone(),
         true
+    );
+    let dv = DataVisualizer::new(
+        Data::SystemInfo(system_info.clone()),
+        file_name.clone(),
+        String::new(),
+        String::new(),
+        file_name.clone(),
     );
 
     PERFORMANCE_DATA
         .lock()
         .unwrap()
-        .add_datatype("SystemInfo".to_string(), dt);
+        .add_datatype(file_name.clone(), dt);
+
+    VISUALIZATION_DATA
+        .lock()
+        .unwrap()
+        .add_visualizer(file_name.clone(), dv);
 }
 
 #[cfg(test)]

@@ -1,8 +1,9 @@
 extern crate ctor;
 
+use anyhow::Result;
 use crate::data::{CollectData, Data, DataType, TimeEnum};
-use crate::PDResult;
-use crate::PERFORMANCE_DATA;
+use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::visualizer::{DataVisualizer, GetData};
 use chrono::prelude::*;
 use ctor::ctor;
 use log::debug;
@@ -37,7 +38,7 @@ impl KernelConfig {
 }
 
 impl CollectData for KernelConfig {
-    fn collect_data(&mut self) -> PDResult {
+    fn collect_data(&mut self) -> Result<()> {
         let time_now = Utc::now();
         let kernel_config_data = kernel_config().unwrap();
         let mut kernel_data_processed: HashMap<String, String> = HashMap::new();
@@ -61,18 +62,34 @@ impl CollectData for KernelConfig {
     }
 }
 
+impl GetData for KernelConfig {}
+
 #[ctor]
 fn init_kernel_config() {
+    let kernel_config = KernelConfig::new();
+    let file_name = KERNEL_CONFIG_FILE_NAME.to_string();
     let dt = DataType::new(
-        Data::KernelConfig(KernelConfig::new()),
-        KERNEL_CONFIG_FILE_NAME.to_string(),
+        Data::KernelConfig(kernel_config.clone()),
+        file_name.clone(),
         true
+    );
+    let dv = DataVisualizer::new(
+        Data::KernelConfig(kernel_config),
+        file_name.clone(),
+        String::new(),
+        String::new(),
+        file_name.clone(),
     );
 
     PERFORMANCE_DATA
         .lock()
         .unwrap()
-        .add_datatype("KernelConfig".to_string(), dt);
+        .add_datatype(file_name.clone(), dt);
+
+    VISUALIZATION_DATA
+        .lock()
+        .unwrap()
+        .add_visualizer(file_name.clone(), dv);
 }
 
 #[cfg(test)]
