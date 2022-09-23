@@ -8,7 +8,7 @@ use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use crate::visualizer::{DataVisualizer, GetData};
 use chrono::prelude::*;
 use ctor::ctor;
-use log::{debug};
+use log::debug;
 use serde::{Deserialize, Serialize};
 use cmd_lib::run_fun;
 

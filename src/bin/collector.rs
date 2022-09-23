@@ -36,7 +36,7 @@ fn start_collection_serial() -> Result<()> {
     Ok(())
 }
 
-fn collect_static_data() -> PDResult {
+fn collect_static_data() -> Result<()>  {
     info!("Collecting static data...");
     PERFORMANCE_DATA.lock().unwrap().collect_static_data()?;
     Ok(())
