@@ -2,7 +2,8 @@
 	"compilerOptions": {
 		"allowJs": true,
 		"target": "es6",
-		"outDir": "js/"
+		"outDir": "js/",
+		"allowUmdGlobalAccess": true,
 	},
 	"include": ["./*"]
 }

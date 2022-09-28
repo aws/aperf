@@ -1,0 +1,56 @@
+---
+CpuUtilization:
+  total:
+    time:
+      DateTime: "2022-01-01T01:01:01.000000000Z"
+    cpu: -1
+    values:
+      user: 2744431
+      nice: 452987
+      system: 1655289
+      irq: 0
+      softirq: 3187
+      idle: 731934689
+      iowait: 132596
+      steal: 13080
+  per_cpu:
+    - time:
+        DateTime: "2022-01-01T01:01:01.000000000Z"
+      cpu: 0
+      values:
+        user: 354549
+        nice: 56503
+        system: 214275
+        irq: 0
+        softirq: 491
+        idle: 91481992
+        iowait: 6327
+        steal: 12084
+---
+CpuUtilization:
+  total:
+    time:
+      DateTime: "2022-01-01T01:01:02.000000000Z"
+    cpu: -1
+    values:
+      user: 2744432
+      nice: 452988
+      system: 1655290
+      irq: 1
+      softirq: 3188
+      idle: 731934690
+      iowait: 132597
+      steal: 13081
+  per_cpu:
+    - time:
+        DateTime: "2022-01-01T01:01:02.000000000Z"
+      cpu: 0
+      values:
+        user: 354550
+        nice: 56504
+        system: 214276
+        irq: 1
+        softirq: 492
+        idle: 91481993
+        iowait: 6328
+        steal: 12085

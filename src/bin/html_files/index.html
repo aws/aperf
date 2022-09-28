@@ -6,7 +6,13 @@
 	</head>
 	<body>
 		<h2>Performance Data Assistant</h2>
-		<script src="/html_files/index.js"></script>
-		<script src="/html_files/plotly-2.14.0.min.js"></script>
+		<div class="tab">
+			<button class="tablinks" name="cpu_utilization">CPU Utilization</button>
+		</div>
+		<div id="cpu_utilization" class="tabcontent">
+			<div id="runs"></div>
+		</div>
+		<script type="module" src="/html_files/index.js"></script>
+		<script type="module" src="/html_files/cpu_utilization.js"></script>
 	</body>
 </html>
