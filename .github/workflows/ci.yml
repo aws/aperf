@@ -1,45 +1,34 @@
 name: Rust
 
 on:
-  push:
-    branches: [ main ]
   pull_request:
-    branches: [ main ]
+    branches:
+      - "**"
 jobs:
-  X64:
-    runs-on: [self-hosted, Linux, X64]
+  CI:
+    strategy:
+      matrix:
+        platform: [ X86, ARM64 ]
+    runs-on: [ self-hosted, Linux, ${ { matrix.platform } } ]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-            toolchain: stable
-            profile: minimal
-            override: true
+          toolchain: stable
+          profile: minimal
+          override: true
       - uses: Swatinem/rust-cache@v1
       - uses: actions-rs/cargo@v1
       - name: Install gcc
         run: sudo apt install -y build-essential
-      - name: Build
-        run: cargo build --verbose
-      - name: Run tests
-        run: cargo test --verbose
-  ARM64:
-    runs-on: [ self-hosted, Linux, ARM64 ]
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-            toolchain: stable
-            profile: minimal
-            override: true
-      - uses: Swatinem/rust-cache@v1
-      - uses: actions-rs/cargo@v1
-      - name: Install gcc
-        run: sudo apt install -y build-essential
+      - name: Install NodeSource
+        run: sudo curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
+      - name: Install npm
+        run: sudo apt-get install -y nodejs
+      - name: Install TypeScript
+        run: sudo npm install -g typescript
       - name: Build
         run: cargo build --verbose
       - name: Run tests

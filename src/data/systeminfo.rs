@@ -7,7 +7,7 @@ use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use crate::visualizer::{DataVisualizer, GetData};
 use chrono::prelude::*;
 use ctor::ctor;
-use log::debug;
+use log::{debug, info};
 use serde::{Deserialize, Serialize};
 
 pub static SYSTEMINFO_FILE_NAME: &str = "system_info";
@@ -20,6 +20,7 @@ pub struct SystemInfo {
     pub os_version: String,
     pub host_name: String,
     pub total_cpus: usize,
+    pub instance_metadata: EC2Metadata
 }
 
 impl SystemInfo {
@@ -30,7 +31,8 @@ impl SystemInfo {
             kernel_version: String::new(),
             os_version: String::new(),
             host_name: String::new(),
-            total_cpus: 0
+            total_cpus: 0,
+            instance_metadata: EC2Metadata::new()
         }
     }
 
@@ -53,6 +55,55 @@ impl SystemInfo {
     fn set_total_cpus(&mut self, total_cpus: usize) {
         self.total_cpus = total_cpus;
     }
+
+    fn set_instance_metadata(&mut self, instance_metadata: EC2Metadata) {
+        self.instance_metadata = instance_metadata;
+    }
+}
+
+type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct EC2Metadata {
+    pub instance_id: String,
+    pub local_hostname: String,
+    pub ami_id: String,
+    pub region: String,
+    pub instance_type: String,
+}
+
+impl EC2Metadata {
+    fn new() -> Self {
+        EC2Metadata {
+            instance_id: String::new(),
+            local_hostname: String::new(),
+            ami_id: String::new(),
+            region: String::new(),
+            instance_type: String::new()
+        }
+    }
+
+    async fn get_instance_metadata() -> Result<EC2Metadata, BoxError> {
+        use aws_config::imds;
+
+        let imds_client = imds::Client::builder().build().await?;
+
+        let ami_id = imds_client.get("/latest/meta-data/ami-id").await?;
+        let instance_id = imds_client.get("/latest/meta-data/instance-id").await?;
+        let local_hostname = imds_client.get("/latest/meta-data/local-hostname").await?;
+        let instance_type = imds_client.get("/latest/meta-data/instance-type").await?;
+        let region = imds_client
+            .get("/latest/meta-data/placement/region")
+            .await?;
+
+        Ok(EC2Metadata {
+            instance_id,
+            local_hostname,
+            ami_id,
+            region,
+            instance_type
+        })
+    }
 }
 
 impl CollectData for SystemInfo {
@@ -65,7 +116,16 @@ impl CollectData for SystemInfo {
         self.set_os_version(sys.os_version().unwrap());
         self.set_host_name(sys.host_name().unwrap());
         self.set_total_cpus(sys.cpus().len());
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+
+        match rt.block_on(EC2Metadata::get_instance_metadata()) {
+            Ok(s) => self.set_instance_metadata(s),
+            Err(e) => info!("An error occurred: {}", e),
+        };
+
         debug!("SysInfo:\n{:#?}", self);
+
         Ok(())
     }
 }
