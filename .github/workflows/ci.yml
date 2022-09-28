@@ -8,8 +8,8 @@ jobs:
   CI:
     strategy:
       matrix:
-        platform: [ X86, ARM64 ]
-    runs-on: [ self-hosted, Linux, ${ { matrix.platform } } ]
+        platform: [X86, ARM64]
+    runs-on: [ self-hosted, Linux, ${{ matrix.platform }} ]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
