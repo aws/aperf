@@ -1,15 +1,22 @@
-function openData(evt: Event, tabName: string) {
-	var tabcontent = Array.from(document.getElementsByClassName('tabcontent') as HTMLCollectionOf<HTMLElement>);
-	var tablinks = Array.from(document.getElementsByClassName("tablinks") as HTMLCollectionOf<HTMLElement>);
-	tabcontent.forEach((element) => {
-		element.style.display = "none";
-	});
-	tablinks.forEach((element) => {
-		element.className.replace(" active", "");
-	})
+import { cpuUtilization } from './cpu_utilization.js';
+export { clearElements, addElemToNode, openData };
+
+function openData(evt: Event, elem: HTMLButtonElement) {
+	var tabName: string = elem.name;
+	var tabcontent = document.getElementsByClassName('tabcontent');
+	var tablinks = document.getElementsByClassName('tablinks');
+	for (var i = 0; i < tabcontent.length; i++) {
+		(tabcontent[i] as HTMLElement).style.display = "none";
+	}
+	for (var i = 0; i < tablinks.length; i++) {
+		tablinks[i].className = tablinks[i].className.replace(" active", "");
+	}
 	document.getElementById(tabName).style.display = "block";
 	const currentTarget = evt.currentTarget as HTMLButtonElement;
 	currentTarget.className += " active";
+	if (tabName == "cpu_utilization") {
+		cpuUtilization();
+	}
 }
 // Collapse functionality
 var coll = Array.from(document.getElementsByClassName("collapsible") as HTMLCollectionOf<HTMLElement>);
@@ -24,3 +31,23 @@ coll.forEach((element) => {
 		}
 	})
 })
+
+// Tab button click
+var elems = document.getElementsByClassName('tablinks');
+for (var i=0; i < elems.length; i++) {
+	elems[i].addEventListener("click", function(evt: Event) {
+		openData(evt, this)
+	}, false);
+}
+
+function clearElements(id: string) {
+	let node: HTMLElement = document.getElementById(id);
+	while(node.lastElementChild) {
+		node.removeChild(node.lastElementChild);
+	}
+}
+
+function addElemToNode(node_id: string, elem: HTMLElement) {
+	let node: HTMLElement = document.getElementById(node_id);
+	node.appendChild(elem);
+}
