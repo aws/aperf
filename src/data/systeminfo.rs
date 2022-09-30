@@ -7,20 +7,35 @@ use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use crate::visualizer::{DataVisualizer, GetData};
 use chrono::prelude::*;
 use ctor::ctor;
-use log::{debug, info};
+use log::{debug, error, info};
 use serde::{Deserialize, Serialize};
+use validator::{Validate, ValidationError};
 
 pub static SYSTEMINFO_FILE_NAME: &str = "system_info";
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Validate, Clone)]
 pub struct SystemInfo {
     pub time: TimeEnum,
+    #[validate(length(min = 1))]
     pub system_name: String,
+    #[validate(length(min = 1), custom="validate_kernel_version")]
     pub kernel_version: String,
+    #[validate(length(min = 1))]
     pub os_version: String,
+    #[validate(contains = ".com", length(min = 4))]
     pub host_name: String,
+    #[validate(range(min = 1))]
     pub total_cpus: usize,
     pub instance_metadata: EC2Metadata
+}
+
+fn validate_kernel_version(kernel_version: &str) -> Result<(), ValidationError> {
+    let version:f32 = kernel_version[..2].parse().unwrap();
+    // PDA requires kernel version to be >= 4.14.
+    if version < 4.14 {
+        return Err(ValidationError::new("Kernel version should be >= 4.14.*"));
+    }
+    Ok(())
 }
 
 impl SystemInfo {
@@ -124,6 +139,11 @@ impl CollectData for SystemInfo {
             Err(e) => info!("An error occurred: {}", e),
         };
 
+        // This only logs error message for now.
+        match self.validate(){
+            Ok(_) => (),
+            Err(e) => error!("An error occurred: {}", e),
+        };
         debug!("SysInfo:\n{:#?}", self);
 
         Ok(())
