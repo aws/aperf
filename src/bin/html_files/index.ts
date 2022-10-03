@@ -1,4 +1,5 @@
 import { cpuUtilization } from './cpu_utilization.js';
+import { vmStat } from './vmstat.js';
 export { clearElements, addElemToNode, openData };
 
 function openData(evt: Event, elem: HTMLButtonElement) {
@@ -16,6 +17,9 @@ function openData(evt: Event, elem: HTMLButtonElement) {
 	currentTarget.className += " active";
 	if (tabName == "cpu_utilization") {
 		cpuUtilization();
+	}
+	if (tabName == "vmstat") {
+		vmStat();
 	}
 }
 // Collapse functionality

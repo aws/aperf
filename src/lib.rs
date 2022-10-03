@@ -24,6 +24,9 @@ pub enum PDError {
 
     #[error("Error getting run values for {}", .0)]
     VisualizerRunValueGetError(String),
+
+    #[error("Error getting Vmstat value for {}", .0)]
+    VisualizerVmstatValueGetError(String),
 }
 
 lazy_static! {
