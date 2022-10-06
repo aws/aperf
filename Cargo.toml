@@ -27,6 +27,7 @@ path = "src/bin/visualizer.rs"
 clap = {version = "3.2.6", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
+rustix = { version = "0.35.6", features = ["process"] }
 async-std = { version = "1.8.0", features = ["attributes"] }
 serde_yaml = "0.8"
 thiserror = "1.0"
