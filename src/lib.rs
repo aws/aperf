@@ -27,6 +27,12 @@ pub enum PDError {
 
     #[error("Error getting Vmstat value for {}", .0)]
     VisualizerVmstatValueGetError(String),
+
+    #[error("Error getting Line Name Error")]
+    CollectorLineNameError,
+
+    #[error("Error getting Line Value Error")]
+    CollectorLineValueError,
 }
 
 lazy_static! {

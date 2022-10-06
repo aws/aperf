@@ -7,8 +7,9 @@
 	<body>
 		<h2>Performance Data Assistant</h2>
 		<div class="tab">
-			<button class="tablinks" name="cpu_utilization">CPU Utilization</button>
+			<button class="tablinks" name="cpu_utilization" id="default">CPU Utilization</button>
 			<button class="tablinks" name="vmstat">VM Stat</button>
+			<button class="tablinks" name="kernel_config">Kernel Config</button>
 		</div>
 		<div id="cpu_utilization" class="tabcontent">
 			<div id="cpu-util-runs"></div>
@@ -16,8 +17,17 @@
 		<div id="vmstat" class="tabcontent">
 			<div id="vmstat-runs"></div>
 		</div>
+		<div id="kernel_config" class="tabcontent">
+			<div>
+				<h3>Diff:</h3>
+				<input type="radio" class="kernel-button" id="kernel_diff_yes" name="kernelDiff">Yes</button>
+				<input type="radio" class="kernel-button" id="kernel_diff_no" name="kernelDiff">No</button>
+			</div>
+			<div id="kernel-config-runs"></div>
+		</div>
 		<script type="module" src="/html_files/index.js"></script>
 		<script type="module" src="/html_files/cpu_utilization.js"></script>
 		<script type="module" src="/html_files/vmstat.js"></script>
+		<script type="module" src="/html_files/kernel_config.js"></script>
 	</body>
 </html>

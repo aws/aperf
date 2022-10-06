@@ -1,5 +1,6 @@
 import { cpuUtilization } from './cpu_utilization.js';
 import { vmStat } from './vmstat.js';
+import { kernelConfig } from './kernel_config.js';
 export { clearElements, addElemToNode, openData };
 
 function openData(evt: Event, elem: HTMLButtonElement) {
@@ -20,6 +21,9 @@ function openData(evt: Event, elem: HTMLButtonElement) {
 	}
 	if (tabName == "vmstat") {
 		vmStat();
+	}
+	if (tabName == "kernel_config") {
+		kernelConfig(false);
 	}
 }
 // Collapse functionality
@@ -43,6 +47,16 @@ for (var i=0; i < elems.length; i++) {
 		openData(evt, this)
 	}, false);
 }
+var elems = document.getElementsByClassName('kernel-button');
+for (var i=0; i < elems.length; i++) {
+	elems[i].addEventListener("click",function(evn: Event) {
+		if (this.id == "kernel_diff_yes"){
+			kernelConfig(true);
+		} else {
+			kernelConfig(false);
+		}
+	} )
+}
 
 function clearElements(id: string) {
 	let node: HTMLElement = document.getElementById(id);
@@ -55,3 +69,6 @@ function addElemToNode(node_id: string, elem: HTMLElement) {
 	let node: HTMLElement = document.getElementById(node_id);
 	node.appendChild(elem);
 }
+
+// Show landing page
+document.getElementById("default").click();
