@@ -36,6 +36,8 @@ jobs:
         run: sudo npm install --save plotly.js
       - name: Install musl
         run: sudo apt-get install -y musl-tools
+      - name: Symlink musl-gcc on ARM64
+        run: sudo ln -s /usr/bin/musl-gcc /usr/bin/aarch64-linux-musl-gcc
       - name: Build for X64
         if: ${{ matrix.architecture == 'X64' }}
         run: rustup target add x86_64-unknown-linux-musl && cargo build --release --target x86_64-unknown-linux-musl
