@@ -32,7 +32,14 @@ jobs:
         run: sudo apt-get install -y nodejs
       - name: Install TypeScript
         run: sudo npm install -g typescript
+      - name: Install Plotly
+        run: sudo npm install --save plotly.js
+      - name: Install musl
+        run: sudo apt-get install musl-tools
       - name: Build
-        run: cargo build --verbose
+      - if: ${{ matrix.architecture == "X64" }}
+        run: rustup target add x86_64-unknown-linux-musl && cargo build --release --target x86_64-unknown-linux-musl
+      - if: ${{ matrix.architecture == "ARM64" }}
+        run: rustup target add aarch64-unknown-linux-musl && cargo build --release --target aarch64-unknown-linux-musl
       - name: Run tests
         run: cargo test --verbose
