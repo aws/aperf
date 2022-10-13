@@ -1,4 +1,4 @@
-name: Rust
+name: CI
 
 on:
   pull_request:
@@ -32,7 +32,20 @@ jobs:
         run: sudo apt-get install -y nodejs
       - name: Install TypeScript
         run: sudo npm install -g typescript
-      - name: Build
-        run: cargo build --verbose
+      - name: Install Plotly
+        run: sudo npm install --save plotly.js
+      - name: Install Plotly Types
+        run: sudo npm install --save-dev @types/plotly.js
+      - name: Install musl
+        run: sudo apt-get install -y musl-tools
+      - name: Symlink musl-gcc on ARM64
+        if: ${{ matrix.architecture == 'ARM64' }}
+        run: sudo ln -snf /usr/bin/musl-gcc /usr/bin/aarch64-linux-musl-gcc
+      - name: Build for X64
+        if: ${{ matrix.architecture == 'X64' }}
+        run: rustup target add x86_64-unknown-linux-musl && cargo build --release --target x86_64-unknown-linux-musl
+      - name: Build for ARM64
+        if: ${{ matrix.architecture == 'ARM64' }}
+        run: rustup target add aarch64-unknown-linux-musl && cargo build --release --target aarch64-unknown-linux-musl
       - name: Run tests
         run: cargo test --verbose
