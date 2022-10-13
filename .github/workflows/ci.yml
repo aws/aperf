@@ -35,7 +35,7 @@ jobs:
       - name: Install Plotly
         run: sudo npm install --save plotly.js
       - name: Install Plotly Types
-        run: sudo npm install -g @types/plotly.js
+        run: sudo npm install --save-dev @types/plotly.js
       - name: Install musl
         run: sudo apt-get install -y musl-tools
       - name: Symlink musl-gcc on ARM64
