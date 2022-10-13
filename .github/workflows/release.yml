@@ -1,0 +1,102 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  Release:
+    strategy:
+      matrix:
+        architecture: [X64, ARM64]
+    runs-on:
+      - self-hosted
+      - Linux
+      - ${{matrix.architecture}}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+      - uses: Swatinem/rust-cache@v1
+      - uses: actions-rs/cargo@v1
+      - name: Install gcc
+        run: sudo apt install -y build-essential
+      - name: Install NodeSource
+        run: sudo curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
+      - name: Install npm
+        run: sudo apt-get install -y nodejs
+      - name: Install TypeScript
+        run: sudo npm install -g typescript
+      - name: Install Plotly
+        run: sudo npm install --save plotly.js
+      - name: Install Plotly Types
+        run: sudo npm install --save-dev @types/plotly.js
+      - name: Install musl
+        run: sudo apt-get install -y musl-tools
+      - name: Symlink musl-gcc on ARM64
+        if: ${{ matrix.architecture == 'ARM64' }}
+        run: sudo ln -snf /usr/bin/musl-gcc /usr/bin/aarch64-linux-musl-gcc
+      - name: Build for X64
+        if: ${{ matrix.architecture == 'X64' }}
+        run: rustup target add x86_64-unknown-linux-musl && cargo build --release --target x86_64-unknown-linux-musl
+      - name: Build for ARM64
+        if: ${{ matrix.architecture == 'ARM64' }}
+        run: rustup target add aarch64-unknown-linux-musl && cargo build --release --target aarch64-unknown-linux-musl
+      - name: Run tests
+        run: cargo test --verbose
+      - name: release
+        uses: actions/create-release@v1
+        id: create_release
+        with:
+          draft: false
+          prerelease: false
+          release_name: Release {{ github.ref }}
+          tag_name: ${{ github.ref }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: upload X64 collector artifact
+        if: ${{ matrix.architecture == 'X64' }}
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./target/x86_64-unknown-linux-musl/release/performance-data-collector
+          asset_name: performance-data-collector
+          asset_content_type: application/octet-stream
+      - name: upload X64 visualizer artifact
+        if: ${{ matrix.architecture == 'X64' }}
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./target/aarch64-unknown-linux-musl/release/performance-data-visualizer
+          asset_name: performance-data-collector
+          asset_content_type: application/octet-stream
+      - name: upload X64 collector artifact
+        if: ${{ matrix.architecture == 'ARM64' }}
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./target/aarch64-unknown-linux-musl/release/performance-data-collector
+          asset_name: performance-data-collector
+          asset_content_type: application/octet-stream
+      - name: upload X64 visualizer artifact
+        if: ${{ matrix.architecture == 'ARM64' }}
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./target/x86_64-unknown-linux-musl/release/performance-data-visualizer
+          asset_name: performance-data-collector
+          asset_content_type: application/octet-stream

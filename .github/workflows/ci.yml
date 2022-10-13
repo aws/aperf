@@ -4,9 +4,6 @@ on:
   pull_request:
     branches:
       - "**"
-  push:
-    tags:
-      - '*'
 
 jobs:
   CI:
@@ -53,53 +50,3 @@ jobs:
         run: rustup target add aarch64-unknown-linux-musl && cargo build --release --target aarch64-unknown-linux-musl
       - name: Run tests
         run: cargo test --verbose
-      - name: release
-        uses: actions/create-release@v1
-        id: create_release
-        with:
-          draft: false
-          prerelease: false
-          release_name: {{ github.ref }}
-          tag_name: ${{ github.ref }}
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-      - name: upload X64 collector artifact
-        if: ${{ matrix.architecture == 'X64' }}
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./target/x86_64-unknown-linux-musl/release/performance-data-collector
-          asset_name: performance-data-collector
-          asset_content_type: application/octet-stream
-      - name: upload X64 visualizer artifact
-        if: ${{ matrix.architecture == 'X64' }}
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./target/aarch64-unknown-linux-musl/release/performance-data-visualizer
-          asset_name: performance-data-collector
-          asset_content_type: application/octet-stream
-      - name: upload X64 collector artifact
-        if: ${{ matrix.architecture == 'ARM64' }}
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./target/aarch64-unknown-linux-musl/release/performance-data-collector
-          asset_name: performance-data-collector
-          asset_content_type: application/octet-stream
-      - name: upload X64 visualizer artifact
-        if: ${{ matrix.architecture == 'ARM64' }}
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./target/x86_64-unknown-linux-musl/release/performance-data-visualizer
-          asset_name: performance-data-collector
-          asset_content_type: application/octet-stream
