@@ -130,7 +130,80 @@ impl CollectData for SystemInfo {
     }
 }
 
-impl GetData for SystemInfo {}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct SUTConfigEntry {
+    pub name: String,
+    pub value: String,
+}
+
+fn get_values(buffer: SystemInfo) -> Result<String> {
+    let mut end_values = Vec::new();
+    let system_name = SUTConfigEntry {
+        name: "System Name".to_string(),
+        value: buffer.system_name,
+    };
+    end_values.push(system_name);
+    let os_version = SUTConfigEntry {
+        name: "OS Version".to_string(),
+        value: buffer.os_version,
+    };
+    end_values.push(os_version);
+    let kernel_version = SUTConfigEntry {
+        name: "Kernel Version".to_string(),
+        value: buffer.kernel_version,
+    };
+    end_values.push(kernel_version);
+    let region = SUTConfigEntry {
+        name: "Region".to_string(),
+        value: buffer.instance_metadata.region,
+    };
+    end_values.push(region);
+    let instance_type = SUTConfigEntry {
+        name: "Instance Type".to_string(),
+        value: buffer.instance_metadata.instance_type,
+    };
+    end_values.push(instance_type);
+    let total_cpus = SUTConfigEntry {
+        name: "Total CPUs".to_string(),
+        value: buffer.total_cpus.to_string(),
+    };
+    end_values.push(total_cpus);
+    let instance_id = SUTConfigEntry {
+        name: "Instance ID".to_string(),
+        value: buffer.instance_metadata.instance_id,
+    };
+    end_values.push(instance_id);
+    let ami_id = SUTConfigEntry {
+        name: "AMI ID".to_string(),
+        value: buffer.instance_metadata.ami_id,
+    };
+    end_values.push(ami_id);
+    let host_name = SUTConfigEntry {
+        name: "Host Name".to_string(),
+        value: buffer.host_name,
+    };
+    end_values.push(host_name);
+    Ok(serde_json::to_string(&end_values)?)
+}
+
+impl GetData for SystemInfo {
+    fn get_data(&mut self, buffer: Vec<Data>, query: String) -> Result<String> {
+        let mut values = Vec::new();
+        for data in buffer {
+            match data {
+                Data::SystemInfo(ref value) => values.push(value.clone()),
+                _ => panic!("Invalid Data type in file"),
+            }
+        }
+        let param: Vec<(String, String)> = serde_urlencoded::from_str(&query).unwrap();
+        let (_, req_str) = &param[1];
+
+        match req_str.as_str() {
+            "values" => get_values(values[0].clone()),
+            _ => panic!("Unsupported API"),
+        }
+    }
+}
 
 #[ctor]
 fn init_systeminfo() {
@@ -141,11 +214,12 @@ fn init_systeminfo() {
         file_name.clone(),
         true
     );
+    let js_file_name = file_name.clone() + &".js".to_string();
     let dv = DataVisualizer::new(
         Data::SystemInfo(system_info.clone()),
         file_name.clone(),
-        String::new(),
-        String::new(),
+        js_file_name,
+        include_str!("../bin/html_files/js/system_info.js").to_string(),
         file_name.clone(),
     );
 
@@ -162,8 +236,9 @@ fn init_systeminfo() {
 
 #[cfg(test)]
 mod tests {
-    use super::SystemInfo;
-    use crate::data::CollectData;
+    use super::{SystemInfo, SUTConfigEntry};
+    use crate::data::{CollectData, Data};
+    use crate::visualizer::GetData;
 
     #[test]
     fn test_collect_data() {
@@ -175,5 +250,17 @@ mod tests {
         assert!(systeminfo.kernel_version != String::new());
         assert!(systeminfo.os_version != String::new());
         assert!(systeminfo.host_name != String::new());
+    }
+
+    #[test]
+    fn test_get_values() {
+        let mut buffer: Vec<Data> = Vec::<Data>::new();
+        let mut system_info = SystemInfo::new();
+
+        system_info.collect_data().unwrap();
+        buffer.push(Data::SystemInfo(system_info));
+        let json = SystemInfo::new().get_data(buffer, "run=test&get=values".to_string()).unwrap();
+        let values: Vec<SUTConfigEntry> = serde_json::from_str(&json).unwrap();
+        assert!(values.len() > 0);
     }
 }

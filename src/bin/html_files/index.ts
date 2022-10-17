@@ -1,3 +1,4 @@
+import { systemInfo } from './system_info.js';
 import { cpuUtilization } from './cpu_utilization.js';
 import { vmStat } from './vmstat.js';
 import { kernelConfig } from './kernel_config.js';
@@ -16,6 +17,9 @@ function openData(evt: Event, elem: HTMLButtonElement) {
 	document.getElementById(tabName).style.display = "block";
 	const currentTarget = evt.currentTarget as HTMLButtonElement;
 	currentTarget.className += " active";
+	if (tabName == "system_info") {
+		systemInfo();
+	}
 	if (tabName == "cpu_utilization") {
 		cpuUtilization();
 	}
