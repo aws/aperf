@@ -7,7 +7,7 @@ on:
 
 jobs:
   Build:
-    uses: .github/workflows/ci.yml
+    uses: .github/workflows/ci.yml@main
   Release:
     strategy:
       matrix:
