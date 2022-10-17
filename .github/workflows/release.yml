@@ -19,53 +19,19 @@ jobs:
     needs:
       - Build
     steps:
-      - name: release
-        uses: actions/create-release@v1
-        id: create_release
-        with:
-          draft: false
-          prerelease: false
-          release_name: Release {{ github.ref }}
-          tag_name: ${{ github.ref }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Upload X64 collector artifact
+      - name: Upload X64 artifacts.
         if: ${{ matrix.architecture == 'X64' }}
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: ncipollo/release-action@v1
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./target/x86_64-unknown-linux-musl/release/performance-data-collector
-          asset_name: x86_64-performance-data-collector
-          asset_content_type: application/octet-stream
-      - name: Upload X64 visualizer artifact
-        if: ${{ matrix.architecture == 'X64' }}
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./target/x86_64-unknown-linux-musl/release/performance-data-visualizer
-          asset_name: x86_64-performance-data-visualizer
-          asset_content_type: application/octet-stream
-      - name: Upload ARM64 collector artifact
+          artifacts: "./target/x86_64-unknown-linux-musl/release/performance-data-collector,./target/x86_64-unknown-linux-musl/release/performance-data-visualizer"
+          replacesArtifacts: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          allowUpdates: true
+      - name: Upload ARM64 artifacts
         if: ${{ matrix.architecture == 'ARM64' }}
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: ncipollo/release-action@v1
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./target/aarch64-unknown-linux-musl/release/performance-data-collector
-          asset_name: aarch64-performance-data-collector
-          asset_content_type: application/octet-stream
-      - name: upload ARM64 visualizer artifact
-        if: ${{ matrix.architecture == 'ARM64' }}
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./target/aarch64-unknown-linux-musl/release/performance-data-visualizer
-          asset_name: aarch64-performance-data-visualizer
-          asset_content_type: application/octet-stream
+          artifacts: "./target/aarch64-unknown-linux-musl/release/performance-data-collector,./target/aarch64-unknown-linux-musl/release/performance-data-visualizer"
+          replacesArtifacts: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          allowUpdates: true
