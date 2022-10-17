@@ -37,7 +37,7 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./target/x86_64-unknown-linux-musl/release/performance-data-collector
-          asset_name: performance-data-collector
+          asset_name: x86_64-performance-data-collector
           asset_content_type: application/octet-stream
       - name: Upload X64 visualizer artifact
         if: ${{ matrix.architecture == 'X64' }}
@@ -47,7 +47,7 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./target/x86_64-unknown-linux-musl/release/performance-data-visualizer
-          asset_name: performance-data-collector
+          asset_name: x86_64-performance-data-visualizer
           asset_content_type: application/octet-stream
       - name: Upload ARM64 collector artifact
         if: ${{ matrix.architecture == 'ARM64' }}
@@ -57,7 +57,7 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./target/aarch64-unknown-linux-musl/release/performance-data-collector
-          asset_name: performance-data-collector
+          asset_name: aarch64-performance-data-collector
           asset_content_type: application/octet-stream
       - name: upload ARM64 visualizer artifact
         if: ${{ matrix.architecture == 'ARM64' }}
@@ -67,5 +67,5 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./target/aarch64-unknown-linux-musl/release/performance-data-visualizer
-          asset_name: performance-data-collector
+          asset_name: aarch64-performance-data-visualizer
           asset_content_type: application/octet-stream
