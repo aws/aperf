@@ -4,7 +4,7 @@ on:
   pull_request:
     branches:
       - "**"
-  workflow_call:
+  workflow_call: # Needed to make this a reusable workflow for releasing artifacts https://docs.github.com/en/actions/using-workflows/reusing-workflows
 
 jobs:
   CI:
