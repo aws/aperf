@@ -11,6 +11,7 @@
 			<button class="tablinks" name="cpu_utilization">CPU Utilization</button>
 			<button class="tablinks" name="vmstat">VM Stat</button>
 			<button class="tablinks" name="kernel_config">Kernel Config</button>
+			<button class="tablinks" name="interrupts">Interrupt Data</button>
 		</div>
 		<div id="system_info" class="tabcontent">
 			<div id="system-info-runs"></div>
@@ -29,10 +30,14 @@
 			</div>
 			<div id="kernel-config-runs"></div>
 		</div>
+		<div id="interrupts" class="tabcontent">
+			<div id="interrupt-runs"></div>
+		</div>
 		<script type="module" src="/html_files/index.js"></script>
 		<script type="module" src="/html_files/system_info.js"></script>
 		<script type="module" src="/html_files/cpu_utilization.js"></script>
 		<script type="module" src="/html_files/vmstat.js"></script>
 		<script type="module" src="/html_files/kernel_config.js"></script>
+		<script type="module" src="/html_files/interrupts.js"></script>
 	</body>
 </html>
