@@ -3,6 +3,7 @@ pub mod vmstat;
 pub mod diskstats;
 pub mod systeminfo;
 pub mod kernel_config;
+pub mod interrupts;
 
 use anyhow::Result;
 use crate::InitParams;
@@ -18,6 +19,7 @@ use diskstats::Diskstats;
 use std::ops::Sub;
 use systeminfo::SystemInfo;
 use kernel_config::KernelConfig;
+use interrupts::InterruptData;
 
 pub struct DataType {
     pub data: Data,
@@ -138,7 +140,7 @@ macro_rules! data {
     };
 }
 
-data!(CpuUtilization, Vmstat, Diskstats, SystemInfo, KernelConfig);
+data!(CpuUtilization, Vmstat, Diskstats, SystemInfo, KernelConfig, InterruptData);
 
 pub trait CollectData {
     fn collect_data(&mut self) -> Result<()>;

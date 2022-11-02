@@ -2,6 +2,7 @@ import { systemInfo } from './system_info.js';
 import { cpuUtilization } from './cpu_utilization.js';
 import { vmStat } from './vmstat.js';
 import { kernelConfig } from './kernel_config.js';
+import { interrupts } from './interrupts.js';
 export { clearElements, addElemToNode, openData };
 
 function openData(evt: Event, elem: HTMLButtonElement) {
@@ -28,6 +29,9 @@ function openData(evt: Event, elem: HTMLButtonElement) {
 	}
 	if (tabName == "kernel_config") {
 		kernelConfig(false);
+	}
+	if (tabName == "interrupts") {
+		interrupts();
 	}
 }
 // Collapse functionality
