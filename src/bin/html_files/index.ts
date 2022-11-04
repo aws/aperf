@@ -3,6 +3,7 @@ import { cpuUtilization } from './cpu_utilization.js';
 import { vmStat } from './vmstat.js';
 import { kernelConfig } from './kernel_config.js';
 import { interrupts } from './interrupts.js';
+import { diskStats } from './disk_stats.js';
 export { clearElements, addElemToNode, openData };
 
 function openData(evt: Event, elem: HTMLButtonElement) {
@@ -32,6 +33,9 @@ function openData(evt: Event, elem: HTMLButtonElement) {
 	}
 	if (tabName == "interrupts") {
 		interrupts();
+	}
+	if (tabName == "disk_stats") {
+		diskStats();
 	}
 }
 // Collapse functionality
