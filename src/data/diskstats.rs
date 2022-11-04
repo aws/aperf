@@ -9,79 +9,29 @@ use ctor::ctor;
 use log::debug;
 use procfs::diskstats;
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap};
+use strum::IntoEnumIterator;
+use strum_macros::{Display, EnumString, EnumIter};
 
 pub static DISKSTATS_FILE_NAME: &str = "disk_stats";
 
-// Same as DiskStat from procfs/diskstats.rs
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DiskStat {
-    /// Device name
     pub name: String,
+    pub stat: HashMap<String, u64>,
+}
 
-    /// Reads completed successfully
-    ///
-    /// This is the total number of reads completed successfully
-    pub reads: u64,
+impl DiskStat {
+    fn new(name: String) -> Self {
+        DiskStat {
+            name,
+            stat: HashMap::new(),
+        }
+    }
 
-    /// Reads merged
-    ///
-    /// The number of adjacent reads that have been merged for efficiency.
-    pub merged: u64,
-
-    /// Sectors read successfully
-    ///
-    /// This is the total number of sectors read successfully.
-    pub sectors_read: u64,
-
-    /// Time spent reading (ms)
-    pub time_reading: u64,
-
-    /// writes completed
-    pub writes: u64,
-
-    /// writes merged
-    ///
-    /// The number of adjacent writes that have been merged for efficiency.
-    pub writes_merged: u64,
-
-    /// Sectors written successfully
-    pub sectors_written: u64,
-
-    /// Time spent writing (ms)
-    pub time_writing: u64,
-
-    /// I/Os currently in progress
-    pub in_progress: u64,
-
-    /// Time spent doing I/Os (ms)
-    pub time_in_progress: u64,
-
-    /// Weighted time spent doing I/Os (ms)
-    pub weighted_time_in_progress: u64,
-
-    /// Discards completed successfully
-    /// (since kernel 4.18)
-    pub discards: u64,
-
-    /// Discards merged
-    /// (since kernel 4.18)
-    pub discards_merged: u64,
-
-    /// Sectors discarded
-    /// (since kernel 4.18)
-    pub sectors_discarded: u64,
-
-    /// Time spent discarding
-    /// (since kernel 4.18)
-    pub time_discarding: u64,
-
-    /// Flush requests completed successfully
-    /// (since kernel 5.5)
-    pub flushes: u64,
-
-    /// Time spent flushing
-    /// (since kernel 5.5)
-    pub time_flushing: u64,
+    fn add(&mut self, key: String, value: u64) {
+        self.stat.insert(key, value);
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -107,32 +57,66 @@ impl Diskstats {
     }
 }
 
+#[derive(Debug, Display, EnumString, EnumIter)]
+pub enum DiskstatKeys {
+    Reads,
+    Merged,
+    #[strum(serialize = "Sectors Read")]
+    SectorsRead,
+    #[strum(serialize = "Time Reading")]
+    TimeReading,
+    Writes,
+    #[strum(serialize = "Writes Merged")]
+    WritesMerged,
+    #[strum(serialize = "Sectors Written")]
+    SectorsWritten,
+    #[strum(serialize = "Time Writing")]
+    TimeWriting,
+    #[strum(serialize = "In Progress")]
+    InProgress,
+    #[strum(serialize = "Time In Progress")]
+    TimeInProgress,
+    #[strum(serialize = "Weighted Time In Progress")]
+    WeightedTimeInProgress,
+    Discards,
+    #[strum(serialize = "Discards Merged")]
+    DiscardsMerged,
+    #[strum(serialize = "Sectors Discarded")]
+    SectorsDiscarded,
+    #[strum(serialize = "Time Discarding")]
+    TimeDiscarding,
+    Flushes,
+    #[strum(serialize = "Time Flushing")]
+    TimeFlushing,
+}
+
 impl CollectData for Diskstats {
     fn collect_data(&mut self) -> Result<()> {
         let stats = diskstats().unwrap();
         let mut data = Vec::<DiskStat>::new();
         for disk in stats {
-            let stat = DiskStat {
-                name: disk.name,
-                reads: disk.reads,
-                merged: disk.merged,
-                sectors_read: disk.sectors_read,
-                time_reading: disk.time_reading,
-                writes: disk.writes,
-                writes_merged: disk.writes_merged,
-                sectors_written: disk.sectors_written,
-                time_writing: disk.time_writing,
-                in_progress: disk.in_progress,
-                time_in_progress: disk.time_in_progress,
-                weighted_time_in_progress: disk.weighted_time_in_progress,
-                discards: disk.discards.unwrap_or_default(),
-                discards_merged: disk.discards_merged.unwrap_or_default(),
-                sectors_discarded: disk.sectors_discarded.unwrap_or_default(),
-                time_discarding: disk.time_discarding.unwrap_or_default(),
-                flushes: disk.flushes.unwrap_or_default(),
-                time_flushing: disk.time_flushing.unwrap_or_default(),
-            };
-            data.push(stat);
+            let mut diskstat = DiskStat::new(disk.name);
+            diskstat.add(DiskstatKeys::Reads.to_string(), disk.reads);
+            diskstat.add(DiskstatKeys::Merged.to_string(), disk.merged);
+            diskstat.add(DiskstatKeys::SectorsRead.to_string(), disk.sectors_read);
+            diskstat.add(DiskstatKeys::TimeReading.to_string(), disk.time_reading);
+            diskstat.add(DiskstatKeys::Writes.to_string(), disk.writes);
+            diskstat.add(DiskstatKeys::WritesMerged.to_string(), disk.writes_merged);
+            diskstat.add(DiskstatKeys::SectorsWritten.to_string(), disk.sectors_written);
+            diskstat.add(DiskstatKeys::TimeWriting.to_string(), disk.time_writing);
+            diskstat.add(DiskstatKeys::InProgress.to_string(), disk.in_progress);
+            diskstat.add(DiskstatKeys::TimeInProgress.to_string(), disk.time_in_progress);
+            diskstat.add(DiskstatKeys::WeightedTimeInProgress.to_string(), disk.weighted_time_in_progress);
+            // Following since kernel 4.18
+            diskstat.add(DiskstatKeys::Discards.to_string(), disk.discards.unwrap_or_default());
+            diskstat.add(DiskstatKeys::DiscardsMerged.to_string(), disk.discards_merged.unwrap_or_default());
+            diskstat.add(DiskstatKeys::SectorsDiscarded.to_string(), disk.sectors_discarded.unwrap_or_default());
+            diskstat.add(DiskstatKeys::TimeDiscarding.to_string(), disk.time_discarding.unwrap_or_default());
+            // Following since kernel 5.5
+            diskstat.add(DiskstatKeys::Flushes.to_string(), disk.flushes.unwrap_or_default());
+            diskstat.add(DiskstatKeys::TimeFlushing.to_string(), disk.time_flushing.unwrap_or_default());
+
+            data.push(diskstat);
         }
 
         debug!("Diskstats:\n{:#?}", self);
@@ -142,7 +126,97 @@ impl CollectData for Diskstats {
     }
 }
 
-impl GetData for Diskstats {}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DiskValue {
+    pub time: TimeEnum,
+    pub value: u64,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DiskValues {
+    pub name: String,
+    pub values: Vec<DiskValue>,
+}
+
+impl DiskValues {
+    fn new(name: String) -> Self {
+        DiskValues {
+            name,
+            values: Vec::new(),
+        }
+    }
+}
+
+fn get_disk_names(value: Diskstats) -> Vec<String> {
+    let mut names = Vec::new();
+    for disk in value.disk_stats {
+        names.push(disk.name);
+    }
+    names
+}
+
+fn get_values(values: Vec<Diskstats>, key: String) -> Result<String> {
+    let mut ev: BTreeMap<String, DiskValues> = BTreeMap::new();
+    let disk_names = get_disk_names(values[0].clone());
+    for name in disk_names {
+        let dv = DiskValues::new(name.clone());
+        ev.insert(name, dv);
+    }
+    let time_zero = values[0].time;
+    for value in values {
+        for disk in value.disk_stats {
+            let dv = DiskValue {
+                time: (value.time - time_zero),
+                value: *disk.stat.get(&key.clone()).unwrap(),
+            };
+            let dvs = ev.get_mut(&disk.name).unwrap();
+            dvs.values.push(dv);
+        }
+    }
+    let end_values: Vec<DiskValues> = ev.into_values().collect();
+    Ok(serde_json::to_string(&end_values)?)
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Key {
+    pub name: String,
+    pub unit: String,
+}
+
+fn get_keys() -> Result<String> {
+    let mut end_values: Vec<Key> = Vec::new();
+    for key in DiskstatKeys::iter() {
+        let mut unit: String = "Count".to_string();
+        if key.to_string().contains("Time") {
+            unit = "Time (ms)".to_string();
+        }
+        end_values.push(Key {name: key.to_string(), unit: unit});
+    }
+    return Ok(serde_json::to_string(&end_values)?)
+}
+
+impl GetData for Diskstats {
+    fn get_data(&mut self, buffer: Vec<Data>, query: String) -> Result<String> {
+        let mut values = Vec::new();
+        for data in buffer {
+            match data {
+                Data::Diskstats(ref value) => values.push(value.clone()),
+                _ => panic!("Invalid Data type in file"),
+            }
+        }
+        let param: Vec<(String, String)> = serde_urlencoded::from_str(&query).unwrap();
+        let (_, req_str) = &param[1];
+
+        match req_str.as_str() {
+            "keys" => return get_keys(),
+            "values" => {
+                let (_, key) = &param[2];
+                return get_values(values, key.to_string());
+            }
+            _ => panic!("Unsupported API"),
+        }
+    }
+}
 
 #[ctor]
 fn init_diskstats() {
@@ -153,11 +227,12 @@ fn init_diskstats() {
         file_name.clone(),
         false
     );
+    let js_file_name = file_name.clone() + &".js".to_string();
     let dv = DataVisualizer::new(
         Data::Diskstats(diskstats),
         file_name.clone(),
-        String::new(),
-        String::new(),
+        js_file_name,
+        include_str!("../bin/html_files/js/disk_stats.js").to_string(),
         file_name.clone(),
     );
 
@@ -174,8 +249,11 @@ fn init_diskstats() {
 
 #[cfg(test)]
 mod tests {
-    use super::Diskstats;
-    use crate::data::CollectData;
+    use super::{Diskstats, DiskstatKeys, DiskValues, Key};
+    use crate::data::{CollectData, Data};
+    use crate::visualizer::GetData;
+    use std::collections::HashMap;
+    use strum::IntoEnumIterator;
 
     #[test]
     fn test_collect_data() {
@@ -183,5 +261,52 @@ mod tests {
 
         assert!(diskstats.collect_data().unwrap() == ());
         assert!(diskstats.disk_stats.len() != 0);
+    }
+
+    #[test]
+    fn test_keys() {
+        let mut stat = Diskstats::new();
+        let mut key_map = HashMap::new();
+        for key in DiskstatKeys::iter() {
+            key_map.insert(key.to_string(), 0);
+        }
+        stat.collect_data().unwrap();
+        let keys: Vec<String> = stat.disk_stats[0].stat.clone().into_keys().collect();
+        for key in keys {
+            assert!(key_map.contains_key(&key));
+            let value = key_map.get(&key).unwrap();
+            key_map.insert(key, value+1);
+        }
+        let mut values: Vec<u64> = key_map.into_values().collect();
+        values.dedup();
+        assert!(values.len() == 1);
+    }
+
+    #[test]
+    fn test_get_data_keys() {
+        let mut buffer: Vec<Data> = Vec::<Data>::new();
+        let mut diskstat = Diskstats::new();
+
+        diskstat.collect_data().unwrap();
+        buffer.push(Data::Diskstats(diskstat));
+        let json = Diskstats::new().get_data(buffer, "run=test&get=keys".to_string()).unwrap();
+        let values: Vec<Key> = serde_json::from_str(&json).unwrap();
+        assert!(values.len() > 0);
+    }
+
+    #[test]
+    fn test_get_data_values() {
+        let mut buffer: Vec<Data> = Vec::<Data>::new();
+        let mut diskstat_zero = Diskstats::new();
+        let mut diskstat_one = Diskstats::new();
+
+        diskstat_zero.collect_data().unwrap();
+        diskstat_one.collect_data().unwrap();
+        buffer.push(Data::Diskstats(diskstat_zero));
+        buffer.push(Data::Diskstats(diskstat_one));
+        let json = Diskstats::new().get_data(buffer, "run=test&get=values&key=Reads".to_string()).unwrap();
+        let values: Vec<DiskValues> = serde_json::from_str(&json).unwrap();
+        assert!(values[0].name != "");
+        assert!(values[0].values.len() > 0);
     }
 }
