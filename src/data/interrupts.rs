@@ -129,8 +129,8 @@ impl CollectData for InterruptData {
         for line in reader.lines() {
             let mut interrupt_line_data = InterruptLineData::new();
             interrupt_line_data.set_time(TimeEnum::DateTime(Utc::now()));
-            let line = line?;
 
+            let line = line?;
             let mut split = line.split_whitespace();
 
             /* Get type of interrupt line */
@@ -143,7 +143,7 @@ impl CollectData for InterruptData {
                     if value.to_uppercase() == "MIS" || value.to_uppercase() == "ERR" {
                         let interrupt_cpu_data = get_interrupt_cpu_data(split.next().unwrap(), 0)?;
                         interrupt_line_data.push_to_per_cpu(interrupt_cpu_data);
-                        interrupt_line_data.set_device(value.to_string());
+                        interrupt_line_data.set_type(value.to_string());
                     } else {
                         /* Other named INTRs are per-cpu */
                         for cpu in 0..cpu_count {
@@ -158,15 +158,15 @@ impl CollectData for InterruptData {
                          *
                          * as_str - Get the remaining data as is
                          */
-                        let mut device_name = Vec::<&str>::new();
+                        let mut type_name = Vec::<&str>::new();
                         loop {
                             let s = split.next();
                             match s {
-                                Some(value) => device_name.push(value),
+                                Some(value) => type_name.push(value),
                                 None => break,
                             }
                         }
-                        interrupt_line_data.set_device(device_name.join(" ").to_string());
+                        interrupt_line_data.set_type(type_name.join(" ").to_string());
                     }
                 }
                 InterruptLine::InterruptNr(_) => {
@@ -291,7 +291,7 @@ fn init_interrupts() {
 
 #[cfg(test)]
 mod tests {
-    use super::{InterruptData, InterruptLineData};
+    use super::{InterruptData, InterruptLineData, InterruptLine};
     use crate::data::{CollectData, Data};
     use crate::visualizer::GetData;
 
@@ -301,6 +301,26 @@ mod tests {
 
         assert!(id.collect_data().unwrap() == ());
         assert!(id.interrupt_data.len() > 0);
+        for interrupt_line_data in id.interrupt_data {
+            match interrupt_line_data.interrupt_line {
+                InterruptLine::InterruptNr(_) => {
+                    assert!(interrupt_line_data.interrupt_type != "");
+                    assert!(interrupt_line_data.interrupt_device != "");
+                    assert!(interrupt_line_data.per_cpu.len() > 0);
+                }
+                InterruptLine::InterruptStr(value) => {
+                    if value.to_uppercase() == "MIS" || value.to_uppercase() == "ERR" {
+                        assert!(interrupt_line_data.interrupt_type == value);
+                        assert!(interrupt_line_data.per_cpu.len() == 1);
+                    } else {
+                        assert!(interrupt_line_data.interrupt_type != "");
+                        assert!(interrupt_line_data.per_cpu.len() > 0);
+                    }
+                    assert!(interrupt_line_data.interrupt_device == "");
+                }
+                InterruptLine::None => assert!(false),
+            }
+        }
     }
 
     #[test]

@@ -3,7 +3,6 @@ import { clearElements, addElemToNode } from './index.js';
 export { interrupts };
 
 function getLine(run, key, elem) {
-    console.log("Getting Line data for ", key);
     const http = new XMLHttpRequest();
     http.onload = function() {
         var data = JSON.parse(http.response);
@@ -29,10 +28,10 @@ function getLine(run, key, elem) {
             interrupt_type_datas.push(interrupt_cpu_data);
         }
         var title;
-        if (data[0].interrupt_type != "") {
+        if (data[0].interrupt_device != "") {
             title = `Interrupt #${key} (${data[0].interrupt_device} ${data[0].interrupt_type})`;
         } else {
-            title = `${key} (${data[0].interrupt_device})`;
+            title = `${key} (${data[0].interrupt_type})`;
         }
         var TESTER = elem;
         var layout = {
