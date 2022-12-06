@@ -33,6 +33,9 @@ pub enum PDError {
 
     #[error("Error getting Line Value Error")]
     CollectorLineValueError,
+
+    #[error("Unsupported API")]
+    VisualizerUnsupportedAPI,
 }
 
 lazy_static! {
