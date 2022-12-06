@@ -1,4 +1,5 @@
 import { systemInfo } from './system_info.js';
+import { sysctl } from './sysctl.js';
 import { cpuUtilization } from './cpu_utilization.js';
 import { vmStat } from './vmstat.js';
 import { kernelConfig } from './kernel_config.js';
@@ -21,6 +22,9 @@ function openData(evt: Event, elem: HTMLButtonElement) {
 	currentTarget.className += " active";
 	if (tabName == "system_info") {
 		systemInfo();
+	}
+	if (tabName == "sysctl") {
+		sysctl(false);
 	}
 	if (tabName == "cpu_utilization") {
 		cpuUtilization();
@@ -67,7 +71,17 @@ for (var i=0; i < elems.length; i++) {
 		} else {
 			kernelConfig(false);
 		}
-	} )
+	})
+}
+var elems = document.getElementsByClassName('sysctl-button');
+for (var i=0; i < elems.length; i++) {
+	elems[i].addEventListener("click",function(evn: Event) {
+		if (this.id == "sysctl_diff_yes"){
+			sysctl(true);
+		} else {
+			sysctl(false);
+		}
+	})
 }
 
 function clearElements(id: string) {

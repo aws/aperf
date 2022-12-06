@@ -8,6 +8,7 @@
 		<h2>Performance Data Assistant</h2>
 		<div class="tab">
 			<button class="tablinks" name="system_info" id="default">SUT Config</button>
+			<button class="tablinks" name="sysctl">Sysctl Data</button>
 			<button class="tablinks" name="cpu_utilization">CPU Utilization</button>
 			<button class="tablinks" name="vmstat">VM Stat</button>
 			<button class="tablinks" name="kernel_config">Kernel Config</button>
@@ -16,6 +17,14 @@
 		</div>
 		<div id="system_info" class="tabcontent">
 			<div id="system-info-runs"></div>
+		</div>
+		<div id="sysctl" class="tabcontent">
+			<div>
+				<h3>Diff:</h3>
+				<input type="radio" class="sysctl-button" id="sysctl_diff_yes" name="sysctlDiff">Yes</button>
+				<input type="radio" class="sysctl-button" id="sysctl_diff_no" name="sysctlDiff">No</button>
+			</div>
+			<div id="sysctl-data-runs"></div>
 		</div>
 		<div id="cpu_utilization" class="tabcontent">
 			<div id="cpu-util-runs"></div>
@@ -39,6 +48,7 @@
 		</div>
 		<script type="module" src="/html_files/index.js"></script>
 		<script type="module" src="/html_files/system_info.js"></script>
+		<script type="module" src="/html_files/sysctl.js"></script>
 		<script type="module" src="/html_files/cpu_utilization.js"></script>
 		<script type="module" src="/html_files/vmstat.js"></script>
 		<script type="module" src="/html_files/kernel_config.js"></script>
