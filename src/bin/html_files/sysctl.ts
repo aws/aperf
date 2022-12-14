@@ -47,7 +47,8 @@ function getSysctlData(run, container_id, diff) {
         dl.style.float = "none";
         var dl_id = dl.id;
         addElemToNode(container_id, dl);
-        for (let [key, value] of Object.entries(data)) {
+        for (var key in data) {
+            var value = data[key];
             if (diff && !containsEntry(key)) {
                 continue;
             }
