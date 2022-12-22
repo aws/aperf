@@ -35,9 +35,10 @@ jobs:
           allowUpdates: true
       - name: Upload ARM64 artifacts
         if: ${{ matrix.architecture == 'ARM64' }}
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@v1.12.0
         with:
           artifacts: "./pda-${{ github.ref_name }}-aarch64.tar.gz"
           replacesArtifacts: false
           token: ${{ secrets.GITHUB_TOKEN }}
           allowUpdates: true
+          skipIfReleaseExists: true
