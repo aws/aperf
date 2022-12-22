@@ -27,7 +27,7 @@ jobs:
         run: sudo mkdir -p pda-${{ github.ref_name }}-aarch64 && sudo cp ./target/aarch64-unknown-linux-musl/release/performance-data-collector ./target/aarch64-unknown-linux-musl/release/performance-data-visualizer ./pda-${{ github.ref_name }}-aarch64 && sudo tar -cvzf pda-${{ github.ref_name }}-aarch64.tar.gz pda-${{ github.ref_name }}-aarch64/ && sudo rm -rf pda-${{ github.ref_name }}-aarch64
       - name: Upload X64 artifacts.
         if: ${{ matrix.architecture == 'X64' }}
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@v1.11.1
         with:
           artifacts: "./pda-${{ github.ref_name }}-x86_64.tar.gz"
           replacesArtifacts: false
@@ -35,9 +35,10 @@ jobs:
           allowUpdates: true
       - name: Upload ARM64 artifacts
         if: ${{ matrix.architecture == 'ARM64' }}
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@v1.11.1
         with:
           artifacts: "./pda-${{ github.ref_name }}-aarch64.tar.gz"
           replacesArtifacts: false
           token: ${{ secrets.GITHUB_TOKEN }}
           allowUpdates: true
+          generateReleaseNotes: true
