@@ -178,7 +178,8 @@ processed_data!(
     Diskstats,
     SystemInfo,
     KernelConfig,
-    InterruptData
+    InterruptData,
+    SysctlData
 );
 
 pub trait CollectData {

@@ -1,8 +1,8 @@
 extern crate ctor;
 
-use anyhow::{Result, bail};
-use crate::data::{CollectData, Data, DataType, TimeEnum};
-use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA, PDError};
+use anyhow::Result;
+use crate::data::{CollectData, Data, ProcessedData, DataType, TimeEnum};
+use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use crate::visualizer::{DataVisualizer, GetData};
 use chrono::prelude::*;
 use ctor::ctor;
@@ -54,7 +54,17 @@ impl CollectData for SysctlData {
                 Err(_) => continue,
             };
             if !flags.contains(sysctl::CtlFlags::SKIP) && can_collect(ctl.name()?) {
-                self.add_ctl(ctl.name()?, ctl.value_string()?);
+                let name;
+                let value;
+                match ctl.name() {
+                    Ok(s) => name = s,
+                    _ => continue,
+                }
+                match ctl.value_string() {
+                    Ok(s) => value = s,
+                    _ => continue,
+                }
+                self.add_ctl(name, value);
             }
         }
         debug!("{:#?}", self.sysctl_data);
@@ -67,11 +77,20 @@ fn get_sysctl_data(value: SysctlData) -> Result<String> {
 }
 
 impl GetData for SysctlData {
-    fn get_data(&mut self, buffer: Vec<Data>, query: String) -> Result<String> {
+    fn process_raw_data(&mut self, buffer: Data) -> Result<ProcessedData> {
+        let raw_value = match buffer {
+            Data::SysctlData(ref value) => value,
+            _ => panic!("Invalid Data type in raw file"),
+        };
+        let processed_data = ProcessedData::SysctlData((*raw_value).clone());
+        Ok(processed_data)
+    }
+
+    fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
         let mut values = Vec::new();
         for data in buffer {
             match data {
-                Data::SysctlData(ref value) => values.push(value.clone()),
+                ProcessedData::SysctlData(ref value) => values.push(value.clone()),
                 _ => unreachable!(),
             }
         }
@@ -83,7 +102,7 @@ impl GetData for SysctlData {
 
         match req_str.as_str() {
             "values" => return get_sysctl_data(values[0].clone()),
-            _ => bail!(PDError::VisualizerUnsupportedAPI),
+            _ => panic!("Unsupported API"),
         }
     }
 }
@@ -99,7 +118,7 @@ fn init_sysctl() {
     );
     let js_file_name = file_name.clone() + &".js".to_string();
     let dv = DataVisualizer::new(
-        Data::SysctlData(sysctl_data),
+        ProcessedData::SysctlData(sysctl_data),
         file_name.clone(),
         js_file_name,
         include_str!("../bin/html_files/js/sysctl.js").to_string(),
@@ -120,7 +139,7 @@ fn init_sysctl() {
 #[cfg(test)]
 mod tests {
     use super::{SysctlData, DONT_COLLECT};
-    use crate::data::{CollectData, Data};
+    use crate::data::{CollectData, Data, ProcessedData};
     use crate::visualizer::GetData;
     use std::collections::BTreeMap;
 
@@ -151,10 +170,12 @@ mod tests {
     fn test_get_values() {
         let mut buffer: Vec<Data> = Vec::<Data>::new();
         let mut sysctl = SysctlData::new();
+        let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
 
         sysctl.collect_data().unwrap();
         buffer.push(Data::SysctlData(sysctl));
-        let json = SysctlData::new().get_data(buffer, "run=test&get=values".to_string()).unwrap();
+        processed_buffer.push(SysctlData::new().process_raw_data(buffer[0].clone()).unwrap());
+        let json = SysctlData::new().get_data(processed_buffer, "run=test&get=values".to_string()).unwrap();
         let values: BTreeMap<String, String> = serde_json::from_str(&json).unwrap();
         assert!(values.len() != 0);
     }
