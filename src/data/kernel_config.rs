@@ -1,7 +1,7 @@
 extern crate ctor;
 
 use anyhow::Result;
-use crate::data::{CollectData, Data, DataType, TimeEnum};
+use crate::data::{CollectData, Data, ProcessedData, DataType, TimeEnum};
 use crate::{PERFORMANCE_DATA, PDError, VISUALIZATION_DATA};
 use crate::visualizer::{DataVisualizer, GetData};
 use chrono::prelude::*;
@@ -199,11 +199,20 @@ fn get_kernel_config(value: KernelConfig) -> Result<String> {
 }
 
 impl GetData for KernelConfig {
-    fn get_data(&mut self, buffer: Vec<Data>, query: String) -> Result<String> {
+    fn process_raw_data(&mut self, buffer: Data) -> Result<ProcessedData> {
+        let raw_value = match buffer {
+            Data::KernelConfig(ref value) => value,
+            _ => panic!("Invalid Data type in raw file"),
+        };
+        let processed_data = ProcessedData::KernelConfig((*raw_value).clone());
+        Ok(processed_data)
+    }
+
+    fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
         let mut values = Vec::new();
         for data in buffer {
             match data {
-                Data::KernelConfig(ref value) => values.push(value.clone()),
+                ProcessedData::KernelConfig(ref value) => values.push(value.clone()),
                 _ => panic!("Invalid Data type in file"),
             }
         }
@@ -231,7 +240,7 @@ fn init_kernel_config() {
     );
     let js_file_name = file_name.clone() + &".js".to_string();
     let dv = DataVisualizer::new(
-        Data::KernelConfig(kernel_config),
+        ProcessedData::KernelConfig(kernel_config),
         file_name.clone(),
         js_file_name,
         include_str!("../bin/html_files/js/kernel_config.js").to_string(),
@@ -252,7 +261,7 @@ fn init_kernel_config() {
 #[cfg(test)]
 mod tests {
     use super::{KernelConfig, KernelConfigEntryGroup};
-    use crate::data::{CollectData, Data};
+    use crate::data::{CollectData, Data, ProcessedData};
     use crate::visualizer::GetData;
 
     #[test]
@@ -267,10 +276,12 @@ mod tests {
     fn test_get_values() {
         let mut buffer: Vec<Data> = Vec::<Data>::new();
         let mut kernel_config = KernelConfig::new();
+        let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
 
         kernel_config.collect_data().unwrap();
         buffer.push(Data::KernelConfig(kernel_config));
-        let json = KernelConfig::new().get_data(buffer, "run=test&get=values".to_string()).unwrap();
+        processed_buffer.push(KernelConfig::new().process_raw_data(buffer[0].clone()).unwrap());
+        let json = KernelConfig::new().get_data(processed_buffer, "run=test&get=values".to_string()).unwrap();
         let values: Vec<KernelConfigEntryGroup> = serde_json::from_str(&json).unwrap();
         assert!(values.len() > 0);
     }
