@@ -34,6 +34,9 @@ pub enum PDError {
     #[error("Error getting Line Value Error")]
     CollectorLineValueError,
 
+    #[error("Error getting value from Option")]
+    ProcessorOptionExtractError,
+
     #[error("Unsupported API")]
     VisualizerUnsupportedAPI,
 }
