@@ -202,7 +202,7 @@ impl VisualizationData {
 
     pub fn unpack_data(&mut self, name: String) -> Result<()> {
         for (_, datavisualizer) in self.visualizers.iter_mut() {
-            datavisualizer.unpack_data(name.clone())?;
+            datavisualizer.process_raw_data(name.clone())?;
         }
         Ok(())
     }

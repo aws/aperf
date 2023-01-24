@@ -1,12 +1,12 @@
 use anyhow::Result;
-use crate::{data::Data, get_file, PDError};
+use crate::{data::Data, data::ProcessedData, get_file, PDError};
 use serde::Deserialize;
 use std::{collections::HashMap, fs::File};
 
 pub struct DataVisualizer {
-    pub data: Data,
+    pub data: ProcessedData,
     pub file_handle: Option<File>,
-    pub run_values: HashMap<String, Vec<Data>>,
+    pub run_values: HashMap<String, Vec<ProcessedData>>,
     pub file_name: String,
     pub js_file_name: String,
     pub js: String,
@@ -14,7 +14,7 @@ pub struct DataVisualizer {
 }
 
 impl DataVisualizer {
-    pub fn new(data: Data, file_name: String, js_file_name: String, js: String, api_name: String) -> Self {
+    pub fn new(data: ProcessedData, file_name: String, js_file_name: String, js: String, api_name: String) -> Self {
         DataVisualizer {
             data: data,
             file_handle: None,
@@ -33,11 +33,16 @@ impl DataVisualizer {
         Ok(())
     }
 
-    pub fn unpack_data(&mut self, name: String) -> Result<()> {
-        let mut data = Vec::new();
+    pub fn process_raw_data(&mut self, name: String) -> Result<()> {
+        let mut raw_data = Vec::new();
         for document in serde_yaml::Deserializer::from_reader(self.file_handle.as_ref().unwrap()) {
             let v = Data::deserialize(document);
-            data.push(v?);
+            raw_data.push(v?);
+        }
+        let mut data = Vec::new();
+        for value in raw_data {
+            let processed_data = self.data.process_raw_data(value)?;
+            data.push(processed_data);
         }
         self.run_values.insert(name.clone(), data);
         Ok(())
@@ -57,7 +62,10 @@ impl DataVisualizer {
 }
 
 pub trait GetData {
-    fn get_data(&mut self, _values: Vec<Data>, _query: String) -> Result<String> {
+    fn get_data(&mut self, _values: Vec<ProcessedData>, _query: String) -> Result<String> {
+        unimplemented!();
+    }
+    fn process_raw_data(&mut self, _buffer: Data) -> Result<ProcessedData> {
         unimplemented!();
     }
 }
@@ -65,13 +73,13 @@ pub trait GetData {
 #[cfg(test)]
 mod tests {
     use crate::data::cpu_utilization::{CpuData, CpuUtilization};
-    use crate::data::{Data, TimeEnum};
+    use crate::data::{Data, ProcessedData, TimeEnum};
     use super::DataVisualizer;
 
     #[test]
     fn test_unpack_data() {
         let mut dv = DataVisualizer::new(
-            Data::CpuUtilization(CpuUtilization::new()),
+            ProcessedData::CpuUtilization(CpuUtilization::new()),
             "cpu_utilization".to_string(),
             String::new(),
             String::new(),
@@ -80,7 +88,7 @@ mod tests {
         assert!(
             dv.init_visualizer("test/performance_data_2022-01-01_01_01_01/".to_string(), "test".to_string()).unwrap() == ()
         );
-        assert!(dv.unpack_data("test".to_string()).unwrap() == ());
+        assert!(dv.process_raw_data("test".to_string()).unwrap() == ());
         let ret = dv.get_data("run=test&get=aggregate".to_string()).unwrap();
         let values: Vec<CpuData> = serde_json::from_str(&ret).unwrap();
         assert!(values[0].cpu == -1);
