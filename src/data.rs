@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_yaml::{self};
 use std::fs::{File, OpenOptions};
 use vmstat::{Vmstat, VmstatRaw};
-use diskstats::Diskstats;
+use diskstats::{Diskstats, DiskstatsRaw};
 use std::ops::Sub;
 use systeminfo::SystemInfo;
 use kernel_config::KernelConfig;
@@ -165,7 +165,7 @@ macro_rules! processed_data {
 data!(
     CpuUtilizationRaw,
     VmstatRaw,
-    Diskstats,
+    DiskstatsRaw,
     SystemInfo,
     KernelConfig,
     InterruptData,
@@ -174,7 +174,8 @@ data!(
 
 processed_data!(
     CpuUtilization,
-    Vmstat
+    Vmstat,
+    Diskstats
 );
 
 pub trait CollectData {
