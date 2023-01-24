@@ -2,7 +2,7 @@ extern crate ctor;
 
 use anyhow::Result;
 use sysinfo::{System, SystemExt};
-use crate::data::{CollectData, Data, DataType, TimeEnum};
+use crate::data::{CollectData, Data, ProcessedData, DataType, TimeEnum};
 use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use crate::visualizer::{DataVisualizer, GetData};
 use chrono::prelude::*;
@@ -187,11 +187,20 @@ fn get_values(buffer: SystemInfo) -> Result<String> {
 }
 
 impl GetData for SystemInfo {
-    fn get_data(&mut self, buffer: Vec<Data>, query: String) -> Result<String> {
+    fn process_raw_data(&mut self, buffer: Data) -> Result<ProcessedData> {
+        let raw_value = match buffer {
+            Data::SystemInfo(ref value) => value,
+            _ => panic!("Invalid Data type in raw file"),
+        };
+        let processed_data = ProcessedData::SystemInfo((*raw_value).clone());
+        Ok(processed_data)
+    }
+
+    fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
         let mut values = Vec::new();
         for data in buffer {
             match data {
-                Data::SystemInfo(ref value) => values.push(value.clone()),
+                ProcessedData::SystemInfo(ref value) => values.push(value.clone()),
                 _ => panic!("Invalid Data type in file"),
             }
         }
@@ -216,7 +225,7 @@ fn init_systeminfo() {
     );
     let js_file_name = file_name.clone() + &".js".to_string();
     let dv = DataVisualizer::new(
-        Data::SystemInfo(system_info.clone()),
+        ProcessedData::SystemInfo(system_info.clone()),
         file_name.clone(),
         js_file_name,
         include_str!("../bin/html_files/js/system_info.js").to_string(),
@@ -227,7 +236,6 @@ fn init_systeminfo() {
         .lock()
         .unwrap()
         .add_datatype(file_name.clone(), dt);
-
     VISUALIZATION_DATA
         .lock()
         .unwrap()
@@ -237,7 +245,7 @@ fn init_systeminfo() {
 #[cfg(test)]
 mod tests {
     use super::{SystemInfo, SUTConfigEntry};
-    use crate::data::{CollectData, Data};
+    use crate::data::{CollectData, Data, ProcessedData};
     use crate::visualizer::GetData;
 
     #[test]
@@ -256,10 +264,12 @@ mod tests {
     fn test_get_values() {
         let mut buffer: Vec<Data> = Vec::<Data>::new();
         let mut system_info = SystemInfo::new();
+        let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
 
         system_info.collect_data().unwrap();
         buffer.push(Data::SystemInfo(system_info));
-        let json = SystemInfo::new().get_data(buffer, "run=test&get=values".to_string()).unwrap();
+        processed_buffer.push(SystemInfo::new().process_raw_data(buffer[0].clone()).unwrap());
+        let json = SystemInfo::new().get_data(processed_buffer, "run=test&get=values".to_string()).unwrap();
         let values: Vec<SUTConfigEntry> = serde_json::from_str(&json).unwrap();
         assert!(values.len() > 0);
     }

@@ -175,7 +175,8 @@ data!(
 processed_data!(
     CpuUtilization,
     Vmstat,
-    Diskstats
+    Diskstats,
+    SystemInfo
 );
 
 pub trait CollectData {
