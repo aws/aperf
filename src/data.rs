@@ -142,6 +142,34 @@ macro_rules! data {
     };
 }
 
+macro_rules! processed_data {
+    ( $( $x:ident ),* ) => {
+        #[derive(Clone, Debug, Deserialize, Serialize)]
+        pub enum ProcessedData {
+            $(
+                $x($x),
+            )*
+        }
+
+        impl ProcessedData {
+            pub fn process_raw_data(&mut self, buffer: Data) -> Result<ProcessedData> {
+                match self {
+                    $(
+                        ProcessedData::$x(ref mut value) => Ok(value.process_raw_data(buffer)?),
+                    )*
+                }
+            }
+            pub fn get_data(&mut self, values: Vec<ProcessedData>, query: String) -> Result<String> {
+                match self {
+                    $(
+                        ProcessedData::$x(ref mut value) => Ok(value.get_data(values, query)?),
+                    )*
+                }
+            }
+        }
+    };
+}
+
 data!(
     CpuUtilization,
     Vmstat,
