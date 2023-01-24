@@ -1,7 +1,7 @@
 extern crate ctor;
 
 use anyhow::Result;
-use crate::data::{CollectData, Data, DataType, TimeEnum};
+use crate::data::{CollectData, Data, ProcessedData, DataType, TimeEnum};
 use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use crate::visualizer::{DataVisualizer, GetData};
 use chrono::prelude::*;
@@ -12,6 +12,33 @@ use serde::{Deserialize, Serialize};
 use std::ops::Sub;
 
 pub static CPU_UTILIZATION_FILE_NAME: &str = "cpu_utilization";
+
+
+/// Gather CPU Utilization raw data.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CpuUtilizationRaw {
+    pub time: TimeEnum,
+    pub data: String,
+}
+
+impl CpuUtilizationRaw {
+    pub fn new() -> Self {
+        CpuUtilizationRaw {
+            time: TimeEnum::DateTime(Utc::now()),
+            data: String::new(),
+        }
+    }
+}
+
+impl CollectData for CpuUtilizationRaw {
+    fn collect_data(&mut self) -> Result<()> {
+        self.time = TimeEnum::DateTime(Utc::now());
+        self.data = String::new();
+        self.data = std::fs::read_to_string("/proc/stat")?;
+        debug!("{:#?}", self.data);
+        Ok(())
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct UtilValues {
@@ -121,43 +148,51 @@ impl CpuUtilization {
     fn add_per_cpu_data(&mut self, cpu_data: CpuData) {
         self.per_cpu.push(cpu_data);
     }
-
-    fn clear_per_cpu_data(&mut self) {
-        self.per_cpu.clear();
-    }
 }
 
-impl CollectData for CpuUtilization {
-    fn collect_data(&mut self) -> Result<()> {
-        let stat = KernelStats::new().unwrap();
-        let time_now = Utc::now();
-        self.clear_per_cpu_data();
+/// Process gathered raw data during visualization.
+fn process_gathered_raw_data(buffer: Data) -> Result<ProcessedData> {
+    let raw_value = match buffer {
+        Data::CpuUtilizationRaw(ref value) => value,
+        _ => panic!("Invalid Data type in raw file"),
+    };
+    let stat = KernelStats::from_reader(raw_value.data.as_bytes()).unwrap();
+    let mut cpu_utilization = CpuUtilization::new();
+    let time_now = match raw_value.time {
+        TimeEnum::DateTime(value) => value,
+        _ => panic!("Has to be datetime"),
+    };
 
-        /* Get total numbers */
-        self.set_total(-1, stat.total);
-        self.set_total_time(time_now);
+    /* Get total numbers */
+    cpu_utilization.set_total(-1, stat.total);
+    cpu_utilization.set_total_time(time_now);
 
-        debug!("Total CPU Utilization: {:#?}", self.total);
-        /* Get per_cpu numbers */
-        for (i, cpu) in stat.cpu_time.iter().enumerate() {
-            let mut current_cpu_data = CpuData::new();
+    /* Get per_cpu numbers */
+    for (i, cpu) in stat.cpu_time.iter().enumerate() {
+        let mut current_cpu_data = CpuData::new();
 
-            /* Set this CPU's data */
-            current_cpu_data.set_data(i as i64, cpu);
-            current_cpu_data.set_time(TimeEnum::DateTime(time_now));
+        /* Set this CPU's data */
+        current_cpu_data.set_data(i as i64, cpu);
+        current_cpu_data.set_time(TimeEnum::DateTime(time_now));
 
-            /* Push to Vec of per_cpu data */
-            self.add_per_cpu_data(current_cpu_data);
-        }
-        debug!("Per CPU Utilization: {:#?}", self.per_cpu);
-        Ok(())
+        /* Push to Vec of per_cpu data */
+        cpu_utilization.add_per_cpu_data(current_cpu_data);
     }
+    let data = ProcessedData::CpuUtilization(cpu_utilization.clone());
+    Ok(data)
 }
 
-impl Default for CpuUtilization {
-    fn default() -> Self {
-        Self::new()
-    }
+/// Visualize processed data.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct TimeData {
+    pub time: TimeEnum,
+    pub value: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct UtilData {
+    pub cpu: i64,
+    pub data: Vec<TimeData>,
 }
 
 fn percentage(value: u64, total: u64) -> u64 {
@@ -205,44 +240,6 @@ pub fn get_aggregate_data(values: Vec<CpuData>) -> Result<String> {
     Ok(serde_json::to_string(&end_values)?)
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct TimeData {
-    pub time: TimeEnum,
-    pub value: u64,
-}
-
-impl TimeData {
-    fn new(time: TimeEnum) -> Self {
-        TimeData {
-            time,
-            value: 0,
-        }
-    }
-
-    fn set_value(&mut self, value: u64) {
-        self.value = value;
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct UtilData {
-    pub cpu: i64,
-    pub data: Vec<TimeData>,
-}
-
-impl UtilData {
-    fn new(cpu: i64) -> Self {
-        UtilData {
-            cpu: cpu,
-            data: Vec::new(),
-        }
-    }
-}
-
-fn get_count(value: CpuUtilization) -> u64 {
-    value.per_cpu.len() as u64
-}
-
 pub fn get_cpu_values(cpu: i64, values: Vec<CpuUtilization>) -> Vec<CpuData> {
     let mut end_values = Vec::new();
     for value in values {
@@ -259,7 +256,10 @@ pub fn get_cpu_values(cpu: i64, values: Vec<CpuUtilization>) -> Vec<CpuData> {
 fn get_type(count: u64, values: Vec<CpuUtilization>, util_type: &str) -> Result<String> {
     let mut end_values = Vec::new();
     for i in 0..count {
-        let mut util_data = UtilData::new(i as i64);
+        let mut util_data = UtilData {
+           cpu: (i as i64),
+           data: Vec::new(),
+        };
 
         /* Get cpu 'i' values */
         let cpu_values = get_cpu_values(i as i64, values.clone());
@@ -278,7 +278,6 @@ fn get_type(count: u64, values: Vec<CpuUtilization>, util_type: &str) -> Result<
             end_value.values = set_as_percent(current_cpu_data - prev_cpu_data);
             end_value.set_time(current_time - time_zero);
 
-            let mut time_data = TimeData::new(end_value.time);
             let value;
             match util_type {
                 "user" => value = end_value.values.user,
@@ -291,7 +290,10 @@ fn get_type(count: u64, values: Vec<CpuUtilization>, util_type: &str) -> Result<
                 "steal" => value = end_value.values.steal,
                 _ => panic!("Invalid util type"),
             }
-            time_data.set_value(value);
+            let time_data = TimeData {
+                time: end_value.time,
+                value: value,
+            };
             util_data.data.push(time_data);
             prev_cpu_data = current_cpu_data;
         }
@@ -301,11 +303,15 @@ fn get_type(count: u64, values: Vec<CpuUtilization>, util_type: &str) -> Result<
 }
 
 impl GetData for CpuUtilization {
-    fn get_data(&mut self, buffer: Vec<Data>, query: String) -> Result<String> {
+    fn process_raw_data(&mut self, buffer: Data) -> Result<ProcessedData> {
+        process_gathered_raw_data(buffer)
+    }
+
+    fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
         let mut values = Vec::new();
         for data in buffer {
             match data {
-                Data::CpuUtilization(ref value) => values.push(value.clone()),
+                ProcessedData::CpuUtilization(ref value) => values.push(value.clone()),
                 _ => panic!("Invalid Data type in file"),
             }
         }
@@ -325,8 +331,7 @@ impl GetData for CpuUtilization {
                 return get_aggregate_data(temp_values);
             },
             "user" | "nice" | "system" | "irq" | "softirq" | "idle" | "iowait" | "steal" => {
-                let count = get_count(values[0].clone());
-                return get_type(count, values, &req_str);
+                return get_type(values[0].per_cpu.len() as u64, values, &req_str);
             },
             _ => panic!("Unsupported API"),
         }
@@ -336,16 +341,17 @@ impl GetData for CpuUtilization {
 
 #[ctor]
 fn init_cpu_utilization() {
-    let cpu_utilization = CpuUtilization::new();
+    let cpu_utilization_raw = CpuUtilizationRaw::new();
     let file_name = CPU_UTILIZATION_FILE_NAME.to_string();
     let dt = DataType::new(
-        Data::CpuUtilization(cpu_utilization.clone()),
+        Data::CpuUtilizationRaw(cpu_utilization_raw.clone()),
         file_name.clone(),
         false
     );
     let js_file_name = file_name.clone() + &".js".to_string();
+    let cpu_utilization = CpuUtilization::new();
     let dv = DataVisualizer::new(
-        Data::CpuUtilization(cpu_utilization),
+        ProcessedData::CpuUtilization(cpu_utilization),
         file_name.clone(),
         js_file_name,
         include_str!("../bin/html_files/js/cpu_utilization.js").to_string(),
@@ -362,34 +368,36 @@ fn init_cpu_utilization() {
         .unwrap()
         .add_visualizer(file_name.clone(), dv);
 }
-
 #[cfg(test)]
-mod tests {
-    use super::{CpuData, CpuUtilization, UtilData};
-    use crate::data::{CollectData, Data};
+mod cpu_tests {
+    use super::{CpuData, CpuUtilization, CpuUtilizationRaw, UtilData};
+    use crate::data::{CollectData, Data, ProcessedData};
     use crate::visualizer::GetData;
 
     #[test]
     fn test_collect_data() {
-        let mut cpu_utilization = CpuUtilization::new();
+        let mut cpu_utilization = CpuUtilizationRaw::new();
 
         assert!(cpu_utilization.collect_data().unwrap() == ());
-        assert!(cpu_utilization.total.cpu == -1);
-        assert!(!cpu_utilization.per_cpu.is_empty());
+        assert!(!cpu_utilization.data.is_empty());
     }
 
     #[test]
     fn test_get_data_aggregate_cpu() {
         let mut buffer: Vec<Data> = Vec::<Data>::new();
-        let mut cpu_util_zero = CpuUtilization::new();
-        let mut cpu_util_one = CpuUtilization::new();
+        let mut cpu_util_zero = CpuUtilizationRaw::new();
+        let mut cpu_util_one = CpuUtilizationRaw::new();
+        let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
 
         cpu_util_zero.collect_data().unwrap();
         cpu_util_one.collect_data().unwrap();
 
-        buffer.push(Data::CpuUtilization(cpu_util_zero));
-        buffer.push(Data::CpuUtilization(cpu_util_one));
-        let json = CpuUtilization::new().get_data(buffer, "run=test&get=aggregate".to_string()).unwrap();
+        buffer.push(Data::CpuUtilizationRaw(cpu_util_zero));
+        buffer.push(Data::CpuUtilizationRaw(cpu_util_one));
+        for buf in buffer {
+            processed_buffer.push(CpuUtilization::new().process_raw_data(buf).unwrap());
+        }
+        let json = CpuUtilization::new().get_data(processed_buffer, "run=test&get=aggregate".to_string()).unwrap();
         let values: Vec<CpuData> = serde_json::from_str(&json).unwrap();
         assert!(values[0].cpu == -1);
     }
@@ -409,15 +417,19 @@ mod tests {
     #[test]
     fn test_get_user() {
         let mut buffer: Vec<Data> = Vec::<Data>::new();
-        let mut cpu_util_zero = CpuUtilization::new();
-        let mut cpu_util_one = CpuUtilization::new();
+        let mut cpu_util_zero = CpuUtilizationRaw::new();
+        let mut cpu_util_one = CpuUtilizationRaw::new();
+        let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
 
         cpu_util_zero.collect_data().unwrap();
         cpu_util_one.collect_data().unwrap();
 
-        buffer.push(Data::CpuUtilization(cpu_util_zero));
-        buffer.push(Data::CpuUtilization(cpu_util_one));
-        let json = CpuUtilization::new().get_data(buffer, "run=test&get=user".to_string()).unwrap();
+        buffer.push(Data::CpuUtilizationRaw(cpu_util_zero));
+        buffer.push(Data::CpuUtilizationRaw(cpu_util_one));
+        for buf in buffer {
+            processed_buffer.push(CpuUtilization::new().process_raw_data(buf).unwrap());
+        }
+        let json = CpuUtilization::new().get_data(processed_buffer, "run=test&get=user".to_string()).unwrap();
         let values: Vec<UtilData> = serde_json::from_str(&json).unwrap();
         assert!(values.len() > 0);
     }

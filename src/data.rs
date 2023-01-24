@@ -10,7 +10,7 @@ use anyhow::Result;
 use crate::InitParams;
 use crate::visualizer::GetData;
 use chrono::prelude::*;
-use cpu_utilization::CpuUtilization;
+use cpu_utilization::{CpuUtilization, CpuUtilizationRaw};
 use log::debug;
 use serde::{Deserialize, Serialize};
 use serde_yaml::{self};
@@ -130,14 +130,6 @@ macro_rules! data {
                 }
                 Ok(())
             }
-
-            pub fn get_data(&mut self, values: Vec<Data>, query: String) -> Result<String> {
-                match self {
-                    $(
-                        Data::$x(ref mut value) => Ok(value.get_data(values, query)?),
-                    )*
-                }
-            }
         }
     };
 }
@@ -171,7 +163,7 @@ macro_rules! processed_data {
 }
 
 data!(
-    CpuUtilization,
+    CpuUtilizationRaw,
     Vmstat,
     Diskstats,
     SystemInfo,
@@ -180,13 +172,17 @@ data!(
     SysctlData
 );
 
+processed_data!(
+    CpuUtilization
+);
+
 pub trait CollectData {
     fn collect_data(&mut self) -> Result<()>;
 }
 
 #[cfg(test)]
 mod tests {
-    use super::cpu_utilization::CpuUtilization;
+    use super::cpu_utilization::{CpuUtilization, CpuUtilizationRaw};
     use super::{Data, DataType, TimeEnum};
     use crate::InitParams;
     use chrono::prelude::*;
@@ -198,9 +194,9 @@ mod tests {
     #[test]
     fn test_data_type_init() {
         let mut param = InitParams::new();
-        let data = CpuUtilization::new();
+        let data = CpuUtilizationRaw::new();
         let mut dt = DataType {
-            data: Data::CpuUtilization(data),
+            data: Data::CpuUtilizationRaw(data),
             file_handle: None,
             file_name: "cpu_utilization".to_string(),
             full_path: String::new(),
@@ -224,9 +220,9 @@ mod tests {
     #[test]
     fn test_print() {
         let mut param = InitParams::new();
-        let data = CpuUtilization::new();
+        let data = CpuUtilizationRaw::new();
         let mut dt = DataType {
-            data: Data::CpuUtilization(data),
+            data: Data::CpuUtilizationRaw(data),
             file_handle: None,
             file_name: "cpu_utilization".to_string(),
             full_path: String::new(),
@@ -248,9 +244,8 @@ mod tests {
         for document in serde_yaml::Deserializer::from_reader(dt.file_handle.unwrap()) {
             let v = Data::deserialize(document).expect("File read error");
             match v {
-                Data::CpuUtilization(ref value) => {
-                    assert!(value.total.cpu == 0);
-                    assert!(value.per_cpu.is_empty());
+                Data::CpuUtilizationRaw(ref value) => {
+                    assert!(value.data.is_empty());
                 }
                 _ => assert!(true),
             }
