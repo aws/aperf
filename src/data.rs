@@ -15,7 +15,7 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use serde_yaml::{self};
 use std::fs::{File, OpenOptions};
-use vmstat::Vmstat;
+use vmstat::{Vmstat, VmstatRaw};
 use diskstats::Diskstats;
 use std::ops::Sub;
 use systeminfo::SystemInfo;
@@ -164,7 +164,7 @@ macro_rules! processed_data {
 
 data!(
     CpuUtilizationRaw,
-    Vmstat,
+    VmstatRaw,
     Diskstats,
     SystemInfo,
     KernelConfig,
@@ -173,7 +173,8 @@ data!(
 );
 
 processed_data!(
-    CpuUtilization
+    CpuUtilization,
+    Vmstat
 );
 
 pub trait CollectData {
