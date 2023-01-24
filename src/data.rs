@@ -20,7 +20,7 @@ use diskstats::{Diskstats, DiskstatsRaw};
 use std::ops::Sub;
 use systeminfo::SystemInfo;
 use kernel_config::KernelConfig;
-use interrupts::InterruptData;
+use interrupts::{InterruptData, InterruptDataRaw};
 use sysctldata::SysctlData;
 
 pub struct DataType {
@@ -168,7 +168,7 @@ data!(
     DiskstatsRaw,
     SystemInfo,
     KernelConfig,
-    InterruptData,
+    InterruptDataRaw,
     SysctlData
 );
 
@@ -177,7 +177,8 @@ processed_data!(
     Vmstat,
     Diskstats,
     SystemInfo,
-    KernelConfig
+    KernelConfig,
+    InterruptData
 );
 
 pub trait CollectData {
