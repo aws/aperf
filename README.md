@@ -5,7 +5,6 @@ A CLI tool to gather many pieces of performance data in one go.
 ## Requirements
 * Rust toolchain (v1.61.0+) - https://www.rust-lang.org/tools/install
 * Node.js (v16.16.0+) - https://nodejs.org/en/download/
-* TypeScript compiler (v4.8.3+) - https://www.typescriptlang.org/id/download
 
 ## Building from source
 ```
