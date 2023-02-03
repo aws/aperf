@@ -153,7 +153,7 @@ fn init_vmstat() {
         ProcessedData::Vmstat(vmstat.clone()),
         file_name.clone(),
         js_file_name,
-        include_str!("../bin/html_files/js/vmstat.js").to_string(),
+        include_str!(concat!(env!("JS_DIR"), "/vmstat.js")).to_string(),
         file_name.clone(),
     );
 

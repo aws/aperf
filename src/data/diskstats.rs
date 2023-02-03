@@ -289,7 +289,7 @@ fn init_diskstats() {
         ProcessedData::Diskstats(diskstats),
         file_name.clone(),
         js_file_name,
-        include_str!("../bin/html_files/js/disk_stats.js").to_string(),
+        include_str!(concat!(env!("JS_DIR"), "/disk_stats.js")).to_string(),
         file_name.clone(),
     );
 

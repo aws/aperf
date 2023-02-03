@@ -1,4 +1,5 @@
 use anyhow::Result;
+use std::env;
 use std::process::Command;
 use vergen::{Config, ShaKind, vergen};
 
@@ -13,14 +14,17 @@ fn main() -> Result<()> {
         std::process::exit(1);
     }
 
+    let jsdir = format!("{}/js", env::var("OUT_DIR").unwrap());
+    println!("cargo:rustc-env=JS_DIR={}", jsdir);
     println!("cargo:rerun-if-changed=src/bin/html_files/");
     let status = Command::new("npm")
         .arg("exec")
         .arg("--")
         .arg("tsc")
-        .arg("-b")
+        .arg("-p")
         .arg("src/bin/html_files/")
-        .arg("--verbose")
+        .arg("--outDir")
+        .arg(jsdir)
         .spawn()?
         .wait()?;
     if ! status.success() {

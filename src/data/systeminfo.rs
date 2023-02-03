@@ -228,7 +228,7 @@ fn init_systeminfo() {
         ProcessedData::SystemInfo(system_info.clone()),
         file_name.clone(),
         js_file_name,
-        include_str!("../bin/html_files/js/system_info.js").to_string(),
+        include_str!(concat!(env!("JS_DIR"), "/system_info.js")).to_string(),
         file_name.clone(),
     );
 
