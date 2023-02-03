@@ -51,7 +51,7 @@ async fn main() -> Result<(), std::io::Error> {
                 file_type = mime::CSS;
             },
             "index.js" => file = include_str!(concat!(env!("JS_DIR"), "/index.js")),
-            "plotly-2.14.0.min.js" => file = include_str!("html_files/plotly-2.14.0.min.js"),
+            "plotly.js" => file = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/node_modules/plotly.js/dist/plotly.min.js")),
             _ => return Ok(create_response(
                     StatusCode::Ok,
                     VISUALIZATION_DATA.lock().unwrap().get_js_file((&name).to_string())?,

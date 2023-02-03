@@ -1,4 +1,4 @@
-import './plotly-2.14.0.min.js';
+import './plotly.js';
 import { clearElements, addElemToNode } from './index.js';
 export { interrupts };
 
