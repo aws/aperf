@@ -73,7 +73,7 @@ pub trait GetData {
 #[cfg(test)]
 mod tests {
     use crate::data::cpu_utilization::{CpuData, CpuUtilization};
-    use crate::data::{Data, ProcessedData, TimeEnum};
+    use crate::data::{ProcessedData, TimeEnum};
     use super::DataVisualizer;
 
     #[test]

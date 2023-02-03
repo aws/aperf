@@ -30,6 +30,12 @@ fn init_logger() {
     env_logger::init_from_env(env);
 }
 
+fn prepare_data_collectors() -> Result<()> {
+    info!("Preparing data collectors...");
+    PERFORMANCE_DATA.lock().unwrap().prepare_data_collectors()?;
+    Ok(())
+}
+
 fn start_collection_serial() -> Result<()> {
     info!("Collecting data serially...");
     PERFORMANCE_DATA.lock().unwrap().collect_data_serial()?;
@@ -55,6 +61,7 @@ fn main() -> Result<()> {
     PERFORMANCE_DATA.lock().unwrap().set_params(params);
     PERFORMANCE_DATA.lock().unwrap().init_collectors()?;
     info!("Starting Performance Data collection:");
+    prepare_data_collectors()?;
     collect_static_data()?;
     start_collection_serial()?;
     Ok(())

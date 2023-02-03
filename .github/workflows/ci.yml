@@ -43,5 +43,7 @@ jobs:
       - name: Build for ARM64
         if: ${{ matrix.architecture == 'ARM64' }}
         run: rustup target add aarch64-unknown-linux-musl && cargo build --release --target aarch64-unknown-linux-musl
+      - name: Set perf_event_paranoid to 0
+        run: echo 0 | sudo tee /proc/sys/kernel/perf_event_paranoid
       - name: Run tests
         run: cargo test --verbose

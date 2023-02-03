@@ -5,6 +5,11 @@ pub mod systeminfo;
 pub mod kernel_config;
 pub mod interrupts;
 pub mod sysctldata;
+pub mod perf_stat;
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+pub mod intel_perf_events;
+#[cfg(target_arch = "aarch64")]
+pub mod grv_perf_events;
 
 use anyhow::Result;
 use crate::InitParams;
@@ -22,6 +27,7 @@ use systeminfo::SystemInfo;
 use kernel_config::KernelConfig;
 use interrupts::{InterruptData, InterruptDataRaw};
 use sysctldata::SysctlData;
+use perf_stat::{PerfStatRaw, PerfStat};
 
 pub struct DataType {
     pub data: Data,
@@ -66,6 +72,12 @@ impl DataType {
                 .expect("Could not create file for data"),
         );
 
+        Ok(())
+    }
+
+    pub fn prepare_data_collector(&mut self) -> Result<()> {
+        debug!("Preparing data collector...");
+        self.data.prepare_data_collector()?;
         Ok(())
     }
 
@@ -130,6 +142,15 @@ macro_rules! data {
                 }
                 Ok(())
             }
+
+            fn prepare_data_collector(&mut self) -> Result<()> {
+                match self {
+                    $(
+                        Data::$x(ref mut value) => value.prepare_data_collector()?,
+                    )*
+                }
+                Ok(())
+            }
         }
     };
 }
@@ -169,7 +190,8 @@ data!(
     SystemInfo,
     KernelConfig,
     InterruptDataRaw,
-    SysctlData
+    SysctlData,
+    PerfStatRaw
 );
 
 processed_data!(
@@ -179,16 +201,27 @@ processed_data!(
     SystemInfo,
     KernelConfig,
     InterruptData,
-    SysctlData
+    SysctlData,
+    PerfStat
 );
 
+macro_rules! noop { () => (); }
+
 pub trait CollectData {
-    fn collect_data(&mut self) -> Result<()>;
+    fn prepare_data_collector(&mut self) -> Result<()> {
+        noop!();
+        Ok(())
+    }
+
+    fn collect_data(&mut self) -> Result<()> {
+        noop!();
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::cpu_utilization::{CpuUtilization, CpuUtilizationRaw};
+    use super::cpu_utilization::CpuUtilizationRaw;
     use super::{Data, DataType, TimeEnum};
     use crate::InitParams;
     use chrono::prelude::*;
