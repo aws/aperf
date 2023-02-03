@@ -47,3 +47,7 @@ tokio = { version = "1.24.2", features = ["full"] }
 strum = "0.24"
 strum_macros = "0.24"
 sysctl = "*"
+perf-event = { git = "https://github.com/janaknat/perf-event", branch = "Group" }
+num_cpus = "1.0"
+raw-cpuid = "10.6.0"
+libc = "0.2"

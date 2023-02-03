@@ -334,6 +334,7 @@ mod tests {
         assert!(!id.data.is_empty());
     }
 
+    #[test]
     fn test_get_data_interrupt_line_values() {
         let mut buffer: Vec<Data> = Vec::<Data>::new();
         let mut id_raw = InterruptDataRaw::new();

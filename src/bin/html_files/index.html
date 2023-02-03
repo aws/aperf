@@ -14,6 +14,7 @@
 			<button class="tablinks" name="kernel_config">Kernel Config</button>
 			<button class="tablinks" name="interrupts">Interrupt Data</button>
 			<button class="tablinks" name="disk_stats">Disk Stats</button>
+			<button class="tablinks" name="perfstat">PMU Stats</button>
 		</div>
 		<div id="system_info" class="tabcontent">
 			<div id="system-info-runs"></div>
@@ -31,6 +32,9 @@
 		</div>
 		<div id="vmstat" class="tabcontent">
 			<div id="vmstat-runs"></div>
+		</div>
+		<div id="perfstat" class="tabcontent">
+			<div id="perfstat-runs"></div>
 		</div>
 		<div id="kernel_config" class="tabcontent">
 			<div>
@@ -51,6 +55,7 @@
 		<script type="module" src="/html_files/sysctl.js"></script>
 		<script type="module" src="/html_files/cpu_utilization.js"></script>
 		<script type="module" src="/html_files/vmstat.js"></script>
+		<script type="module" src="/html_files/perf_stat.js"></script>
 		<script type="module" src="/html_files/kernel_config.js"></script>
 		<script type="module" src="/html_files/interrupts.js"></script>
 		<script type="module" src="/html_files/disk_stats.js"></script>

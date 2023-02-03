@@ -5,6 +5,7 @@ import { vmStat } from './vmstat.js';
 import { kernelConfig } from './kernel_config.js';
 import { interrupts } from './interrupts.js';
 import { diskStats } from './disk_stats.js';
+import { perfStat } from './perf_stat.js';
 export { clearElements, addElemToNode, openData };
 
 function openData(evt: Event, elem: HTMLButtonElement) {
@@ -34,6 +35,9 @@ function openData(evt: Event, elem: HTMLButtonElement) {
 	}
 	if (tabName == "kernel_config") {
 		kernelConfig(false);
+	}
+	if (tabName == "perfstat") {
+		perfStat();
 	}
 	if (tabName == "interrupts") {
 		interrupts();

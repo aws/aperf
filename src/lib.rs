@@ -37,6 +37,9 @@ pub enum PDError {
     #[error("Error getting value from Option")]
     ProcessorOptionExtractError,
 
+    #[error("Unsupported CPU")]
+    CollectorPerfUnsupportedCPU,
+
     #[error("Unsupported API")]
     VisualizerUnsupportedAPI,
 }
@@ -89,6 +92,27 @@ impl PerformanceData {
         for (_name, datatype) in self.collectors.iter_mut() {
             datatype.init_data_type(self.init_params.clone())?;
         }
+        Ok(())
+    }
+
+    pub fn prepare_data_collectors(&mut self) -> Result<()> {
+        let mut remove_entries: Vec<String> = Vec::new();
+        for (_name, datatype) in self.collectors.iter_mut() {
+            if datatype.is_static {
+                continue;
+            }
+            match datatype.prepare_data_collector() {
+                Err(e) => {
+                    println!("Error preparing {} collector. Excluding from collection. Error: {}", _name, e);
+                    remove_entries.push(_name.clone());
+                }
+                _ => continue,
+            }
+        }
+        for key in remove_entries {
+            self.collectors.remove_entry(&key);
+        }
+
         Ok(())
     }
 

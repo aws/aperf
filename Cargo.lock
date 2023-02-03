@@ -1506,9 +1506,9 @@ checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
 name = "libc"
-version = "0.2.135"
+version = "0.2.139"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68783febc7782c6c5cb401fbda4de5a9898be1762314da0bb2c10ced61f18b0c"
+checksum = "201de327520df007757c1f0adce6e827fe8562fbc28bfd9c15571c66ca1f5f79"
 
 [[package]]
 name = "libgit2-sys"
@@ -1710,6 +1710,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "478c572c3d73181ff3c2539045f6eb99e5491218eae919370993b890cdbdd98e"
 
 [[package]]
+name = "perf-event"
+version = "0.4.8"
+source = "git+https://github.com/janaknat/perf-event?branch=Group#530842372b88fe689a2a0bed4ba9bbdbc09c9a68"
+dependencies = [
+ "bitflags",
+ "libc",
+ "perf-event-open-sys",
+]
+
+[[package]]
+name = "perf-event-open-sys"
+version = "4.0.0"
+source = "git+https://github.com/janaknat/perf-event?branch=Group#530842372b88fe689a2a0bed4ba9bbdbc09c9a68"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "performance-data-assistant"
 version = "0.1.0"
 dependencies = [
@@ -1721,8 +1739,12 @@ dependencies = [
  "ctor",
  "env_logger",
  "lazy_static",
+ "libc",
  "log",
+ "num_cpus",
+ "perf-event",
  "procfs",
+ "raw-cpuid",
  "rustix 0.35.11",
  "serde",
  "serde_json",
@@ -1946,6 +1968,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca3129af7b92a17112d59ad498c6f81eaf463253766b90396d39ea7a39d6613c"
 dependencies = [
  "rand_core 0.5.1",
+]
+
+[[package]]
+name = "raw-cpuid"
+version = "10.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6823ea29436221176fe662da99998ad3b4db2c7f31e7b6f5fe43adccd6320bb"
+dependencies = [
+ "bitflags",
 ]
 
 [[package]]
