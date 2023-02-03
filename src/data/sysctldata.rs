@@ -121,7 +121,7 @@ fn init_sysctl() {
         ProcessedData::SysctlData(sysctl_data),
         file_name.clone(),
         js_file_name,
-        include_str!("../bin/html_files/js/sysctl.js").to_string(),
+        include_str!(concat!(env!("JS_DIR"), "/sysctl.js")).to_string(),
         file_name.clone(),
     );
 

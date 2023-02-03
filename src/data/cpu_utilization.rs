@@ -354,7 +354,7 @@ fn init_cpu_utilization() {
         ProcessedData::CpuUtilization(cpu_utilization),
         file_name.clone(),
         js_file_name,
-        include_str!("../bin/html_files/js/cpu_utilization.js").to_string(),
+        include_str!(concat!(env!("JS_DIR"), "/cpu_utilization.js")).to_string(),
         file_name.clone(),
     );
 

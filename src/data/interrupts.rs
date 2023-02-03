@@ -306,7 +306,7 @@ fn init_interrupts() {
         ProcessedData::InterruptData(interrupt_data),
         file_name.clone(),
         js_file_name,
-        include_str!("../bin/html_files/js/interrupts.js").to_string(),
+        include_str!(concat!(env!("JS_DIR"), "/interrupts.js")).to_string(),
         file_name.clone()
     );
     PERFORMANCE_DATA

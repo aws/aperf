@@ -50,7 +50,7 @@ async fn main() -> Result<(), std::io::Error> {
                 file = include_str!("html_files/index.css");
                 file_type = mime::CSS;
             },
-            "index.js" => file = include_str!("html_files/js/index.js"),
+            "index.js" => file = include_str!(concat!(env!("JS_DIR"), "/index.js")),
             "plotly-2.14.0.min.js" => file = include_str!("html_files/plotly-2.14.0.min.js"),
             _ => return Ok(create_response(
                     StatusCode::Ok,

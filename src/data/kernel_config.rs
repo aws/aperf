@@ -243,7 +243,7 @@ fn init_kernel_config() {
         ProcessedData::KernelConfig(kernel_config),
         file_name.clone(),
         js_file_name,
-        include_str!("../bin/html_files/js/kernel_config.js").to_string(),
+        include_str!(concat!(env!("JS_DIR"), "/kernel_config.js")).to_string(),
         file_name.clone(),
     );
 
