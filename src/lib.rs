@@ -5,11 +5,12 @@ pub mod data;
 pub mod visualizer;
 use anyhow::Result;
 use chrono::prelude::*;
-use log::{error, info};
+use log::{error, debug, info};
 use serde::{Deserialize, Serialize};
 use serde_json::{self};
 use std::collections::HashMap;
 use std::{fs, time};
+use std::path::Path;
 use std::sync::Mutex;
 use thiserror::Error;
 use timerfd::{SetTimeFlags, TimerFd, TimerState};
@@ -57,7 +58,7 @@ pub struct PerformanceData {
 impl PerformanceData {
     pub fn new() -> Self {
         let collectors = HashMap::new();
-        let init_params = InitParams::new();
+        let init_params = InitParams::new("".to_string());
 
         PerformanceData {
             collectors,
@@ -102,8 +103,8 @@ impl PerformanceData {
                 continue;
             }
             match datatype.prepare_data_collector() {
-                Err(e) => {
-                    println!("Error preparing {} collector. Excluding from collection. Error: {}", _name, e);
+                Err(_) => {
+                    error!("Excluding {} from collection", _name);
                     remove_entries.push(_name.clone());
                 }
                 _ => continue,
@@ -146,7 +147,7 @@ impl PerformanceData {
             if ret > 1 {
                 error!("Missed {} interval(s)", ret - 1);
             }
-            info!("Time elapsed: {:?}", start.elapsed());
+            debug!("Time elapsed: {:?}", start.elapsed());
             current += time::Duration::from_secs(ret);
             for (_name, datatype) in self.collectors.iter_mut() {
                 if datatype.is_static {
@@ -156,7 +157,7 @@ impl PerformanceData {
                 datatype.print_to_file()?;
             }
             let data_collection_time = time::Instant::now() - current;
-            info!("Collection time: {:?}", data_collection_time);
+            debug!("Collection time: {:?}", data_collection_time);
         }
         tfd.set_state(TimerState::Disarmed, SetTimeFlags::Default);
         Ok(())
@@ -204,12 +205,8 @@ impl VisualizationData {
     }
 
     pub fn init_visualizers(&mut self, dir: String) -> Result<String, tide::Error> {
-        let meta_data_file_handle = get_file(dir.clone(), "meta_data".to_string())?;
-        let mut params = InitParams::new();
-        for document in serde_yaml::Deserializer::from_reader(meta_data_file_handle) {
-            params = InitParams::deserialize(document)?;
-            self.run_names.push(params.run_name.clone());
-        }
+        let params = InitParams::new(dir.clone());
+        self.run_names.push(dir.clone());
 
         for (_name, visualizer) in self.visualizers.iter_mut() {
             visualizer.init_visualizer(dir.clone(), params.run_name.clone())?;
@@ -257,10 +254,18 @@ pub struct InitParams {
 }
 
 impl InitParams {
-    pub fn new() -> Self {
+    pub fn new(dir: String) -> Self {
         let time_now = Utc::now();
         let time_str = time_now.format("%Y-%m-%d_%H_%M_%S").to_string();
-        let dir_name = format!("./performance_data_{}", time_str);
+        let mut dir_name = format!("./aperf_{}", time_str);
+        let mut run_name = String::new();
+        if dir != "" {
+            dir_name = dir.clone();
+            run_name = dir;
+        } else {
+            let path = Path::new(&dir_name);
+            info!("No run-name given. Using {}", path.file_stem().unwrap().to_str().unwrap());
+        }
         let collector_version = env!("CARGO_PKG_VERSION").to_string();
         let commit_sha_short = env!("VERGEN_GIT_SHA_SHORT").to_string();
 
@@ -270,7 +275,7 @@ impl InitParams {
             dir_name,
             period: 0,
             interval: 0,
-            run_name: String::new(),
+            run_name,
             collector_version,
             commit_sha_short,
         }
@@ -279,7 +284,7 @@ impl InitParams {
 
 impl Default for InitParams {
     fn default() -> Self {
-        Self::new()
+        Self::new("".to_string())
     }
 }
 
@@ -294,7 +299,7 @@ mod tests {
         let pd = PerformanceData::new();
 
         let dir_name = format!(
-            "./performance_data_{}",
+            "./aperf_{}",
             pd.init_params.time_now.format("%Y-%m-%d_%H_%M_%S")
         );
         assert!(pd.collectors.is_empty());
@@ -303,7 +308,7 @@ mod tests {
 
     #[test]
     fn test_performance_data_dir_creation() {
-        let mut params = InitParams::new();
+        let mut params = InitParams::new("".to_string());
         params.dir_name = format!("./performance_data_dir_creation_{}", params.time_str);
 
         let mut pd = PerformanceData::new();

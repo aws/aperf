@@ -6,7 +6,7 @@ use crate::{PERFORMANCE_DATA, PDError, VISUALIZATION_DATA};
 use crate::visualizer::{DataVisualizer, GetData};
 use chrono::prelude::*;
 use ctor::ctor;
-use log::debug;
+use log::trace;
 use std::fmt::Debug;
 use serde::{Deserialize, Serialize};
 use std::io::{self, BufRead, BufReader};
@@ -189,7 +189,7 @@ impl CollectData for KernelConfig {
         }
         self.set_time(TimeEnum::DateTime(time_now));
         self.set_data(kernel_data_processed);
-        debug!("KernelConfig data: {:#?}", self);
+        trace!("KernelConfig data: {:#?}", self);
         Ok(())
     }
 }

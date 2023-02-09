@@ -1,11 +1,12 @@
 use clap::Parser;
-use performance_data::VISUALIZATION_DATA;
+use aperf::VISUALIZATION_DATA;
 use tide::http::mime;
 use tide::{Response, StatusCode};
+use std::path::Path;
 
 #[derive(Clone, Parser, Debug)]
 #[clap(author, about, long_about = None)]
-#[clap(name = "performance-data-visualizer")]
+#[clap(name = "aperf-visualizer")]
 #[clap(version = concat!(env!("CARGO_PKG_VERSION"), " (", env!("VERGEN_GIT_SHA_SHORT"), ")"))]
 struct Args {
     /// Directory which contains run data to be visualized.
@@ -27,9 +28,18 @@ async fn main() -> Result<(), std::io::Error> {
     tide::log::start();
 
     let dirs: Vec<String> = args.run_directory;
+    let mut dir_stems: Vec<String> = Vec::new();
     for dir in dirs {
+        let path = Path::new(&dir);
+        if dir_stems.contains(&path.file_stem().unwrap().to_str().unwrap().to_string()) {
+            println!("Cannot process two directories with the same name");
+            return Ok(())
+        }
+        dir_stems.push(path.file_stem().unwrap().to_str().unwrap().to_string());
+    }
+    for dir in dir_stems {
         let name;
-        name = VISUALIZATION_DATA.lock().unwrap().init_visualizers(dir.to_owned() + "/").unwrap();
+        name = VISUALIZATION_DATA.lock().unwrap().init_visualizers(dir.to_owned()).unwrap();
         VISUALIZATION_DATA.lock().unwrap().unpack_data(name).unwrap();
     }
 

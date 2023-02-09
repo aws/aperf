@@ -6,7 +6,7 @@ use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use crate::visualizer::{DataVisualizer, GetData};
 use chrono::prelude::*;
 use ctor::ctor;
-use log::{debug, error};
+use log::{trace, error};
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader};
 
@@ -212,7 +212,7 @@ fn process_collected_raw_data(buffer: Data) -> Result<ProcessedData> {
         }
         interrupt_line_datas.push(interrupt_line_data);
     }
-    debug!("{:#?}", interrupt_line_datas);
+    trace!("{:#?}", interrupt_line_datas);
     interrupt_data.set_interrupt_data(interrupt_line_datas);
     let processed_data = ProcessedData::InterruptData(interrupt_data);
     Ok(processed_data)

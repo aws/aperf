@@ -1,4 +1,5 @@
 {
+  "name": "aperf",
   "dependencies": {
     "plotly.js": "^2.18.1"
   },

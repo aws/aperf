@@ -1,5 +1,5 @@
 [package]
-name = "performance-data-assistant"
+name = "aperf"
 version = "0.1.0"
 edition = "2021"
 
@@ -12,15 +12,15 @@ anyhow = "1.0"
 vergen = "6"
 
 [lib]
-name = "performance_data"
+name = "aperf"
 path = "src/lib.rs"
 
 [[bin]]
-name = "performance-data-collector"
+name = "aperf-collector"
 path = "src/bin/collector.rs"
 
 [[bin]]
-name = "performance-data-visualizer"
+name = "aperf-visualizer"
 path = "src/bin/visualizer.rs"
 
 [dependencies]
