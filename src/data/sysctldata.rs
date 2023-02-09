@@ -6,7 +6,7 @@ use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use crate::visualizer::{DataVisualizer, GetData};
 use chrono::prelude::*;
 use ctor::ctor;
-use log::debug;
+use log::trace;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use sysctl::Sysctl;
@@ -67,7 +67,7 @@ impl CollectData for SysctlData {
                 self.add_ctl(name, value);
             }
         }
-        debug!("{:#?}", self.sysctl_data);
+        trace!("{:#?}", self.sysctl_data);
         Ok(())
     }
 }

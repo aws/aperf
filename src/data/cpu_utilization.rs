@@ -6,7 +6,7 @@ use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use crate::visualizer::{DataVisualizer, GetData};
 use chrono::prelude::*;
 use ctor::ctor;
-use log::debug;
+use log::trace;
 use procfs::{CpuTime, KernelStats};
 use serde::{Deserialize, Serialize};
 use std::ops::Sub;
@@ -35,7 +35,7 @@ impl CollectData for CpuUtilizationRaw {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
         self.data = std::fs::read_to_string("/proc/stat")?;
-        debug!("{:#?}", self.data);
+        trace!("{:#?}", self.data);
         Ok(())
     }
 }

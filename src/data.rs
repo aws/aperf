@@ -16,7 +16,7 @@ use crate::InitParams;
 use crate::visualizer::GetData;
 use chrono::prelude::*;
 use cpu_utilization::{CpuUtilization, CpuUtilizationRaw};
-use log::debug;
+use log::trace;
 use serde::{Deserialize, Serialize};
 use serde_yaml::{self};
 use std::fs::{File, OpenOptions};
@@ -55,7 +55,7 @@ impl DataType {
     }
 
     pub fn init_data_type(&mut self, param: InitParams) -> Result<()> {
-        debug!("Initializing data type...");
+        trace!("Initializing data type...");
         let name = format!("{}_{}.yaml", self.file_name, param.time_str);
         let full_path = format!("{}/{}", param.dir_name, name);
 
@@ -76,19 +76,19 @@ impl DataType {
     }
 
     pub fn prepare_data_collector(&mut self) -> Result<()> {
-        debug!("Preparing data collector...");
+        trace!("Preparing data collector...");
         self.data.prepare_data_collector()?;
         Ok(())
     }
 
     pub fn collect_data(&mut self) -> Result<()> {
-        debug!("Collecting Data...");
+        trace!("Collecting Data...");
         self.data.collect_data()?;
         Ok(())
     }
 
     pub fn print_to_file(&mut self) -> Result<()> {
-        debug!("Printing to YAML file...");
+        trace!("Printing to YAML file...");
         let file_handle = self.file_handle.as_ref().unwrap();
         serde_yaml::to_writer(file_handle.try_clone()?, &self.data)?;
         Ok(())
@@ -232,7 +232,7 @@ mod tests {
 
     #[test]
     fn test_data_type_init() {
-        let mut param = InitParams::new();
+        let mut param = InitParams::new("".to_string());
         let data = CpuUtilizationRaw::new();
         let mut dt = DataType {
             data: Data::CpuUtilizationRaw(data),
@@ -258,7 +258,7 @@ mod tests {
 
     #[test]
     fn test_print() {
-        let mut param = InitParams::new();
+        let mut param = InitParams::new("".to_string());
         let data = CpuUtilizationRaw::new();
         let mut dt = DataType {
             data: Data::CpuUtilizationRaw(data),

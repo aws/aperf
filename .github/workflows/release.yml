@@ -19,17 +19,17 @@ jobs:
     needs:
       - Build
     steps:
-      - name: Tar X64 artifacts # Below workaround will allow files to be extracted to a directory e.g. pda-v0.1-x86_64/
+      - name: Tar X64 artifacts # Below workaround will allow files to be extracted to a directory e.g. aperf-v0.1-x86_64/
         if: ${{ matrix.architecture == 'X64' }}
-        run: sudo mkdir -p pda-${{ github.ref_name }}-x86_64 && sudo cp ./target/x86_64-unknown-linux-musl/release/performance-data-collector ./target/x86_64-unknown-linux-musl/release/performance-data-visualizer ./pda-${{ github.ref_name }}-x86_64 && sudo tar -cvzf pda-${{ github.ref_name }}-x86_64.tar.gz pda-${{ github.ref_name }}-x86_64/ && sudo rm -rf pda-${{ github.ref_name }}-x86_64
+        run: sudo mkdir -p aperf-${{ github.ref_name }}-x86_64 && sudo cp ./target/x86_64-unknown-linux-musl/release/aperf-collector ./target/x86_64-unknown-linux-musl/release/aperf-visualizer ./aperf-${{ github.ref_name }}-x86_64 && sudo tar -cvzf aperf-${{ github.ref_name }}-x86_64.tar.gz aperf-${{ github.ref_name }}-x86_64/ && sudo rm -rf aperf-${{ github.ref_name }}-x86_64
       - name: Tar ARM64 artifacts
         if: ${{ matrix.architecture == 'ARM64' }}
-        run: sudo mkdir -p pda-${{ github.ref_name }}-aarch64 && sudo cp ./target/aarch64-unknown-linux-musl/release/performance-data-collector ./target/aarch64-unknown-linux-musl/release/performance-data-visualizer ./pda-${{ github.ref_name }}-aarch64 && sudo tar -cvzf pda-${{ github.ref_name }}-aarch64.tar.gz pda-${{ github.ref_name }}-aarch64/ && sudo rm -rf pda-${{ github.ref_name }}-aarch64
+        run: sudo mkdir -p aperf-${{ github.ref_name }}-aarch64 && sudo cp ./target/aarch64-unknown-linux-musl/release/aperf-collector ./target/aarch64-unknown-linux-musl/release/aperf-visualizer ./aperf-${{ github.ref_name }}-aarch64 && sudo tar -cvzf aperf-${{ github.ref_name }}-aarch64.tar.gz aperf-${{ github.ref_name }}-aarch64/ && sudo rm -rf aperf-${{ github.ref_name }}-aarch64
       - name: Upload X64 artifacts.
         if: ${{ matrix.architecture == 'X64' }}
         uses: ncipollo/release-action@v1.11.1
         with:
-          artifacts: "./pda-${{ github.ref_name }}-x86_64.tar.gz"
+          artifacts: "./aperf-${{ github.ref_name }}-x86_64.tar.gz"
           replacesArtifacts: false
           token: ${{ secrets.GITHUB_TOKEN }}
           allowUpdates: true
@@ -37,7 +37,7 @@ jobs:
         if: ${{ matrix.architecture == 'ARM64' }}
         uses: ncipollo/release-action@v1.11.1
         with:
-          artifacts: "./pda-${{ github.ref_name }}-aarch64.tar.gz"
+          artifacts: "./aperf-${{ github.ref_name }}-aarch64.tar.gz"
           replacesArtifacts: false
           token: ${{ secrets.GITHUB_TOKEN }}
           allowUpdates: true

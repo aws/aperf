@@ -6,7 +6,7 @@ use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
 use chrono::prelude::*;
 use ctor::ctor;
-use log::debug;
+use log::trace;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
@@ -33,7 +33,7 @@ impl CollectData for VmstatRaw {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
         self.data = std::fs::read_to_string("/proc/vmstat")?;
-        debug!("{:#?}", self.data);
+        trace!("{:#?}", self.data);
         Ok(())
     }
 }

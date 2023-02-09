@@ -78,6 +78,40 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "98161a4e3e2184da77bb14f02184cdd111e83bbbcc9979dfee3c44b9a85f5602"
 
 [[package]]
+name = "aperf"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-std",
+ "aws-config",
+ "chrono",
+ "clap",
+ "ctor",
+ "env_logger",
+ "lazy_static",
+ "libc",
+ "log",
+ "num_cpus",
+ "perf-event",
+ "procfs",
+ "raw-cpuid",
+ "rustix 0.35.11",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "serde_yaml",
+ "strum",
+ "strum_macros",
+ "sysctl",
+ "sysinfo 0.26.2",
+ "thiserror",
+ "tide",
+ "timerfd",
+ "tokio",
+ "vergen",
+]
+
+[[package]]
 name = "arrayref"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1725,40 +1759,6 @@ version = "4.0.0"
 source = "git+https://github.com/janaknat/perf-event?branch=Group#530842372b88fe689a2a0bed4ba9bbdbc09c9a68"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "performance-data-assistant"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-std",
- "aws-config",
- "chrono",
- "clap",
- "ctor",
- "env_logger",
- "lazy_static",
- "libc",
- "log",
- "num_cpus",
- "perf-event",
- "procfs",
- "raw-cpuid",
- "rustix 0.35.11",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "serde_yaml",
- "strum",
- "strum_macros",
- "sysctl",
- "sysinfo 0.26.2",
- "thiserror",
- "tide",
- "timerfd",
- "tokio",
- "vergen",
 ]
 
 [[package]]

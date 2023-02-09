@@ -7,7 +7,7 @@ use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use crate::visualizer::{DataVisualizer, GetData};
 use chrono::prelude::*;
 use ctor::ctor;
-use log::{debug, info};
+use log::{trace, error};
 use serde::{Deserialize, Serialize};
 
 pub static SYSTEMINFO_FILE_NAME: &str = "system_info";
@@ -121,10 +121,10 @@ impl CollectData for SystemInfo {
 
         match rt.block_on(EC2Metadata::get_instance_metadata()) {
             Ok(s) => self.set_instance_metadata(s),
-            Err(e) => info!("An error occurred: {}", e),
+            Err(e) => error!("An error occurred: {}", e),
         };
 
-        debug!("SysInfo:\n{:#?}", self);
+        trace!("SysInfo:\n{:#?}", self);
 
         Ok(())
     }

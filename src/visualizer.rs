@@ -86,7 +86,7 @@ mod tests {
             "cpu_utilization".to_string(),
         );
         assert!(
-            dv.init_visualizer("test/performance_data_2022-01-01_01_01_01/".to_string(), "test".to_string()).unwrap() == ()
+            dv.init_visualizer("test/aperf_2022-01-01_01_01_01/".to_string(), "test".to_string()).unwrap() == ()
         );
         assert!(dv.process_raw_data("test".to_string()).unwrap() == ());
         let ret = dv.get_data("run=test&get=aggregate".to_string()).unwrap();
