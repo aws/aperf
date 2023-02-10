@@ -53,15 +53,15 @@ jobs:
         run: |
           wget https://git.musl-libc.org/cgit/musl/snapshot/musl-1.2.3.tar.gz \
           && tar xvf musl-1.2.3.tar.gz -C /tmp/ && cd /tmp/musl-1.2.3 \
-          && ./configure && sudo make install && rm -rf /tmp/musl-1.2.3
+          && ./configure && sudo make install && sudo rm -rf /tmp/musl-1.2.3
       - name: Symlink musl-gcc on ARM64 & Ubuntu
         if: ${{ matrix.architecture == 'ARM64' && matrix.distribution == 'Ubuntu' }}
         run: sudo ln -snf /usr/bin/musl-gcc /usr/bin/aarch64-linux-musl-gcc
       - name: Symlink musl-gcc on AL2 & ARM64
-        if: ${{ matrix.architecture == 'ARM64'}}
+        if: ${{ matrix.architecture == 'ARM64' && matrix.distribution == 'AL2' }}
         run: sudo ln -snf /usr/local/musl/bin/musl-gcc /usr/bin/aarch64-linux-musl-gcc
       - name: Symlink musl-gcc on AL2 & X86
-        if: ${{ matrix.architecture == 'X86'}}
+        if: ${{ matrix.architecture == 'X86' && matrix.distribution == 'AL2' }}
         run: sudo ln -snf /usr/local/musl/bin/musl-gcc /usr/bin/musl-gcc
       - name: Build for X64
         if: ${{ matrix.architecture == 'X64' }}
