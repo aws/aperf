@@ -42,15 +42,20 @@ jobs:
         run: sudo apt-get install -y nodejs
       - name: Install NodeJs on AL2
         if: ${{ matrix.distribution == 'AL2' }}
-        run: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash && source  ~/.nvm/nvm.sh && nvm install v16.16.0
+        run: |
+          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash \
+          && source  ~/.nvm/nvm.sh && nvm install v16.16.0
       - name: Install musl on Ubuntu
         if: ${{ matrix.distribution == 'Ubuntu' }}
         run: sudo apt-get install -y musl-tools
-      - name: Install musl on AL2
+      - name: Build & install musl on AL2
         if: ${{ matrix.distribution == 'AL2' }}
-        run: sudo yum install musl-tools-devel
+        run: |
+          wget https://git.musl-libc.org/cgit/musl/snapshot/musl-1.2.3.tar.gz \
+          && tar xvf musl-1.2.3.tar.gz && cd musl-1.2.3 \
+          && ./configure & sudo make install
       - name: Symlink musl-gcc on ARM64
-        if: ${{ matrix.architecture == 'ARM64' }}
+        if: ${{ matrix.architecture == 'ARM64' && matrix.distribution == 'Ubuntu' }}
         run: sudo ln -snf /usr/bin/musl-gcc /usr/bin/aarch64-linux-musl-gcc
       - name: Build for X64
         if: ${{ matrix.architecture == 'X64' }}
