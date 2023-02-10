@@ -11,10 +11,12 @@ jobs:
     strategy:
       matrix:
         architecture: [X64, ARM64]
+        distribution: [Ubuntu, AL2]
     runs-on:
       - self-hosted
       - Linux
       - ${{matrix.architecture}}
+      - ${{matrix.distribution}}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -26,14 +28,26 @@ jobs:
           override: true
       - uses: Swatinem/rust-cache@v1
       - uses: actions-rs/cargo@v1
-      - name: Install gcc
+      - name: Install gcc on Ubuntu
+        if: ${{ matrix.distribution == 'Ubuntu' }}
         run: sudo apt install -y build-essential
+      - name: Install gcc on AL2
+        if: ${{ matrix.distribution == 'AL2' }}
+        run: sudo yum install -y yum install "@Development Tools"
       - name: Install NodeSource
         run: sudo curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
-      - name: Install npm
+      - name: Install npm on Ubuntu
+        if: ${{ matrix.distribution == 'Ubuntu' }}
         run: sudo apt-get install -y nodejs
-      - name: Install musl
+      - name: Install npm on AL2
+        if: ${{ matrix.distribution == 'AL2' }}
+        run: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash && source .nvm/nvm.sh && nvm install v16.16.0
+      - name: Install musl on Ubuntu
+        if: ${{ matrix.distribution == 'Ubuntu' }}
         run: sudo apt-get install -y musl-tools
+      - name: Install musl on AL2
+        if: ${{ matrix.distribution == 'AL2' }}
+        run: sudo yum install musl-tools-devel
       - name: Symlink musl-gcc on ARM64
         if: ${{ matrix.architecture == 'ARM64' }}
         run: sudo ln -snf /usr/bin/musl-gcc /usr/bin/aarch64-linux-musl-gcc
