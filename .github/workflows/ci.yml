@@ -60,8 +60,8 @@ jobs:
       - name: Symlink musl-gcc on AL2 & ARM64
         if: ${{ matrix.architecture == 'ARM64' && matrix.distribution == 'AL2' }}
         run: sudo ln -snf /usr/local/musl/bin/musl-gcc /usr/bin/aarch64-linux-musl-gcc
-      - name: Symlink musl-gcc on AL2 & X86
-        if: ${{ matrix.architecture == 'X86' && matrix.distribution == 'AL2' }}
+      - name: Symlink musl-gcc on AL2 & X64
+        if: ${{ matrix.architecture == 'X64' && matrix.distribution == 'AL2' }}
         run: sudo ln -snf /usr/local/musl/bin/musl-gcc /usr/bin/musl-gcc
       - name: Build for X64
         if: ${{ matrix.architecture == 'X64' }}
