@@ -54,9 +54,15 @@ jobs:
           wget https://git.musl-libc.org/cgit/musl/snapshot/musl-1.2.3.tar.gz \
           && tar xvf musl-1.2.3.tar.gz && cd musl-1.2.3 \
           && ./configure && sudo make install
-      - name: Symlink musl-gcc on ARM64
+      - name: Symlink musl-gcc on ARM64 & Ubuntu
         if: ${{ matrix.architecture == 'ARM64' && matrix.distribution == 'Ubuntu' }}
         run: sudo ln -snf /usr/bin/musl-gcc /usr/bin/aarch64-linux-musl-gcc
+      - name: Symlink musl-gcc on AL2 & ARM64
+        if: ${{ matrix.architecture == 'ARM64'}}
+        run: sudo ln -snf /usr/local/musl/bin/musl-gcc /usr/bin/aarch64-linux-musl-gcc
+      - name: Symlink musl-gcc on AL2 & X86
+        if: ${{ matrix.architecture == 'X86'}}
+        run: sudo ln -snf /usr/local/musl/bin/musl-gcc /usr/bin/musl-gcc
       - name: Build for X64
         if: ${{ matrix.architecture == 'X64' }}
         run: rustup target add x86_64-unknown-linux-musl && cargo build --release --target x86_64-unknown-linux-musl
