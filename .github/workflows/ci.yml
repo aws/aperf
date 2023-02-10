@@ -42,7 +42,7 @@ jobs:
         run: sudo apt-get install -y nodejs
       - name: Install NodeJs on AL2
         if: ${{ matrix.distribution == 'AL2' }}
-        run: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash && source .nvm/nvm.sh && nvm install v16.16.0
+        run: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash && source  ~/.nvm/nvm.sh && nvm install v16.16.0
       - name: Install musl on Ubuntu
         if: ${{ matrix.distribution == 'Ubuntu' }}
         run: sudo apt-get install -y musl-tools
