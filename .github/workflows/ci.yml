@@ -52,8 +52,8 @@ jobs:
         if: ${{ matrix.distribution == 'AL2' }}
         run: |
           wget https://git.musl-libc.org/cgit/musl/snapshot/musl-1.2.3.tar.gz \
-          && tar xvf musl-1.2.3.tar.gz && cd musl-1.2.3 \
-          && ./configure && sudo make install
+          && tar xvf musl-1.2.3.tar.gz -C /tmp/ && cd /tmp/musl-1.2.3 \
+          && ./configure && sudo make install && rm -rf /tmp/musl-1.2.3
       - name: Symlink musl-gcc on ARM64 & Ubuntu
         if: ${{ matrix.architecture == 'ARM64' && matrix.distribution == 'Ubuntu' }}
         run: sudo ln -snf /usr/bin/musl-gcc /usr/bin/aarch64-linux-musl-gcc
