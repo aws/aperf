@@ -29,6 +29,9 @@ pub enum PDError {
     #[error("Error getting Vmstat value for {}", .0)]
     VisualizerVmstatValueGetError(String),
 
+    #[error("Error getting interrupt line count for CPU {}", .0)]
+    VisualizerInterruptLineCPUCountError(String),
+
     #[error("Error getting Line Name Error")]
     CollectorLineNameError,
 
