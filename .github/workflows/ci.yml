@@ -34,14 +34,7 @@ jobs:
       - name: Install gcc on AL2
         if: ${{ matrix.distribution == 'AL2' }}
         run: sudo yum install -y yum install "@Development Tools"
-      - name: Install NodeSource on Ubuntu
-        if: ${{ matrix.distribution == 'Ubuntu' }}
-        run: sudo curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
-      - name: Install NodeJs on Ubuntu
-        if: ${{ matrix.distribution == 'Ubuntu' }}
-        run: sudo apt-get install -y nodejs
-      - name: Install NodeJs on AL2
-        if: ${{ matrix.distribution == 'AL2' }}
+      - name: Install NodeJs
         run: |
           curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash \
           && source  ~/.nvm/nvm.sh && nvm install v16.16.0
@@ -52,8 +45,8 @@ jobs:
         if: ${{ matrix.distribution == 'AL2' }}
         run: |
           wget https://git.musl-libc.org/cgit/musl/snapshot/musl-1.2.3.tar.gz \
-          && tar xvf musl-1.2.3.tar.gz -C /tmp/ && cd /tmp/musl-1.2.3 \
-          && ./configure && sudo make install && sudo rm -rf /tmp/musl-1.2.3
+          && tar xvf musl-1.2.3.tar.gz -C /tmp/ && cd musl-1.2.3 \
+          && ./configure && sudo make install & cd .. && sudo rm -rf musl-1.2.3
       - name: Symlink musl-gcc on ARM64 & Ubuntu
         if: ${{ matrix.architecture == 'ARM64' && matrix.distribution == 'Ubuntu' }}
         run: sudo ln -snf /usr/bin/musl-gcc /usr/bin/aarch64-linux-musl-gcc
