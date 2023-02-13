@@ -2,13 +2,14 @@ extern crate ctor;
 
 use anyhow::Result;
 use crate::data::{CollectData, Data, ProcessedData, DataType, TimeEnum};
-use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use crate::visualizer::{DataVisualizer, GetData};
 use chrono::prelude::*;
 use ctor::ctor;
 use log::{trace, error};
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader};
+use std::collections::HashMap;
 
 pub static INTERRUPTS_FILE_NAME: &str = "interrupts";
 
@@ -253,11 +254,24 @@ fn get_key_data(values: Vec<InterruptData>, key: String) -> Vec<InterruptLineDat
 fn get_line_data(values: Vec<InterruptData>, key: String) -> Result<String> {
     let key_values = get_key_data(values, key);
     let mut end_values = Vec::new();
+    let mut prev_data_map = HashMap::new();
     let time_zero = key_values[0].time;
+    for cpu_data in &key_values[0].per_cpu {
+        prev_data_map.insert(cpu_data.cpu, cpu_data.count);
+    }
     for data in key_values {
         let mut end_value = data.clone();
         end_value.set_time(data.time - time_zero);
+        for cpu_data in &mut end_value.per_cpu {
+            cpu_data.count -= prev_data_map
+                .get(&cpu_data.cpu)
+                .ok_or(PDError::VisualizerInterruptLineCPUCountError(format!("{}", cpu_data.cpu)))?;
+        }
         end_values.push(end_value);
+        prev_data_map.clear();
+        for cpu_data in data.per_cpu {
+            prev_data_map.insert(cpu_data.cpu, cpu_data.count);
+        }
     }
     Ok(serde_json::to_string(&end_values)?)
 }
