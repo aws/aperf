@@ -174,10 +174,10 @@ impl Default for PerformanceData {
 }
 
 pub fn get_file(dir: String, name: String) -> Result<fs::File> {
-    for path in fs::read_dir(dir.clone()).unwrap() {
+    for path in fs::read_dir(dir.clone())? {
         let mut file_name = path?.file_name().into_string().unwrap();
         if file_name.contains(&name) {
-            file_name = dir + "/" + &file_name;
+            file_name = dir + &file_name;
             return Ok(fs::OpenOptions::new()
                 .read(true)
                 .open(file_name)
@@ -208,13 +208,14 @@ impl VisualizationData {
     }
 
     pub fn init_visualizers(&mut self, dir: String) -> Result<String, tide::Error> {
-        let params = InitParams::new(dir.clone());
-        self.run_names.push(dir.clone());
+        let dir_path = Path::new(&dir);
+        let dir_name = dir_path.file_stem().unwrap().to_str().unwrap().to_string();
+        self.run_names.push(dir_name.clone());
 
         for (_name, visualizer) in self.visualizers.iter_mut() {
-            visualizer.init_visualizer(dir.clone(), params.run_name.clone())?;
+            visualizer.init_visualizer(dir.clone(), dir_name.clone())?;
         }
-        Ok(params.run_name.clone())
+        Ok(dir_name.clone())
     }
 
     pub fn add_visualizer(&mut self, name: String, dv: visualizer::DataVisualizer) {

@@ -1,6 +1,6 @@
 use clap::Parser;
 use aperf::VISUALIZATION_DATA;
-use tide::http::mime;
+use tide::http::{mime, Body};
 use tide::{Response, StatusCode};
 use std::path::Path;
 
@@ -28,6 +28,7 @@ async fn main() -> Result<(), std::io::Error> {
     tide::log::start();
 
     let dirs: Vec<String> = args.run_directory;
+    let mut dir_paths: Vec<String> = Vec::new();
     let mut dir_stems: Vec<String> = Vec::new();
     for dir in dirs {
         let path = Path::new(&dir);
@@ -35,9 +36,10 @@ async fn main() -> Result<(), std::io::Error> {
             println!("Cannot process two directories with the same name");
             return Ok(())
         }
-        dir_stems.push(path.file_stem().unwrap().to_str().unwrap().to_string());
+        dir_stems.push(path.clone().file_stem().unwrap().to_str().unwrap().to_string());
+        dir_paths.push(path.to_str().unwrap().to_string());
     }
-    for dir in dir_stems {
+    for dir in dir_paths {
         let name;
         name = VISUALIZATION_DATA.lock().unwrap().init_visualizers(dir.to_owned()).unwrap();
         VISUALIZATION_DATA.lock().unwrap().unpack_data(name).unwrap();
@@ -49,6 +51,11 @@ async fn main() -> Result<(), std::io::Error> {
     app.at("/").get(|_| async move {
         let html = include_str!("html_files/index.html");
         Ok(create_response(StatusCode::Ok, html, mime::HTML))
+    });
+    app.at("favicon.ico").get(|_| async move {
+        let ico = include_bytes!("html_files/favicon.ico");
+        let response = Response::builder(StatusCode::Ok).content_type(mime::ICO).body(Body::from_bytes(ico.to_vec())).build();
+        Ok(response)
     });
     /* Serve JavaScript files */
     app.at("/html_files/:name").get(|req: tide::Request<()>| async move {
