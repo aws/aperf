@@ -177,7 +177,8 @@ pub fn get_file(dir: String, name: String) -> Result<fs::File> {
     for path in fs::read_dir(dir.clone())? {
         let mut file_name = path?.file_name().into_string().unwrap();
         if file_name.contains(&name) {
-            file_name = dir + &file_name;
+            let file_path = Path::new(&dir).join(file_name.clone());
+            file_name = file_path.to_str().unwrap().to_string();
             return Ok(fs::OpenOptions::new()
                 .read(true)
                 .open(file_name)
