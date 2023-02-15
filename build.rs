@@ -8,6 +8,8 @@ fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=package-lock.json");
     let status = Command::new("npm")
         .arg("install")
+        .arg("--loglevel")
+        .arg("verbose")
         .spawn()?
         .wait()?;
     if ! status.success() {
