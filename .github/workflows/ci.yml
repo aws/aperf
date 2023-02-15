@@ -71,4 +71,4 @@ jobs:
       - name: Set perf_event_paranoid to 0
         run: echo 0 | sudo tee /proc/sys/kernel/perf_event_paranoid
       - name: Run tests
-        run: cargo test --verbose
+        run: source  ~/.nvm/nvm.sh && cargo test --verbose
