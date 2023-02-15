@@ -45,7 +45,7 @@ jobs:
         if: ${{ matrix.distribution == 'AL2' }}
         run: |
           wget https://git.musl-libc.org/cgit/musl/snapshot/musl-1.2.3.tar.gz \
-          && tar xvf musl-1.2.3.tar.gz && cd musl-1.2.3 \
+          && tar xvf musl-1.2.3.tar.gz && cd musl-1.2.3 \ 
           && ./configure && sudo make install && cd .. && sudo rm -rf musl-1.2.3
       - name: Symlink musl-gcc on ARM64 & Ubuntu
         if: ${{ matrix.architecture == 'ARM64' && matrix.distribution == 'Ubuntu' }}
@@ -58,10 +58,10 @@ jobs:
         run: sudo ln -snf /usr/local/musl/bin/musl-gcc /usr/bin/musl-gcc
       - name: Build for X64
         if: ${{ matrix.architecture == 'X64' }}
-        run: rustup target add x86_64-unknown-linux-musl && cargo build --release --target x86_64-unknown-linux-musl
+        run: rustup target add x86_64-unknown-linux-musl && cargo build --release --verbose --target x86_64-unknown-linux-musl
       - name: Build for ARM64
         if: ${{ matrix.architecture == 'ARM64' }}
-        run: rustup target add aarch64-unknown-linux-musl && cargo build --release --target aarch64-unknown-linux-musl
+        run: rustup target add aarch64-unknown-linux-musl && cargo build --release --verbose --target aarch64-unknown-linux-musl
       - name: Set perf_event_paranoid to 0
         run: echo 0 | sudo tee /proc/sys/kernel/perf_event_paranoid
       - name: Run tests
