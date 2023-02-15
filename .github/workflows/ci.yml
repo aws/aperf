@@ -11,10 +11,12 @@ jobs:
     strategy:
       matrix:
         architecture: [X64, ARM64]
+        distribution: [Ubuntu, AL2]
     runs-on:
       - self-hosted
       - Linux
       - ${{matrix.architecture}}
+      - ${{matrix.distribution}}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -26,24 +28,47 @@ jobs:
           override: true
       - uses: Swatinem/rust-cache@v1
       - uses: actions-rs/cargo@v1
-      - name: Install gcc
+      - name: Install gcc on Ubuntu
+        if: ${{ matrix.distribution == 'Ubuntu' }}
         run: sudo apt install -y build-essential
-      - name: Install NodeSource
-        run: sudo curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
-      - name: Install npm
-        run: sudo apt-get install -y nodejs
-      - name: Install musl
+      - name: Install gcc on AL2
+        if: ${{ matrix.distribution == 'AL2' }}
+        run: sudo yum install -y "@Development Tools"
+      - name: Install NodeJs
+        run: |
+          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash \
+          && source  ~/.nvm/nvm.sh && nvm install v16.16.0
+      - name: Install musl on Ubuntu
+        if: ${{ matrix.distribution == 'Ubuntu' }}
         run: sudo apt-get install -y musl-tools
-      - name: Symlink musl-gcc on ARM64
-        if: ${{ matrix.architecture == 'ARM64' }}
+      - name: Build & install musl on AL2
+        if: ${{ matrix.distribution == 'AL2' }}
+        run: |
+          wget https://git.musl-libc.org/cgit/musl/snapshot/musl-1.2.3.tar.gz \
+          && tar xvf musl-1.2.3.tar.gz && cd musl-1.2.3 \
+          && ./configure && sudo make install && cd .. && sudo rm -rf musl-1.2.3
+      - name: Symlink musl-gcc on ARM64 & Ubuntu
+        if: ${{ matrix.architecture == 'ARM64' && matrix.distribution == 'Ubuntu' }}
         run: sudo ln -snf /usr/bin/musl-gcc /usr/bin/aarch64-linux-musl-gcc
+      - name: Symlink musl-gcc on AL2 & ARM64
+        if: ${{ matrix.architecture == 'ARM64' && matrix.distribution == 'AL2' }}
+        run: sudo ln -snf /usr/local/musl/bin/musl-gcc /usr/bin/aarch64-linux-musl-gcc
+      - name: Symlink musl-gcc on AL2 & X64
+        if: ${{ matrix.architecture == 'X64' && matrix.distribution == 'AL2' }}
+        run: sudo ln -snf /usr/local/musl/bin/musl-gcc /usr/bin/musl-gcc
       - name: Build for X64
         if: ${{ matrix.architecture == 'X64' }}
-        run: rustup target add x86_64-unknown-linux-musl && cargo build --release --target x86_64-unknown-linux-musl
+        run: |
+          rustup target add x86_64-unknown-linux-musl \
+          && source  ~/.nvm/nvm.sh \
+          && cargo build --release --target x86_64-unknown-linux-musl
       - name: Build for ARM64
         if: ${{ matrix.architecture == 'ARM64' }}
-        run: rustup target add aarch64-unknown-linux-musl && cargo build --release --target aarch64-unknown-linux-musl
+        run: |
+          rustup target add aarch64-unknown-linux-musl \
+          && source  ~/.nvm/nvm.sh \
+          && cargo build --release --target aarch64-unknown-linux-musl
       - name: Set perf_event_paranoid to 0
         run: echo 0 | sudo tee /proc/sys/kernel/perf_event_paranoid
       - name: Run tests
-        run: cargo test --verbose
+        run: source  ~/.nvm/nvm.sh && cargo test --verbose
