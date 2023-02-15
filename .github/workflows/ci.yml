@@ -33,7 +33,7 @@ jobs:
         run: sudo apt install -y build-essential
       - name: Install gcc on AL2
         if: ${{ matrix.distribution == 'AL2' }}
-        run: sudo yum install -y yum install "@Development Tools"
+        run: sudo yum install -y "@Development Tools"
       - name: Install NodeJs
         run: |
           curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash \
