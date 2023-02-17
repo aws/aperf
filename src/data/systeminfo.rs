@@ -108,8 +108,8 @@ impl EC2Metadata {
 
 impl CollectData for SystemInfo {
     fn collect_data(&mut self) -> Result<()> {
-        let mut sys = System::new_all();
-        sys.refresh_all();
+        let mut sys = System::new();
+        sys.refresh_system();
 
         self.set_system_name(sys.name().unwrap());
         self.set_kernel_version(sys.kernel_version().unwrap());
