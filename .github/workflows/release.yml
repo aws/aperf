@@ -26,20 +26,32 @@ jobs:
       - name: Tar ARM64 artifacts
         if: ${{ matrix.architecture == 'ARM64' }}
         run: sudo mkdir -p aperf-${{ github.ref_name }}-aarch64 && sudo cp ./target/aarch64-unknown-linux-musl/release/aperf-collector ./target/aarch64-unknown-linux-musl/release/aperf-visualizer ./aperf-${{ github.ref_name }}-aarch64 && sudo tar -cvzf aperf-${{ github.ref_name }}-aarch64.tar.gz aperf-${{ github.ref_name }}-aarch64/ && sudo rm -rf aperf-${{ github.ref_name }}-aarch64
+      - name: Create Release
+        if: github.run_number == 1
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: APerf-${{ github.ref }}
+          body: |
+            ${{ steps.Changelog.outputs.changelog }}
+          draft: false
+          prerelease: false
       - name: Upload X64 artifacts.
         if: ${{ matrix.architecture == 'X64' }}
-        uses: ncipollo/release-action@v1.11.1
+        uses: svenstaro/upload-release-action@v2
         with:
-          artifacts: "./aperf-${{ github.ref_name }}-x86_64.tar.gz"
-          replacesArtifacts: false
-          token: ${{ secrets.GITHUB_TOKEN }}
-          allowUpdates: true
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ./aperf-${{ github.ref_name }}-x86_64.tar.gz
+          tag: ${{ github.ref }}
+          asset_name: aperf-${{ github.ref_name }}-x86_64.tar.gz
       - name: Upload ARM64 artifacts
         if: ${{ matrix.architecture == 'ARM64' }}
-        uses: ncipollo/release-action@v1.11.1
+        uses: svenstaro/upload-release-action@v2
         with:
-          artifacts: "./aperf-${{ github.ref_name }}-aarch64.tar.gz"
-          replacesArtifacts: false
-          token: ${{ secrets.GITHUB_TOKEN }}
-          allowUpdates: true
-          generateReleaseNotes: true
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ./aperf-${{ github.ref_name }}-aarch64.tar.gz
+          tag: ${{ github.ref }}
+          asset_name: aperf-${{ github.ref_name }}-aarch64.tar.gz
