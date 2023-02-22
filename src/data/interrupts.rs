@@ -115,8 +115,7 @@ impl InterruptData {
 }
 
 fn get_intr_line(data: &str) -> Result<InterruptLine> {
-    let len = data.len();
-    let intr_line = &data[..(len - 1)];
+    let intr_line = &data;
     if intr_line.chars().all(char::is_numeric) {
         Ok(InterruptLine::InterruptNr(intr_line.parse::<u64>()?))
     } else {
@@ -158,7 +157,7 @@ fn process_collected_raw_data(buffer: Data) -> Result<ProcessedData> {
         interrupt_line_data.set_time(raw_value.time);
 
         let line = line?;
-        let mut split = line.split_whitespace();
+        let mut split = line.split(|c: char| c.is_whitespace() || c == ':').filter(|s| !s.is_empty());
 
         /* Get type of interrupt line */
         let intr_line = get_intr_line(split.next().unwrap())?;
@@ -338,7 +337,9 @@ fn init_interrupts() {
 mod tests {
     use super::{InterruptData, InterruptDataRaw, InterruptLineData, InterruptLine};
     use crate::data::{CollectData, Data, ProcessedData};
-    use crate::visualizer::GetData;
+    use crate::visualizer::{DataVisualizer, GetData};
+    use crate::get_file;
+    use serde::Deserialize;
 
     #[test]
     fn test_collect_data() {
@@ -426,5 +427,31 @@ mod tests {
         let line_data: Vec<InterruptLineData> = serde_json::from_str(&ld_json).unwrap();
         assert!(line_data.len() > 0);
         assert!(line_data[0].per_cpu.len() > 0);
+    }
+
+    #[test]
+    fn test_process_raw_data() {
+        let mut raw_data = Vec::new();
+        let file = get_file("test/aperf_2022-01-01_01_01_01/".to_string(), "interrupts".to_string()).unwrap();
+        for document in serde_yaml::Deserializer::from_reader(file) {
+            let v = Data::deserialize(document);
+            raw_data.push(v.unwrap());
+        }
+        let mut dv = DataVisualizer::new(
+            ProcessedData::InterruptData(InterruptData::new()),
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new()
+        );
+        let processed_data = dv.data.process_raw_data(raw_data[0].clone()).unwrap();
+        match processed_data {
+            ProcessedData::InterruptData(ref value) => {
+                assert!(value.interrupt_data[0].interrupt_line == InterruptLine::InterruptNr(123), "{:#?}", value);
+                assert!(value.interrupt_data[0].interrupt_type == "PCI".to_string(), "Invalid interrupt type");
+                assert!(value.interrupt_data[0].interrupt_device == "device".to_string(), "Invalid interrupt device");
+            }
+            _ => assert!(false, "Invalid data type in interrupts"),
+        }
     }
 }
