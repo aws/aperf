@@ -1,5 +1,9 @@
+#[macro_use]
+extern crate log;
+
+use anyhow::Result;
 use clap::Parser;
-use aperf::VISUALIZATION_DATA;
+use aperf::{PDError, VISUALIZATION_DATA};
 use tide::http::{mime, Body};
 use tide::{Response, StatusCode};
 use std::path::Path;
@@ -23,7 +27,7 @@ fn create_response(http_code: tide::StatusCode, body: &str, content_type: mime::
 }
 
 #[async_std::main]
-async fn main() -> Result<(), std::io::Error> {
+async fn main() -> Result<()> {
     let args = Args::parse();
     tide::log::start();
 
@@ -41,8 +45,17 @@ async fn main() -> Result<(), std::io::Error> {
     }
     for dir in dir_paths {
         let name;
-        name = VISUALIZATION_DATA.lock().unwrap().init_visualizers(dir.to_owned()).unwrap();
-        VISUALIZATION_DATA.lock().unwrap().unpack_data(name).unwrap();
+        match VISUALIZATION_DATA.lock().unwrap().init_visualizers(dir.to_owned()) {
+            Ok(v) => name = v,
+            Err(e) => {
+                error!("Error initializing visualizer: {}", e);
+                return Err(PDError::VisualizerInitError.into());
+            }
+        }
+        match VISUALIZATION_DATA.lock().unwrap().unpack_data(name) {
+            Ok(_) => continue,
+            Err(e) => error!("Error processing raw data: {}", e),
+        }
     }
 
     let mut app = tide::new();

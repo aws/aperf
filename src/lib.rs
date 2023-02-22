@@ -46,6 +46,9 @@ pub enum PDError {
 
     #[error("Unsupported API")]
     VisualizerUnsupportedAPI,
+
+    #[error("Visuailzer Init error")]
+    VisualizerInitError,
 }
 
 lazy_static! {
@@ -230,7 +233,8 @@ impl VisualizationData {
     }
 
     pub fn unpack_data(&mut self, name: String) -> Result<()> {
-        for (_, datavisualizer) in self.visualizers.iter_mut() {
+        for (dvname, datavisualizer) in self.visualizers.iter_mut() {
+            debug!("Processing: {}", dvname);
             datavisualizer.process_raw_data(name.clone())?;
         }
         Ok(())
