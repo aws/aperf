@@ -104,7 +104,14 @@ impl PerfStatRaw {
 
 impl CollectData for PerfStatRaw {
     fn prepare_data_collector(&mut self) -> Result<()> {
-        let num_cpus = num_cpus::get();
+        let num_cpus;
+        match unsafe { libc::sysconf(libc::_SC_NPROCESSORS_ONLN as libc::c_int) } {
+            -1 => {
+                error!("Could not get the number of cpus in the system");
+                return Err(PDError::CollectorPMUCPUCountError.into());
+            },
+            ret => num_cpus = ret as usize,
+        }
         let mut cpu_groups: Vec<CpuCtrGroup> = Vec::new();
         let perf_list;
 

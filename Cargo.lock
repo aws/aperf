@@ -91,7 +91,6 @@ dependencies = [
  "lazy_static",
  "libc",
  "log",
- "num_cpus",
  "perf-event",
  "procfs",
  "raw-cpuid",

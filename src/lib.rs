@@ -49,6 +49,9 @@ pub enum PDError {
 
     #[error("Visuailzer Init error")]
     VisualizerInitError,
+
+    #[error("Collector PMU CPUs count error")]
+    CollectorPMUCPUCountError,
 }
 
 lazy_static! {
