@@ -5,7 +5,7 @@ A CLI tool to gather many pieces of performance data in one go. APerf includes a
 ## Why does APerf exist?
 Performance issues in applications are investigated by recreating them locally and collecting data/metrics using monitoring tools like sysstat, perf, sysctl, ebpf, etc... or by running these tools remotely. Installing and executing various performance monitoring tools is a manual process and prone to errors. Even with the [Graviton Performance Runbook](https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/graviton_perfrunbook.md), understanding the output of these tools requires deep domain specific knowledge.
 
-The aim of APerf is to enable anyone to collect performance data in their enviornment while providing tools to analyze and visualize application performance. APerf will enable faster troubleshooting by analyzing and highlighting deviations in performance between two application environments automatically. 
+The aim of APerf is to enable anyone to collect performance data in their enviornment while providing tools to analyze and visualize application performance. APerf will hopefully enable faster troubleshooting by analyzing and highlighting deviations in performance between two application environments automatically. 
 
 ## What data does APerf collect?
 APerf collects the following metadata:
@@ -30,7 +30,7 @@ Download the binaries from the [Releases](https://github.com/aws/APerf/releases)
 
 `aperf-collector`  only supports running on Linux.
 
-`aperf-visualizer` supports Mac and Linux.
+`aperf-visualizer` supports Mac.
 
 
 ### Building from source
@@ -40,7 +40,6 @@ Download the binaries from the [Releases](https://github.com/aws/APerf/releases)
 ```
 cargo build
 cargo test
-cargo run
 ```
 
 ## Usage
@@ -48,9 +47,9 @@ cargo run
 
 To visualize the data using `aperf-visualizer` download the directory created by `aperf-collector` and load the data with `aperf-visualizer`.
 
-**WARNING**
+**KNOWN LIMITATION**
 
-The default configuration of 10ms for `/sys/devices/cpu/perf_event_mux_interval_ms ` is known to cause serious performance overhead for systems with large core counts. We recommend setting this value to 100ms by doing the following:
+The default configuration of 10ms for `/sys/devices/cpu/perf_event_mux_interval_ms` is known to cause serious performance overhead for systems with large core counts. We recommend setting this value to 100ms by doing the following:
 
 ```
 echo 100 | sudo tee /sys/devices/cpu/perf_event_mux_interval_ms 
@@ -58,8 +57,7 @@ echo 100 | sudo tee /sys/devices/cpu/perf_event_mux_interval_ms
 
 **aperf-collector**
 1. Download the `aperf-collector` binary.
-2. By default `aperf-collector` will collect data for 10 seconds. Configure options are shown below. 
-3. Start `aperf-collector`:
+2. Start `aperf-collector`:
 ```
 ./aperf-collector -r <RUN_NAME> -i <INTERVAL_NUMBER> -p <COLLECTION_PERIOD>
 ```
@@ -84,7 +82,7 @@ echo 100 | sudo tee /sys/devices/cpu/perf_event_mux_interval_ms
 
 `-p, --period` period (how long you want the data collection to run, default is 10s)
 
-`-r, --run-name` run name (name of the run for organization purposes, creates directory of the same name, default of APerf_timestamp)
+`-r, --run-name` run name (name of the run for organization purposes, creates directory of the same name, default of aperf_[timestamp])
 
 
 `./aperf-visualizer -h`
