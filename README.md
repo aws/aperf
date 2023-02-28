@@ -30,7 +30,7 @@ Download the binaries from the [Releases](https://github.com/aws/APerf/releases)
 
 `aperf-collector`  only supports running on Linux.
 
-`aperf-visualizer` supports Mac.
+`aperf-visualizer` only supports running on Linux.
 
 
 ### Building from source
