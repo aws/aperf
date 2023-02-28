@@ -2,6 +2,7 @@ extern crate ctor;
 
 use anyhow::Result;
 use crate::data::{CollectData, Data, ProcessedData, DataType, TimeEnum};
+use crate::data::constants::*;
 use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use crate::visualizer::{DataVisualizer, GetData};
 use chrono::prelude::*;
@@ -85,15 +86,16 @@ impl Diskstats {
 #[derive(Debug, Display, EnumString, EnumIter)]
 pub enum DiskstatKeys {
     Reads,
+    #[strum(serialize = "Reads Merged")]
     Merged,
-    #[strum(serialize = "Sectors Read")]
+    #[strum(serialize = "Sectors Read (1 sector = 512 bytes)")]
     SectorsRead,
     #[strum(serialize = "Time Reading")]
     TimeReading,
     Writes,
     #[strum(serialize = "Writes Merged")]
     WritesMerged,
-    #[strum(serialize = "Sectors Written")]
+    #[strum(serialize = "Sectors Written (1 sector = 512 bytes)")]
     SectorsWritten,
     #[strum(serialize = "Time Writing")]
     TimeWriting,
@@ -106,7 +108,7 @@ pub enum DiskstatKeys {
     Discards,
     #[strum(serialize = "Discards Merged")]
     DiscardsMerged,
-    #[strum(serialize = "Sectors Discarded")]
+    #[strum(serialize = "Sectors Discarded (1 sector = 512 bytes)")]
     SectorsDiscarded,
     #[strum(serialize = "Time Discarding")]
     TimeDiscarding,
@@ -181,7 +183,7 @@ fn process_collected_raw_data(buffer: Data) -> Result<ProcessedData> {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DiskValue {
     pub time: TimeEnum,
-    pub value: u64,
+    pub value: f64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -207,23 +209,47 @@ fn get_disk_names(value: Diskstats) -> Vec<String> {
     names
 }
 
-fn get_values(values: Vec<Diskstats>, key: String) -> Result<String> {
+fn get_values(values: Vec<Diskstats>, key: String, unit: String) -> Result<String> {
     let mut ev: BTreeMap<String, DiskValues> = BTreeMap::new();
     let disk_names = get_disk_names(values[0].clone());
+    let mut factor = KB_FACTOR;
     for name in disk_names {
         let dv = DiskValues::new(name.clone());
         ev.insert(name, dv);
     }
+    if key.contains("Time") {
+        factor = TIME_S_FACTOR;
+    } else if "MB" == unit {
+        factor = MB_FACTOR;
+    } else if key.contains("Merged") {
+        factor = FACTOR_OF_ONE;
+    }
     let time_zero = values[0].time;
-    for value in values {
-        for disk in value.disk_stats {
+    let mut prev_data = values[0].clone();
+    for v in values {
+        let mut prev_value: HashMap<String, u64> = HashMap::new();
+        for disk in &prev_data.disk_stats {
+            prev_value.insert(disk.name.clone(), *disk.stat.get(&key.clone()).unwrap());
+        }
+        for disk in &v.disk_stats {
+            let stat_value;
+            /*
+             * The only counter to go to zero.
+             * See https://www.kernel.org/doc/html/latest/admin-guide/iostats.html Field #9
+             */
+            if key == "In Progress" {
+                stat_value = *disk.stat.get(&key.clone()).unwrap() as f64;
+            } else {
+                stat_value = (*disk.stat.get(&key.clone()).unwrap() as i64 - *prev_value.get(&disk.name).unwrap() as i64) as f64/ factor as f64;
+            }
             let dv = DiskValue {
-                time: (value.time - time_zero),
-                value: *disk.stat.get(&key.clone()).unwrap(),
+                time: (v.time - time_zero),
+                value: stat_value,
             };
             let dvs = ev.get_mut(&disk.name).unwrap();
             dvs.values.push(dv);
         }
+        prev_data = v.clone();
     }
     let end_values: Vec<DiskValues> = ev.into_values().collect();
     Ok(serde_json::to_string(&end_values)?)
@@ -235,12 +261,18 @@ pub struct Key {
     pub unit: String,
 }
 
-fn get_keys() -> Result<String> {
+fn get_keys(user_unit: String) -> Result<String> {
     let mut end_values: Vec<Key> = Vec::new();
     for key in DiskstatKeys::iter() {
         let mut unit: String = "Count".to_string();
-        if key.to_string().contains("Time") {
-            unit = "Time (ms)".to_string();
+        if key.to_string().contains("Sectors") {
+            unit = "Sectors".to_string();
+        } else if key.to_string().contains("Time") {
+            unit = "Time (s)".to_string();
+        } else if key.to_string().contains("Merged") {
+            unit = "Merges (Count)".to_string();
+        } else if !key.to_string().contains("In Progress") {
+            unit = format!("{} ({})", key, user_unit);
         }
         end_values.push(Key {name: key.to_string(), unit: unit});
     }
@@ -264,10 +296,14 @@ impl GetData for Diskstats {
         let (_, req_str) = &param[1];
 
         match req_str.as_str() {
-            "keys" => return get_keys(),
+            "keys" => {
+                let (_, unit) = &param[2];
+                return get_keys(unit.to_string());
+            }
             "values" => {
                 let (_, key) = &param[2];
-                return get_values(values, key.to_string());
+                let (_, unit) = &param[3];
+                return get_values(values, key.to_string(), unit.to_string());
             }
             _ => panic!("Unsupported API"),
         }
@@ -354,7 +390,7 @@ mod tests {
         diskstat.collect_data().unwrap();
         buffer.push(Data::DiskstatsRaw(diskstat));
         processed_buffer.push(Diskstats::new().process_raw_data(buffer[0].clone()).unwrap());
-        let json = Diskstats::new().get_data(processed_buffer, "run=test&get=keys".to_string()).unwrap();
+        let json = Diskstats::new().get_data(processed_buffer, "run=test&get=keys&unit=kb".to_string()).unwrap();
         let values: Vec<Key> = serde_json::from_str(&json).unwrap();
         assert!(values.len() > 0);
     }
@@ -373,7 +409,7 @@ mod tests {
         for buf in buffer {
             processed_buffer.push(Diskstats::new().process_raw_data(buf).unwrap());
         }
-        let json = Diskstats::new().get_data(processed_buffer, "run=test&get=values&key=Reads".to_string()).unwrap();
+        let json = Diskstats::new().get_data(processed_buffer, "run=test&get=values&key=Reads&unit=kb".to_string()).unwrap();
         let values: Vec<DiskValues> = serde_json::from_str(&json).unwrap();
         assert!(values[0].name != "");
         assert!(values[0].values.len() > 0);
