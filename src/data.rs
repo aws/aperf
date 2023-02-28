@@ -10,6 +10,7 @@ pub mod perf_stat;
 pub mod intel_perf_events;
 #[cfg(target_arch = "aarch64")]
 pub mod grv_perf_events;
+pub mod constants;
 
 use anyhow::Result;
 use crate::InitParams;

@@ -2,7 +2,7 @@ import './plotly.js';
 import { clearElements, addElemToNode } from './index.js';
 export { diskStats };
 
-function getStatValues(run, key, elem) {
+function getStatValues(run, key, elem, unit) {
     const http = new XMLHttpRequest();
     http.onload = function () {
         var disk_datas = [];
@@ -34,11 +34,15 @@ function getStatValues(run, key, elem) {
         };
         Plotly.newPlot(TESTER, disk_datas, layout, { frameMargins: 0 });
     }
-    http.open("GET", `visualize/disk_stats?run=${run}&get=values&key=${key.name}`);
+    http.open("GET", `visualize/disk_stats?run=${run}&get=values&key=${key.name}&unit=${unit}`);
     http.send();
 }
 
-function getStatKeys(run, container_id) {
+function getStatKeys(run, container_id, mb) {
+    var unit = "KB";
+    if (mb) {
+	unit = "MB";
+    }
     const http = new XMLHttpRequest();
     http.onload = function () {
         var data = JSON.parse(http.response);
@@ -47,14 +51,14 @@ function getStatKeys(run, container_id) {
             elem.id = `disk-stat-${run}-${value.name}`;
             elem.style.float = "none";
             addElemToNode(container_id, elem);
-            getStatValues(run, value, elem);
+            getStatValues(run, value, elem, unit);
         })
     }
-    http.open("GET", `visualize/disk_stats?run=${run}&get=keys`);
+    http.open("GET", `visualize/disk_stats?run=${run}&get=keys&unit=${unit}`);
     http.send();
 }
 
-function diskStats() {
+function diskStats(mb: boolean) {
     const http = new XMLHttpRequest();
     http.onload = function () {
         var data = JSON.parse(http.response);
@@ -83,7 +87,7 @@ function diskStats() {
             var per_value_div = document.createElement('div');
             per_value_div.id = `${value}-disk-stat-per-data`;
             addElemToNode(run_node_id, per_value_div);
-            getStatKeys(value, per_value_div.id);
+            getStatKeys(value, per_value_div.id, mb);
         })
     }
     http.open("GET", '/visualize/get?get=entries');

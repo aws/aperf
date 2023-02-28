@@ -43,7 +43,7 @@ function openData(evt: Event, elem: HTMLButtonElement) {
 		interrupts();
 	}
 	if (tabName == "disk_stats") {
-		diskStats();
+		diskStats(false);
 	}
 }
 // Collapse functionality
@@ -84,6 +84,16 @@ for (var i=0; i < elems.length; i++) {
 			sysctl(true);
 		} else {
 			sysctl(false);
+		}
+	})
+}
+var elems = document.getElementsByClassName('disk-button');
+for (var i=0; i < elems.length; i++) {
+	elems[i].addEventListener("click", function(evn: Event) {
+		if (this.id == "disk_button_kb"){
+			diskStats(false);
+		} else {
+			diskStats(true);
 		}
 	})
 }
