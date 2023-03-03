@@ -13,7 +13,7 @@ tar -xvf ./aperf-v0.1.4-alpha-aarch64.tar.gz
 For the purpose of this example we will be collecting data on two systems. The first system will be an x86-based C6i system and the second one will be an AWS Graviton C7g instance. To collect performance data in 1 second time intervals for 10 seconds on the C6i instances, run the following command:
 
 ```
-./aperf-v0.1.4-alpha-aarch64/aperf-collector -i 1 -p 10 -r c6i_performance_run_1
+./aperf-v0.1.4-alpha-x86_64/aperf-collector -i 1 -p 10 -r c6i_performance_run_1
 ```
 
 To collect performance data in 1 second time intervals for 10 seconds on the C7gf instances, run the following command (not the `run_name` parameter has changed. This allows us to easily differentiate between two performance runs.
