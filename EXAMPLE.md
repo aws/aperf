@@ -16,24 +16,24 @@ For the purpose of this example we will be collecting data on two systems. The f
 ./aperf-v0.1.4-alpha-x86_64/aperf-collector -i 1 -p 10 -r c6i_performance_run_1
 ```
 
-To collect performance data in 1 second time intervals for 10 seconds on the C7gf instances, run the following command (not the `run_name` parameter has changed. This allows us to easily differentiate between two performance runs.
+To collect performance data in 1 second time intervals for 10 seconds on the C7gf instances, run the following command (note the `run_name` parameter has changed. This allows us to easily differentiate between two performance runs.
 
 ```
 ./aperf-v0.1.4-alpha-aarch64/aperf-collector -i 1 -p 10 -r c7g_performance_run_1
 ```
 
 ## Visualizing The Results
-To visualize the results you'll need access to a Linux desktop environment with a web browser installed. If you don't have access to a Linux desktop environment, [AWS Workspaces](https://aws.amazon.com/workspaces/) can be used to spin up a Linux desktop enviornment quickly and easily.
-
-To get started you'll need the `aperf-visualizer` binary and the performance data on the same machine. To visualize the results of a single performance run use the following command:
+The APerf Visualizer runs a webserver to visualize the results. To get started you'll need the `aperf-visualizer` binary and the performance data on the same machine. `aperf-visualizer` currently only supports Linux environments. To visualize the results of a single performance run use the following command:
 
 ```
-./aperf-v0.1.4-alpha-aarch64/aperf-visualizer --run-directory c7g_performance_run_1
+./aperf-v0.1.4-alpha-aarch64/aperf-visualizer -p 8080 --run-directory c7g_performance_run_1
 ```
+
+Once `aperf-visualizer` is up and running, simply point any web browser to the IP address of the machine running `aperf-visualizer`.
 
 ## Comparing Two Performance Run Results
-To visualize and compare the results of two different performance runs, use the following command. APerf will automatically highlight variances between the two performance runs. This can be useful for comparing differences between systems.
+To visualize and compare the results of two different performance runs, use the following command. This can be useful for comparing differences between systems.
 
 ```
-./aperf-v0.1.4-alpha-aarch64/aperf-visualizer --run-directory c7g_performance_run_1 --run-directory c6i_performance_run_1
+./aperf-v0.1.4-alpha-aarch64/aperf-visualizer -p 8080 --run-directory c7g_performance_run_1 --run-directory c6i_performance_run_1
 ```
