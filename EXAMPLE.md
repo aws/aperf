@@ -29,7 +29,7 @@ The APerf Visualizer runs a webserver to visualize the results. To get started y
 ./aperf-v0.1.4-alpha-aarch64/aperf-visualizer -p 8080 --run-directory c7g_performance_run_1
 ```
 
-Once `aperf-visualizer` is up and running, simply point any web browser to the IP address of the machine running `aperf-visualizer`.
+`aperf-visualizer` only listens for connections on localhost. If `aperf-visualizer` is running on a remote host you'll need to establish an SSH tunnel and then point a web browser to forwarded port established by the SSH tunnel. If you are running `aperf-visualizer` locally you can point your local web browser to  `127.0.0.1:8080`.
 
 ## Comparing Two Performance Run Results
 To visualize and compare the results of two different performance runs, use the following command. This can be useful for comparing differences between systems.
