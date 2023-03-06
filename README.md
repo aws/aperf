@@ -69,6 +69,8 @@ echo 100 | sudo tee /sys/devices/cpu/perf_event_mux_interval_ms
 ```
 ./aperf-visualizer -r <COLLECTOR_DIRECTORY> -p <PORT_NUMBER>
 ```
+### Example
+To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 
 ### Configuration
 
