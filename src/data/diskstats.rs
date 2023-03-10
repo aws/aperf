@@ -212,17 +212,22 @@ fn get_disk_names(value: Diskstats) -> Vec<String> {
 fn get_values(values: Vec<Diskstats>, key: String, unit: String) -> Result<String> {
     let mut ev: BTreeMap<String, DiskValues> = BTreeMap::new();
     let disk_names = get_disk_names(values[0].clone());
-    let mut factor = KB_FACTOR;
+    let mut factor = FACTOR_OF_ONE;
+    let mut mult_factor = MULT_FACTOR_OF_ONE;
     for name in disk_names {
         let dv = DiskValues::new(name.clone());
         ev.insert(name, dv);
     }
+
     if key.contains("Time") {
         factor = TIME_S_FACTOR;
-    } else if "MB" == unit {
-        factor = MB_FACTOR;
-    } else if key.contains("Merged") {
-        factor = FACTOR_OF_ONE;
+    }
+    if key.contains("Sectors") {
+        mult_factor = MULT_SECTORS;
+        factor = KB_FACTOR;
+        if unit == "MB" {
+            factor = MB_FACTOR;
+        }
     }
     let time_zero = values[0].time;
     let mut prev_data = values[0].clone();
@@ -240,7 +245,7 @@ fn get_values(values: Vec<Diskstats>, key: String, unit: String) -> Result<Strin
             if key == "In Progress" {
                 stat_value = *disk.stat.get(&key.clone()).unwrap() as f64;
             } else {
-                stat_value = (*disk.stat.get(&key.clone()).unwrap() as i64 - *prev_value.get(&disk.name).unwrap() as i64) as f64/ factor as f64;
+                stat_value = (*disk.stat.get(&key.clone()).unwrap() as i64 - *prev_value.get(&disk.name).unwrap() as i64) as f64 * mult_factor as f64 / factor as f64;
             }
             let dv = DiskValue {
                 time: (v.time - time_zero),
@@ -266,13 +271,9 @@ fn get_keys(user_unit: String) -> Result<String> {
     for key in DiskstatKeys::iter() {
         let mut unit: String = "Count".to_string();
         if key.to_string().contains("Sectors") {
-            unit = "Sectors".to_string();
+            unit = format!("{} ({})", "Sectors", user_unit);
         } else if key.to_string().contains("Time") {
             unit = "Time (s)".to_string();
-        } else if key.to_string().contains("Merged") {
-            unit = "Merges (Count)".to_string();
-        } else if !key.to_string().contains("In Progress") {
-            unit = format!("{} ({})", key, user_unit);
         }
         end_values.push(Key {name: key.to_string(), unit: unit});
     }

@@ -70,20 +70,30 @@ struct VmstatEntry {
 fn get_entry(values: Vec<Vmstat>, key: String) -> Result<String> {
     let mut end_values = Vec::new();
     let time_zero = values[0].time;
+    let mut prev_vmstat = values[0].clone();
     for value in values {
-        let current_vmstat = value;
+        let current_vmstat = value.clone();
         let current_time = current_vmstat.time;
 
         let curr_data = current_vmstat.vmstat_data.clone();
         let curr_value = curr_data
             .get(&key)
             .ok_or(PDError::VisualizerVmstatValueGetError(key.to_string()))?;
+        let prev_data = prev_vmstat.vmstat_data.clone();
+        let prev_value = prev_data
+            .get(&key)
+            .ok_or(PDError::VisualizerVmstatValueGetError(key.to_string()))?;
 
+        let mut v = *curr_value;
+        if !key.contains("nr_") {
+            v = *curr_value - *prev_value;
+        }
         let vmstat_entry = VmstatEntry {
             time: (current_time - time_zero),
-            value: *curr_value,
+            value: v,
         };
         end_values.push(vmstat_entry);
+        prev_vmstat = value.clone();
     }
     Ok(serde_json::to_string(&end_values)?)
 }
@@ -95,26 +105,26 @@ fn get_entries(value: Vmstat) -> Result<String> {
 }
 
 impl GetData for Vmstat {
-	fn process_raw_data(&mut self, buffer: Data) -> Result<ProcessedData> {
+    fn process_raw_data(&mut self, buffer: Data) -> Result<ProcessedData> {
         let raw_value = match buffer {
             Data::VmstatRaw(ref value) => value,
             _ => panic!("Invalid Data type in raw file"),
         };
         let mut vmstat = Vmstat::new();
-		let reader = BufReader::new(raw_value.data.as_bytes());
-		let mut map: HashMap<String, i64> = HashMap::new();
-		for line in reader.lines() {
-			let line = line?;
-			let mut split = line.split_whitespace();
-			let name = split.next().ok_or(PDError::ProcessorOptionExtractError)?;
+	let reader = BufReader::new(raw_value.data.as_bytes());
+	let mut map: HashMap<String, i64> = HashMap::new();
+	for line in reader.lines() {
+            let line = line?;
+            let mut split = line.split_whitespace();
+            let name = split.next().ok_or(PDError::ProcessorOptionExtractError)?;
             let val = split.next().ok_or(PDError::ProcessorOptionExtractError)?;
-			map.insert(name.to_owned(), val.parse::<i64>()?);
-		}
+	    map.insert(name.to_owned(), val.parse::<i64>()?);
+	}
         vmstat.set_time(raw_value.time);
         vmstat.set_data(map);
         let processed_data = ProcessedData::Vmstat(vmstat);
         Ok(processed_data)
-	}
+    }
 
     fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
         let mut values = Vec::new();

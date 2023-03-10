@@ -35,6 +35,7 @@ function getUtilizationType(run, elem, type) {
             },
             yaxis: {
                 title: 'CPU Utilization (%)',
+                range: [0, 100],
             },
         };
         Plotly.newPlot(TESTER, cpu_type_datas, layout, { frameMargins: 0 });
