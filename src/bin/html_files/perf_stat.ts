@@ -44,7 +44,6 @@ function getEvent(run, key, parent_id) {
     http.onload = function () {
         var data = JSON.parse(http.response);
         var perfstat_datas = [];
-        console.log(data);
         data[0].cpus.forEach(function (value, index, arr) {
             var cpu_stat = new StatValue();
             cpu_stat.cpu = value.cpu;
@@ -52,13 +51,11 @@ function getEvent(run, key, parent_id) {
             cpu_stat.y_data = [];
             perfstat_datas.push(cpu_stat);
         });
-        console.log(perfstat_datas);
         data.forEach(function (value, index, arr) {
             value.cpus.forEach(function (stat, i_index, i_arr) {
                 addData(perfstat_datas, stat, value.time.TimeDiff);
             })
         });
-        console.log(perfstat_datas);
         var elem = document.createElement('div');
         elem.style.float = "none";
         addElemToNode(parent_id, elem);
