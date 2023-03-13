@@ -16,7 +16,7 @@ For the purpose of this example we will be collecting data on two systems. The f
 ./aperf-v0.1.4-alpha-x86_64/aperf-collector -i 1 -p 10 -r c6i_performance_run_1
 ```
 
-To collect performance data in 1 second time intervals for 10 seconds on the C7gf instances, run the following command (note the `run_name` parameter has changed. This allows us to easily differentiate between two performance runs.
+To collect performance data in 1 second time intervals for 10 seconds on the C7g instances, run the following command (note the `run_name` parameter has changed. This allows us to easily differentiate between two performance runs.
 
 ```
 ./aperf-v0.1.4-alpha-aarch64/aperf-collector -i 1 -p 10 -r c7g_performance_run_1
