@@ -2,6 +2,8 @@ import './plotly.js';
 import { clearElements, addElemToNode } from './index.js';
 export { cpuUtilization };
 
+let got_data = false;
+
 function getUtilizationType(run, elem, type) {
     const http = new XMLHttpRequest();
     http.onload = function () {
@@ -137,6 +139,7 @@ function getCpuUtilization(elem, run) {
             },
             yaxis: {
                 title: 'CPU Utilization (%)',
+                range: [0, 100],
             },
         };
         var data_list = [user, nice, system, irq, softirq, idle, iowait, steal];
@@ -146,6 +149,9 @@ function getCpuUtilization(elem, run) {
     http.send();
 }
 function cpuUtilization() {
+    if (got_data) {
+        return;
+    }
     const http = new XMLHttpRequest();
     http.onload = function () {
         var data = JSON.parse(http.response);
@@ -179,6 +185,7 @@ function cpuUtilization() {
             addElemToNode(run_node_id, per_type_div);
             getUtilizationTypes(value, per_type_div.id);
         });
+        got_data = true;
     };
     http.open("GET", '/visualize/get?get=entries');
     http.send();

@@ -2,6 +2,8 @@ import './plotly.js';
 import { clearElements, addElemToNode } from './index.js';
 export { systemInfo };
 
+let got_data = false;
+
 function getSystemInfo(run, container_id) {
     const http = new XMLHttpRequest();
     http.onload = function () {
@@ -27,6 +29,9 @@ function getSystemInfo(run, container_id) {
 }
 
 function systemInfo() {
+    if (got_data) {
+        return;
+    }
     const http = new XMLHttpRequest();
     http.onload = function () {
         var data = JSON.parse(http.response);
@@ -57,6 +62,7 @@ function systemInfo() {
             addElemToNode(run_node_id, per_run_div);
             getSystemInfo(value, per_run_div.id);
         })
+        got_data = true;
     }
     http.open("GET", '/visualize/get?get=entries');
     http.send();
