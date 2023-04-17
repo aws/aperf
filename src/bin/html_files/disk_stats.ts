@@ -2,6 +2,8 @@ import './plotly.js';
 import { clearElements, addElemToNode } from './index.js';
 export { diskStats };
 
+let got_data = false;
+
 function getStatValues(run, key, elem, unit) {
     const http = new XMLHttpRequest();
     http.onload = function () {
@@ -59,6 +61,9 @@ function getStatKeys(run, container_id, mb) {
 }
 
 function diskStats(mb: boolean) {
+    if (got_data) {
+        return;
+    }
     const http = new XMLHttpRequest();
     http.onload = function () {
         var data = JSON.parse(http.response);
@@ -89,6 +94,7 @@ function diskStats(mb: boolean) {
             addElemToNode(run_node_id, per_value_div);
             getStatKeys(value, per_value_div.id, mb);
         })
+        got_data = true;
     }
     http.open("GET", '/visualize/get?get=entries');
     http.send();

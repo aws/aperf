@@ -2,6 +2,8 @@ import './plotly.js';
 import { clearElements, addElemToNode } from './index.js';
 export { perfStat };
 
+let got_data = false;
+
 function getEvents(run, container_id) {
     const http = new XMLHttpRequest();
     http.onload = function () {
@@ -93,6 +95,9 @@ function getEvent(run, key, parent_id) {
 }
 
 function perfStat() {
+    if (got_data) {
+        return;
+    }
     const http = new XMLHttpRequest();
     http.onload = function () {
         var data = JSON.parse(http.response);
@@ -123,6 +128,7 @@ function perfStat() {
             addElemToNode(run_node_id, per_value_div);
             getEvents(value, per_value_div.id);
         })
+        got_data = true;
     }
     http.open("GET", '/visualize/get?get=entries');
     http.send();
