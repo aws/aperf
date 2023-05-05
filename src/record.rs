@@ -19,13 +19,13 @@ pub struct Record {
 }
 
 fn prepare_data_collectors() -> Result<()> {
-    debug!("Preparing data collectors...");
+    info!("Preparing data collectors...");
     PERFORMANCE_DATA.lock().unwrap().prepare_data_collectors()?;
     Ok(())
 }
 
 fn start_collection_serial() -> Result<()> {
-    debug!("Collecting data...");
+    info!("Collecting data...");
     PERFORMANCE_DATA.lock().unwrap().collect_data_serial()?;
     Ok(())
 }

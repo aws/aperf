@@ -61,6 +61,9 @@ pub enum PDError {
 
     #[error("Invalid tar.gz file name")]
     InvalidArchiveName,
+
+    #[error("Invalid verbose option")]
+    InvalidVerboseOption,
 }
 
 lazy_static! {
@@ -324,7 +327,7 @@ impl InitParams {
             run_name = dir;
         } else {
             let path = Path::new(&dir_name);
-            debug!("No run-name given. Using {}", path.file_stem().unwrap().to_str().unwrap());
+            info!("No run-name given. Using {}", path.file_stem().unwrap().to_str().unwrap());
         }
         let collector_version = env!("CARGO_PKG_VERSION").to_string();
         let commit_sha_short = env!("VERGEN_GIT_SHA_SHORT").to_string();
