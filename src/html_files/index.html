@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 	<head>
-		<link rel="stylesheet" href="/html_files/index.css">
+		<link rel="stylesheet" href="index.css">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<title>APerf</title>
 	</head>
@@ -32,6 +32,7 @@
 			<div id="cpu-util-runs"></div>
 		</div>
 		<div id="vmstat" class="tabcontent">
+			<div id="vmstat-loading">Loading...</div>
 			<div id="vmstat-runs"></div>
 		</div>
 		<div id="perfstat" class="tabcontent">
@@ -49,20 +50,27 @@
 			<div id="interrupt-runs"></div>
 		</div>
 		<div id="disk_stats" class="tabcontent">
-			<div>
-				<input type="radio" class="disk-button" id="disk_button_kb" name="diskBytes">KB (Kilobytes)</button>
-				<input type="radio" class="disk-button" id="disk_button_mb" name="diskBytes">MB (Megabytes)</button>
-			</div>
 			<div id="disk-stat-runs"></div>
 		</div>
-		<script type="module" src="/html_files/index.js"></script>
-		<script type="module" src="/html_files/system_info.js"></script>
-		<script type="module" src="/html_files/sysctl.js"></script>
-		<script type="module" src="/html_files/cpu_utilization.js"></script>
-		<script type="module" src="/html_files/vmstat.js"></script>
-		<script type="module" src="/html_files/perf_stat.js"></script>
-		<script type="module" src="/html_files/kernel_config.js"></script>
-		<script type="module" src="/html_files/interrupts.js"></script>
-		<script type="module" src="/html_files/disk_stats.js"></script>
+		<script type="text/javascript" src="data/js/runs.js"></script>
+		<script type="text/javascript" src="data/js/system_info.js"></script>
+		<script type="text/javascript" src="data/js/sysctl.js"></script>
+		<script type="text/javascript" src="data/js/cpu_utilization.js"></script>
+		<script type="text/javascript" src="data/js/vmstat.js"></script>
+		<script type="text/javascript" src="data/js/kernel_config.js"></script>
+		<script type="text/javascript" src="data/js/interrupts.js"></script>
+		<script type="text/javascript" src="data/js/disk_stats.js"></script>
+		<script type="text/javascript" src="data/js/perf_stat.js"></script>
+		<script type="text/javascript" src="js/utils.js"></script>
+		<script type="text/javascript" src="js/plotly.js"></script>
+		<script type="text/javascript" src="js/system_info.js"></script>
+		<script type="text/javascript" src="js/cpu_utilization.js"></script>
+		<script type="text/javascript" src="js/vmstat.js"></script>
+		<script type="text/javascript" src="js/kernel_config.js"></script>
+		<script type="text/javascript" src="js/sysctl.js"></script>
+		<script type="text/javascript" src="js/interrupts.js"></script>
+		<script type="text/javascript" src="js/disk_stats.js"></script>
+		<script type="text/javascript" src="js/perf_stat.js"></script>
+		<script type="text/javascript" src="index.js"></script>
 	</body>
 </html>
