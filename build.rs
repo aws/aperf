@@ -16,13 +16,13 @@ fn main() -> Result<()> {
 
     let jsdir = format!("{}/js", env::var("OUT_DIR").unwrap());
     println!("cargo:rustc-env=JS_DIR={}", jsdir);
-    println!("cargo:rerun-if-changed=src/bin/html_files/");
+    println!("cargo:rerun-if-changed=src/html_files/");
     let status = Command::new("npm")
         .arg("exec")
         .arg("--")
         .arg("tsc")
         .arg("-p")
-        .arg("src/bin/html_files/")
+        .arg("src/html_files/")
         .arg("--outDir")
         .arg(jsdir)
         .spawn()?

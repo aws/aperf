@@ -1,13 +1,3 @@
-import { systemInfo } from './system_info.js';
-import { sysctl } from './sysctl.js';
-import { cpuUtilization } from './cpu_utilization.js';
-import { vmStat } from './vmstat.js';
-import { kernelConfig } from './kernel_config.js';
-import { interrupts } from './interrupts.js';
-import { diskStats } from './disk_stats.js';
-import { perfStat } from './perf_stat.js';
-export { clearElements, addElemToNode, openData };
-
 function openData(evt: Event, elem: HTMLButtonElement) {
 	var tabName: string = elem.name;
 	var tabcontent = document.getElementsByClassName('tabcontent');
@@ -24,9 +14,6 @@ function openData(evt: Event, elem: HTMLButtonElement) {
 	if (tabName == "system_info") {
 		systemInfo();
 	}
-	if (tabName == "sysctl") {
-		sysctl(false);
-	}
 	if (tabName == "cpu_utilization") {
 		cpuUtilization();
 	}
@@ -36,8 +23,8 @@ function openData(evt: Event, elem: HTMLButtonElement) {
 	if (tabName == "kernel_config") {
 		kernelConfig(false);
 	}
-	if (tabName == "perfstat") {
-		perfStat();
+	if (tabName == "sysctl") {
+		sysctl(false);
 	}
 	if (tabName == "interrupts") {
 		interrupts();
@@ -45,21 +32,10 @@ function openData(evt: Event, elem: HTMLButtonElement) {
 	if (tabName == "disk_stats") {
 		diskStats(false);
 	}
+	if (tabName == "perfstat") {
+		perfStat();
+	}
 }
-// Collapse functionality
-var coll = Array.from(document.getElementsByClassName("collapsible") as HTMLCollectionOf<HTMLElement>);
-coll.forEach((element) => {
-	element.addEventListener("click", function () {
-		this.classList.toggle("active");
-		var content = this.nextElementSibling as HTMLElement;
-		if (content.style.display === "block") {
-			content.style.display = "none";
-		} else {
-			content.style.display = "block";
-		}
-	})
-})
-
 // Tab button click
 var elems = document.getElementsByClassName('tablinks');
 for (var i=0; i < elems.length; i++) {
@@ -86,28 +62,6 @@ for (var i=0; i < elems.length; i++) {
 			sysctl(false);
 		}
 	})
-}
-var elems = document.getElementsByClassName('disk-button');
-for (var i=0; i < elems.length; i++) {
-	elems[i].addEventListener("click", function(evn: Event) {
-		if (this.id == "disk_button_kb"){
-			diskStats(false);
-		} else {
-			diskStats(true);
-		}
-	})
-}
-
-function clearElements(id: string) {
-	let node: HTMLElement = document.getElementById(id);
-	while(node.lastElementChild) {
-		node.removeChild(node.lastElementChild);
-	}
-}
-
-function addElemToNode(node_id: string, elem: HTMLElement) {
-	let node: HTMLElement = document.getElementById(node_id);
-	node.appendChild(elem);
 }
 
 // Show landing page
