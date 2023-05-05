@@ -1,6 +1,6 @@
 # APerf
 ## What is APerf?
-A CLI tool to gather many pieces of performance data in one go. APerf includes a collector and a visualizer sub tool. The collector gathers performance metrics, stores them in a set of local files that can then be analyzed via the visualizer sub tool.
+A CLI tool to gather many pieces of performance data in one go. APerf includes a recorder and a reporter sub tool. The recorder gathers performance metrics, stores them in a set of local files that can then be analyzed via the reporter sub tool.
 
 ## Why does APerf exist?
 Performance issues in applications are investigated by recreating them locally and collecting data/metrics using monitoring tools like sysstat, perf, sysctl, ebpf, etc... or by running these tools remotely. Installing and executing various performance monitoring tools is a manual process and prone to errors. Even with the [Graviton Performance Runbook](https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/graviton_perfrunbook.md), understanding the output of these tools requires deep domain specific knowledge.
@@ -26,12 +26,9 @@ APerf collects the following performance data:
 * [Node.js (v16.16.0+)](https://nodejs.org/en/download/)
 
 ## Installation
-Download the binaries from the [Releases](https://github.com/aws/APerf/releases) page.
+Download the binary from the [Releases](https://github.com/aws/APerf/releases) page.
 
-`aperf-collector`  only supports running on Linux.
-
-`aperf-visualizer` only supports running on Linux.
-
+`aperf` only supports running on Linux.
 
 ### Building from source
 1. Download the source code from the [Releases](https://github.com/aws/APerf/releases) page.
@@ -43,9 +40,7 @@ cargo test
 ```
 
 ## Usage
-`aperf-collector` collects performance data and stores them in a series of files. These files are then viewed using `aperf-visualizer` either on the same machine the performance data was collected on or a remote machine running `aperf-visualizer`. 
-
-To visualize the data using `aperf-visualizer` download the directory created by `aperf-collector` and load the data with `aperf-visualizer`.
+`aperf record` records performance data and stores them in a series of files. A report is then generated with `aperf report` and viewed in any system with a web browser.
 
 **KNOWN LIMITATION**
 
@@ -55,26 +50,26 @@ The default configuration of 10ms for `/sys/devices/cpu/perf_event_mux_interval_
 echo 100 | sudo tee /sys/devices/cpu/perf_event_mux_interval_ms 
 ```
 
-**aperf-collector**
-1. Download the `aperf-collector` binary.
-2. Start `aperf-collector`:
+**aperf record**
+1. Download the `aperf` binary.
+2. Start `aperf record`:
 ```
-./aperf-collector -r <RUN_NAME> -i <INTERVAL_NUMBER> -p <COLLECTION_PERIOD>
+./aperf record -r <RUN_NAME> -i <INTERVAL_NUMBER> -p <COLLECTION_PERIOD>
 ```
 
-**aperf-visualizer**
-1. Download the `aperf-visualizer` binary.
-2. Download the directory created by `aperf-collector` to the machine where `aperf-visualizer` will be running.
-3. Start `aperf-visualizer`:
+**aperf report**
+1. Download the `aperf` binary.
+2. Download the directory created by `aperf record`.
+3. Start `aperf report`:
 ```
-./aperf-visualizer -r <COLLECTOR_DIRECTORY> -p <PORT_NUMBER>
+./aperf report -r <COLLECTOR_DIRECTORY> -p <PORT_NUMBER>
 ```
 ### Example
 To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 
 ### Configuration
 
-`aperf-collector` has the following flags available for use:
+`aperf record` has the following flags available for use:
 
 **Collector Flags:**
 
@@ -87,7 +82,7 @@ To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 `-r, --run-name` run name (name of the run for organization purposes, creates directory of the same name, default of aperf_[timestamp])
 
 
-`./aperf-visualizer -h`
+`./aperf report -h`
 
 **Visualizer Flags:**
 
@@ -95,12 +90,10 @@ To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 
 `-r, --run-directory` directory that contains collected data 
 
-`-p, --port` port number (default localhost:8080)
-
 ## Logging
 * `env_logger` is used to log information about the tool run to stdout.
-* To see it, use `export APERF_LOG_LEVEL=info`.
-* To see more detail, use `export APERF_LOG_LEVEL=debug`.
+* To see it, use `./aperf <command> -v`.
+* To see more detail, use `./aperf <command> -vv`.
 
 ## Security
 
