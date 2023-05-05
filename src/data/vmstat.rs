@@ -126,6 +126,13 @@ impl GetData for Vmstat {
         Ok(processed_data)
     }
 
+    fn get_calls(&mut self) -> Result<Vec<String>> {
+        let mut end_values = Vec::new();
+        end_values.push("keys".to_string());
+        end_values.push("values".to_string());
+        Ok(end_values)
+    }
+
     fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
         let mut values = Vec::new();
         for data in buffer {
@@ -138,7 +145,7 @@ impl GetData for Vmstat {
         let (_, req_str) = &param[1];
 
         match req_str.as_str() {
-            "entries" => return get_entries(values[0].clone()),
+            "keys" => return get_entries(values[0].clone()),
             "values" => {
                 let (_, key) = &param[2];
                 return get_entry(values, key.to_string());
@@ -201,7 +208,7 @@ mod tests {
         assert!(vmstat.collect_data().unwrap() == ());
         buffer.push(Data::VmstatRaw(vmstat));
         processed_buffer.push(Vmstat::new().process_raw_data(buffer[0].clone()).unwrap());
-        let json = Vmstat::new().get_data(processed_buffer, "run=test&get=entries".to_string()).unwrap();
+        let json = Vmstat::new().get_data(processed_buffer, "run=test&get=keys".to_string()).unwrap();
         let values: Vec<&str> = serde_json::from_str(&json).unwrap();
         assert!(values.len() > 0);
     }

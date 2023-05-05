@@ -209,7 +209,7 @@ fn get_disk_names(value: Diskstats) -> Vec<String> {
     names
 }
 
-fn get_values(values: Vec<Diskstats>, key: String, unit: String) -> Result<String> {
+fn get_values(values: Vec<Diskstats>, key: String) -> Result<String> {
     let mut ev: BTreeMap<String, DiskValues> = BTreeMap::new();
     let disk_names = get_disk_names(values[0].clone());
     let mut factor = FACTOR_OF_ONE;
@@ -225,9 +225,6 @@ fn get_values(values: Vec<Diskstats>, key: String, unit: String) -> Result<Strin
     if key.contains("Sectors") {
         mult_factor = MULT_SECTORS;
         factor = KB_FACTOR;
-        if unit == "MB" {
-            factor = MB_FACTOR;
-        }
     }
     let time_zero = values[0].time;
     let mut prev_data = values[0].clone();
@@ -260,22 +257,10 @@ fn get_values(values: Vec<Diskstats>, key: String, unit: String) -> Result<Strin
     Ok(serde_json::to_string(&end_values)?)
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Key {
-    pub name: String,
-    pub unit: String,
-}
-
-fn get_keys(user_unit: String) -> Result<String> {
-    let mut end_values: Vec<Key> = Vec::new();
+fn get_keys() -> Result<String> {
+    let mut end_values: Vec<String> = Vec::new();
     for key in DiskstatKeys::iter() {
-        let mut unit: String = "Count".to_string();
-        if key.to_string().contains("Sectors") {
-            unit = format!("{} ({})", "Sectors", user_unit);
-        } else if key.to_string().contains("Time") {
-            unit = "Time (s)".to_string();
-        }
-        end_values.push(Key {name: key.to_string(), unit: unit});
+        end_values.push(key.to_string());
     }
     return Ok(serde_json::to_string(&end_values)?)
 }
@@ -283,6 +268,13 @@ fn get_keys(user_unit: String) -> Result<String> {
 impl GetData for Diskstats {
     fn process_raw_data(&mut self, buffer: Data) -> Result<ProcessedData> {
         process_collected_raw_data(buffer)
+    }
+
+    fn get_calls(&mut self) -> Result<Vec<String>> {
+        let mut end_values = Vec::new();
+        end_values.push("keys".to_string());
+        end_values.push("values".to_string());
+        Ok(end_values)
     }
 
     fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
@@ -298,13 +290,11 @@ impl GetData for Diskstats {
 
         match req_str.as_str() {
             "keys" => {
-                let (_, unit) = &param[2];
-                return get_keys(unit.to_string());
+                return get_keys();
             }
             "values" => {
                 let (_, key) = &param[2];
-                let (_, unit) = &param[3];
-                return get_values(values, key.to_string(), unit.to_string());
+                return get_values(values, key.to_string());
             }
             _ => panic!("Unsupported API"),
         }
@@ -343,7 +333,7 @@ fn init_diskstats() {
 
 #[cfg(test)]
 mod tests {
-    use super::{Diskstats, DiskstatsRaw, DiskstatKeys, DiskValues, Key};
+    use super::{Diskstats, DiskstatsRaw, DiskstatKeys, DiskValues};
     use crate::data::{CollectData, Data, ProcessedData};
     use crate::visualizer::GetData;
     use std::collections::HashMap;
@@ -391,8 +381,8 @@ mod tests {
         diskstat.collect_data().unwrap();
         buffer.push(Data::DiskstatsRaw(diskstat));
         processed_buffer.push(Diskstats::new().process_raw_data(buffer[0].clone()).unwrap());
-        let json = Diskstats::new().get_data(processed_buffer, "run=test&get=keys&unit=kb".to_string()).unwrap();
-        let values: Vec<Key> = serde_json::from_str(&json).unwrap();
+        let json = Diskstats::new().get_data(processed_buffer, "run=test&get=keys".to_string()).unwrap();
+        let values: Vec<String> = serde_json::from_str(&json).unwrap();
         assert!(values.len() > 0);
     }
 
@@ -410,7 +400,7 @@ mod tests {
         for buf in buffer {
             processed_buffer.push(Diskstats::new().process_raw_data(buf).unwrap());
         }
-        let json = Diskstats::new().get_data(processed_buffer, "run=test&get=values&key=Reads&unit=kb".to_string()).unwrap();
+        let json = Diskstats::new().get_data(processed_buffer, "run=test&get=values&key=Reads".to_string()).unwrap();
         let values: Vec<DiskValues> = serde_json::from_str(&json).unwrap();
         assert!(values[0].name != "");
         assert!(values[0].values.len() > 0);

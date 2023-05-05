@@ -307,6 +307,13 @@ impl GetData for CpuUtilization {
         process_gathered_raw_data(buffer)
     }
 
+    fn get_calls(&mut self) -> Result<Vec<String>> {
+        let mut end_values = Vec::new();
+        end_values.push("keys".to_string());
+        end_values.push("values".to_string());
+        Ok(end_values)
+    }
+
     fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
         let mut values = Vec::new();
         for data in buffer {
@@ -316,22 +323,24 @@ impl GetData for CpuUtilization {
             }
         }
         let param: Vec<(String, String)> = serde_urlencoded::from_str(&query).unwrap();
-        let(_, req_str) = &param[1];
+        let (_, req_str) = &param[1];
 
         match req_str.as_str() {
-            "types" => {
-                let end_values = ["user", "nice", "system", "irq", "softirq", "idle", "iowait", "steal"];
+            "keys" => {
+                let end_values = ["aggregate", "user", "nice", "system", "irq", "softirq", "idle", "iowait", "steal"];
                 return Ok(serde_json::to_string(&end_values)?);
             },
-            "aggregate" => {
-                let mut temp_values = Vec::new();
-                for value in values {
-                    temp_values.push(value.total);
+            "values" => {
+                let (_, key) = &param[2];
+                if key == "aggregate" {
+                    let mut temp_values = Vec::new();
+                    for value in values {
+                        temp_values.push(value.total);
+                    }
+                    return get_aggregate_data(temp_values);
+                } else {
+                    return get_type(values[0].per_cpu.len() as u64, values, &key);
                 }
-                return get_aggregate_data(temp_values);
-            },
-            "user" | "nice" | "system" | "irq" | "softirq" | "idle" | "iowait" | "steal" => {
-                return get_type(values[0].per_cpu.len() as u64, values, &req_str);
             },
             _ => panic!("Unsupported API"),
         }
@@ -397,18 +406,18 @@ mod cpu_tests {
         for buf in buffer {
             processed_buffer.push(CpuUtilization::new().process_raw_data(buf).unwrap());
         }
-        let json = CpuUtilization::new().get_data(processed_buffer, "run=test&get=aggregate".to_string()).unwrap();
+        let json = CpuUtilization::new().get_data(processed_buffer, "run=test&get=values&=aggregate".to_string()).unwrap();
         let values: Vec<CpuData> = serde_json::from_str(&json).unwrap();
         assert!(values[0].cpu == -1);
     }
 
     #[test]
     fn test_get_util_types() {
-        let types = CpuUtilization::new().get_data(Vec::new(), "run=test&get=types".to_string()).unwrap();
+        let types = CpuUtilization::new().get_data(Vec::new(), "run=test&get=keys".to_string()).unwrap();
         let values: Vec<&str> = serde_json::from_str(&types).unwrap();
         for type_str in values {
             match type_str {
-                "user" | "nice" | "system" | "irq" | "softirq" | "idle" | "iowait" | "steal" => assert!(true),
+                "aggregate" | "user" | "nice" | "system" | "irq" | "softirq" | "idle" | "iowait" | "steal" => assert!(true),
                 _ => assert!(false),
             }
         }
@@ -429,7 +438,7 @@ mod cpu_tests {
         for buf in buffer {
             processed_buffer.push(CpuUtilization::new().process_raw_data(buf).unwrap());
         }
-        let json = CpuUtilization::new().get_data(processed_buffer, "run=test&get=user".to_string()).unwrap();
+        let json = CpuUtilization::new().get_data(processed_buffer, "run=test&get=values&key=user".to_string()).unwrap();
         let values: Vec<UtilData> = serde_json::from_str(&json).unwrap();
         assert!(values.len() > 0);
     }

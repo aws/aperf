@@ -59,9 +59,17 @@ impl DataVisualizer {
         }
         self.data.get_data(values.clone(), query)
     }
+
+    pub fn get_calls(&mut self) -> Result<Vec<String>> {
+        self.data.get_calls()
+    }
 }
 
 pub trait GetData {
+    fn get_calls(&mut self) -> Result<Vec<String>> {
+        unimplemented!();
+    }
+
     fn get_data(&mut self, _values: Vec<ProcessedData>, _query: String) -> Result<String> {
         unimplemented!();
     }
@@ -89,7 +97,7 @@ mod tests {
             dv.init_visualizer("test/aperf_2022-01-01_01_01_01/".to_string(), "test".to_string()).unwrap() == ()
         );
         assert!(dv.process_raw_data("test".to_string()).unwrap() == ());
-        let ret = dv.get_data("run=test&get=aggregate".to_string()).unwrap();
+        let ret = dv.get_data("run=test&get=values&key=aggregate".to_string()).unwrap();
         let values: Vec<CpuData> = serde_json::from_str(&ret).unwrap();
         assert!(values[0].cpu == -1);
         match values[0].time {
