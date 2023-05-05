@@ -26,7 +26,7 @@ impl DataVisualizer {
         }
     }
 
-    pub fn init_visualizer(&mut self, dir: String, name: String) -> Result<(), tide::Error> {
+    pub fn init_visualizer(&mut self, dir: String, name: String) -> Result<()> {
         let file = get_file(dir.clone(), self.file_name.clone())?;
         self.file_handle = Some(file);
         self.run_values.insert(name, Vec::new());

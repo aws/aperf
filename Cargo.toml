@@ -12,23 +12,18 @@ anyhow = "1.0"
 vergen = "6"
 
 [lib]
-name = "aperf"
+name = "aperf_lib"
 path = "src/lib.rs"
 
 [[bin]]
-name = "aperf-collector"
-path = "src/bin/collector.rs"
-
-[[bin]]
-name = "aperf-visualizer"
-path = "src/bin/visualizer.rs"
+name = "aperf"
+path = "src/bin/aperf.rs"
 
 [dependencies]
-clap = {version = "3.2.6", features = ["derive"] }
+clap = { version = "4.2.5", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
 rustix = { version = "0.35.6", features = ["process"] }
-async-std = { version = "1.8.0", features = ["attributes"] }
 serde_yaml = "0.8"
 thiserror = "1.0"
 log = "0.4.0"
@@ -39,7 +34,6 @@ procfs = "0.12.0"
 ctor = "0.1.22"
 sysinfo = "0.26.2"
 anyhow = "1.0"
-tide = "0.16.0"
 serde_urlencoded = "0.7"
 serde_json = "1.0"
 aws-config = "0.49.0"
@@ -51,3 +45,6 @@ perf-event = { git = "https://github.com/janaknat/perf-event", branch = "Group" 
 num_cpus = "1.0"
 raw-cpuid = "10.6.0"
 libc = "0.2"
+flate2 = "1.0.26"
+tar = "0.4.38"
+infer = "0.13.0"
