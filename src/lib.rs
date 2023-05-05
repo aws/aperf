@@ -3,9 +3,11 @@ extern crate lazy_static;
 
 pub mod data;
 pub mod visualizer;
+pub mod record;
+pub mod report;
 use anyhow::Result;
 use chrono::prelude::*;
-use log::{error, debug, info};
+use log::{debug, error, info};
 use serde::{Deserialize, Serialize};
 use serde_json::{self};
 use std::collections::HashMap;
@@ -14,6 +16,7 @@ use std::path::Path;
 use std::sync::Mutex;
 use thiserror::Error;
 use timerfd::{SetTimeFlags, TimerFd, TimerState};
+use flate2::{Compression, write::GzEncoder};
 
 #[derive(Error, Debug)]
 pub enum PDError {
@@ -47,8 +50,17 @@ pub enum PDError {
     #[error("Unsupported API")]
     VisualizerUnsupportedAPI,
 
-    #[error("Visuailzer Init error")]
+    #[error("Visualizer Init error")]
     VisualizerInitError,
+
+    #[error("Not an archive or directory")]
+    RecordNotArchiveOrDirectory,
+
+    #[error("Tar.gz file name and archived directory name inside mismatch")]
+    ArchiveDirectoryMismatch,
+
+    #[error("Invalid tar.gz file name")]
+    InvalidArchiveName,
 }
 
 lazy_static! {
@@ -166,6 +178,17 @@ impl PerformanceData {
             debug!("Collection time: {:?}", data_collection_time);
         }
         tfd.set_state(TimerState::Disarmed, SetTimeFlags::Default);
+        self.create_data_archive()?;
+        Ok(())
+    }
+
+    pub fn create_data_archive(&mut self) -> Result<()> {
+        let archive_name = format!("{}.tar.gz", self.init_params.dir_name);
+        let tar_gz = fs::File::create(&archive_name)?;
+        let enc = GzEncoder::new(tar_gz, Compression::default());
+        let mut tar = tar::Builder::new(enc);
+        tar.append_dir_all(&self.init_params.dir_name, &self.init_params.dir_name)?;
+        info!("Data collected in {}/, archived in {}", self.init_params.dir_name, archive_name);
         Ok(())
     }
 }
@@ -211,7 +234,7 @@ impl VisualizationData {
         }
     }
 
-    pub fn init_visualizers(&mut self, dir: String) -> Result<String, tide::Error> {
+    pub fn init_visualizers(&mut self, dir: String) -> Result<String> {
         let dir_path = Path::new(&dir);
         let dir_name = dir_path.file_stem().unwrap().to_str().unwrap().to_string();
         self.run_names.push(dir_name.clone());
@@ -225,6 +248,16 @@ impl VisualizationData {
     pub fn add_visualizer(&mut self, name: String, dv: visualizer::DataVisualizer) {
         self.js_files.insert(dv.js_file_name.clone(), dv.js.clone());
         self.visualizers.insert(name, dv);
+    }
+
+    pub fn get_all_js_files(&mut self) -> Result<Vec<(String, String)>> {
+        let mut ret = Vec::new();
+        for (name, visualizer) in self.visualizers.iter() {
+            let file = self.js_files.get(&visualizer.js_file_name)
+                .ok_or(PDError::VisualizerJSFileGetError(name.to_string().into()))?;
+            ret.push((visualizer.js_file_name.clone(), file.clone()));
+        }
+        Ok(ret)
     }
 
     pub fn get_js_file(&mut self, name: String) -> Result<&str> {
@@ -291,7 +324,7 @@ impl InitParams {
             run_name = dir;
         } else {
             let path = Path::new(&dir_name);
-            info!("No run-name given. Using {}", path.file_stem().unwrap().to_str().unwrap());
+            debug!("No run-name given. Using {}", path.file_stem().unwrap().to_str().unwrap());
         }
         let collector_version = env!("CARGO_PKG_VERSION").to_string();
         let commit_sha_short = env!("VERGEN_GIT_SHA_SHORT").to_string();
