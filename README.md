@@ -62,7 +62,7 @@ echo 100 | sudo tee /sys/devices/cpu/perf_event_mux_interval_ms
 2. Download the directory created by `aperf record`.
 3. Start `aperf report`:
 ```
-./aperf report -r <COLLECTOR_DIRECTORY> -p <PORT_NUMBER>
+./aperf report -r <COLLECTOR_DIRECTORY>
 ```
 ### Example
 To see a step-by-step example, please see our example [here](./EXAMPLE.md)
@@ -73,7 +73,7 @@ To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 
 **Collector Flags:**
 
-`-v, --version` version of APerf
+`-V, --version` version of APerf
 
 `-i, --interval` interval collection rate (default 1)
 
@@ -81,14 +81,22 @@ To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 
 `-r, --run-name` run name (name of the run for organization purposes, creates directory of the same name, default of aperf_[timestamp])
 
+`-v, --verbose` verbose messages
+
+`-vv, --verbose --verbose` more verbose messages
+
 
 `./aperf report -h`
 
 **Visualizer Flags:**
 
-`-v, --version` version of APerf visualizer
+`-V, --version` version of APerf visualizer
 
 `-r, --run-directory` directory that contains collected data 
+
+`-v, --verbose` verbose messages
+
+`-vv, --verbose --verbose` more verbose messages
 
 ## Logging
 * `env_logger` is used to log information about the tool run to stdout.

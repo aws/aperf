@@ -4,6 +4,7 @@ use log::LevelFilter;
 use clap::{Parser, Subcommand};
 use aperf_lib::record::{record, Record};
 use aperf_lib::report::{report, Report};
+use aperf_lib::PDError;
 
 #[derive(Parser)]
 #[command(author, about, long_about = None)]
@@ -28,19 +29,21 @@ enum Commands {
     Report(Report),
 }
 
-fn init_logger(verbose: u8) {
+fn init_logger(verbose: u8) -> Result<()> {
     let level;
     match verbose {
+        0 => level = LevelFilter::Info,
         1 => level = LevelFilter::Debug,
         2 => level = LevelFilter::Trace,
-        _ => level = LevelFilter::Info,
+        _ => return Err(PDError::InvalidVerboseOption.into()),
     }
     Builder::new().filter_level(level).init();
+    Ok(())
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    init_logger(cli.verbose);
+    init_logger(cli.verbose)?;
 
     match &cli.command {
         Commands::Record(r) => record(r),
