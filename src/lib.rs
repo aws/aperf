@@ -240,6 +240,19 @@ impl VisualizationData {
         Ok(())
     }
 
+    pub fn get_api(&mut self, name: String) -> Result<String> {
+        let api = self.visualizers.get(&name).unwrap().api_name.clone();
+        return Ok(api);
+    }
+
+    pub fn get_visualizer_names(&mut self) -> Result<Vec<String>> {
+        let mut visualizer_names = Vec::new();
+        for (name, _visualizer) in self.visualizers.iter() {
+            visualizer_names.push(name.clone());
+        }
+        return Ok(visualizer_names);
+    }
+
     pub fn get_run_names(&mut self) -> Result<String> {
         Ok(serde_json::to_string(&self.run_names)?)
     }
@@ -247,6 +260,11 @@ impl VisualizationData {
     pub fn get_data(&mut self, name: &str, query: String) -> Result<String> {
         let visualizer = self.visualizers.get_mut(name).ok_or(PDError::VisualizerHashMapEntryError(name.to_string().into()))?;
         visualizer.get_data(query.clone())
+    }
+
+    pub fn get_calls(&mut self, name: String) -> Result<Vec<String>> {
+        let visualizer = self.visualizers.get_mut(&name).unwrap();
+        return visualizer.get_calls();
     }
 }
 

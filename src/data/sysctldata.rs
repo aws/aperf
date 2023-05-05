@@ -86,6 +86,12 @@ impl GetData for SysctlData {
         Ok(processed_data)
     }
 
+    fn get_calls(&mut self) -> Result<Vec<String>> {
+        let mut end_values = Vec::new();
+        end_values.push("values".to_string());
+        Ok(end_values)
+    }
+
     fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
         let mut values = Vec::new();
         for data in buffer {

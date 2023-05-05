@@ -403,6 +403,13 @@ impl GetData for PerfStat {
         Ok(processed_data)
     }
 
+    fn get_calls(&mut self) -> Result<Vec<String>> {
+        let mut end_values = Vec::new();
+        end_values.push("keys".to_string());
+        end_values.push("values".to_string());
+        Ok(end_values)
+    }
+
     fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
         let mut values = Vec::new();
         for data in buffer {
@@ -418,7 +425,7 @@ impl GetData for PerfStat {
         let (_, req_str) = &param[1];
 
         match req_str.as_str() {
-            "events" => return get_named_events(values[0].clone()),
+            "keys" => return get_named_events(values[0].clone()),
             "values" => {
                 let (_, key) = &param[2];
                 return get_values(values, key.to_string());
@@ -511,7 +518,7 @@ mod tests {
                 for buf in buffer {
                     processed_buffer.push(PerfStat::new().process_raw_data(buf).unwrap());
                 }
-                let events = PerfStat::new().get_data(processed_buffer, "run=test&get=events".to_string()).unwrap();
+                let events = PerfStat::new().get_data(processed_buffer, "run=test&get=keys".to_string()).unwrap();
                 let values: Vec<&str> = serde_json::from_str(&events).unwrap();
                 let mut key_map = HashMap::new();
                 let event_names = [

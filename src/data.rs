@@ -180,6 +180,13 @@ macro_rules! processed_data {
                     )*
                 }
             }
+            pub fn get_calls(&mut self) -> Result<Vec<String>> {
+                match self {
+                    $(
+                        ProcessedData::$x(ref mut value) => Ok(value.get_calls()?),
+                    )*
+                }
+            }
         }
     };
 }

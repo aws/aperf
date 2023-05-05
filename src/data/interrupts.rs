@@ -33,6 +33,7 @@ impl CollectData for InterruptDataRaw {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
         self.data = std::fs::read_to_string("/proc/interrupts")?;
+        trace!("{:#?}", self.data);
         Ok(())
     }
 }
@@ -280,6 +281,13 @@ impl GetData for InterruptData {
         process_collected_raw_data(buffer)
     }
 
+    fn get_calls(&mut self) -> Result<Vec<String>> {
+        let mut end_values = Vec::new();
+        end_values.push("keys".to_string());
+        end_values.push("values".to_string());
+        Ok(end_values)
+    }
+
     fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
         let mut values = Vec::new();
         for data in buffer {
@@ -292,7 +300,7 @@ impl GetData for InterruptData {
         let (_, req_str) = &param[1];
 
         match req_str.as_str() {
-            "lines" => {
+            "keys" => {
                 return get_lines(values[0].clone());
             }
             "values" => {
@@ -403,7 +411,7 @@ mod tests {
         for buf in buffer {
             processed_buffer.push(InterruptData::new().process_raw_data(buf).unwrap());
         }
-        let json = InterruptData::new().get_data(processed_buffer, "run=test&get=lines".to_string()).unwrap();
+        let json = InterruptData::new().get_data(processed_buffer, "run=test&get=keys".to_string()).unwrap();
         let values: Vec<String> = serde_json::from_str(&json).unwrap();
         assert!(values.len() > 0);
     }
@@ -420,7 +428,7 @@ mod tests {
         for buf in buffer {
             processed_buffer.push(InterruptData::new().process_raw_data(buf).unwrap());
         }
-        let json = InterruptData::new().get_data(processed_buffer.clone(), "run=test&get=lines".to_string()).unwrap();
+        let json = InterruptData::new().get_data(processed_buffer.clone(), "run=test&get=keys".to_string()).unwrap();
         let values: Vec<String> = serde_json::from_str(&json).unwrap();
         let key_query = format!("run=test&get=values&key={}", values[0]);
         let ld_json = InterruptData::new().get_data(processed_buffer, key_query).unwrap();
