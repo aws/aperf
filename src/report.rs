@@ -1,6 +1,6 @@
 use anyhow::Result;
 use crate::{PDError, VISUALIZATION_DATA};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use log::{error, info};
 use std::fs::File;
 use std::io::Write;
@@ -15,6 +15,10 @@ pub struct Report {
     /// Directory which contains run data to be visualized.
     #[clap(short, long, value_parser)]
     run_directory: Vec<String>,
+
+    /// Report name.
+    #[clap(short, long, value_parser)]
+    name: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -30,7 +34,7 @@ struct Run {
     key_values: HashMap<String, String>,
 }
 
-pub fn form_and_copy_archive(loc: String) -> Result<()> {
+pub fn form_and_copy_archive(loc: String, report_name: &PathBuf) -> Result<()> {
     if Path::new(&loc).is_dir() {
         let dir_stem = Path::new(&loc).file_stem().unwrap().to_str().unwrap().to_string();
 
@@ -42,7 +46,7 @@ pub fn form_and_copy_archive(loc: String) -> Result<()> {
         tar.append_dir_all(&dir_stem, &loc)?;
 
         /* Copy archive to aperf_report */
-        let archive_dst = format!("aperf_report/data/archive/{}", archive_name);
+        let archive_dst = report_name.join(format!("data/archive/{}", archive_name));
         fs::copy(&archive_name, archive_dst)?;
         return Ok(());
     }
@@ -50,7 +54,7 @@ pub fn form_and_copy_archive(loc: String) -> Result<()> {
         let file_name = Path::new(&loc).file_name().unwrap().to_str().unwrap().to_string();
 
         /* Copy archive to aperf_report */
-        let archive_dst = format!("aperf_report/data/archive/{}", file_name);
+        let archive_dst = report_name.join(format!("data/archive/{}", file_name));
         fs::copy(loc, archive_dst)?;
         return Ok(());
     }
@@ -96,18 +100,28 @@ pub fn report(report: &Report) -> Result<()> {
         dir_paths.push(path.to_str().unwrap().to_string());
     }
 
-    /* Generate report name */
-    let mut report_name = "aperf_report".to_string();
-    for name in &dir_stems {
-        let file_name;
-        if name.ends_with(".tar.gz") {
-            file_name = name.strip_suffix(".tar.gz").unwrap().to_string();
-        } else {
-            file_name = name.to_string();
+    let mut report_name = PathBuf::new();
+    match &report.name {
+        Some(n) => report_name.push(n),
+        None => {
+            /* Generate report name */
+            let mut file_name = "aperf_report".to_string();
+            for stem in &dir_stems {
+                let name;
+                if stem.ends_with(".tar.gz") {
+                    name = stem.strip_suffix(".tar.gz").unwrap().to_string();
+                } else {
+                    name = stem.to_string();
+                }
+                file_name = format!("{}_{}", file_name, name);
+            }
+            report_name.push(file_name);
+            info!("Report name not given. Using '{}'", report_name.display());
         }
-        report_name = format!("{}_{}", report_name, file_name);
     }
-    let report_name_tgz = format!("{}.tar.gz", report_name);
+    let mut report_name_tgz = PathBuf::new();
+    report_name_tgz.set_file_name(&report_name);
+    report_name_tgz.set_extension("tar.gz");
 
     /* Init visualizers */
     for dir in dir_paths {
@@ -124,21 +138,21 @@ pub fn report(report: &Report) -> Result<()> {
     let plotly_js = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/node_modules/plotly.js/dist/plotly.min.js"));
     let run_names = dir_stems.clone();
 
-    fs::create_dir_all(report_name.clone() + "/js")?;
-    fs::create_dir_all(report_name.clone() + "/data/archive")?;
-    fs::create_dir_all(report_name.clone() + "/data/js")?;
+    fs::create_dir_all(report_name.join("js"))?;
+    fs::create_dir_all(report_name.join("data/archive"))?;
+    fs::create_dir_all(report_name.join("data/js"))?;
 
     /* Generate/copy the archives of the collected data into aperf_report */
     for dir in &dirs {
-        form_and_copy_archive(dir.clone())?;
+        form_and_copy_archive(dir.clone(), &report_name)?;
     }
     /* Generate base HTML, JS files */
-    let mut ico_file = File::create(report_name.clone() + "/favicon.ico")?;
-    let mut index_html_file = File::create(report_name.clone() + "/index.html")?;
-    let mut index_css_file = File::create(report_name.clone() + "/index.css")?;
-    let mut index_js_file = File::create(report_name.clone() + "/index.js")?;
-    let mut utils_js_file = File::create(report_name.clone() + "/js/utils.js")?;
-    let mut plotly_js_file = File::create(report_name.clone() + "/js/plotly.js")?;
+    let mut ico_file = File::create(report_name.join("favicon.ico"))?;
+    let mut index_html_file = File::create(report_name.join("index.html"))?;
+    let mut index_css_file = File::create(report_name.join("index.css"))?;
+    let mut index_js_file = File::create(report_name.join("index.js"))?;
+    let mut utils_js_file = File::create(report_name.join("js/utils.js"))?;
+    let mut plotly_js_file = File::create(report_name.join("js/plotly.js"))?;
     ico_file.write_all(ico)?;
     write!(index_html_file, "{}", index_html)?;
     write!(index_css_file, "{}", index_css)?;
@@ -148,12 +162,12 @@ pub fn report(report: &Report) -> Result<()> {
 
     /* Generate visualizer JS files */
     for (name, file) in VISUALIZATION_DATA.lock().unwrap().get_all_js_files()? {
-        let mut created_file = File::create(format!("{}/js/{}", report_name.clone(), name))?;
+        let mut created_file = File::create(report_name.join(format!("js/{}", name)))?;
         write!(created_file, "{}", file)?;
     }
 
     /* Generate run.js */
-    let out_loc = format!("{}/data/js/runs.js", report_name.clone());
+    let out_loc = report_name.join("data/js/runs.js");
     let mut runs_file = File::create(out_loc)?;
     write!(runs_file, "runs_raw = {}", serde_json::to_string(&run_names)?)?;
     let visualizer_names = VISUALIZATION_DATA.lock().unwrap().get_visualizer_names()?;
@@ -194,14 +208,14 @@ pub fn report(report: &Report) -> Result<()> {
             }
             api.runs.push(run);
         }
-        let out_loc = format!("{}/data/js/{}.js", report_name.clone(), api_name);
+        let out_loc = report_name.join(format!("data/js/{}.js", api_name));
         let mut out_file = File::create(out_loc)?;
         let out_data = serde_json::to_string(&api)?;
         let str_out_data = format!("{}_raw_data = {}", api.name.clone(), out_data.clone());
         write!(out_file, "{}", str_out_data)?;
     }
     /* Generate aperf_report.tar.gz */
-    info!("Generating {}", report_name_tgz);
+    info!("Generating {}", report_name_tgz.display());
     let tar_gz = File::create(&report_name_tgz)?;
     let enc = GzEncoder::new(tar_gz, Compression::default());
     let mut tar = tar::Builder::new(enc);

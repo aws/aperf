@@ -40,7 +40,7 @@ cargo test
 ```
 
 ## Usage
-`aperf record` records performance data and stores them in a series of files. A report is then generated with `aperf report` and viewed in any system with a web browser.
+`aperf record` records performance data and stores them in a series of files. A report is then generated with `aperf report` and can be viewed in any system with a web browser.
 
 **KNOWN LIMITATION**
 
@@ -62,7 +62,7 @@ echo 100 | sudo tee /sys/devices/cpu/perf_event_mux_interval_ms
 2. Download the directory created by `aperf record`.
 3. Start `aperf report`:
 ```
-./aperf report -r <COLLECTOR_DIRECTORY>
+./aperf report -r <COLLECTOR_DIRECTORY> -n <REPORT_NAME>
 ```
 ### Example
 To see a step-by-step example, please see our example [here](./EXAMPLE.md)
@@ -71,7 +71,7 @@ To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 
 `aperf record` has the following flags available for use:
 
-**Collector Flags:**
+**Recorder Flags:**
 
 `-V, --version` version of APerf
 
@@ -88,11 +88,13 @@ To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 
 `./aperf report -h`
 
-**Visualizer Flags:**
+**Reporter Flags:**
 
 `-V, --version` version of APerf visualizer
 
 `-r, --run-directory` directory that contains collected data 
+
+`-n, --name` report name (name of the report for origanization purposes, creates directory of the same name, default of aperf_report_<run-directory>
 
 `-v, --verbose` verbose messages
 
