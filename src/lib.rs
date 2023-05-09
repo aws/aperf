@@ -215,7 +215,7 @@ pub fn get_file(dir: String, name: String) -> Result<fs::File> {
             );
         }
     }
-    panic!("File not found");
+    panic!("Failed while looking for: {} in: {}", name, dir);
 }
 
 lazy_static! {
