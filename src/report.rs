@@ -12,9 +12,9 @@ use flate2::{Compression, write::GzEncoder, read::GzDecoder};
 
 #[derive(Clone, Args, Debug)]
 pub struct Report {
-    /// Directory which contains run data to be visualized.
+    /// Run data to be visualized. Can be a directory or a tarball.
     #[clap(short, long, value_parser)]
-    run_directory: Vec<String>,
+    run: Vec<String>,
 
     /// Report name.
     #[clap(short, long, value_parser)]
@@ -84,7 +84,7 @@ pub fn get_dir(dir: String) -> Result<String> {
 }
 
 pub fn report(report: &Report) -> Result<()> {
-    let dirs: Vec<String> = report.run_directory.clone();
+    let dirs: Vec<String> = report.run.clone();
     let mut dir_paths: Vec<String> = Vec::new();
     let mut dir_stems: Vec<String> = Vec::new();
 
@@ -93,7 +93,7 @@ pub fn report(report: &Report) -> Result<()> {
         let directory = get_dir(dir.to_string())?;
         let path = Path::new(&directory);
         if dir_stems.contains(&path.file_stem().unwrap().to_str().unwrap().to_string()) {
-            error!("Cannot process two directories with the same name");
+            error!("Cannot process two runs with the same name");
             return Ok(())
         }
         dir_stems.push(path.clone().file_stem().unwrap().to_str().unwrap().to_string());
