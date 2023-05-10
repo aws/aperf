@@ -92,9 +92,9 @@ To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 
 `-V, --version` version of APerf visualizer
 
-`-r, --run-directory` directory that contains collected data 
+`-r, --run` run data to be visualized. Can be a directory or a tarball.
 
-`-n, --name` report name (name of the report for origanization purposes, creates directory of the same name, default of aperf_report_<run-directory>
+`-n, --name` report name (name of the report for origanization purposes, creates directory of the same name, default of aperf_report_<run>
 
 `-v, --verbose` verbose messages
 
