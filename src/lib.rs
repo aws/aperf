@@ -64,6 +64,15 @@ pub enum PDError {
 
     #[error("Invalid verbose option")]
     InvalidVerboseOption,
+
+    #[error("All processes collection error")]
+    CollectorAllProcessError,
+
+    #[error("File not found {}", .0)]
+    VisualizerFileNotFound(String),
+
+    #[error("Run data not available")]
+    InvalidRunData,
 }
 
 lazy_static! {
@@ -215,7 +224,7 @@ pub fn get_file(dir: String, name: String) -> Result<fs::File> {
             );
         }
     }
-    panic!("Failed while looking for: {} in: {}", name, dir);
+    return Err(PDError::VisualizerFileNotFound(name).into());
 }
 
 lazy_static! {
@@ -241,9 +250,22 @@ impl VisualizationData {
         let dir_path = Path::new(&dir);
         let dir_name = dir_path.file_stem().unwrap().to_str().unwrap().to_string();
         self.run_names.push(dir_name.clone());
+        let visualizers_len = self.visualizers.len();
+        let mut error_count = 0;
 
         for (_name, visualizer) in self.visualizers.iter_mut() {
-            visualizer.init_visualizer(dir.clone(), dir_name.clone())?;
+            match visualizer.init_visualizer(dir.clone(), dir_name.clone()) {
+                Err(_) => {
+                    visualizer.data_not_available()?;
+                    error_count += 1;
+                },
+                Ok(_) => {},
+            }
+        }
+
+        /* Works if a new type of visualizer is introduced but data not present */
+        if error_count == visualizers_len {
+            return Err(PDError::InvalidRunData.into());
         }
         Ok(dir_name.clone())
     }
@@ -270,7 +292,7 @@ impl VisualizationData {
 
     pub fn unpack_data(&mut self, name: String) -> Result<()> {
         for (dvname, datavisualizer) in self.visualizers.iter_mut() {
-            debug!("Processing: {}", dvname);
+            debug!("Unpacking data for: {}", dvname);
             datavisualizer.process_raw_data(name.clone())?;
         }
         Ok(())

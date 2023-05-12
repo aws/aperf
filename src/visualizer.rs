@@ -2,6 +2,7 @@ use anyhow::Result;
 use crate::{data::Data, data::ProcessedData, get_file, PDError};
 use serde::Deserialize;
 use std::{collections::HashMap, fs::File};
+use log::debug;
 
 pub struct DataVisualizer {
     pub data: ProcessedData,
@@ -11,6 +12,7 @@ pub struct DataVisualizer {
     pub js_file_name: String,
     pub js: String,
     pub api_name: String,
+    pub data_available: bool,
 }
 
 impl DataVisualizer {
@@ -23,6 +25,7 @@ impl DataVisualizer {
             js_file_name: js_file_name,
             js: js,
             api_name: api_name,
+            data_available: true,
         }
     }
 
@@ -33,7 +36,17 @@ impl DataVisualizer {
         Ok(())
     }
 
+    pub fn data_not_available(&mut self) -> Result<()> {
+        self.data_available = false;
+        Ok(())
+    }
+
     pub fn process_raw_data(&mut self, name: String) -> Result<()> {
+        if !self.data_available {
+            debug!("Raw data unavailable for: {}", self.api_name);
+            return Ok(())
+        }
+        debug!("Processing raw data for: {}", self.api_name);
         let mut raw_data = Vec::new();
         for document in serde_yaml::Deserializer::from_reader(self.file_handle.as_ref().unwrap()) {
             let v = Data::deserialize(document);
@@ -49,6 +62,10 @@ impl DataVisualizer {
     }
 
     pub fn get_data(&mut self, query: String) -> Result<String> {
+        if !self.data_available {
+            debug!("No data available for: {} query: {}", self.api_name, query);
+            return Ok("No data collected".to_string());
+        }
         /* Get run name from Query */
         let param: Vec<(String, String)> = serde_urlencoded::from_str(&query)?;
         let (_, run) = param[0].clone();
