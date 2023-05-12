@@ -34,20 +34,23 @@ struct Run {
     key_values: HashMap<String, String>,
 }
 
+pub static APERF_TMP: &str = "aperf_tmp";
+
 pub fn form_and_copy_archive(loc: String, report_name: &PathBuf) -> Result<()> {
     if Path::new(&loc).is_dir() {
         let dir_stem = Path::new(&loc).file_stem().unwrap().to_str().unwrap().to_string();
 
         /* Create a temp archive */
         let archive_name = format!("{}.tar.gz", &dir_stem);
-        let tar_gz = fs::File::create(&archive_name)?;
+        let archive_path = format!("{}/{}", APERF_TMP, archive_name);
+        let tar_gz = fs::File::create(&archive_path)?;
         let enc = GzEncoder::new(tar_gz, Compression::default());
         let mut tar = tar::Builder::new(enc);
         tar.append_dir_all(&dir_stem, &loc)?;
 
         /* Copy archive to aperf_report */
         let archive_dst = report_name.join(format!("data/archive/{}", archive_name));
-        fs::copy(&archive_name, archive_dst)?;
+        fs::copy(&archive_path, archive_dst)?;
         return Ok(());
     }
     if infer::get_from_path(&loc)?.unwrap().mime_type() == "application/gzip" {
@@ -71,14 +74,15 @@ pub fn get_dir(dir: String) -> Result<String> {
         let tar_gz = File::open(&dir)?;
         let tar = GzDecoder::new(tar_gz);
         let mut archive = tar::Archive::new(tar);
-        archive.unpack(".")?;
-        let dir_name = dir
+        archive.unpack(APERF_TMP)?;
+        let dir_name = Path::new(&dir)
+            .file_name().unwrap().to_str().unwrap()
             .strip_suffix(".tar.gz")
             .ok_or(PDError::InvalidArchiveName)?;
-        if !Path::new(&dir_name).exists() {
+        if !Path::new(&format!("{}/{}", APERF_TMP, dir_name)).exists() {
             return Err(PDError::ArchiveDirectoryMismatch.into());
         }
-        return Ok(dir_name.to_string());
+        return Ok(format!("{}/{}", APERF_TMP, dir_name));
     }
     return Err(PDError::RecordNotArchiveOrDirectory.into());
 }
@@ -87,6 +91,9 @@ pub fn report(report: &Report) -> Result<()> {
     let dirs: Vec<String> = report.run.clone();
     let mut dir_paths: Vec<String> = Vec::new();
     let mut dir_stems: Vec<String> = Vec::new();
+
+    /* Create a tmp dir for aperf to work with */
+    fs::create_dir_all(APERF_TMP)?;
 
     /* Get dir paths, stems */
     for dir in &dirs {
@@ -220,5 +227,6 @@ pub fn report(report: &Report) -> Result<()> {
     let enc = GzEncoder::new(tar_gz, Compression::default());
     let mut tar = tar::Builder::new(enc);
     tar.append_dir_all(&report_name, &report_name)?;
+    fs::remove_dir_all(APERF_TMP)?;
     Ok(())
 }

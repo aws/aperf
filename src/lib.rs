@@ -105,7 +105,7 @@ impl PerformanceData {
     }
 
     pub fn init_collectors(&mut self) -> Result<()> {
-        let _ret = fs::create_dir_all(self.init_params.dir_name.clone()).unwrap();
+        let _ret = fs::create_dir(self.init_params.dir_name.clone())?;
 
         /*
          * Create a meta_data.yaml to hold the InitParams that was used by the collector.
@@ -195,12 +195,13 @@ impl PerformanceData {
     }
 
     pub fn create_data_archive(&mut self) -> Result<()> {
-        let archive_name = format!("{}.tar.gz", self.init_params.dir_name);
-        let tar_gz = fs::File::create(&archive_name)?;
+        let dir_name = Path::new(&self.init_params.dir_name).file_stem().unwrap();
+        let archive_path = format!("{}.tar.gz", self.init_params.dir_name);
+        let tar_gz = fs::File::create(&archive_path)?;
         let enc = GzEncoder::new(tar_gz, Compression::default());
         let mut tar = tar::Builder::new(enc);
-        tar.append_dir_all(&self.init_params.dir_name, &self.init_params.dir_name)?;
-        info!("Data collected in {}/, archived in {}", self.init_params.dir_name, archive_name);
+        tar.append_dir_all(&dir_name, &self.init_params.dir_name)?;
+        info!("Data collected in {}/, archived in {}", self.init_params.dir_name, archive_path);
         Ok(())
     }
 }
@@ -345,7 +346,7 @@ impl InitParams {
         let mut dir_name = format!("./aperf_{}", time_str);
         let mut run_name = String::new();
         if dir != "" {
-            dir_name = dir.clone();
+            dir_name = Path::new(&dir).components().as_path().to_str().unwrap().to_string();
             run_name = dir;
         } else {
             let path = Path::new(&dir_name);
