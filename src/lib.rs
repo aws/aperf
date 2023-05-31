@@ -257,7 +257,7 @@ impl VisualizationData {
         for (_name, visualizer) in self.visualizers.iter_mut() {
             match visualizer.init_visualizer(dir.clone(), dir_name.clone()) {
                 Err(_) => {
-                    visualizer.data_not_available()?;
+                    visualizer.data_not_available(dir_name.clone())?;
                     error_count += 1;
                 },
                 Ok(_) => {},
@@ -316,9 +316,9 @@ impl VisualizationData {
         Ok(serde_json::to_string(&self.run_names)?)
     }
 
-    pub fn get_data(&mut self, name: &str, query: String) -> Result<String> {
-        let visualizer = self.visualizers.get_mut(name).ok_or(PDError::VisualizerHashMapEntryError(name.to_string().into()))?;
-        visualizer.get_data(query.clone())
+    pub fn get_data(&mut self, run_name: &String, visualizer_name: &str, query: String) -> Result<String> {
+        let visualizer = self.visualizers.get_mut(visualizer_name).ok_or(PDError::VisualizerHashMapEntryError(visualizer_name.to_string().into()))?;
+        visualizer.get_data(run_name.to_string(), query.clone())
     }
 
     pub fn get_calls(&mut self, name: String) -> Result<Vec<String>> {
