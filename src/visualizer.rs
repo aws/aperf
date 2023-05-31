@@ -12,7 +12,7 @@ pub struct DataVisualizer {
     pub js_file_name: String,
     pub js: String,
     pub api_name: String,
-    pub data_available: bool,
+    pub data_available: HashMap<String, bool>,
 }
 
 impl DataVisualizer {
@@ -25,24 +25,25 @@ impl DataVisualizer {
             js_file_name: js_file_name,
             js: js,
             api_name: api_name,
-            data_available: true,
+            data_available: HashMap::new(),
         }
     }
 
     pub fn init_visualizer(&mut self, dir: String, name: String) -> Result<()> {
         let file = get_file(dir.clone(), self.file_name.clone())?;
         self.file_handle = Some(file);
-        self.run_values.insert(name, Vec::new());
+        self.run_values.insert(name.clone(), Vec::new());
+        self.data_available.insert(name, true);
         Ok(())
     }
 
-    pub fn data_not_available(&mut self) -> Result<()> {
-        self.data_available = false;
+    pub fn data_not_available(&mut self, name: String) -> Result<()> {
+        self.data_available.insert(name, false);
         Ok(())
     }
 
     pub fn process_raw_data(&mut self, name: String) -> Result<()> {
-        if !self.data_available {
+        if !self.data_available.get(&name).unwrap() {
             debug!("Raw data unavailable for: {}", self.api_name);
             return Ok(())
         }
@@ -61,8 +62,8 @@ impl DataVisualizer {
         Ok(())
     }
 
-    pub fn get_data(&mut self, query: String) -> Result<String> {
-        if !self.data_available {
+    pub fn get_data(&mut self, name: String, query: String) -> Result<String> {
+        if !self.data_available.get(&name).unwrap() {
             debug!("No data available for: {} query: {}", self.api_name, query);
             return Ok("No data collected".to_string());
         }
@@ -114,7 +115,7 @@ mod tests {
             dv.init_visualizer("test/aperf_2022-01-01_01_01_01/".to_string(), "test".to_string()).unwrap() == ()
         );
         assert!(dv.process_raw_data("test".to_string()).unwrap() == ());
-        let ret = dv.get_data("run=test&get=values&key=aggregate".to_string()).unwrap();
+        let ret = dv.get_data("test".to_string(), "run=test&get=values&key=aggregate".to_string()).unwrap();
         let values: Vec<CpuData> = serde_json::from_str(&ret).unwrap();
         assert!(values[0].cpu == -1);
         match values[0].time {

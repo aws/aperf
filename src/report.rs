@@ -192,7 +192,7 @@ pub fn report(report: &Report) -> Result<()> {
                 let query = format!("run={}&get={}", run_name, call);
                 let mut data;
                 if call == "keys" {
-                    data = VISUALIZATION_DATA.lock().unwrap().get_data(&api_name, query)?;
+                    data = VISUALIZATION_DATA.lock().unwrap().get_data(run_name, &api_name, query)?;
                     if data != "No data collected" {
                         temp_keys = serde_json::from_str(&data)?;
                     }
@@ -203,12 +203,12 @@ pub fn report(report: &Report) -> Result<()> {
                     if keys {
                         for key in &temp_keys {
                             let query = format!("run={}&get=values&key={}", run_name, key);
-                            data = VISUALIZATION_DATA.lock().unwrap().get_data(&api_name, query)?;
+                            data = VISUALIZATION_DATA.lock().unwrap().get_data(run_name, &api_name, query)?;
                             run.key_values.insert(key.clone(), data.clone());
                         }
                     } else {
                         let query = format!("run={}&get=values", run_name);
-                        data = VISUALIZATION_DATA.lock().unwrap().get_data(&api_name, query)?;
+                        data = VISUALIZATION_DATA.lock().unwrap().get_data(run_name, &api_name, query)?;
                         run.key_values.insert(call.clone(), data.clone());
                     }
                 }
