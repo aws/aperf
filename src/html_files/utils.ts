@@ -7,6 +7,7 @@ declare let sysctl_raw_data;
 declare let interrupts_raw_data;
 declare let disk_stats_raw_data;
 declare let perf_stat_raw_data;
+declare let processes_raw_data;
 
 class RunEntry {
     run: string;
@@ -51,7 +52,7 @@ function checkIsCommonKey(title: string, check_runs, check_common_keys) {
         }
     }
     for (let [key, value] of check_runs) {
-        if (value.entries.has(title)) {
+        if (value.keys.includes(title)) {
             continue;
         } else {
             return false;

@@ -17,6 +17,9 @@ function openData(evt: Event, elem: HTMLButtonElement) {
 	if (tabName == "cpu_utilization") {
 		cpuUtilization();
 	}
+	if (tabName == "processes") {
+		processes();
+	}
 	if (tabName == "vmstat") {
 		vmStat();
 	}
