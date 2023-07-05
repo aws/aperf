@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Args;
 use crate::{InitParams, PERFORMANCE_DATA};
-use log::{debug, info};
+use log::{debug, error, info};
 
 #[derive(Args, Debug)]
 pub struct Record {
@@ -38,6 +38,14 @@ fn collect_static_data() -> Result<()>  {
 
 pub fn record(record: &Record) -> Result<()> {
     let mut run_name = String::new();
+    if record.period == 0 {
+        error!("Collection period cannot be 0.");
+        return Ok(());
+    }
+    if record.interval == 0 {
+        error!("Collection interval cannot be 0.");
+        return Ok(());
+    }
     match &record.run_name {
         Some(r) => run_name = r.clone(),
         None => {},
