@@ -27,7 +27,6 @@ jobs:
           profile: minimal
           override: true
       - uses: Swatinem/rust-cache@v1
-      - uses: actions-rs/cargo@v1
       - name: Install gcc on Ubuntu
         if: ${{ matrix.distribution == 'Ubuntu' }}
         run: sudo apt install -y build-essential
