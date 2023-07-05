@@ -6,6 +6,7 @@ pub mod kernel_config;
 pub mod interrupts;
 pub mod sysctldata;
 pub mod perf_stat;
+pub mod processes;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub mod intel_perf_events;
 #[cfg(target_arch = "aarch64")]
@@ -29,6 +30,7 @@ use kernel_config::KernelConfig;
 use interrupts::{InterruptData, InterruptDataRaw};
 use sysctldata::SysctlData;
 use perf_stat::{PerfStatRaw, PerfStat};
+use processes::{ProcessesRaw, Processes};
 
 pub struct DataType {
     pub data: Data,
@@ -96,7 +98,7 @@ impl DataType {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum TimeEnum {
     DateTime(DateTime<Utc>),
     TimeDiff(u64),
@@ -199,7 +201,8 @@ data!(
     KernelConfig,
     InterruptDataRaw,
     SysctlData,
-    PerfStatRaw
+    PerfStatRaw,
+    ProcessesRaw
 );
 
 processed_data!(
@@ -210,7 +213,8 @@ processed_data!(
     KernelConfig,
     InterruptData,
     SysctlData,
-    PerfStat
+    PerfStat,
+    Processes
 );
 
 macro_rules! noop { () => (); }
