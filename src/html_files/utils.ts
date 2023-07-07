@@ -8,6 +8,7 @@ declare let interrupts_raw_data;
 declare let disk_stats_raw_data;
 declare let perf_stat_raw_data;
 declare let processes_raw_data;
+declare let meminfo_raw_data;
 
 class RunEntry {
     run: string;
