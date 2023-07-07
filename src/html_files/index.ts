@@ -20,6 +20,9 @@ function openData(evt: Event, elem: HTMLButtonElement) {
 	if (tabName == "processes") {
 		processes();
 	}
+	if (tabName == "meminfo") {
+		meminfo();
+	}
 	if (tabName == "vmstat") {
 		vmStat();
 	}

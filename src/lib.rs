@@ -73,6 +73,9 @@ pub enum PDError {
 
     #[error("Run data not available")]
     InvalidRunData,
+
+    #[error("Error getting Meminfo values for {}", .0)]
+    VisualizerMeminfoValueGetError(String),
 }
 
 lazy_static! {
