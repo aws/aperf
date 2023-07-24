@@ -132,37 +132,6 @@ impl GetData for Netstat {
             }
         }
 
-        /*
-        let binding = lines.next().ok_or(PDError::ProcessorOptionExtractError)??;
-        let mut tcp_ext_header_line_split = binding.split_whitespace();
-
-        let binding = lines.next().ok_or(PDError::ProcessorOptionExtractError)??;
-        let mut tcp_ext_data_line_split = binding.split_whitespace();
-
-        let binding = lines.next().ok_or(PDError::ProcessorOptionExtractError)??;
-        let mut ip_ext_header_line_split = binding.split_whitespace();
-
-        let binding = lines.next().ok_or(PDError::ProcessorOptionExtractError)??;
-        let mut ip_ext_data_line_split = binding.split_whitespace();
-
-        let tcp_ext = tcp_ext_header_line_split.next().ok_or(PDError::ProcessorOptionExtractError)?;
-        tcp_ext_data_line_split.next().ok_or(PDError::ProcessorOptionExtractError)?;
-
-        for name in tcp_ext_header_line_split {
-            let val = tcp_ext_data_line_split.next().ok_or(PDError::ProcessorOptionExtractError)?;
-            map.insert(tcp_ext.to_owned() + " " + &name.to_owned(), val.parse::<i64>()?);
-        }
-
-        let ip_ext = ip_ext_header_line_split.next().ok_or(PDError::ProcessorOptionExtractError)?;
-        ip_ext_data_line_split.next().ok_or(PDError::ProcessorOptionExtractError)?;
-
-        for name in ip_ext_header_line_split {
-            let val = ip_ext_data_line_split.next().ok_or(PDError::ProcessorOptionExtractError)?;
-            map.insert(ip_ext.to_owned() + " " + &name.to_owned(), val.parse::<i64>()?);
-        }
-
-         */
-
         netstat.set_time(raw_value.time);
         netstat.set_data(map);
         let processed_data = ProcessedData::Netstat(netstat);
