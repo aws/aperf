@@ -8,6 +8,7 @@ pub mod sysctldata;
 pub mod perf_stat;
 pub mod processes;
 pub mod meminfodata;
+pub mod netstat;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub mod intel_perf_events;
 #[cfg(target_arch = "aarch64")]
@@ -33,6 +34,7 @@ use sysctldata::SysctlData;
 use perf_stat::{PerfStatRaw, PerfStat};
 use processes::{ProcessesRaw, Processes};
 use meminfodata::{MeminfoDataRaw, MeminfoData};
+use netstat::{Netstat, NetstatRaw};
 
 pub struct DataType {
     pub data: Data,
@@ -205,7 +207,8 @@ data!(
     SysctlData,
     PerfStatRaw,
     ProcessesRaw,
-    MeminfoDataRaw
+    MeminfoDataRaw,
+    NetstatRaw
 );
 
 processed_data!(
@@ -218,7 +221,8 @@ processed_data!(
     SysctlData,
     PerfStat,
     Processes,
-    MeminfoData
+    MeminfoData,
+    Netstat
 );
 
 macro_rules! noop { () => (); }

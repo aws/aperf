@@ -35,6 +35,9 @@ pub enum PDError {
     #[error("Error getting interrupt line count for CPU {}", .0)]
     VisualizerInterruptLineCPUCountError(String),
 
+    #[error("Error getting Netstat value for {}", .0)]
+    VisualizerNetstatValueGetError(String),
+
     #[error("Error getting Line Name Error")]
     CollectorLineNameError,
 
