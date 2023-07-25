@@ -3,18 +3,20 @@ extern crate lazy_static;
 
 use anyhow::Result;
 use crate::data::{CollectData, Data, ProcessedData, DataType, TimeEnum};
-use crate::{PERFORMANCE_DATA, PDError, VISUALIZATION_DATA};
+use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use crate::visualizer::{DataVisualizer, GetData};
 use chrono::prelude::*;
 use ctor::ctor;
-use log::{error, trace};
-use procfs::process::all_processes;
+use log::trace;
 use serde::{Deserialize, Serialize};
+use std::fs;
 use std::io::{BufRead, BufReader};
 use std::collections::HashMap;
 use std::sync::Mutex;
 
 pub static PROCESS_FILE_NAME: &str = "processes";
+pub static PROC_PID_STAT_USERSPACE_TIME_POS: usize = 11;
+pub static PROC_PID_STAT_KERNELSPACE_TIME_POS: usize = 12;
 
 lazy_static! {
     pub static ref TICKS_PER_SECOND: Mutex<u64> = Mutex::new(0);
@@ -47,24 +49,17 @@ impl CollectData for ProcessesRaw {
         let ticks_per_second: u64 = *TICKS_PER_SECOND.lock().unwrap();
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
-        let processes = match all_processes() {
-            Err(e) => {
-                error!("Failed to read all processes, {}", e);
-                return Err(PDError::CollectorAllProcessError.into());
+        for entry in fs::read_dir("/proc")? {
+            let entry = entry?;
+            let file_name = entry.file_name().to_str().unwrap().to_string();
+            if file_name.chars().all(char::is_numeric) {
+                let mut path = entry.path();
+                path.push("stat");
+                match fs::read_to_string(path) {
+                    Ok(v) => self.data.push_str(&v),
+                    Err(_) => {},
+                }
             }
-            Ok(p) => p,
-        };
-        for process in processes {
-            let pstat;
-            match process.stat() {
-                Ok(p) => pstat = p,
-                Err(_) => continue,
-            };
-            let name = pstat.comm;
-            let pid = pstat.pid as u64;
-            let time_ticks = pstat.utime + pstat.stime;
-            let process_entry = format!("{};{};{}\n", name, pid, time_ticks);
-            self.data.push_str(&process_entry);
         }
         self.ticks_per_second = ticks_per_second;
         trace!("{:#?}", self.data);
@@ -243,17 +238,31 @@ impl GetData for Processes {
         processes.time = raw_value.time;
         for line in reader.lines() {
             let line = line?;
-            let line_str: Vec<&str> = line.split(';').collect();
 
-            let name = line_str[0];
-            let pid = line_str[1];
-            let cpu_time = line_str[2];
-            let sample = SampleEntry {
-                name: name.to_string(),
-                pid: pid.parse::<u64>()?,
-                cpu_time: cpu_time.parse::<u64>()?,
-            };
-            processes.entries.push(sample);
+            let open_parenthesis = line.find('(');
+            let open_pos;
+            match open_parenthesis {
+                Some(v) => open_pos = v,
+                None => continue,
+            }
+            let close_parenthesis = line.find(')');
+            let close_pos;
+            match close_parenthesis {
+                Some(v) => close_pos = v,
+                None => continue,
+            }
+            let pid = line[..open_pos-1].parse::<u64>()?;
+            let name = line[open_pos+1..close_pos].to_string();
+            let values: Vec<&str> = line[close_pos+2..].split_whitespace().collect();
+
+            if values.len() < PROC_PID_STAT_KERNELSPACE_TIME_POS + 1 {
+                continue;
+            }
+            let user_time = values[PROC_PID_STAT_USERSPACE_TIME_POS].parse::<u64>()?;
+            let kernel_time = values[PROC_PID_STAT_KERNELSPACE_TIME_POS].parse::<u64>()?;
+            let cpu_time = user_time + kernel_time;
+
+            processes.entries.push(SampleEntry{name, pid, cpu_time});
         }
         let processed_data = ProcessedData::Processes(processes);
         Ok(processed_data)
