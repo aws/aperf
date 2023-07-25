@@ -41,7 +41,7 @@ impl CollectData for NetstatRaw {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Netstat {
     pub time: TimeEnum,
-    pub netstat_data: HashMap<String, i64>,
+    pub netstat_data: HashMap<String, u64>,
 }
 
 impl Netstat {
@@ -56,7 +56,7 @@ impl Netstat {
         self.time = time;
     }
 
-    fn set_data(&mut self, data: HashMap<String, i64>) {
+    fn set_data(&mut self, data: HashMap<String, u64>) {
         self.netstat_data = data;
     }
 }
@@ -64,7 +64,7 @@ impl Netstat {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct NetstatEntry {
     pub time: TimeEnum,
-    pub value: i64,
+    pub value: u64,
 }
 
 fn get_entry(values: Vec<Netstat>, key: String) -> Result<String> {
@@ -84,13 +84,9 @@ fn get_entry(values: Vec<Netstat>, key: String) -> Result<String> {
             .get(&key)
             .ok_or(PDError::VisualizerNetstatValueGetError(key.to_string()))?;
 
-        let mut v = *curr_value;
-        if !key.contains("nr_") {
-            v = *curr_value - *prev_value;
-        }
         let netstat_entry = NetstatEntry {
             time: (current_time - time_zero),
-            value: v,
+            value: *curr_value - *prev_value,
         };
         end_values.push(netstat_entry);
         prev_netstat = value.clone();
@@ -112,23 +108,30 @@ impl GetData for Netstat {
         };
         let mut netstat = Netstat::new();
         let reader = BufReader::new(raw_value.data.as_bytes());
-        let mut map: HashMap<String, i64> = HashMap::new();
+        let mut map: HashMap<String, u64> = HashMap::new();
         let mut lines = reader.lines();
 
         while let (
             Some(line1), Some(line2)) = (lines.next(), lines.next()) {
             let binding = line1.unwrap();
-            let mut names = binding.split_whitespace();
+            let params :Vec<&str> = binding.split_whitespace().collect();
 
             let binding = line2.unwrap();
-            let mut values = binding.split_whitespace();
+            let values :Vec<&str> = binding.split_whitespace().collect();
 
-            let tag = names.next().unwrap();
-            values.next();
+            if params.len() != values.len() {
+                panic!("Parameter count should match value count!")
+            }
 
-            for name in names {
-                let val = values.next().ok_or(PDError::ProcessorOptionExtractError)?;
-                map.insert(tag.to_owned() + " " + &name.to_owned(), val.parse::<i64>()?);
+            let mut param_itr = params.iter();
+            let mut val_itr = values.iter();
+
+            let tag = param_itr.next().unwrap().to_owned();
+            val_itr.next();
+
+            for param in param_itr {
+                let val = val_itr.next().ok_or(PDError::ProcessorOptionExtractError)?;
+                map.insert(tag.to_owned() + " " + &param.to_owned(), val.parse::<u64>()?);
             }
         }
 
@@ -234,7 +237,7 @@ mod tests {
         assert!(netstat.collect_data().unwrap() == ());
         buffer.push(Data::NetstatRaw(netstat));
         processed_buffer.push(Netstat::new().process_raw_data(buffer[0].clone()).unwrap());
-        let json = Netstat::new().get_data(processed_buffer, "run=test&get=values&key=IpExt: InNoECTPkts".to_string()).unwrap();
+        let json = Netstat::new().get_data(processed_buffer, "run=test&get=values&key=TcpExt: TCPDSACKRecv".to_string()).unwrap();
         let values: Vec<NetstatEntry> = serde_json::from_str(&json).unwrap();
         assert!(values.len() > 0);
         match values[0].time {

@@ -36,7 +36,7 @@ function getNetstatEntry(run, parent_id, key, run_data) {
             title: 'Time (s)',
         },
         yaxis: {
-            title: 'Packets',
+            title: 'Count',
         },
     }
     Plotly.newPlot(TESTER, [netstat_data], layout, { frameMargins: 0 });
