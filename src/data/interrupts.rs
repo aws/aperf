@@ -347,7 +347,6 @@ mod tests {
     use crate::data::{CollectData, Data, ProcessedData};
     use crate::visualizer::{DataVisualizer, GetData};
     use crate::get_file;
-    use serde::Deserialize;
 
     #[test]
     fn test_collect_data() {
@@ -440,11 +439,14 @@ mod tests {
     #[test]
     fn test_process_raw_data() {
         let mut raw_data = Vec::new();
-        let file = get_file("test/aperf_2022-01-01_01_01_01/".to_string(), "interrupts".to_string()).unwrap();
-        for document in serde_yaml::Deserializer::from_reader(file) {
-            let v = Data::deserialize(document);
-            raw_data.push(v.unwrap());
-        }
+        let file = get_file("test/aperf_2023-07-26_18_37_43/".to_string(), "interrupts".to_string()).unwrap();
+        match bincode::deserialize_from::<_, Data>(file) {
+            Ok(v) => raw_data.push(v),
+            Err(e) => match *e {
+                bincode::ErrorKind::Io(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => assert!(true),
+                e => assert!(false, "{:#?}", e),
+            },
+        };
         let mut dv = DataVisualizer::new(
             ProcessedData::InterruptData(InterruptData::new()),
             String::new(),
@@ -455,9 +457,9 @@ mod tests {
         let processed_data = dv.data.process_raw_data(raw_data[0].clone()).unwrap();
         match processed_data {
             ProcessedData::InterruptData(ref value) => {
-                assert!(value.interrupt_data[0].interrupt_line == InterruptLine::InterruptNr(123), "{:#?}", value);
-                assert!(value.interrupt_data[0].interrupt_type == "PCI".to_string(), "Invalid interrupt type");
-                assert!(value.interrupt_data[0].interrupt_device == "device".to_string(), "Invalid interrupt device");
+                assert!(value.interrupt_data[0].interrupt_line == InterruptLine::InterruptNr(1), "{:#?}", value);
+                assert!(value.interrupt_data[0].interrupt_type == "IO-APIC".to_string(), "Invalid interrupt type");
+                assert!(value.interrupt_data[0].interrupt_device == "i8042".to_string(), "Invalid interrupt device");
             }
             _ => assert!(false, "Invalid data type in interrupts"),
         }

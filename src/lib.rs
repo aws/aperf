@@ -18,6 +18,8 @@ use thiserror::Error;
 use timerfd::{SetTimeFlags, TimerFd, TimerState};
 use flate2::{Compression, write::GzEncoder};
 
+pub static APERF_FILE_FORMAT: &str = "bin";
+
 #[derive(Error, Debug)]
 pub enum PDError {
     #[error("Error getting JavaScript file for {}", .0)]
@@ -114,17 +116,17 @@ impl PerformanceData {
         let _ret = fs::create_dir(self.init_params.dir_name.clone())?;
 
         /*
-         * Create a meta_data.yaml to hold the InitParams that was used by the collector.
+         * Create a meta_data file to hold the InitParams that was used by the collector.
          * This will help when we visualize the data and we don't have to guess these values.
          */
-        let meta_data_path = format!("{}/meta_data.yaml", self.init_params.dir_name.clone());
+        let meta_data_path = format!("{}/meta_data.{}", self.init_params.dir_name.clone(), APERF_FILE_FORMAT);
         let meta_data_handle = fs::OpenOptions::new()
             .create(true)
             .write(true)
             .open(meta_data_path.clone())
             .expect("Could not create meta-data file");
 
-        serde_yaml::to_writer(meta_data_handle, &self.init_params)?;
+        bincode::serialize_into(meta_data_handle, &self.init_params)?;
 
         for (_name, datatype) in self.collectors.iter_mut() {
             datatype.init_data_type(self.init_params.clone())?;
@@ -159,7 +161,7 @@ impl PerformanceData {
                 continue;
             }
             datatype.collect_data()?;
-            datatype.print_to_file()?;
+            datatype.write_to_file()?;
         }
 
         Ok(())
@@ -190,7 +192,7 @@ impl PerformanceData {
                     continue;
                 }
                 datatype.collect_data()?;
-                datatype.print_to_file()?;
+                datatype.write_to_file()?;
             }
             let data_collection_time = time::Instant::now() - current;
             debug!("Collection time: {:?}", data_collection_time);
@@ -382,7 +384,7 @@ impl Default for InitParams {
 
 #[cfg(test)]
 mod tests {
-    use super::{InitParams, PerformanceData};
+    use super::{InitParams, PerformanceData, APERF_FILE_FORMAT};
     use std::fs;
     use std::path::Path;
 
@@ -407,7 +409,7 @@ mod tests {
         pd.set_params(params.clone());
         pd.init_collectors().unwrap();
         assert!(Path::new(&pd.init_params.dir_name).exists());
-        let full_path = format!("{}/meta_data.yaml", params.dir_name.clone());
+        let full_path = format!("{}/meta_data.{}", params.dir_name.clone(), APERF_FILE_FORMAT);
         assert!(Path::new(&full_path).exists());
         fs::remove_dir_all(pd.init_params.dir_name).unwrap();
     }

@@ -1,5 +1,0 @@
----
-InterruptDataRaw:
-  time:
-    DateTime: "2022-01-01T01:01:01.000000000Z"
-  data: "           CPU0       CPU1       CPU2       CPU3       CPU4       CPU5       CPU6       CPU7       \n 123:0          0          0          0          0          0         0    0   PCI edge      device\n"

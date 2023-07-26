@@ -16,13 +16,12 @@ pub mod grv_perf_events;
 pub mod constants;
 
 use anyhow::Result;
-use crate::InitParams;
+use crate::{APERF_FILE_FORMAT, InitParams};
 use crate::visualizer::GetData;
 use chrono::prelude::*;
 use cpu_utilization::{CpuUtilization, CpuUtilizationRaw};
 use log::trace;
 use serde::{Deserialize, Serialize};
-use serde_yaml::{self};
 use std::fs::{File, OpenOptions};
 use vmstat::{Vmstat, VmstatRaw};
 use diskstats::{Diskstats, DiskstatsRaw};
@@ -63,7 +62,7 @@ impl DataType {
 
     pub fn init_data_type(&mut self, param: InitParams) -> Result<()> {
         trace!("Initializing data type...");
-        let name = format!("{}_{}.yaml", self.file_name, param.time_str);
+        let name = format!("{}_{}.{}", self.file_name, param.time_str, APERF_FILE_FORMAT);
         let full_path = format!("{}/{}", param.dir_name, name);
 
         self.file_name = name;
@@ -94,10 +93,10 @@ impl DataType {
         Ok(())
     }
 
-    pub fn print_to_file(&mut self) -> Result<()> {
-        trace!("Printing to YAML file...");
+    pub fn write_to_file(&mut self) -> Result<()> {
+        trace!("Writing to file...");
         let file_handle = self.file_handle.as_ref().unwrap();
-        serde_yaml::to_writer(file_handle.try_clone()?, &self.data)?;
+        bincode::serialize_into(file_handle.try_clone()?, &self.data)?;
         Ok(())
     }
 }
@@ -245,8 +244,6 @@ mod tests {
     use super::{Data, DataType, TimeEnum};
     use crate::InitParams;
     use chrono::prelude::*;
-    use serde::Deserialize;
-    use serde_yaml::{self};
     use std::fs;
     use std::path::Path;
 
@@ -298,16 +295,21 @@ mod tests {
         dt.init_data_type(param).unwrap();
 
         assert!(Path::new(&dt.full_path).exists());
-        assert!(dt.print_to_file().unwrap() == ());
+        assert!(dt.write_to_file().unwrap() == ());
 
-        for document in serde_yaml::Deserializer::from_reader(dt.file_handle.unwrap()) {
-            let v = Data::deserialize(document).expect("File read error");
-            match v {
-                Data::CpuUtilizationRaw(ref value) => {
-                    assert!(value.data.is_empty());
-                }
-                _ => assert!(true),
-            }
+        loop {
+            match bincode::deserialize_from::<_, Data>(dt.file_handle.as_ref().unwrap()) {
+                Ok(v) => {
+                    match v {
+                        Data::CpuUtilizationRaw(ref value) => assert!(value.data.is_empty()),
+                        _ => assert!(false),
+                    }
+                },
+                Err(e) => match *e {
+                    bincode::ErrorKind::Io(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+                    _ => assert!(false),
+                },
+            };
         }
         fs::remove_file(dt.full_path).unwrap();
         fs::remove_dir_all(dt.dir_name).unwrap();
