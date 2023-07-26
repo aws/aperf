@@ -41,6 +41,9 @@ function openData(evt: Event, elem: HTMLButtonElement) {
 	if (tabName == "perfstat") {
 		perfStat();
 	}
+	if (tabName == "netstat") {
+		netStat();
+	}
 }
 // Tab button click
 var elems = document.getElementsByClassName('tablinks');

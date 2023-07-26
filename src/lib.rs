@@ -35,6 +35,9 @@ pub enum PDError {
     #[error("Error getting interrupt line count for CPU {}", .0)]
     VisualizerInterruptLineCPUCountError(String),
 
+    #[error("Error getting Netstat value for {}", .0)]
+    VisualizerNetstatValueGetError(String),
+
     #[error("Error getting Line Name Error")]
     CollectorLineNameError,
 
@@ -136,8 +139,8 @@ impl PerformanceData {
                 continue;
             }
             match datatype.prepare_data_collector() {
-                Err(_) => {
-                    error!("Excluding {} from collection", _name);
+                Err(e) => {
+                    error!("Excluding {} from collection. Error msg: {}", _name, e.to_string());
                     remove_entries.push(_name.clone());
                 }
                 _ => continue,
