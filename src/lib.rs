@@ -139,8 +139,8 @@ impl PerformanceData {
                 continue;
             }
             match datatype.prepare_data_collector() {
-                Err(_) => {
-                    error!("Excluding {} from collection", _name);
+                Err(e) => {
+                    error!("Excluding {} from collection. Error msg: {}", _name, e.to_string());
                     remove_entries.push(_name.clone());
                 }
                 _ => continue,
