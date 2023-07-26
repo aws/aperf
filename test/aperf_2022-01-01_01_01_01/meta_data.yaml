@@ -1,9 +1,0 @@
----
-time_now: "2022-01-01T01:01:01.000000000Z"
-time_str: 2022-01-01_01_01_01
-dir_name: "./performance_data_2022-01-01_01_01_01"
-period: 10
-interval: 1
-run_name: test
-collector_version: 0.1.0
-commit_sha_short: fffffff

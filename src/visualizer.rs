@@ -1,6 +1,5 @@
 use anyhow::Result;
 use crate::{data::Data, data::ProcessedData, get_file, PDError};
-use serde::Deserialize;
 use std::{collections::HashMap, fs::File};
 use log::debug;
 
@@ -49,9 +48,15 @@ impl DataVisualizer {
         }
         debug!("Processing raw data for: {}", self.api_name);
         let mut raw_data = Vec::new();
-        for document in serde_yaml::Deserializer::from_reader(self.file_handle.as_ref().unwrap()) {
-            let v = Data::deserialize(document);
-            raw_data.push(v?);
+        loop {
+            match bincode::deserialize_from::<_, Data>(self.file_handle.as_ref().unwrap()) {
+                Ok(v) => raw_data.push(v),
+                Err(e) => match *e {
+                    // EOF
+                    bincode::ErrorKind::Io(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+                    e => panic!("Error when Deserializing {} data {}", self.api_name, e),
+                },
+            };
         }
         let mut data = Vec::new();
         for value in raw_data {
@@ -112,7 +117,7 @@ mod tests {
             "cpu_utilization".to_string(),
         );
         assert!(
-            dv.init_visualizer("test/aperf_2022-01-01_01_01_01/".to_string(), "test".to_string()).unwrap() == ()
+            dv.init_visualizer("test/aperf_2023-07-26_18_37_43/".to_string(), "test".to_string()).unwrap() == ()
         );
         assert!(dv.process_raw_data("test".to_string()).unwrap() == ());
         let ret = dv.get_data("test".to_string(), "run=test&get=values&key=aggregate".to_string()).unwrap();
