@@ -184,7 +184,7 @@ impl PerformanceData {
                 error!("Missed {} interval(s)", ret - 1);
             }
             debug!("Time elapsed: {:?}", start.elapsed());
-            current += time::Duration::from_secs(ret);
+            current += time::Duration::from_secs(ret * self.init_params.interval);
             for (_name, datatype) in self.collectors.iter_mut() {
                 if datatype.is_static {
                     continue;
