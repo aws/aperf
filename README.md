@@ -64,6 +64,12 @@ echo 100 | sudo tee /sys/devices/cpu/perf_event_mux_interval_ms
 ```
 ./aperf report -r <COLLECTOR_DIRECTORY> -n <REPORT_NAME>
 ```
+
+To compare the results of two different performance runs, use the following command:
+```
+./aperf report -r <COLLECTOR_DIRECTORY_1> -r <COLLECTOR_DIRECTORY_2> -n <REPORT_NAME>
+```
+
 ### Example
 To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 
