@@ -16,6 +16,10 @@ pub struct Record {
     /// Time (in seconds) for which the performance data is to be collected.
     #[clap(short, long, value_parser, default_value_t = 10)]
     period: u64,
+
+    /// Gather profiling data using the 'perf' binary.
+    #[clap(long, value_parser, default_value_t = false)]
+    profile: bool,
 }
 
 fn prepare_data_collectors() -> Result<()> {
@@ -52,6 +56,7 @@ pub fn record(record: &Record) -> Result<()> {
     }
     let mut params = InitParams::new(run_name);
     params.period = record.period;
+    params.profile = record.profile;
     params.interval = record.interval;
 
     PERFORMANCE_DATA.lock().unwrap().set_params(params);

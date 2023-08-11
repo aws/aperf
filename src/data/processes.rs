@@ -2,7 +2,7 @@ extern crate ctor;
 extern crate lazy_static;
 
 use anyhow::Result;
-use crate::data::{CollectData, Data, ProcessedData, DataType, TimeEnum};
+use crate::data::{CollectData, Data, ProcessedData, CollectorParams, DataType, TimeEnum};
 use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use crate::visualizer::{DataVisualizer, GetData};
 use chrono::prelude::*;
@@ -40,7 +40,7 @@ impl ProcessesRaw {
 }
 
 impl CollectData for ProcessesRaw {
-    fn prepare_data_collector(&mut self) -> Result<()> {
+    fn prepare_data_collector(&mut self, _params: CollectorParams) -> Result<()> {
         *TICKS_PER_SECOND.lock().unwrap() = procfs::ticks_per_second()? as u64;
         Ok(())
     }
@@ -328,13 +328,14 @@ fn init_system_processes() {
 #[cfg(test)]
 mod process_test {
     use super::{Processes, ProcessesRaw};
-    use crate::data::{CollectData, Data, ProcessedData};
+    use crate::data::{CollectData, Data, CollectorParams, ProcessedData};
     use crate::visualizer::GetData;
 
     #[test]
     fn test_collect_data() {
         let mut processes = ProcessesRaw::new();
-        assert!(processes.prepare_data_collector().unwrap() == ());
+        let params = CollectorParams::new();
+        assert!(processes.prepare_data_collector(params).unwrap() == ());
         assert!(processes.collect_data().unwrap() == ());
         assert!(!processes.data.is_empty());
     }
@@ -345,9 +346,10 @@ mod process_test {
         let mut processes_zero = ProcessesRaw::new();
         let mut processes_one = ProcessesRaw::new();
         let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
+        let params = CollectorParams::new();
 
-        assert!(processes_zero.prepare_data_collector().unwrap() == ());
-        assert!(processes_one.prepare_data_collector().unwrap() == ());
+        assert!(processes_zero.prepare_data_collector(params.clone()).unwrap() == ());
+        assert!(processes_one.prepare_data_collector(params).unwrap() == ());
         processes_zero.collect_data().unwrap();
         processes_one.collect_data().unwrap();
 

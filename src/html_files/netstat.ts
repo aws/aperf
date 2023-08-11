@@ -80,6 +80,5 @@ function netStat() {
             }
         }
     })
-    document.getElementById("netstat-loading").remove();
     got_netstat_data = true;
 }

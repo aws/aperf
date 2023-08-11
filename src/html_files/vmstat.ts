@@ -80,6 +80,5 @@ function vmStat() {
             }
         }
     })
-    document.getElementById("vmstat-loading").remove();
     got_vmstat_data = true;
 }

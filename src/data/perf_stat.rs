@@ -1,7 +1,7 @@
 extern crate ctor;
 
 use anyhow::Result;
-use crate::data::{CollectData, Data, ProcessedData, DataType, TimeEnum};
+use crate::data::{CollectData, Data, ProcessedData, CollectorParams, DataType, TimeEnum};
 use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use crate::visualizer::{DataVisualizer, GetData};
 use chrono::prelude::*;
@@ -103,7 +103,7 @@ impl PerfStatRaw {
 }
 
 impl CollectData for PerfStatRaw {
-    fn prepare_data_collector(&mut self) -> Result<()> {
+    fn prepare_data_collector(&mut self, _params: CollectorParams) -> Result<()> {
         let num_cpus = num_cpus::get();
         let mut cpu_groups: Vec<CpuCtrGroup> = Vec::new();
         let perf_list;
@@ -468,7 +468,7 @@ fn init_perf_stat_raw() {
 #[cfg(test)]
 mod tests {
     use super::{PerfStat, PerfStatRaw};
-    use crate::data::{CollectData, Data, ProcessedData};
+    use crate::data::{CollectData, Data, ProcessedData, CollectorParams};
     use crate::visualizer::GetData;
     use std::collections::HashMap;
     use std::io::ErrorKind;
@@ -476,8 +476,9 @@ mod tests {
     #[test]
     fn test_collect_data() {
         let mut perf_stat = PerfStatRaw::new();
+        let params = CollectorParams::new();
 
-        match perf_stat.prepare_data_collector() {
+        match perf_stat.prepare_data_collector(params) {
             Err(e) => {
                 if let Some(os_error) = e.downcast_ref::<std::io::Error>() {
                     match os_error.kind() {
@@ -500,8 +501,9 @@ mod tests {
         let mut perf_stat = PerfStatRaw::new();
         let mut buffer: Vec<Data> = Vec::<Data>::new();
         let mut processed_buffer: Vec<ProcessedData> = Vec::new();
+        let params = CollectorParams::new();
 
-        match perf_stat.prepare_data_collector() {
+        match perf_stat.prepare_data_collector(params) {
             Err(e) => {
                 if let Some(os_error) = e.downcast_ref::<std::io::Error>() {
                     match os_error.kind() {

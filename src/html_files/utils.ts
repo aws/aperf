@@ -10,6 +10,8 @@ declare let perf_stat_raw_data;
 declare let processes_raw_data;
 declare let meminfo_raw_data;
 declare let netstat_raw_data;
+declare let perf_profile_raw_data;
+declare let flamegraph_raw_data;
 
 class RunEntry {
     run: string;

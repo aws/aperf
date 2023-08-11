@@ -9,6 +9,8 @@ pub mod perf_stat;
 pub mod processes;
 pub mod meminfodata;
 pub mod netstat;
+pub mod perf_profile;
+pub mod flamegraphs;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub mod intel_perf_events;
 #[cfg(target_arch = "aarch64")]
@@ -17,7 +19,7 @@ pub mod constants;
 
 use anyhow::Result;
 use crate::{APERF_FILE_FORMAT, InitParams};
-use crate::visualizer::GetData;
+use crate::visualizer::{GetData, ReportParams};
 use chrono::prelude::*;
 use cpu_utilization::{CpuUtilization, CpuUtilizationRaw};
 use log::trace;
@@ -34,6 +36,27 @@ use perf_stat::{PerfStatRaw, PerfStat};
 use processes::{ProcessesRaw, Processes};
 use meminfodata::{MeminfoDataRaw, MeminfoData};
 use netstat::{Netstat, NetstatRaw};
+use perf_profile::{PerfProfileRaw, PerfProfile};
+use flamegraphs::{FlamegraphRaw, Flamegraph};
+
+#[derive(Clone, Debug)]
+pub struct CollectorParams {
+    pub collection_time: u64,
+    pub data_file_path: String,
+    pub data_dir: String,
+    pub run_name: String,
+}
+
+impl CollectorParams {
+    fn new() -> Self {
+        CollectorParams {
+            collection_time: 0,
+            data_file_path: String::new(),
+            data_dir: String::new(),
+            run_name: String::new(),
+        }
+    }
+}
 
 pub struct DataType {
     pub data: Data,
@@ -41,7 +64,8 @@ pub struct DataType {
     pub file_name: String,
     pub full_path: String,
     pub dir_name: String,
-    pub is_static:  bool
+    pub is_static:  bool,
+    pub collector_params: CollectorParams,
 }
 
 impl DataType {
@@ -52,7 +76,8 @@ impl DataType {
             file_name,
             full_path: String::new(),
             dir_name: String::new(),
-            is_static
+            is_static,
+            collector_params: CollectorParams::new(),
         }
     }
 
@@ -67,7 +92,11 @@ impl DataType {
 
         self.file_name = name;
         self.full_path = full_path;
-        self.dir_name = param.dir_name;
+        self.dir_name = param.dir_name.clone();
+        self.collector_params.run_name = param.dir_name.clone();
+        self.collector_params.collection_time = param.period;
+        self.collector_params.data_file_path = self.full_path.clone();
+        self.collector_params.data_dir = param.dir_name.clone();
 
         self.file_handle = Some(
             OpenOptions::new()
@@ -83,7 +112,7 @@ impl DataType {
 
     pub fn prepare_data_collector(&mut self) -> Result<()> {
         trace!("Preparing data collector...");
-        self.data.prepare_data_collector()?;
+        self.data.prepare_data_collector(self.collector_params.clone())?;
         Ok(())
     }
 
@@ -99,6 +128,13 @@ impl DataType {
         bincode::serialize_into(file_handle.try_clone()?, &self.data)?;
         Ok(())
     }
+
+    pub fn after_data_collection(&mut self) -> Result<()> {
+        trace!("Running post collection actions...");
+        self.data.after_data_collection(self.collector_params.clone())?;
+        Ok(())
+    }
+
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Eq, Ord, PartialEq, PartialOrd, Hash)]
@@ -149,10 +185,19 @@ macro_rules! data {
                 Ok(())
             }
 
-            fn prepare_data_collector(&mut self) -> Result<()> {
+            fn prepare_data_collector(&mut self, params: CollectorParams) -> Result<()> {
                 match self {
                     $(
-                        Data::$x(ref mut value) => value.prepare_data_collector()?,
+                        Data::$x(ref mut value) => value.prepare_data_collector(params)?,
+                    )*
+                }
+                Ok(())
+            }
+
+            fn after_data_collection(&mut self, params: CollectorParams) -> Result<()> {
+                match self {
+                    $(
+                        Data::$x(ref mut value) => value.after_data_collection(params)?,
                     )*
                 }
                 Ok(())
@@ -175,6 +220,13 @@ macro_rules! processed_data {
                 match self {
                     $(
                         ProcessedData::$x(ref mut value) => Ok(value.process_raw_data(buffer)?),
+                    )*
+                }
+            }
+            pub fn custom_raw_data_parser(&mut self, parser_params: ReportParams) -> Result<Vec<ProcessedData>> {
+                match self {
+                    $(
+                        ProcessedData::$x(ref mut value) => Ok(value.custom_raw_data_parser(parser_params)?),
                     )*
                 }
             }
@@ -207,7 +259,9 @@ data!(
     PerfStatRaw,
     ProcessesRaw,
     MeminfoDataRaw,
-    NetstatRaw
+    NetstatRaw,
+    PerfProfileRaw,
+    FlamegraphRaw
 );
 
 processed_data!(
@@ -221,18 +275,23 @@ processed_data!(
     PerfStat,
     Processes,
     MeminfoData,
-    Netstat
+    Netstat,
+    PerfProfile,
+    Flamegraph
 );
 
 macro_rules! noop { () => (); }
 
 pub trait CollectData {
-    fn prepare_data_collector(&mut self) -> Result<()> {
+    fn prepare_data_collector(&mut self, _params: CollectorParams) -> Result<()> {
         noop!();
         Ok(())
     }
-
     fn collect_data(&mut self) -> Result<()> {
+        noop!();
+        Ok(())
+    }
+    fn after_data_collection(&mut self, _params: CollectorParams) -> Result<()> {
         noop!();
         Ok(())
     }
@@ -241,7 +300,7 @@ pub trait CollectData {
 #[cfg(test)]
 mod tests {
     use super::cpu_utilization::CpuUtilizationRaw;
-    use super::{Data, DataType, TimeEnum};
+    use super::{Data, DataType, CollectorParams, TimeEnum};
     use crate::InitParams;
     use chrono::prelude::*;
     use std::fs;
@@ -257,7 +316,8 @@ mod tests {
             file_name: "cpu_utilization".to_string(),
             full_path: String::new(),
             dir_name: String::new(),
-            is_static: false
+            is_static: false,
+            collector_params: CollectorParams::new()
         };
 
         param.dir_name = format!("./performance_data_init_test_{}", param.time_str);
@@ -283,7 +343,8 @@ mod tests {
             file_name: "cpu_utilization".to_string(),
             full_path: String::new(),
             dir_name: String::new(),
-            is_static: false
+            is_static: false,
+            collector_params: CollectorParams::new()
         };
 
         param.dir_name = format!("./performance_data_print_test_{}", param.time_str);
