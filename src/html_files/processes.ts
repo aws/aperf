@@ -9,7 +9,6 @@ function getProcesses(run, run_data, container_id) {
         return;
     }
     var data = JSON.parse(run_data.values);
-    console.log(data);
     data.end_entries.forEach(function (value, index, arr) {
         let process_datas = [];
         var x_time = [];

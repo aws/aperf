@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{self};
 use std::collections::HashMap;
 use std::{fs, time};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use thiserror::Error;
 use timerfd::{SetTimeFlags, TimerFd, TimerState};
@@ -76,6 +76,7 @@ pub enum PDError {
     #[error("File not found {}", .0)]
     VisualizerFileNotFound(String),
 
+
     #[error("Run data not available")]
     InvalidRunData,
 
@@ -136,6 +137,11 @@ impl PerformanceData {
 
     pub fn prepare_data_collectors(&mut self) -> Result<()> {
         let mut remove_entries: Vec<String> = Vec::new();
+        if !self.init_params.profile {
+            self.collectors.remove(data::perf_profile::PERF_PROFILE_FILE_NAME).unwrap();
+            self.collectors.remove(data::flamegraphs::FLAMEGRAPHS_FILE_NAME).unwrap();
+        }
+
         for (_name, datatype) in self.collectors.iter_mut() {
             if datatype.is_static {
                 continue;
@@ -197,6 +203,9 @@ impl PerformanceData {
             let data_collection_time = time::Instant::now() - current;
             debug!("Collection time: {:?}", data_collection_time);
         }
+        for (_name, datatype) in self.collectors.iter_mut() {
+            datatype.after_data_collection()?;
+        }
         tfd.set_state(TimerState::Disarmed, SetTimeFlags::Default);
         self.create_data_archive()?;
         Ok(())
@@ -236,6 +245,16 @@ pub fn get_file(dir: String, name: String) -> Result<fs::File> {
     return Err(PDError::VisualizerFileNotFound(name).into());
 }
 
+pub fn get_file_name(dir: String, name: String) -> Result<String> {
+    for path in fs::read_dir(dir.clone())? {
+        let file_name = path?.file_name().into_string().unwrap();
+        if file_name.contains(&name) {
+            return Ok(file_name);
+        }
+    }
+    return Err(PDError::VisualizerFileNotFound(name).into());
+}
+
 lazy_static! {
     pub static ref VISUALIZATION_DATA: Mutex<VisualizationData> = Mutex::new(VisualizationData::new());
 }
@@ -255,7 +274,7 @@ impl VisualizationData {
         }
     }
 
-    pub fn init_visualizers(&mut self, dir: String) -> Result<String> {
+    pub fn init_visualizers(&mut self, dir: String, tmp_dir: String, fin_dir: PathBuf) -> Result<String> {
         let dir_path = Path::new(&dir);
         let dir_name = dir_path.file_stem().unwrap().to_str().unwrap().to_string();
         self.run_names.push(dir_name.clone());
@@ -263,8 +282,9 @@ impl VisualizationData {
         let mut error_count = 0;
 
         for (_name, visualizer) in self.visualizers.iter_mut() {
-            match visualizer.init_visualizer(dir.clone(), dir_name.clone()) {
-                Err(_) => {
+            match visualizer.init_visualizer(dir.clone(), dir_name.clone(), tmp_dir.clone(), fin_dir.clone()) {
+                Err(e) => {
+                    error!("{:#?}", e);
                     visualizer.data_not_available(dir_name.clone())?;
                     error_count += 1;
                 },
@@ -341,6 +361,7 @@ pub struct InitParams {
     pub time_str: String,
     pub dir_name: String,
     pub period: u64,
+    pub profile: bool,
     pub interval: u64,
     pub run_name: String,
     pub collector_version: String,
@@ -368,6 +389,7 @@ impl InitParams {
             time_str,
             dir_name,
             period: 0,
+            profile: false,
             interval: 0,
             run_name,
             collector_version,

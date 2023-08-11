@@ -91,6 +91,8 @@ To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 
 `-vv, --verbose --verbose` more verbose messages
 
+`--intensive` gather data for which the CPU utilization is high when collected
+
 
 `./aperf report -h`
 

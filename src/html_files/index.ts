@@ -17,6 +17,12 @@ function openData(evt: Event, elem: HTMLButtonElement) {
 	if (tabName == "cpu_utilization") {
 		cpuUtilization();
 	}
+	if (tabName == "flamegraphs") {
+		flamegraphs();
+	}
+	if (tabName == "top_functions") {
+		topFunctions();
+	}
 	if (tabName == "processes") {
 		processes();
 	}

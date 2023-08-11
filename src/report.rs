@@ -132,12 +132,6 @@ pub fn report(report: &Report) -> Result<()> {
     report_name_tgz.set_file_name(&report_name);
     report_name_tgz.set_extension("tar.gz");
 
-    /* Init visualizers */
-    for dir in dir_paths {
-        let name = VISUALIZATION_DATA.lock().unwrap().init_visualizers(dir.to_owned())?;
-        VISUALIZATION_DATA.lock().unwrap().unpack_data(name)?;
-    }
-
     info!("Creating APerf report...");
     let ico = include_bytes!("html_files/favicon.ico");
     let index_html = include_str!("html_files/index.html");
@@ -168,6 +162,13 @@ pub fn report(report: &Report) -> Result<()> {
     write!(index_js_file, "{}", index_js)?;
     write!(utils_js_file, "{}", utils_js)?;
     write!(plotly_js_file, "{}", plotly_js)?;
+
+    /* Init visualizers */
+    for dir in dir_paths {
+        let name = VISUALIZATION_DATA.lock().unwrap()
+            .init_visualizers(dir.to_owned(), APERF_TMP.to_string(), report_name.clone())?;
+        VISUALIZATION_DATA.lock().unwrap().unpack_data(name)?;
+    }
 
     /* Generate visualizer JS files */
     for (name, file) in VISUALIZATION_DATA.lock().unwrap().get_all_js_files()? {
