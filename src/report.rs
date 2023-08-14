@@ -43,13 +43,15 @@ pub fn form_and_copy_archive(loc: String, report_name: &PathBuf) -> Result<()> {
         /* Create a temp archive */
         let archive_name = format!("{}.tar.gz", &dir_stem);
         let archive_path = format!("{}/{}", APERF_TMP, archive_name);
-        let tar_gz = fs::File::create(&archive_path)?;
-        let enc = GzEncoder::new(tar_gz, Compression::default());
-        let mut tar = tar::Builder::new(enc);
-        tar.append_dir_all(&dir_stem, &loc)?;
+        let archive_dst = report_name.join(format!("data/archive/{}", archive_name));
+        {
+            let tar_gz = fs::File::create(&archive_path)?;
+            let enc = GzEncoder::new(tar_gz, Compression::default());
+            let mut tar = tar::Builder::new(enc);
+            tar.append_dir_all(&dir_stem, &loc)?;
+        }
 
         /* Copy archive to aperf_report */
-        let archive_dst = report_name.join(format!("data/archive/{}", archive_name));
         fs::copy(&archive_path, archive_dst)?;
         return Ok(());
     }
