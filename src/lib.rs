@@ -10,7 +10,7 @@ use chrono::prelude::*;
 use log::{debug, error, info};
 use serde::{Deserialize, Serialize};
 use serde_json::{self};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::{fs, time};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -263,6 +263,7 @@ pub struct VisualizationData {
     pub visualizers: HashMap<String, visualizer::DataVisualizer>,
     pub js_files: HashMap<String, String>,
     pub run_names: Vec<String>,
+    pub data_available: HashSet<String>,
 }
 
 impl VisualizationData {
@@ -271,6 +272,7 @@ impl VisualizationData {
             visualizers: HashMap::new(),
             js_files: HashMap::new(),
             run_names: Vec::new(),
+            data_available: HashSet::new(),
         }
     }
 
@@ -281,14 +283,16 @@ impl VisualizationData {
         let visualizers_len = self.visualizers.len();
         let mut error_count = 0;
 
-        for (_name, visualizer) in self.visualizers.iter_mut() {
+        for (name, visualizer) in self.visualizers.iter_mut() {
+            debug!("Initializing visualizer for: {}", name);
             match visualizer.init_visualizer(dir.clone(), dir_name.clone(), tmp_dir.clone(), fin_dir.clone()) {
                 Err(e) => {
-                    error!("{:#?}", e);
-                    visualizer.data_not_available(dir_name.clone())?;
+                    debug!("Error: {:?}", e);
                     error_count += 1;
                 },
-                Ok(_) => {},
+                Ok(_) => {
+                    self.data_available.insert(name.to_string());
+                },
             }
         }
 
@@ -321,6 +325,10 @@ impl VisualizationData {
 
     pub fn unpack_data(&mut self, name: String) -> Result<()> {
         for (dvname, datavisualizer) in self.visualizers.iter_mut() {
+            if !self.data_available.contains(dvname) {
+                debug!("Raw data not available for: {}", dvname);
+                continue;
+            }
             debug!("Unpacking data for: {}", dvname);
             datavisualizer.process_raw_data(name.clone())?;
         }
@@ -345,6 +353,10 @@ impl VisualizationData {
     }
 
     pub fn get_data(&mut self, run_name: &String, visualizer_name: &str, query: String) -> Result<String> {
+        if !self.data_available.contains(&visualizer_name.to_string()) {
+            debug!("Skipping getting data for: {}", visualizer_name);
+            return Ok("No data collected".to_string());
+        }
         let visualizer = self.visualizers.get_mut(visualizer_name).ok_or(PDError::VisualizerHashMapEntryError(visualizer_name.to_string().into()))?;
         visualizer.get_data(run_name.to_string(), query.clone())
     }

@@ -36,7 +36,6 @@ pub struct DataVisualizer {
     pub js: String,
     pub api_name: String,
     pub has_custom_raw_data_parser: bool,
-    pub data_available: HashMap<String, bool>,
     pub report_params: ReportParams,
 }
 
@@ -51,7 +50,6 @@ impl DataVisualizer {
             js: js,
             api_name: api_name,
             has_custom_raw_data_parser: false,
-            data_available: HashMap::new(),
             report_params: ReportParams::new(),
         }
     }
@@ -70,20 +68,10 @@ impl DataVisualizer {
         self.report_params.data_file_path = fs::read_link(full_path).unwrap();
         self.file_handle = Some(file);
         self.run_values.insert(name.clone(), Vec::new());
-        self.data_available.insert(name, true);
-        Ok(())
-    }
-
-    pub fn data_not_available(&mut self, name: String) -> Result<()> {
-        self.data_available.insert(name, false);
         Ok(())
     }
 
     pub fn process_raw_data(&mut self, name: String) -> Result<()> {
-        if !self.data_available.get(&name).unwrap() {
-            debug!("Raw data unavailable for: {}", self.api_name);
-            return Ok(())
-        }
         debug!("Processing raw data for: {}", self.api_name);
         if self.has_custom_raw_data_parser {
             self.run_values.insert(name.clone(), self.data.custom_raw_data_parser(self.report_params.clone())?);
@@ -109,11 +97,7 @@ impl DataVisualizer {
         Ok(())
     }
 
-    pub fn get_data(&mut self, name: String, query: String) -> Result<String> {
-        if !self.data_available.get(&name).unwrap() {
-            debug!("No data available for: {} query: {}", self.api_name, query);
-            return Ok("No data collected".to_string());
-        }
+    pub fn get_data(&mut self, _name: String, query: String) -> Result<String> {
         /* Get run name from Query */
         let param: Vec<(String, String)> = serde_urlencoded::from_str(&query)?;
         let (_, run) = param[0].clone();
