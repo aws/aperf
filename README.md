@@ -20,6 +20,9 @@ APerf collects the following performance data:
 - Disk Utilization per Disk
 - Interrupt Data per Interrupt Line per CPU
 - CPU Performance Counters
+- Network stats
+- Meminfo
+- Profile data (if enabled with `--profile` and `perf` binary present)
 
 ## Requirements
 * [Rust toolchain (v1.61.0+)](https://www.rust-lang.org/tools/install)
@@ -91,7 +94,7 @@ To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 
 `-vv, --verbose --verbose` more verbose messages
 
-`--intensive` gather data for which the CPU utilization is high when collected
+`--profile` gather profiling data using the 'perf' binary
 
 
 `./aperf report -h`
