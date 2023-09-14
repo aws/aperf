@@ -3,6 +3,7 @@ use crate::{data::Data, data::ProcessedData, get_file, PDError};
 use std::{collections::HashMap, fs::File};
 use log::debug;
 use std::path::{Path, PathBuf};
+use serde::{Deserialize, Serialize};
 use rustix::fd::AsRawFd;
 use std::fs;
 
@@ -127,6 +128,84 @@ impl DataVisualizer {
 
     pub fn get_calls(&mut self) -> Result<Vec<String>> {
         self.data.get_calls()
+    }
+}
+
+pub enum GraphLimitType {
+    UInt64(u64),
+    F64(f64),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct GraphLimits {
+    pub low: u64,
+    pub high: u64,
+    pub init_done: bool,
+}
+
+impl GraphLimits {
+    pub fn new() -> Self {
+        GraphLimits {
+            low: 0,
+            high: 0,
+            init_done: false,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct GraphMetadata {
+    pub limits: GraphLimits,
+}
+
+impl GraphMetadata {
+    pub fn new() -> Self {
+        GraphMetadata {
+            limits: GraphLimits::new(),
+        }
+    }
+
+    fn update_limit_u64(&mut self, value: u64) {
+        if !self.limits.init_done {
+            self.limits.low = value;
+            self.limits.init_done = true;
+        }
+        if value < self.limits.low {
+            self.limits.low = value;
+        }
+        if value > self.limits.high {
+            self.limits.high = value;
+        }
+    }
+
+    fn update_limit_f64(&mut self, value: f64) {
+        let value_floor = value.floor() as u64;
+        let value_ceil = value.ceil() as u64;
+        if !self.limits.init_done {
+            self.limits.low = value_floor;
+            self.limits.init_done = true;
+        }
+        // Set low
+        if value_floor < self.limits.low {
+            self.limits.low = value_floor;
+        }
+        if value_ceil < self.limits.low {
+            self.limits.low = value_ceil;
+        }
+        // Set high
+        if value_floor > self.limits.high {
+            self.limits.high = value_floor;
+        }
+        if value_ceil > self.limits.high {
+            self.limits.high = value_ceil;
+        }
+    }
+
+    pub fn update_limits(&mut self, value: GraphLimitType) {
+        match value {
+            GraphLimitType::UInt64(v) => self.update_limit_u64(v),
+            GraphLimitType::F64(v) => self.update_limit_f64(v),
+        }
     }
 }
 

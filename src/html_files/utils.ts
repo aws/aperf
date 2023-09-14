@@ -13,12 +13,51 @@ declare let netstat_raw_data;
 declare let perf_profile_raw_data;
 declare let flamegraph_raw_data;
 
+let key_limits: Map<string, Limits> = new Map<string, Limits>();
+
+function form_graph_limits(data) {
+    key_limits.clear();
+    for (let i = 0; i < data.runs.length; i++) {
+        let key_values = data.runs[i]['key_values'];
+        for (let key in key_values) {
+            let metadata = JSON.parse(key_values[key])['metadata'];
+            let limits = metadata.limits;
+            if (key_limits.has(key)) {
+                let existing_limit = key_limits.get(key);
+                if (limits.low < existing_limit.low) {
+                    existing_limit.low = limits.low;
+                }
+                if (limits.high > existing_limit.high) {
+                    existing_limit.high = limits.high;
+                }
+            } else {
+                key_limits.set(key, limits);
+            }
+        }
+    }
+    for (let [key, value] of key_limits.entries()) {
+        let extra = (value.high - value.low) * 0.1;
+        value.high += extra;
+        if (value.low != 0) {
+            if ((value.low - extra) < 0) {
+                value.low = 0;
+            } else {
+                value.low -= extra;
+            }
+        }
+    }
+}
 class RunEntry {
     run: string;
     entries: Map<string, string>;
     keys: Array<string>;
     diff_keys: Array<string>;
     raw_entries: string;
+}
+
+class Limits {
+    low: number;
+    high: number;
 }
 
 function clearElements(id: string) {
