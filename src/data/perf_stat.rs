@@ -3,7 +3,7 @@ extern crate ctor;
 use anyhow::Result;
 use crate::data::{CollectData, Data, ProcessedData, CollectorParams, DataType, TimeEnum};
 use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
-use crate::visualizer::{DataVisualizer, GetData};
+use crate::visualizer::{DataVisualizer, GetData, GraphMetadata, GraphLimitType};
 use chrono::prelude::*;
 use ctor::ctor;
 use log::{trace, error};
@@ -319,8 +319,15 @@ fn get_named_stat_for_all_cpus(value: PerfStat, key: String) -> Vec<InterStat> {
     return named_stats;
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct EndPerfData {
+    pub data: Vec<EndStats>,
+    pub metadata: GraphMetadata,
+}
+
 fn get_values(values: Vec<PerfStat>, key: String) -> Result<String> {
     let time_zero = &values[0].perf_stats[0].named_stats[0].time;
+    let mut metadata = GraphMetadata::new();
     let mut end_values = Vec::new();
     let mut aggregate_value: f64;
     for value in &values {
@@ -332,11 +339,13 @@ fn get_values(values: Vec<PerfStat>, key: String) -> Result<String> {
         for stat in &stats {
             let this_cpu_end_stat_value = stat.named_stat.nr_value as f64 / stat.named_stat.dr_value as f64;
             let this_cpu_end_stat = EndStat { cpu: stat.cpu as i64, value: this_cpu_end_stat_value * stat.named_stat.scale as f64 };
+            metadata.update_limits(GraphLimitType::F64(this_cpu_end_stat.value));
             end_cpu_stats.push(this_cpu_end_stat);
             aggregate_nr += stat.named_stat.nr_value;
             aggregate_dr += stat.named_stat.dr_value;
         }
         aggregate_value = (aggregate_nr as f64 / aggregate_dr as f64) * stats[0].named_stat.scale as f64;
+        metadata.update_limits(GraphLimitType::F64(aggregate_value));
         let aggr_cpu_stat = EndStat { cpu: -1, value: aggregate_value };
         end_cpu_stats.push(aggr_cpu_stat);
 
@@ -344,7 +353,8 @@ fn get_values(values: Vec<PerfStat>, key: String) -> Result<String> {
         end_stats.cpus = end_cpu_stats;
         end_values.push(end_stats);
     }
-    Ok(serde_json::to_string(&end_values)?)
+    let perf_data = EndPerfData {data: end_values, metadata: metadata};
+    Ok(serde_json::to_string(&perf_data)?)
 }
 
 fn get_named_events(value: PerfStat) -> Result<String> {
