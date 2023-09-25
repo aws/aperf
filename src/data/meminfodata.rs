@@ -3,7 +3,7 @@ extern crate ctor;
 use anyhow::Result;
 use crate::data::{CollectData, Data, ProcessedData, DataType, TimeEnum};
 use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
-use crate::visualizer::{DataVisualizer, GetData};
+use crate::visualizer::{DataVisualizer, GetData, GraphMetadata, GraphLimitType};
 use chrono::prelude::*;
 use ctor::ctor;
 use log::{trace};
@@ -163,17 +163,27 @@ pub struct MemEntry {
     pub value: u64,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct EndMemValues {
+    pub data: MemData,
+    pub metadata: GraphMetadata,
+}
+
 fn get_values(values: Vec<MeminfoData>, key: String) -> Result<String> {
     let time_zero = values[0].time;
+    let mut metadata = GraphMetadata::new();
     let mut end_value = MemData {name: key.clone(), values: Vec::new()};
     for v in values {
         let value = v.data
             .get(&key)
             .ok_or(PDError::VisualizerMeminfoValueGetError(key.to_string()))?;
-        let mementry = MemEntry {time: v.time - time_zero, value: *value};
+        /* Bytes => kB */
+        let mementry = MemEntry {time: v.time - time_zero, value: *value / 1024};
+        metadata.update_limits(GraphLimitType::UInt64(mementry.value));
         end_value.values.push(mementry);
     }
-    return Ok(serde_json::to_string(&end_value)?)
+    let end_values = EndMemValues {data: end_value, metadata: metadata};
+    return Ok(serde_json::to_string(&end_values)?)
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -332,7 +342,7 @@ fn init_meminfo() {
 
 #[cfg(test)]
 mod tests {
-    use super::{MeminfoDataRaw, MeminfoData, MeminfoKeys, MemData};
+    use super::{MeminfoDataRaw, MeminfoData, MeminfoKeys, EndMemValues};
     use crate::data::{CollectData, Data, ProcessedData};
     use crate::visualizer::GetData;
     use std::collections::HashMap;
@@ -400,8 +410,8 @@ mod tests {
             processed_buffer.push(MeminfoData::new().process_raw_data(buf).unwrap());
         }
         let json = MeminfoData::new().get_data(processed_buffer, "run=test&get=values&key=Mem Total".to_string()).unwrap();
-        let memdata: MemData = serde_json::from_str(&json).unwrap();
-        assert!(memdata.name == "Mem Total");
-        assert!(memdata.values.len() > 0);
+        let memdata: EndMemValues = serde_json::from_str(&json).unwrap();
+        assert!(memdata.data.name == "Mem Total");
+        assert!(memdata.data.values.len() > 0);
     }
 }
