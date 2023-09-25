@@ -158,4 +158,5 @@ function meminfo() {
             }
         }
     })
+    got_meminfo_data = true;
 }
