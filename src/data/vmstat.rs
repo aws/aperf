@@ -1,7 +1,7 @@
 extern crate ctor;
 
 use crate::data::{CollectData, Data, ProcessedData, DataType, TimeEnum};
-use crate::visualizer::{DataVisualizer, GetData};
+use crate::visualizer::{DataVisualizer, GetData, GraphMetadata, GraphLimitType};
 use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
 use chrono::prelude::*;
@@ -62,6 +62,12 @@ impl Vmstat {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+struct EndVmstatData {
+    pub data: Vec<VmstatEntry>,
+    pub metadata: GraphMetadata,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct VmstatEntry {
     pub time: TimeEnum,
     pub value: i64,
@@ -69,6 +75,7 @@ struct VmstatEntry {
 
 fn get_entry(values: Vec<Vmstat>, key: String) -> Result<String> {
     let mut end_values = Vec::new();
+    let mut metadata = GraphMetadata::new();
     let time_zero = values[0].time;
     let mut prev_vmstat = values[0].clone();
     for value in values {
@@ -88,6 +95,7 @@ fn get_entry(values: Vec<Vmstat>, key: String) -> Result<String> {
         if !key.contains("nr_") {
             v = *curr_value - *prev_value;
         }
+        metadata.update_limits(GraphLimitType::UInt64(v as u64));
         let vmstat_entry = VmstatEntry {
             time: (current_time - time_zero),
             value: v,
@@ -95,7 +103,8 @@ fn get_entry(values: Vec<Vmstat>, key: String) -> Result<String> {
         end_values.push(vmstat_entry);
         prev_vmstat = value.clone();
     }
-    Ok(serde_json::to_string(&end_values)?)
+    let vmstat_data = EndVmstatData {data: end_values, metadata: metadata};
+    Ok(serde_json::to_string(&vmstat_data)?)
 }
 
 fn get_entries(value: Vmstat) -> Result<String> {
@@ -187,7 +196,7 @@ fn init_vmstat() {
 
 #[cfg(test)]
 mod tests {
-    use super::{Vmstat, VmstatEntry, VmstatRaw};
+    use super::{Vmstat, VmstatRaw, EndVmstatData};
     use crate::data::{CollectData, Data, ProcessedData, TimeEnum};
     use crate::visualizer::GetData;
 
@@ -223,9 +232,9 @@ mod tests {
         buffer.push(Data::VmstatRaw(vmstat));
         processed_buffer.push(Vmstat::new().process_raw_data(buffer[0].clone()).unwrap());
         let json = Vmstat::new().get_data(processed_buffer, "run=test&get=values&key=nr_dirty".to_string()).unwrap();
-        let values: Vec<VmstatEntry> = serde_json::from_str(&json).unwrap();
-        assert!(values.len() > 0);
-        match values[0].time {
+        let data: EndVmstatData = serde_json::from_str(&json).unwrap();
+        assert!(data.data.len() > 0);
+        match data.data[0].time {
             TimeEnum::TimeDiff(value) => assert!(value == 0),
             _ => assert!(false),
         }
