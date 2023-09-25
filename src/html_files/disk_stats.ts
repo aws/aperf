@@ -3,7 +3,7 @@ let got_disk_stat_data = false;
 function getStatValues(run, elem, key, run_data) {
     var disk_datas = [];
     var data = JSON.parse(run_data);
-    data.forEach(function (v, i, a) {
+    data.data.forEach(function (v, i, a) {
         var x_time = [];
         var y_data = [];
         v.values.forEach(function (disk_value, disk_index, disk_arr) {
@@ -27,6 +27,7 @@ function getStatValues(run, elem, key, run_data) {
     } else {
         unit = 'Count';
     }
+    let limits = key_limits.get(key);
     var layout = {
         title: key,
         xaxis: {
@@ -34,6 +35,7 @@ function getStatValues(run, elem, key, run_data) {
         },
         yaxis: {
             title: unit,
+            range: [limits.low, limits.high],
         },
     };
     Plotly.newPlot(TESTER, disk_datas, layout, { frameMargins: 0 });
@@ -63,6 +65,7 @@ function diskStats(mb: boolean) {
     }
     var run_width = 100 / data.length;
     clearElements('disk-stat-runs');
+    form_graph_limits(disk_stats_raw_data);
     data.forEach(function (value, index, arr) {
         // Run div
         var run_div = document.createElement('div');

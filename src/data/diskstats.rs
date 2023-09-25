@@ -4,7 +4,7 @@ use anyhow::Result;
 use crate::data::{CollectData, Data, ProcessedData, DataType, TimeEnum};
 use crate::data::constants::*;
 use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
-use crate::visualizer::{DataVisualizer, GetData};
+use crate::visualizer::{DataVisualizer, GetData, GraphMetadata, GraphLimitType};
 use chrono::prelude::*;
 use ctor::ctor;
 use log::trace;
@@ -209,9 +209,16 @@ fn get_disk_names(value: Diskstats) -> Vec<String> {
     names
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct EndDiskValues {
+    pub data: Vec<DiskValues>,
+    pub metadata: GraphMetadata,
+}
+
 fn get_values(values: Vec<Diskstats>, key: String) -> Result<String> {
     let mut ev: BTreeMap<String, DiskValues> = BTreeMap::new();
     let disk_names = get_disk_names(values[0].clone());
+    let mut metadata = GraphMetadata::new();
     let mut factor = FACTOR_OF_ONE;
     let mut mult_factor = MULT_FACTOR_OF_ONE;
     for name in disk_names {
@@ -248,12 +255,13 @@ fn get_values(values: Vec<Diskstats>, key: String) -> Result<String> {
                 time: (v.time - time_zero),
                 value: stat_value,
             };
+            metadata.update_limits(GraphLimitType::F64(stat_value));
             let dvs = ev.get_mut(&disk.name).unwrap();
             dvs.values.push(dv);
         }
         prev_data = v.clone();
     }
-    let end_values: Vec<DiskValues> = ev.into_values().collect();
+    let end_values = EndDiskValues{data: ev.into_values().collect(), metadata: metadata};
     Ok(serde_json::to_string(&end_values)?)
 }
 
@@ -333,7 +341,7 @@ fn init_diskstats() {
 
 #[cfg(test)]
 mod tests {
-    use super::{Diskstats, DiskstatsRaw, DiskstatKeys, DiskValues};
+    use super::{Diskstats, DiskstatsRaw, DiskstatKeys, EndDiskValues};
     use crate::data::{CollectData, Data, ProcessedData};
     use crate::visualizer::GetData;
     use std::collections::HashMap;
@@ -401,8 +409,8 @@ mod tests {
             processed_buffer.push(Diskstats::new().process_raw_data(buf).unwrap());
         }
         let json = Diskstats::new().get_data(processed_buffer, "run=test&get=values&key=Reads".to_string()).unwrap();
-        let values: Vec<DiskValues> = serde_json::from_str(&json).unwrap();
-        assert!(values[0].name != "");
-        assert!(values[0].values.len() > 0);
+        let data: EndDiskValues = serde_json::from_str(&json).unwrap();
+        assert!(data.data[0].name != "");
+        assert!(data.data[0].values.len() > 0);
     }
 }
