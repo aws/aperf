@@ -17,7 +17,7 @@ function getNetstatEntry(run, parent_id, key, run_data) {
     var data = JSON.parse(run_data);
     var x_time = [];
     var y_data = [];
-    data.forEach(function (value, index, arr) {
+    data.data.forEach(function (value, index, arr) {
         x_time.push(value.time.TimeDiff);
         y_data.push(value.value);
     });
@@ -30,6 +30,7 @@ function getNetstatEntry(run, parent_id, key, run_data) {
         y: y_data,
         type: 'scatter',
     };
+    let limits = key_limits.get(key);
     var layout = {
         title: `${key}`,
         xaxis: {
@@ -37,6 +38,7 @@ function getNetstatEntry(run, parent_id, key, run_data) {
         },
         yaxis: {
             title: 'Count',
+            range: [limits.low, limits.high],
         },
     }
     Plotly.newPlot(TESTER, [netstat_data], layout, { frameMargins: 0 });
@@ -53,6 +55,7 @@ function netStat() {
     }
     var run_width = 100 / data.length;
     clearElements('netstat-runs');
+    form_graph_limits(netstat_raw_data);
     data.forEach(function (value, index, arr) {
         // Run div
         var run_div = document.createElement('div');
