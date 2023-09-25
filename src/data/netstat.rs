@@ -1,7 +1,7 @@
 extern crate ctor;
 
 use crate::data::{CollectData, Data, ProcessedData, DataType, TimeEnum};
-use crate::visualizer::{DataVisualizer, GetData};
+use crate::visualizer::{DataVisualizer, GetData, GraphMetadata, GraphLimitType};
 use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
 use chrono::prelude::*;
@@ -67,8 +67,15 @@ struct NetstatEntry {
     pub value: u64,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct EndNetData {
+    pub data: Vec<NetstatEntry>,
+    pub metadata: GraphMetadata,
+}
+
 fn get_entry(values: Vec<Netstat>, key: String) -> Result<String> {
     let mut end_values = Vec::new();
+    let mut metadata = GraphMetadata::new();
     let time_zero = values[0].time;
     let mut prev_netstat = values[0].clone();
     for value in values {
@@ -88,10 +95,12 @@ fn get_entry(values: Vec<Netstat>, key: String) -> Result<String> {
             time: (current_time - time_zero),
             value: *curr_value - *prev_value,
         };
+        metadata.update_limits(GraphLimitType::UInt64(netstat_entry.value));
         end_values.push(netstat_entry);
         prev_netstat = value.clone();
     }
-    Ok(serde_json::to_string(&end_values)?)
+    let netdata = EndNetData {data: end_values, metadata: metadata};
+    Ok(serde_json::to_string(&netdata)?)
 }
 
 fn get_entries(value: Netstat) -> Result<String> {
@@ -202,7 +211,7 @@ fn init_netstat() {
 
 #[cfg(test)]
 mod tests {
-    use super::{Netstat, NetstatEntry, NetstatRaw};
+    use super::{Netstat, NetstatRaw, EndNetData};
     use crate::data::{CollectData, Data, ProcessedData, TimeEnum};
     use crate::visualizer::GetData;
 
@@ -238,9 +247,9 @@ mod tests {
         buffer.push(Data::NetstatRaw(netstat));
         processed_buffer.push(Netstat::new().process_raw_data(buffer[0].clone()).unwrap());
         let json = Netstat::new().get_data(processed_buffer, "run=test&get=values&key=TcpExt: TCPDSACKRecv".to_string()).unwrap();
-        let values: Vec<NetstatEntry> = serde_json::from_str(&json).unwrap();
-        assert!(values.len() > 0);
-        match values[0].time {
+        let data: EndNetData = serde_json::from_str(&json).unwrap();
+        assert!(data.data.len() > 0);
+        match data.data[0].time {
             TimeEnum::TimeDiff(value) => assert!(value == 0),
             _ => assert!(false),
         }
