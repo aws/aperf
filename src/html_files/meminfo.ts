@@ -106,16 +106,14 @@ function getMeminfo(elem, key, run_data) {
 }
 
 function getMeminfoKeys(run, container_id, keys, run_data) {
-    var data = keys;
-    data.forEach(function (value, index, arr) {
+    for (let i = 0; i < all_run_keys.length; i++) {
+        let value = all_run_keys[i];
         var elem = document.createElement('div');
-        elem.id = `disk-stat-${run}-${value.name}`;
+        elem.id = `disk-stat-${run}-${value}`;
         elem.style.float = "none";
         addElemToNode(container_id, elem);
-        setTimeout(() => {
-            getMeminfo(elem, value, run_data[value]);
-        }, 0);
-    })
+        emptyOrCallback(keys, getMeminfo, elem, value, run_data);
+    }
 }
 
 function meminfo() {
