@@ -13,10 +13,12 @@ declare let netstat_raw_data;
 declare let perf_profile_raw_data;
 declare let flamegraph_raw_data;
 
+let all_run_keys: Array<string> = new Array<string>();
 let key_limits: Map<string, Limits> = new Map<string, Limits>();
 
 function form_graph_limits(data) {
     key_limits.clear();
+    all_run_keys.length = 0;
     for (let i = 0; i < data.runs.length; i++) {
         let key_values = data.runs[i]['key_values'];
         for (let key in key_values) {
@@ -35,6 +37,18 @@ function form_graph_limits(data) {
             }
         }
     }
+    for (let i = 0; i < data.runs.length; i++) {
+        let keys = data.runs[i]['keys'];
+        var prev_all_run_key_index = 0;
+        for (let j = 0; j < keys.length; j++) {
+            let key = keys[j];
+            if (all_run_keys.indexOf(key) == -1) {
+                all_run_keys.splice(prev_all_run_key_index, 0, key);
+            }
+            prev_all_run_key_index += 1;
+        }
+    }
+
     for (let [key, value] of key_limits.entries()) {
         let extra = (value.high - value.low) * 0.1;
         value.high += extra;
@@ -47,6 +61,25 @@ function form_graph_limits(data) {
         }
     }
 }
+
+function emptyOrCallback(keys, callback, elem, key, run_data) {
+    if (keys.indexOf(key) == -1) {
+        setTimeout(() => {
+            emptyGraph(elem, key);
+        }, 0);
+    } else {
+        setTimeout(() => {
+            callback(elem, key, run_data[key]);
+        }, 0);
+    }
+}
+function emptyGraph(elem, key) {
+    var layout = {
+        title: `${key} (N/A)`,
+    }
+    Plotly.newPlot(elem, [], layout, { frameMargins: 0 });
+}
+
 class RunEntry {
     run: string;
     entries: Map<string, string>;
