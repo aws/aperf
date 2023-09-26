@@ -7,16 +7,14 @@ function getEvents(run, container_id, keys, run_data) {
         no_data_div.innerHTML = "No data collected";
         addElemToNode(container_id, no_data_div);
     } else {
-        var data = keys;
-        data.forEach(function (value, index, arr) {
+        for (let i = 0; i < all_run_keys.length; i++) {
+            let value = all_run_keys[i];
             var elem = document.createElement('div');
             elem.id = `perfstat-${run}-${value}`;
             elem.style.float = "none";
             addElemToNode(container_id, elem);
-            setTimeout(() => {
-                getEvent(run, elem.id, value, run_data[value]);
-            }, 0);
-        })
+            emptyOrCallback(keys, getEvent, elem, value, run_data);
+        }
     }
 }
 
@@ -34,7 +32,7 @@ function addData(perfstat_data, stat, timediff) {
         }
     })
 }
-function getEvent(run, parent_id, key, run_data) {
+function getEvent(elem, key, run_data) {
     var data = JSON.parse(run_data);
     var perfstat_datas = [];
     data.data[0].cpus.forEach(function (value, index, arr) {
@@ -49,9 +47,6 @@ function getEvent(run, parent_id, key, run_data) {
             addData(perfstat_datas, stat, value.time.TimeDiff);
         })
     });
-    var elem = document.createElement('div');
-    elem.style.float = "none";
-    addElemToNode(parent_id, elem);
     var TESTER = elem;
     var end_datas = [];
     perfstat_datas.forEach(function (value, index, arr) {
