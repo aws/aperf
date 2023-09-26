@@ -1,19 +1,17 @@
 let got_netstat_data = false;
 
 function getNetstatEntries(run, container_id, keys, run_data) {
-    var data = keys;
-    data.forEach(function (value, index, arr) {
+    for (let i = 0; i < all_run_keys.length; i++) {
+        let value = all_run_keys[i];
         var elem = document.createElement('div');
         elem.id = `netstat-${run}-${value}`;
         elem.style.float = "none";
         addElemToNode(container_id, elem);
-        setTimeout(() => {
-            getNetstatEntry(run, elem.id, value, run_data[value]);
-        }, 0);
-    })
+        emptyOrCallback(keys, getNetstatEntry, elem, value, run_data);
+    }
 }
 
-function getNetstatEntry(run, parent_id, key, run_data) {
+function getNetstatEntry(elem, key, run_data) {
     var data = JSON.parse(run_data);
     var x_time = [];
     var y_data = [];
@@ -21,9 +19,6 @@ function getNetstatEntry(run, parent_id, key, run_data) {
         x_time.push(value.time.TimeDiff);
         y_data.push(value.value);
     });
-    var elem = document.createElement('div');
-    elem.style.float = "none";
-    addElemToNode(parent_id, elem);
     var TESTER = elem;
     var netstat_data: Partial<Plotly.PlotData> = {
         x: x_time,
