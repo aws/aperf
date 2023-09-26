@@ -1,6 +1,6 @@
 let got_disk_stat_data = false;
 
-function getStatValues(run, elem, key, run_data) {
+function getStatValues(elem, key, run_data) {
     var disk_datas = [];
     var data = JSON.parse(run_data);
     data.data.forEach(function (v, i, a) {
@@ -42,16 +42,14 @@ function getStatValues(run, elem, key, run_data) {
 }
 
 function getStatKeys(run, container_id, mb, keys, run_data) {
-    var data = keys;
-    data.forEach(function (value, index, arr) {
+    for (let i = 0; i < all_run_keys.length; i++) {
+        let value = all_run_keys[i];
         var elem = document.createElement('div');
-        elem.id = `disk-stat-${run}-${value.name}`;
+        elem.id = `disk-stat-${run}-${value}`;
         elem.style.float = "none";
         addElemToNode(container_id, elem);
-        setTimeout(() => {
-            getStatValues(run, elem, value, run_data[value]);
-        }, 0);
-    })
+        emptyOrCallback(keys, getStatValues, elem, value, run_data);
+    }
 }
 
 function diskStats(mb: boolean) {
