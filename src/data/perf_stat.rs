@@ -9,8 +9,8 @@ use ctor::ctor;
 use log::{trace, error};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
-use perf_event::events::Raw;
-use perf_event::{Builder, Counter, Group};
+use perf_event::events::{Raw, Software};
+use perf_event::{Builder, Counter, Group, ReadFormat};
 use std::io::{BufRead, BufReader, ErrorKind};
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -43,12 +43,12 @@ pub struct Ctr {
 
 impl Ctr {
     fn new(perf_type: u64, name: String, cpu: usize, config: u64, group: &mut Group) -> Result<Self> {
-        let raw_config = Raw::new().config(config);
+        let raw_config = Raw::new(config);
         Ok(Ctr {
             perf_type: perf_type,
             name: name,
             config: config,
-            counter: Builder::new().group(group).one_cpu(cpu).any_pid().kind(raw_config).include_kernel().build()?,
+            counter: Builder::new(raw_config).one_cpu(cpu).any_pid().include_kernel().build_with_group(group)?,
         })
     }
 }
@@ -68,7 +68,6 @@ pub struct NamedTypeCtr<'a> {
     pub config: u64,
 }
 
-#[derive(Debug)]
 pub struct CpuCtrGroup {
     pub cpu: u64,
     pub name: String,
@@ -124,7 +123,17 @@ impl CollectData for PerfStatRaw {
         }
         for cpu in 0..num_cpus {
             for named_ctr in &perf_list {
-                let perf_group = Group::new_task_cpu(-1, cpu.try_into()?);
+                let perf_group = Builder::new(Software::DUMMY).
+                    read_format(
+                        ReadFormat::GROUP
+                        | ReadFormat::TOTAL_TIME_ENABLED
+                        | ReadFormat::TOTAL_TIME_RUNNING
+                        | ReadFormat::ID,
+                    )
+                    .any_pid()
+                    .one_cpu(cpu)
+                    .build_group();
+
                 let group: Group;
                 match perf_group {
                     Err(e) => {
