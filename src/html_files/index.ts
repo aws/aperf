@@ -26,12 +26,6 @@ function openData(evt: Event, elem: HTMLButtonElement) {
 	if (tabName == "processes") {
 		processes();
 	}
-	if (tabName == "meminfo") {
-		meminfo();
-	}
-	if (tabName == "vmstat") {
-		vmStat();
-	}
 	if (tabName == "kernel_config") {
 		kernelConfig(false);
 	}
@@ -41,14 +35,40 @@ function openData(evt: Event, elem: HTMLButtonElement) {
 	if (tabName == "interrupts") {
 		interrupts();
 	}
-	if (tabName == "disk_stats") {
-		diskStats(false);
-	}
 	if (tabName == "perfstat") {
 		perfStat();
 	}
+	if (tabName == "meminfo") {
+		let id = document.querySelector('input[name="meminfoHide"]:checked').id;
+		if (id == "meminfo_hide_yes") {
+			meminfo(true);
+		} else {
+			meminfo(false);
+		}
+	}
+	if (tabName == "vmstat") {
+		let id = document.querySelector('input[name="vmstatHide"]:checked').id;
+		if (id == "vmstat_hide_yes") {
+			vmStat(true);
+		} else {
+			vmStat(false);
+		}
+	}
+	if (tabName == "disk_stats") {
+		let id = document.querySelector('input[name="diskstatHide"]:checked').id;
+		if (id == 'diskstat_hide_yes') {
+			diskStats(true);
+		} else {
+			diskStats(false);
+		}
+	}
 	if (tabName == "netstat") {
-		netStat();
+		let id = document.querySelector('input[name="netstatHide"]:checked').id;
+		if (id == "netstat_hide_yes") {
+			netStat(true);
+		} else {
+			netStat(false);
+		}
 	}
 }
 // Tab button click
@@ -78,6 +98,45 @@ for (var i=0; i < elems.length; i++) {
 		}
 	})
 }
-
+var elems = document.getElementsByClassName('vmstat-button');
+for (var i=0; i < elems.length; i++) {
+	elems[i].addEventListener("click",function(evn: Event) {
+		if (this.id == "vmstat_hide_yes"){
+			vmStat(true);
+		} else {
+			vmStat(false);
+		}
+	})
+}
+var elems = document.getElementsByClassName('diskstat-button');
+for (var i=0; i < elems.length; i++) {
+	elems[i].addEventListener("click",function(evn: Event) {
+		if (this.id == "diskstat_hide_yes"){
+			diskStats(true);
+		} else {
+			diskStats(false);
+		}
+	})
+}
+var elems = document.getElementsByClassName('meminfo-button');
+for (var i=0; i < elems.length; i++) {
+	elems[i].addEventListener("click",function(evn: Event) {
+		if (this.id == "meminfo_hide_yes"){
+			meminfo(true);
+		} else {
+			meminfo(false);
+		}
+	})
+}
+var elems = document.getElementsByClassName('netstat-button');
+for (var i=0; i < elems.length; i++) {
+	elems[i].addEventListener("click",function(evn: Event) {
+		if (this.id == "netstat_hide_yes"){
+			netStat(true);
+		} else {
+			netStat(false);
+		}
+	})
+}
 // Show landing page
 document.getElementById("default").click();

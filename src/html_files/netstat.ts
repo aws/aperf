@@ -1,4 +1,5 @@
 let got_netstat_data = false;
+let netstat_hide_zero_na_graphs = false;
 
 function getNetstatEntries(run, container_id, keys, run_data) {
     for (let i = 0; i < all_run_keys.length; i++) {
@@ -7,7 +8,7 @@ function getNetstatEntries(run, container_id, keys, run_data) {
         elem.id = `netstat-${run}-${value}`;
         elem.style.float = "none";
         addElemToNode(container_id, elem);
-        emptyOrCallback(keys, getNetstatEntry, elem, value, run_data);
+        emptyOrCallback(keys, netstat_hide_zero_na_graphs, getNetstatEntry, elem, value, run_data);
     }
 }
 
@@ -39,10 +40,11 @@ function getNetstatEntry(elem, key, run_data) {
     Plotly.newPlot(TESTER, [netstat_data], layout, { frameMargins: 0 });
 }
 
-function netStat() {
-    if (got_netstat_data) {
+function netStat(hide: boolean) {
+    if (got_netstat_data && hide == netstat_hide_zero_na_graphs) {
         return;
     }
+    netstat_hide_zero_na_graphs = hide;
     var data = runs_raw;
     var float_style = "none";
     if (data.length > 1) {
