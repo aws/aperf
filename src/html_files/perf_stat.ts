@@ -13,7 +13,7 @@ function getEvents(run, container_id, keys, run_data) {
             elem.id = `perfstat-${run}-${value}`;
             elem.style.float = "none";
             addElemToNode(container_id, elem);
-            emptyOrCallback(keys, getEvent, elem, value, run_data);
+            emptyOrCallback(keys, false, getEvent, elem, value, run_data);
         }
     }
 }

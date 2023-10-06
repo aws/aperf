@@ -1,4 +1,5 @@
 let got_meminfo_data = false;
+let meminfo_hide_zero_na_graphs = false;
 let TB = 1073741824;
 let GB = 1048576;
 
@@ -112,14 +113,15 @@ function getMeminfoKeys(run, container_id, keys, run_data) {
         elem.id = `disk-stat-${run}-${value}`;
         elem.style.float = "none";
         addElemToNode(container_id, elem);
-        emptyOrCallback(keys, getMeminfo, elem, value, run_data);
+        emptyOrCallback(keys, meminfo_hide_zero_na_graphs, getMeminfo, elem, value, run_data);
     }
 }
 
-function meminfo() {
-    if (got_meminfo_data) {
+function meminfo(hide: boolean) {
+    if (got_meminfo_data && hide == meminfo_hide_zero_na_graphs) {
         return;
     }
+    meminfo_hide_zero_na_graphs = hide;
     var data = runs_raw;
     var float_style = "none";
     if (data.length > 1) {

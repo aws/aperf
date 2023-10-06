@@ -62,7 +62,17 @@ function form_graph_limits(data) {
     }
 }
 
-function emptyOrCallback(keys, callback, elem, key, run_data) {
+function canHide(hide, keys, key) {
+    let limits = key_limits.get(key);
+    if (limits.low == 0 && limits.high == 0 && hide) {
+        return true;
+    }
+    return false;
+}
+function emptyOrCallback(keys, hide, callback, elem, key, run_data) {
+    if (canHide(hide, keys, key)) {
+        return;
+    }
     if (keys.indexOf(key) == -1) {
         setTimeout(() => {
             emptyGraph(elem, key);

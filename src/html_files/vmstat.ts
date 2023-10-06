@@ -1,4 +1,5 @@
 let got_vmstat_data = false;
+let vmstat_hide_zero_na_graphs = false;
 
 function getEntries(run, container_id, keys, run_data) {
     for (let i = 0; i < all_run_keys.length; i++) {
@@ -7,7 +8,7 @@ function getEntries(run, container_id, keys, run_data) {
         elem.id = `vmstat-${run}-${value}`;
         elem.style.float = "none";
         addElemToNode(container_id, elem);
-        emptyOrCallback(keys, getEntry, elem, value, run_data);
+        emptyOrCallback(keys, vmstat_hide_zero_na_graphs, getEntry, elem, value, run_data);
     }
 }
 
@@ -39,10 +40,11 @@ function getEntry(elem, key, run_data) {
     Plotly.newPlot(TESTER, [vmstat_data], layout, { frameMargins: 0 });
 }
 
-function vmStat() {
-    if (got_vmstat_data) {
+function vmStat(hide: boolean) {
+    if (got_vmstat_data && hide == vmstat_hide_zero_na_graphs) {
         return;
     }
+    vmstat_hide_zero_na_graphs = hide;
     var data = runs_raw;
     var float_style = "none";
     if (data.length > 1) {

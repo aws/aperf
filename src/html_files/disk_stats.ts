@@ -1,4 +1,5 @@
 let got_disk_stat_data = false;
+let diskstat_hide_zero_na_graphs = false;
 
 function getStatValues(elem, key, run_data) {
     var disk_datas = [];
@@ -41,21 +42,22 @@ function getStatValues(elem, key, run_data) {
     Plotly.newPlot(TESTER, disk_datas, layout, { frameMargins: 0 });
 }
 
-function getStatKeys(run, container_id, mb, keys, run_data) {
+function getStatKeys(run, container_id, keys, run_data) {
     for (let i = 0; i < all_run_keys.length; i++) {
         let value = all_run_keys[i];
         var elem = document.createElement('div');
         elem.id = `disk-stat-${run}-${value}`;
         elem.style.float = "none";
         addElemToNode(container_id, elem);
-        emptyOrCallback(keys, getStatValues, elem, value, run_data);
+        emptyOrCallback(keys, diskstat_hide_zero_na_graphs, getStatValues, elem, value, run_data);
     }
 }
 
-function diskStats(mb: boolean) {
-    if (got_disk_stat_data) {
+function diskStats(hide: boolean) {
+    if (got_disk_stat_data && hide == diskstat_hide_zero_na_graphs) {
         return;
     }
+    diskstat_hide_zero_na_graphs = hide;
     var data = runs_raw;
     var float_style = "none";
     if (data.length > 1) {
@@ -87,7 +89,7 @@ function diskStats(mb: boolean) {
         for (let i = 0; i < disk_stats_raw_data['runs'].length; i++) {
             if (disk_stats_raw_data['runs'][i]['name'] == value) {
                 this_run_data = disk_stats_raw_data['runs'][i];
-                getStatKeys(value, per_value_div.id, mb, this_run_data['keys'], this_run_data['key_values']);
+                getStatKeys(value, per_value_div.id, this_run_data['keys'], this_run_data['key_values']);
                 break;
             }
         }
