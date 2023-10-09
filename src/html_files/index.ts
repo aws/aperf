@@ -26,17 +26,27 @@ function openData(evt: Event, elem: HTMLButtonElement) {
 	if (tabName == "processes") {
 		processes();
 	}
-	if (tabName == "kernel_config") {
-		kernelConfig(false);
-	}
-	if (tabName == "sysctl") {
-		sysctl(false);
-	}
 	if (tabName == "interrupts") {
 		interrupts();
 	}
 	if (tabName == "perfstat") {
 		perfStat();
+	}
+	if (tabName == "kernel_config") {
+		let id = document.querySelector('input[name="kernelDiff"]:checked').id;
+		if (id == "kernel_diff_yes") {
+			kernelConfig(true);
+		} else {
+			kernelConfig(false);
+		}
+	}
+	if (tabName == "sysctl") {
+		let id = document.querySelector('input[name="sysctlDiff"]:checked').id;
+		if (id == "sysctl_diff_yes") {
+			sysctl(true);
+		} else {
+			sysctl(false);
+		}
 	}
 	if (tabName == "meminfo") {
 		let id = document.querySelector('input[name="meminfoHide"]:checked').id;
