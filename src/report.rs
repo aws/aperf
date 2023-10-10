@@ -105,7 +105,7 @@ pub fn report(report: &Report) -> Result<()> {
             error!("Cannot process two runs with the same name");
             return Ok(())
         }
-        dir_stems.push(path.clone().file_stem().unwrap().to_str().unwrap().to_string());
+        dir_stems.push(path.file_stem().unwrap().to_str().unwrap().to_string());
         dir_paths.push(path.to_str().unwrap().to_string());
     }
 
