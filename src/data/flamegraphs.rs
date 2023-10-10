@@ -51,7 +51,7 @@ impl CollectData for FlamegraphRaw {
                 } else {
                     error!("Unknown error: {}", e);
                 }
-                error!("Not processing collected profiling data.");
+                error!("Skip processing profiling data.");
             },
             Ok(_) => trace!("Perf inject successful."),
         }
@@ -100,15 +100,29 @@ impl GetData for Flamegraph {
         let collapse_out = File::create(collapse_loc.clone())?;
         let mut fg_out = File::create(fg_loc.clone())?;
 
-        write!(fg_out, "<svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" width=\"100%\" height=\"100%\"><text x=\"0%\" y=\"1%\">No data collected</text></svg>")?;
         if perf_jit_loc.exists() {
-            let out_script = Command::new("perf")
+            let out = Command::new("perf")
                 .args(["script", "-f", "-i", perf_jit_loc.to_str().unwrap()])
-                .output()?;
-            write!(script_out, "{}", std::str::from_utf8(&out_script.stdout)?.to_string())?;
-            Folder::default().collapse_file(Some(script_loc), collapse_out)?;
-            fg_out = std::fs::OpenOptions::new().read(true).write(true).truncate(true).open(fg_loc)?;
-            flamegraph::from_files(&mut Options::default(), &vec![collapse_loc.to_path_buf()], fg_out)?;
+                .output();
+            match out {
+                Err(e) => {
+                    if e.kind() == ErrorKind::NotFound {
+                        error!("'perf' command not found.");
+                    } else {
+                        error!("Unknown error: {}", e);
+                    }
+                    error!("Skip processing profiling data.");
+                    write!(fg_out, "<svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" width=\"100%\" height=\"100%\"><text x=\"0%\" y=\"1%\">Did not process profiling data</text></svg>")?;
+                },
+                Ok(v) => {
+                    write!(script_out, "{}", std::str::from_utf8(&v.stdout)?.to_string())?;
+                    Folder::default().collapse_file(Some(script_loc), collapse_out)?;
+                    fg_out = std::fs::OpenOptions::new().read(true).write(true).truncate(true).open(fg_loc)?;
+                    flamegraph::from_files(&mut Options::default(), &vec![collapse_loc.to_path_buf()], fg_out)?;
+                },
+            }
+        } else {
+            write!(fg_out, "<svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" width=\"100%\" height=\"100%\"><text x=\"0%\" y=\"1%\">No data collected</text></svg>")?;
         }
         let processed_data = vec![ProcessedData::Flamegraph(profile)];
         Ok(processed_data)

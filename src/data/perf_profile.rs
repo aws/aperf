@@ -67,18 +67,30 @@ impl GetData for PerfProfile {
         let mut profile = PerfProfile::new();
 
         let out = Command::new("perf")
-            .args(["report", "--stdio", "-g", "none", "--percent-limit", "1", "-i", file_name]).output()?.stdout;
+            .args(["report", "--stdio", "--percent-limit", "1", "-i", file_name]).output();
 
-        if out.len() == 0 {
-            profile.data = vec!["No data collected".to_string()];
-        } else {
-            profile.data = std::str::from_utf8(&out)?
-                .to_string()
-                .split('\n')
-                .map(|x| x.to_string())
-                .collect();
+        match out {
+            Err(e) => {
+                if e.kind() == ErrorKind::NotFound {
+                    error!("'perf' command not found.");
+                } else {
+                    error!("Unknown error: {}", e);
+                }
+                error!("Skip processing profiling data.");
+                profile.data = vec!["Did not process profiling data".to_string()];
+            }
+            Ok(v) => {
+                if v.stdout.len() == 0 {
+                    profile.data = vec!["No data collected".to_string()];
+                } else {
+                    profile.data = std::str::from_utf8(&v.stdout)?
+                        .to_string()
+                        .split('\n')
+                        .map(|x| x.to_string())
+                        .collect();
+                }
+            }
         }
-
 
         let processed_data = vec![ProcessedData::PerfProfile(profile)];
         Ok(processed_data)
