@@ -1,3 +1,17 @@
+class DataType {
+	name: string;
+	trueId: string;
+	hideClass: string;
+	callback;
+}
+var DataTypes: Map<string, DataType> = new Map<string, DataType>();
+DataTypes.set('kernel', {name: 'kernel', hideClass: 'kernelDiff', trueId: 'kernel_diff_yes', callback: kernelConfig});
+DataTypes.set('sysctl', {name: 'sysctl', hideClass: 'sysctlDiff', trueId: 'sysctl_diff_yes', callback: sysctl});
+DataTypes.set('vmstat', {name: 'vmstat', hideClass: 'vmstatHide', trueId: 'vmstat_hide_yes', callback: vmStat});
+DataTypes.set('diskstat', {name: 'diskstat', hideClass: 'diskstatHide', trueId: 'diskstat_hide_yes', callback: diskStats});
+DataTypes.set('meminfo', {name: 'meminfo', hideClass: 'meminfoHide', trueId: 'meminfo_hide_yes', callback: meminfo});
+DataTypes.set('netstat', {name: 'netstat', hideClass: 'netstatHide', trueId: 'netstat_hide_yes', callback: netStat});
+
 function openData(evt: Event, elem: HTMLButtonElement) {
 	var tabName: string = elem.name;
 	var tabcontent = document.getElementsByClassName('tabcontent');
@@ -33,54 +47,36 @@ function openData(evt: Event, elem: HTMLButtonElement) {
 		perfStat();
 	}
 	if (tabName == "kernel_config") {
-		let id = document.querySelector('input[name="kernelDiff"]:checked').id;
-		if (id == "kernel_diff_yes") {
-			kernelConfig(true);
-		} else {
-			kernelConfig(false);
-		}
+		callChecked('kernel');
 	}
 	if (tabName == "sysctl") {
-		let id = document.querySelector('input[name="sysctlDiff"]:checked').id;
-		if (id == "sysctl_diff_yes") {
-			sysctl(true);
-		} else {
-			sysctl(false);
-		}
+		callChecked('sysctl');
 	}
 	if (tabName == "meminfo") {
-		let id = document.querySelector('input[name="meminfoHide"]:checked').id;
-		if (id == "meminfo_hide_yes") {
-			meminfo(true);
-		} else {
-			meminfo(false);
-		}
+		callChecked('meminfo');
 	}
 	if (tabName == "vmstat") {
-		let id = document.querySelector('input[name="vmstatHide"]:checked').id;
-		if (id == "vmstat_hide_yes") {
-			vmStat(true);
-		} else {
-			vmStat(false);
-		}
+		callChecked('vmstat');
 	}
 	if (tabName == "disk_stats") {
-		let id = document.querySelector('input[name="diskstatHide"]:checked').id;
-		if (id == 'diskstat_hide_yes') {
-			diskStats(true);
-		} else {
-			diskStats(false);
-		}
+		callChecked('diskstat');
 	}
 	if (tabName == "netstat") {
-		let id = document.querySelector('input[name="netstatHide"]:checked').id;
-		if (id == "netstat_hide_yes") {
-			netStat(true);
-		} else {
-			netStat(false);
-		}
+		callChecked('netstat');
 	}
 }
+
+function callChecked(name) {
+	let datatype = DataTypes.get(name);
+	let queryInput = `input[name="${datatype.hideClass}"]:checked`;
+	let id = document.querySelector(queryInput).id;
+	if (id == datatype.trueId) {
+		datatype.callback(true);
+	} else {
+		datatype.callback(false);
+	}
+}
+
 // Tab button click
 var elems = document.getElementsByClassName('tablinks');
 for (var i=0; i < elems.length; i++) {
@@ -88,65 +84,19 @@ for (var i=0; i < elems.length; i++) {
 		openData(evt, this)
 	}, false);
 }
-var elems = document.getElementsByClassName('kernel-button');
-for (var i=0; i < elems.length; i++) {
-	elems[i].addEventListener("click",function(evn: Event) {
-		if (this.id == "kernel_diff_yes"){
-			kernelConfig(true);
-		} else {
-			kernelConfig(false);
-		}
-	})
-}
-var elems = document.getElementsByClassName('sysctl-button');
-for (var i=0; i < elems.length; i++) {
-	elems[i].addEventListener("click",function(evn: Event) {
-		if (this.id == "sysctl_diff_yes"){
-			sysctl(true);
-		} else {
-			sysctl(false);
-		}
-	})
-}
-var elems = document.getElementsByClassName('vmstat-button');
-for (var i=0; i < elems.length; i++) {
-	elems[i].addEventListener("click",function(evn: Event) {
-		if (this.id == "vmstat_hide_yes"){
-			vmStat(true);
-		} else {
-			vmStat(false);
-		}
-	})
-}
-var elems = document.getElementsByClassName('diskstat-button');
-for (var i=0; i < elems.length; i++) {
-	elems[i].addEventListener("click",function(evn: Event) {
-		if (this.id == "diskstat_hide_yes"){
-			diskStats(true);
-		} else {
-			diskStats(false);
-		}
-	})
-}
-var elems = document.getElementsByClassName('meminfo-button');
-for (var i=0; i < elems.length; i++) {
-	elems[i].addEventListener("click",function(evn: Event) {
-		if (this.id == "meminfo_hide_yes"){
-			meminfo(true);
-		} else {
-			meminfo(false);
-		}
-	})
-}
-var elems = document.getElementsByClassName('netstat-button');
-for (var i=0; i < elems.length; i++) {
-	elems[i].addEventListener("click",function(evn: Event) {
-		if (this.id == "netstat_hide_yes"){
-			netStat(true);
-		} else {
-			netStat(false);
-		}
-	})
-}
+
+// Set Click listener
+DataTypes.forEach((datatype: DataType, key: string) => {
+	var elems = document.getElementsByClassName(`${datatype.name}-button`);
+	for (var j = 0; j < elems.length; j++) {
+		elems[j].addEventListener("click", function (evn: Event) {
+			if (this.id == datatype.trueId) {
+				datatype.callback(true);
+			} else {
+				datatype.callback(false);
+			}
+		})
+	}
+});
 // Show landing page
 document.getElementById("default").click();
