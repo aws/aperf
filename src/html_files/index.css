@@ -8,6 +8,17 @@ body {font-family: "Lato", sans-serif;}
   background-color: #f1f1f1;
   width: 10%;
   height: 100%;
+  position: fixed;
+}
+
+.aperf {
+  background-color: white;
+  text-align: center;
+  color: black;
+  padding: 5%;
+  width: 100%;
+  font-size: 27px;
+  display: grid;
 }
 
 /* Style the buttons inside the tab */
@@ -37,32 +48,9 @@ body {font-family: "Lato", sans-serif;}
 
 /* Style the tab content */
 .tabcontent {
-  float: left;
+  float: right;
   padding: 0px 12px;
   border: 1px solid #ccc;
   width: 90%;
   height: 100%;
-}
-
-.collapsible {
-  background-color: #777;
-  color: white;
-  cursor: pointer;
-  padding: 18px;
-  width: 100%;
-  border: none;
-  text-align: left;
-  outline: none;
-  font-size: 15px;
-}
-
-.active, .collapsible:hover {
-  background-color: #555;
-}
-
-.content {
-  float: left;
-  padding: 0 18px;
-  display: none;
-  background-color: #f1f1f1;
 }

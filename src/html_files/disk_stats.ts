@@ -1,9 +1,10 @@
 let got_disk_stat_data = false;
+let diskstat_hide_zero_na_graphs = false;
 
-function getStatValues(run, elem, key, run_data) {
+function getStatValues(elem, key, run_data) {
     var disk_datas = [];
     var data = JSON.parse(run_data);
-    data.forEach(function (v, i, a) {
+    data.data.forEach(function (v, i, a) {
         var x_time = [];
         var y_data = [];
         v.values.forEach(function (disk_value, disk_index, disk_arr) {
@@ -27,6 +28,7 @@ function getStatValues(run, elem, key, run_data) {
     } else {
         unit = 'Count';
     }
+    let limits = key_limits.get(key);
     var layout = {
         title: key,
         xaxis: {
@@ -34,28 +36,28 @@ function getStatValues(run, elem, key, run_data) {
         },
         yaxis: {
             title: unit,
+            range: [limits.low, limits.high],
         },
     };
     Plotly.newPlot(TESTER, disk_datas, layout, { frameMargins: 0 });
 }
 
-function getStatKeys(run, container_id, mb, keys, run_data) {
-    var data = keys;
-    data.forEach(function (value, index, arr) {
+function getStatKeys(run, container_id, keys, run_data) {
+    for (let i = 0; i < all_run_keys.length; i++) {
+        let value = all_run_keys[i];
         var elem = document.createElement('div');
-        elem.id = `disk-stat-${run}-${value.name}`;
+        elem.id = `disk-stat-${run}-${value}`;
         elem.style.float = "none";
         addElemToNode(container_id, elem);
-        setTimeout(() => {
-            getStatValues(run, elem, value, run_data[value]);
-        }, 0);
-    })
+        emptyOrCallback(keys, diskstat_hide_zero_na_graphs, getStatValues, elem, value, run_data);
+    }
 }
 
-function diskStats(mb: boolean) {
-    if (got_disk_stat_data) {
+function diskStats(hide: boolean) {
+    if (got_disk_stat_data && hide == diskstat_hide_zero_na_graphs) {
         return;
     }
+    diskstat_hide_zero_na_graphs = hide;
     var data = runs_raw;
     var float_style = "none";
     if (data.length > 1) {
@@ -63,6 +65,7 @@ function diskStats(mb: boolean) {
     }
     var run_width = 100 / data.length;
     clearElements('disk-stat-runs');
+    form_graph_limits(disk_stats_raw_data);
     data.forEach(function (value, index, arr) {
         // Run div
         var run_div = document.createElement('div');
@@ -86,7 +89,7 @@ function diskStats(mb: boolean) {
         for (let i = 0; i < disk_stats_raw_data['runs'].length; i++) {
             if (disk_stats_raw_data['runs'][i]['name'] == value) {
                 this_run_data = disk_stats_raw_data['runs'][i];
-                getStatKeys(value, per_value_div.id, mb, this_run_data['keys'], this_run_data['key_values']);
+                getStatKeys(value, per_value_div.id, this_run_data['keys'], this_run_data['key_values']);
                 break;
             }
         }

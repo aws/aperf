@@ -7,63 +7,89 @@
 		<title>APerf</title>
 	</head>
 	<body>
-		<h2>APerf</h2>
 		<div class="tab">
+			<div class="aperf">APerf</div>
 			<button class="tablinks" name="system_info" id="default">SUT Config</button>
-			<button class="tablinks" name="sysctl">Sysctl Data</button>
 			<button class="tablinks" name="cpu_utilization">CPU Utilization</button>
+			<button class="tablinks" name="flamegraphs">Flamegraphs</button>
+			<button class="tablinks" name="top_functions">Top Functions</button>
 			<button class="tablinks" name="processes">Processes</button>
+			<button class="tablinks" name="perfstat">PMU Stats</button>
 			<button class="tablinks" name="meminfo">Meminfo</button>
-			<button class="tablinks" name="vmstat">VM Stat</button>
 			<button class="tablinks" name="kernel_config">Kernel Config</button>
+			<button class="tablinks" name="sysctl">Sysctl Data</button>
+			<button class="tablinks" name="vmstat">VM Stat</button>
 			<button class="tablinks" name="interrupts">Interrupt Data</button>
 			<button class="tablinks" name="disk_stats">Disk Stats</button>
-			<button class="tablinks" name="perfstat">PMU Stats</button>
 			<button class="tablinks" name="netstat">Net Stats</button>
 		</div>
 		<div id="system_info" class="tabcontent">
 			<div id="system-info-runs"></div>
 		</div>
-		<div id="sysctl" class="tabcontent">
-			<div>
-				<h3>Diff:</h3>
-				<input type="radio" class="sysctl-button" id="sysctl_diff_yes" name="sysctlDiff">Yes</button>
-				<input type="radio" class="sysctl-button" id="sysctl_diff_no" name="sysctlDiff">No</button>
-			</div>
-			<div id="sysctl-data-runs"></div>
-		</div>
 		<div id="cpu_utilization" class="tabcontent">
 			<div id="cpu-util-runs"></div>
+		</div>
+		<div id="flamegraphs" class="tabcontent">
+			<div id="flamegraphs-runs"></div>
+		</div>
+		<div id="top_functions" class="tabcontent">
+			<div id="top-functions-runs"></div>
 		</div>
 		<div id="processes" class="tabcontent">
 			<div id="processes-runs"></div>
 		</div>
-		<div id="meminfo" class="tabcontent">
-			<div id="meminfo-runs"></div>
-		</div>
-		<div id="vmstat" class="tabcontent">
-			<div id="vmstat-loading">Loading...</div>
-			<div id="vmstat-runs"></div>
-		</div>
 		<div id="perfstat" class="tabcontent">
 			<div id="perfstat-runs"></div>
+		</div>
+		<div id="meminfo" class="tabcontent">
+			<div>
+				<h3>Hide N/A and all-zero graphs:</h3>
+				<input type="radio" class="meminfo-button" id="meminfo_hide_yes" name="meminfoHide" checked>Yes</button>
+				<input type="radio" class="meminfo-button" id="meminfo_hide_no" name="meminfoHide">No</button>
+			</div>
+			<div id="meminfo-runs"></div>
 		</div>
 		<div id="kernel_config" class="tabcontent">
 			<div>
 				<h3>Diff:</h3>
-				<input type="radio" class="kernel-button" id="kernel_diff_yes" name="kernelDiff">Yes</button>
+				<input type="radio" class="kernel-button" id="kernel_diff_yes" name="kernelDiff" checked>Yes</button>
 				<input type="radio" class="kernel-button" id="kernel_diff_no" name="kernelDiff">No</button>
 			</div>
 			<div id="kernel-config-runs"></div>
+		</div>
+		<div id="sysctl" class="tabcontent">
+			<div>
+				<h3>Diff:</h3>
+				<input type="radio" class="sysctl-button" id="sysctl_diff_yes" name="sysctlDiff" checked>Yes</button>
+				<input type="radio" class="sysctl-button" id="sysctl_diff_no" name="sysctlDiff">No</button>
+			</div>
+			<div id="sysctl-data-runs"></div>
+		</div>
+		<div id="vmstat" class="tabcontent">
+			<div>
+				<h3>Hide N/A and all-zero graphs:</h3>
+				<input type="radio" class="vmstat-button" id="vmstat_hide_yes" name="vmstatHide" checked>Yes</button>
+				<input type="radio" class="vmstat-button" id="vmstat_hide_no" name="vmstatHide">No</button>
+			</div>
+			<div id="vmstat-runs"></div>
 		</div>
 		<div id="interrupts" class="tabcontent">
 			<div id="interrupt-runs"></div>
 		</div>
 		<div id="disk_stats" class="tabcontent">
+			<div>
+				<h3>Hide N/A and all-zero graphs:</h3>
+				<input type="radio" class="diskstat-button" id="diskstat_hide_yes" name="diskstatHide" checked>Yes</button>
+				<input type="radio" class="diskstat-button" id="diskstat_hide_no" name="diskstatHide">No</button>
+			</div>
 			<div id="disk-stat-runs"></div>
 		</div>
 		<div id="netstat" class="tabcontent">
-			<div id="netstat-loading">Loading...</div>
+			<div>
+				<h3>Hide N/A and all-zero graphs:</h3>
+				<input type="radio" class="netstat-button" id="netstat_hide_yes" name="netstatHide" checked>Yes</button>
+				<input type="radio" class="netstat-button" id="netstat_hide_no" name="netstatHide">No</button>
+			</div>
 			<div id="netstat-runs"></div>
 		</div>
 		<script type="text/javascript" src="data/js/runs.js"></script>
@@ -78,10 +104,14 @@
 		<script type="text/javascript" src="data/js/disk_stats.js"></script>
 		<script type="text/javascript" src="data/js/perf_stat.js"></script>
 		<script type="text/javascript" src="data/js/netstat.js"></script>
+		<script type="text/javascript" src="data/js/perf_profile.js"></script>
+		<script type="text/javascript" src="data/js/flamegraph.js"></script>
 		<script type="text/javascript" src="js/utils.js"></script>
-		<script type="text/javascript" src="js/plotly.js"></script>
+		<script type="text/javascript" src="js/plotly.js" charset="utf-8"></script>
 		<script type="text/javascript" src="js/system_info.js"></script>
 		<script type="text/javascript" src="js/cpu_utilization.js"></script>
+		<script type="text/javascript" src="js/perf_profile.js"></script>
+		<script type="text/javascript" src="js/flamegraph.js"></script>
 		<script type="text/javascript" src="js/processes.js"></script>
 		<script type="text/javascript" src="js/meminfo.js"></script>
 		<script type="text/javascript" src="js/vmstat.js"></script>

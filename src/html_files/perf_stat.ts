@@ -7,16 +7,14 @@ function getEvents(run, container_id, keys, run_data) {
         no_data_div.innerHTML = "No data collected";
         addElemToNode(container_id, no_data_div);
     } else {
-        var data = keys;
-        data.forEach(function (value, index, arr) {
+        for (let i = 0; i < all_run_keys.length; i++) {
+            let value = all_run_keys[i];
             var elem = document.createElement('div');
             elem.id = `perfstat-${run}-${value}`;
             elem.style.float = "none";
             addElemToNode(container_id, elem);
-            setTimeout(() => {
-                getEvent(run, elem.id, value, run_data[value]);
-            }, 0);
-        })
+            emptyOrCallback(keys, false, getEvent, elem, value, run_data);
+        }
     }
 }
 
@@ -34,24 +32,21 @@ function addData(perfstat_data, stat, timediff) {
         }
     })
 }
-function getEvent(run, parent_id, key, run_data) {
+function getEvent(elem, key, run_data) {
     var data = JSON.parse(run_data);
     var perfstat_datas = [];
-    data[0].cpus.forEach(function (value, index, arr) {
+    data.data[0].cpus.forEach(function (value, index, arr) {
         var cpu_stat = new StatValue();
         cpu_stat.cpu = value.cpu;
         cpu_stat.x_time = [];
         cpu_stat.y_data = [];
         perfstat_datas.push(cpu_stat);
     });
-    data.forEach(function (value, index, arr) {
+    data.data.forEach(function (value, index, arr) {
         value.cpus.forEach(function (stat, i_index, i_arr) {
             addData(perfstat_datas, stat, value.time.TimeDiff);
         })
     });
-    var elem = document.createElement('div');
-    elem.style.float = "none";
-    addElemToNode(parent_id, elem);
     var TESTER = elem;
     var end_datas = [];
     perfstat_datas.forEach(function (value, index, arr) {
@@ -70,6 +65,7 @@ function getEvent(run, parent_id, key, run_data) {
         };
         end_datas.push(perfstat_line);
     })
+    let limits = key_limits.get(key);
     var layout = {
         title: `${key}`,
         xaxis: {
@@ -77,6 +73,7 @@ function getEvent(run, parent_id, key, run_data) {
         },
         yaxis: {
             title: 'Count',
+            range: [limits.low, limits.high],
         },
     }
     Plotly.newPlot(TESTER, end_datas, layout, { frameMargins: 0 });
@@ -93,6 +90,7 @@ function perfStat() {
     }
     var run_width = 100 / data.length;
     clearElements('perfstat-runs');
+    form_graph_limits(perf_stat_raw_data);
     data.forEach(function (value, index, arr) {
         // Run div
         var run_div = document.createElement('div');

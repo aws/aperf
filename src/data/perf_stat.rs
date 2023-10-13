@@ -1,16 +1,16 @@
 extern crate ctor;
 
 use anyhow::Result;
-use crate::data::{CollectData, Data, ProcessedData, DataType, TimeEnum};
+use crate::data::{CollectData, Data, ProcessedData, CollectorParams, DataType, TimeEnum};
 use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
-use crate::visualizer::{DataVisualizer, GetData};
+use crate::visualizer::{DataVisualizer, GetData, GraphMetadata, GraphLimitType};
 use chrono::prelude::*;
 use ctor::ctor;
 use log::{trace, error};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
-use perf_event::events::Raw;
-use perf_event::{Builder, Counter, Group};
+use perf_event::events::{Raw, Software};
+use perf_event::{Builder, Counter, Group, ReadFormat};
 use std::io::{BufRead, BufReader, ErrorKind};
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -43,12 +43,12 @@ pub struct Ctr {
 
 impl Ctr {
     fn new(perf_type: u64, name: String, cpu: usize, config: u64, group: &mut Group) -> Result<Self> {
-        let raw_config = Raw::new().config(config);
+        let raw_config = Raw::new(config);
         Ok(Ctr {
             perf_type: perf_type,
             name: name,
             config: config,
-            counter: Builder::new().group(group).one_cpu(cpu).any_pid().kind(raw_config).include_kernel().build()?,
+            counter: Builder::new(raw_config).one_cpu(cpu).any_pid().include_kernel().build_with_group(group)?,
         })
     }
 }
@@ -68,7 +68,6 @@ pub struct NamedTypeCtr<'a> {
     pub config: u64,
 }
 
-#[derive(Debug)]
 pub struct CpuCtrGroup {
     pub cpu: u64,
     pub name: String,
@@ -103,7 +102,7 @@ impl PerfStatRaw {
 }
 
 impl CollectData for PerfStatRaw {
-    fn prepare_data_collector(&mut self) -> Result<()> {
+    fn prepare_data_collector(&mut self, _params: CollectorParams) -> Result<()> {
         let num_cpus = num_cpus::get();
         let mut cpu_groups: Vec<CpuCtrGroup> = Vec::new();
         let perf_list;
@@ -124,7 +123,17 @@ impl CollectData for PerfStatRaw {
         }
         for cpu in 0..num_cpus {
             for named_ctr in &perf_list {
-                let perf_group = Group::new_task_cpu(-1, cpu.try_into()?);
+                let perf_group = Builder::new(Software::DUMMY).
+                    read_format(
+                        ReadFormat::GROUP
+                        | ReadFormat::TOTAL_TIME_ENABLED
+                        | ReadFormat::TOTAL_TIME_RUNNING
+                        | ReadFormat::ID,
+                    )
+                    .any_pid()
+                    .one_cpu(cpu)
+                    .build_group();
+
                 let group: Group;
                 match perf_group {
                     Err(e) => {
@@ -319,8 +328,15 @@ fn get_named_stat_for_all_cpus(value: PerfStat, key: String) -> Vec<InterStat> {
     return named_stats;
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct EndPerfData {
+    pub data: Vec<EndStats>,
+    pub metadata: GraphMetadata,
+}
+
 fn get_values(values: Vec<PerfStat>, key: String) -> Result<String> {
     let time_zero = &values[0].perf_stats[0].named_stats[0].time;
+    let mut metadata = GraphMetadata::new();
     let mut end_values = Vec::new();
     let mut aggregate_value: f64;
     for value in &values {
@@ -332,11 +348,13 @@ fn get_values(values: Vec<PerfStat>, key: String) -> Result<String> {
         for stat in &stats {
             let this_cpu_end_stat_value = stat.named_stat.nr_value as f64 / stat.named_stat.dr_value as f64;
             let this_cpu_end_stat = EndStat { cpu: stat.cpu as i64, value: this_cpu_end_stat_value * stat.named_stat.scale as f64 };
+            metadata.update_limits(GraphLimitType::F64(this_cpu_end_stat.value));
             end_cpu_stats.push(this_cpu_end_stat);
             aggregate_nr += stat.named_stat.nr_value;
             aggregate_dr += stat.named_stat.dr_value;
         }
         aggregate_value = (aggregate_nr as f64 / aggregate_dr as f64) * stats[0].named_stat.scale as f64;
+        metadata.update_limits(GraphLimitType::F64(aggregate_value));
         let aggr_cpu_stat = EndStat { cpu: -1, value: aggregate_value };
         end_cpu_stats.push(aggr_cpu_stat);
 
@@ -344,7 +362,8 @@ fn get_values(values: Vec<PerfStat>, key: String) -> Result<String> {
         end_stats.cpus = end_cpu_stats;
         end_values.push(end_stats);
     }
-    Ok(serde_json::to_string(&end_values)?)
+    let perf_data = EndPerfData {data: end_values, metadata: metadata};
+    Ok(serde_json::to_string(&perf_data)?)
 }
 
 fn get_named_events(value: PerfStat) -> Result<String> {
@@ -468,7 +487,7 @@ fn init_perf_stat_raw() {
 #[cfg(test)]
 mod tests {
     use super::{PerfStat, PerfStatRaw};
-    use crate::data::{CollectData, Data, ProcessedData};
+    use crate::data::{CollectData, Data, ProcessedData, CollectorParams};
     use crate::visualizer::GetData;
     use std::collections::HashMap;
     use std::io::ErrorKind;
@@ -476,8 +495,9 @@ mod tests {
     #[test]
     fn test_collect_data() {
         let mut perf_stat = PerfStatRaw::new();
+        let params = CollectorParams::new();
 
-        match perf_stat.prepare_data_collector() {
+        match perf_stat.prepare_data_collector(params) {
             Err(e) => {
                 if let Some(os_error) = e.downcast_ref::<std::io::Error>() {
                     match os_error.kind() {
@@ -500,8 +520,9 @@ mod tests {
         let mut perf_stat = PerfStatRaw::new();
         let mut buffer: Vec<Data> = Vec::<Data>::new();
         let mut processed_buffer: Vec<ProcessedData> = Vec::new();
+        let params = CollectorParams::new();
 
-        match perf_stat.prepare_data_collector() {
+        match perf_stat.prepare_data_collector(params) {
             Err(e) => {
                 if let Some(os_error) = e.downcast_ref::<std::io::Error>() {
                     match os_error.kind() {

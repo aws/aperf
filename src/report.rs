@@ -43,13 +43,15 @@ pub fn form_and_copy_archive(loc: String, report_name: &PathBuf) -> Result<()> {
         /* Create a temp archive */
         let archive_name = format!("{}.tar.gz", &dir_stem);
         let archive_path = format!("{}/{}", APERF_TMP, archive_name);
-        let tar_gz = fs::File::create(&archive_path)?;
-        let enc = GzEncoder::new(tar_gz, Compression::default());
-        let mut tar = tar::Builder::new(enc);
-        tar.append_dir_all(&dir_stem, &loc)?;
+        let archive_dst = report_name.join(format!("data/archive/{}", archive_name));
+        {
+            let tar_gz = fs::File::create(&archive_path)?;
+            let enc = GzEncoder::new(tar_gz, Compression::default());
+            let mut tar = tar::Builder::new(enc);
+            tar.append_dir_all(&dir_stem, &loc)?;
+        }
 
         /* Copy archive to aperf_report */
-        let archive_dst = report_name.join(format!("data/archive/{}", archive_name));
         fs::copy(&archive_path, archive_dst)?;
         return Ok(());
     }
@@ -103,7 +105,7 @@ pub fn report(report: &Report) -> Result<()> {
             error!("Cannot process two runs with the same name");
             return Ok(())
         }
-        dir_stems.push(path.clone().file_stem().unwrap().to_str().unwrap().to_string());
+        dir_stems.push(path.file_stem().unwrap().to_str().unwrap().to_string());
         dir_paths.push(path.to_str().unwrap().to_string());
     }
 
@@ -129,12 +131,6 @@ pub fn report(report: &Report) -> Result<()> {
     let mut report_name_tgz = PathBuf::new();
     report_name_tgz.set_file_name(&report_name);
     report_name_tgz.set_extension("tar.gz");
-
-    /* Init visualizers */
-    for dir in dir_paths {
-        let name = VISUALIZATION_DATA.lock().unwrap().init_visualizers(dir.to_owned())?;
-        VISUALIZATION_DATA.lock().unwrap().unpack_data(name)?;
-    }
 
     info!("Creating APerf report...");
     let ico = include_bytes!("html_files/favicon.ico");
@@ -166,6 +162,13 @@ pub fn report(report: &Report) -> Result<()> {
     write!(index_js_file, "{}", index_js)?;
     write!(utils_js_file, "{}", utils_js)?;
     write!(plotly_js_file, "{}", plotly_js)?;
+
+    /* Init visualizers */
+    for dir in dir_paths {
+        let name = VISUALIZATION_DATA.lock().unwrap()
+            .init_visualizers(dir.to_owned(), APERF_TMP.to_string(), report_name.clone())?;
+        VISUALIZATION_DATA.lock().unwrap().unpack_data(name)?;
+    }
 
     /* Generate visualizer JS files */
     for (name, file) in VISUALIZATION_DATA.lock().unwrap().get_all_js_files()? {

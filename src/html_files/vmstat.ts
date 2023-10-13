@@ -1,35 +1,32 @@
 let got_vmstat_data = false;
+let vmstat_hide_zero_na_graphs = false;
 
 function getEntries(run, container_id, keys, run_data) {
-    var data = keys;
-    data.forEach(function (value, index, arr) {
+    for (let i = 0; i < all_run_keys.length; i++) {
+        let value = all_run_keys[i];
         var elem = document.createElement('div');
         elem.id = `vmstat-${run}-${value}`;
         elem.style.float = "none";
         addElemToNode(container_id, elem);
-        setTimeout(() => {
-            getEntry(run, elem.id, value, run_data[value]);
-        }, 0);
-    })
+        emptyOrCallback(keys, vmstat_hide_zero_na_graphs, getEntry, elem, value, run_data);
+    }
 }
 
-function getEntry(run, parent_id, key, run_data) {
+function getEntry(elem, key, run_data) {
     var data = JSON.parse(run_data);
     var x_time = [];
     var y_data = [];
-    data.forEach(function (value, index, arr) {
+    data.data.forEach(function (value, index, arr) {
         x_time.push(value.time.TimeDiff);
         y_data.push(value.value);
     });
-    var elem = document.createElement('div');
-    elem.style.float = "none";
-    addElemToNode(parent_id, elem);
     var TESTER = elem;
     var vmstat_data: Partial<Plotly.PlotData> = {
         x: x_time,
         y: y_data,
         type: 'scatter',
     };
+    let limits = key_limits.get(key);
     var layout = {
         title: `${key}`,
         xaxis: {
@@ -37,15 +34,17 @@ function getEntry(run, parent_id, key, run_data) {
         },
         yaxis: {
             title: 'Pages',
+            range: [limits.low, limits.high],
         },
     }
     Plotly.newPlot(TESTER, [vmstat_data], layout, { frameMargins: 0 });
 }
 
-function vmStat() {
-    if (got_vmstat_data) {
+function vmStat(hide: boolean) {
+    if (got_vmstat_data && hide == vmstat_hide_zero_na_graphs) {
         return;
     }
+    vmstat_hide_zero_na_graphs = hide;
     var data = runs_raw;
     var float_style = "none";
     if (data.length > 1) {
@@ -53,6 +52,7 @@ function vmStat() {
     }
     var run_width = 100 / data.length;
     clearElements('vmstat-runs');
+    form_graph_limits(vmstat_raw_data);
     data.forEach(function (value, index, arr) {
         // Run div
         var run_div = document.createElement('div');
@@ -80,6 +80,5 @@ function vmStat() {
             }
         }
     })
-    document.getElementById("vmstat-loading").remove();
     got_vmstat_data = true;
 }

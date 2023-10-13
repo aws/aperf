@@ -10,6 +10,85 @@ declare let perf_stat_raw_data;
 declare let processes_raw_data;
 declare let meminfo_raw_data;
 declare let netstat_raw_data;
+declare let perf_profile_raw_data;
+declare let flamegraph_raw_data;
+
+let all_run_keys: Array<string> = new Array<string>();
+let key_limits: Map<string, Limits> = new Map<string, Limits>();
+
+function form_graph_limits(data) {
+    key_limits.clear();
+    all_run_keys.length = 0;
+    for (let i = 0; i < data.runs.length; i++) {
+        let key_values = data.runs[i]['key_values'];
+        for (let key in key_values) {
+            let metadata = JSON.parse(key_values[key])['metadata'];
+            let limits = metadata.limits;
+            if (key_limits.has(key)) {
+                let existing_limit = key_limits.get(key);
+                if (limits.low < existing_limit.low) {
+                    existing_limit.low = limits.low;
+                }
+                if (limits.high > existing_limit.high) {
+                    existing_limit.high = limits.high;
+                }
+            } else {
+                key_limits.set(key, limits);
+            }
+        }
+    }
+    for (let i = 0; i < data.runs.length; i++) {
+        let keys = data.runs[i]['keys'];
+        var prev_all_run_key_index = 0;
+        for (let j = 0; j < keys.length; j++) {
+            let key = keys[j];
+            if (all_run_keys.indexOf(key) == -1) {
+                all_run_keys.splice(prev_all_run_key_index, 0, key);
+            }
+            prev_all_run_key_index += 1;
+        }
+    }
+
+    for (let [key, value] of key_limits.entries()) {
+        let extra = (value.high - value.low) * 0.1;
+        value.high += extra;
+        if (value.low != 0) {
+            if ((value.low - extra) < 0) {
+                value.low = 0;
+            } else {
+                value.low -= extra;
+            }
+        }
+    }
+}
+
+function canHide(hide, keys, key) {
+    let limits = key_limits.get(key);
+    if (limits.low == 0 && limits.high == 0 && hide) {
+        return true;
+    }
+    return false;
+}
+function emptyOrCallback(keys, hide, callback, elem, key, run_data) {
+    if (canHide(hide, keys, key)) {
+        return;
+    }
+    if (keys.indexOf(key) == -1) {
+        setTimeout(() => {
+            emptyGraph(elem, key);
+        }, 0);
+    } else {
+        setTimeout(() => {
+            callback(elem, key, run_data[key]);
+        }, 0);
+    }
+}
+function emptyGraph(elem, key) {
+    var layout = {
+        title: `${key} (N/A)`,
+    }
+    Plotly.newPlot(elem, [], layout, { frameMargins: 0 });
+}
 
 class RunEntry {
     run: string;
@@ -17,6 +96,11 @@ class RunEntry {
     keys: Array<string>;
     diff_keys: Array<string>;
     raw_entries: string;
+}
+
+class Limits {
+    low: number;
+    high: number;
 }
 
 function clearElements(id: string) {

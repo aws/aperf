@@ -2,6 +2,31 @@ use anyhow::Result;
 use crate::{data::Data, data::ProcessedData, get_file, PDError};
 use std::{collections::HashMap, fs::File};
 use log::debug;
+use std::path::{Path, PathBuf};
+use serde::{Deserialize, Serialize};
+use rustix::fd::AsRawFd;
+use std::fs;
+
+#[derive(Clone, Debug)]
+pub struct ReportParams {
+    pub data_dir: String,
+    pub tmp_dir: String,
+    pub report_dir: PathBuf,
+    pub run_name: String,
+    pub data_file_path: PathBuf,
+}
+
+impl ReportParams {
+    fn new() -> Self {
+        ReportParams {
+            data_dir: String::new(),
+            tmp_dir: String::new(),
+            report_dir: PathBuf::new(),
+            run_name: String::new(),
+            data_file_path: PathBuf::new(),
+        }
+    }
+}
 
 pub struct DataVisualizer {
     pub data: ProcessedData,
@@ -11,7 +36,9 @@ pub struct DataVisualizer {
     pub js_file_name: String,
     pub js: String,
     pub api_name: String,
+    pub has_custom_raw_data_parser: bool,
     pub data_available: HashMap<String, bool>,
+    pub report_params: ReportParams,
 }
 
 impl DataVisualizer {
@@ -24,12 +51,24 @@ impl DataVisualizer {
             js_file_name: js_file_name,
             js: js,
             api_name: api_name,
+            has_custom_raw_data_parser: false,
             data_available: HashMap::new(),
+            report_params: ReportParams::new(),
         }
     }
 
-    pub fn init_visualizer(&mut self, dir: String, name: String) -> Result<()> {
+    pub fn has_custom_raw_data_parser(&mut self) {
+        self.has_custom_raw_data_parser = true;
+    }
+
+    pub fn init_visualizer(&mut self, dir: String, name: String, tmp_dir: String, fin_dir: PathBuf) -> Result<()> {
         let file = get_file(dir.clone(), self.file_name.clone())?;
+        let full_path = Path::new("/proc/self/fd").join(file.as_raw_fd().to_string());
+        self.report_params.data_dir = dir.clone();
+        self.report_params.tmp_dir = tmp_dir;
+        self.report_params.report_dir = fin_dir;
+        self.report_params.run_name = name.clone();
+        self.report_params.data_file_path = fs::read_link(full_path).unwrap();
         self.file_handle = Some(file);
         self.run_values.insert(name.clone(), Vec::new());
         self.data_available.insert(name, true);
@@ -47,6 +86,10 @@ impl DataVisualizer {
             return Ok(())
         }
         debug!("Processing raw data for: {}", self.api_name);
+        if self.has_custom_raw_data_parser {
+            self.run_values.insert(name.clone(), self.data.custom_raw_data_parser(self.report_params.clone())?);
+            return Ok(());
+        }
         let mut raw_data = Vec::new();
         loop {
             match bincode::deserialize_from::<_, Data>(self.file_handle.as_ref().unwrap()) {
@@ -88,15 +131,95 @@ impl DataVisualizer {
     }
 }
 
+pub enum GraphLimitType {
+    UInt64(u64),
+    F64(f64),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct GraphLimits {
+    pub low: u64,
+    pub high: u64,
+    pub init_done: bool,
+}
+
+impl GraphLimits {
+    pub fn new() -> Self {
+        GraphLimits {
+            low: 0,
+            high: 0,
+            init_done: false,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct GraphMetadata {
+    pub limits: GraphLimits,
+}
+
+impl GraphMetadata {
+    pub fn new() -> Self {
+        GraphMetadata {
+            limits: GraphLimits::new(),
+        }
+    }
+
+    fn update_limit_u64(&mut self, value: u64) {
+        if !self.limits.init_done {
+            self.limits.low = value;
+            self.limits.init_done = true;
+        }
+        if value < self.limits.low {
+            self.limits.low = value;
+        }
+        if value > self.limits.high {
+            self.limits.high = value;
+        }
+    }
+
+    fn update_limit_f64(&mut self, value: f64) {
+        let value_floor = value.floor() as u64;
+        let value_ceil = value.ceil() as u64;
+        if !self.limits.init_done {
+            self.limits.low = value_floor;
+            self.limits.init_done = true;
+        }
+        // Set low
+        if value_floor < self.limits.low {
+            self.limits.low = value_floor;
+        }
+        if value_ceil < self.limits.low {
+            self.limits.low = value_ceil;
+        }
+        // Set high
+        if value_floor > self.limits.high {
+            self.limits.high = value_floor;
+        }
+        if value_ceil > self.limits.high {
+            self.limits.high = value_ceil;
+        }
+    }
+
+    pub fn update_limits(&mut self, value: GraphLimitType) {
+        match value {
+            GraphLimitType::UInt64(v) => self.update_limit_u64(v),
+            GraphLimitType::F64(v) => self.update_limit_f64(v),
+        }
+    }
+}
+
 pub trait GetData {
     fn get_calls(&mut self) -> Result<Vec<String>> {
         unimplemented!();
     }
-
     fn get_data(&mut self, _values: Vec<ProcessedData>, _query: String) -> Result<String> {
         unimplemented!();
     }
     fn process_raw_data(&mut self, _buffer: Data) -> Result<ProcessedData> {
+        unimplemented!();
+    }
+    fn custom_raw_data_parser(&mut self, _params: ReportParams) -> Result<Vec<ProcessedData>> {
         unimplemented!();
     }
 }
@@ -106,6 +229,7 @@ mod tests {
     use crate::data::cpu_utilization::{CpuData, CpuUtilization};
     use crate::data::{ProcessedData, TimeEnum};
     use super::DataVisualizer;
+    use std::path::PathBuf;
 
     #[test]
     fn test_unpack_data() {
@@ -117,7 +241,12 @@ mod tests {
             "cpu_utilization".to_string(),
         );
         assert!(
-            dv.init_visualizer("test/aperf_2023-07-26_18_37_43/".to_string(), "test".to_string()).unwrap() == ()
+            dv.init_visualizer(
+                "test/aperf_2023-07-26_18_37_43/".to_string(),
+                "test".to_string(),
+                String::new(),
+                PathBuf::new()
+            ).unwrap() == ()
         );
         assert!(dv.process_raw_data("test".to_string()).unwrap() == ());
         let ret = dv.get_data("test".to_string(), "run=test&get=values&key=aggregate".to_string()).unwrap();
