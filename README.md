@@ -81,13 +81,15 @@ To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 
 `-V, --version` version of APerf
 
-`-i, --interval` interval collection rate (default 1)
+`-i, --interval` sampling interval collection rate (default 1)
 
 `-p, --period` period (how long you want the data collection to run, default is 10s)
 
 `-r, --run-name` run name (name of the run for organization purposes, creates directory of the same name, default of aperf_[timestamp])
 
 `-v, --verbose` verbose messages
+    
+`--profile` Gather profiling data using the 'perf' library
 
 `-vv, --verbose --verbose` more verbose messages
 
