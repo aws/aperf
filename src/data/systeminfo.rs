@@ -1,14 +1,14 @@
 extern crate ctor;
 
-use anyhow::Result;
-use sysinfo::{System, SystemExt};
-use crate::data::{CollectData, Data, ProcessedData, DataType, TimeEnum};
-use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::data::{CollectData, Data, DataType, ProcessedData, TimeEnum};
 use crate::visualizer::{DataVisualizer, GetData};
+use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
+use anyhow::Result;
 use chrono::prelude::*;
 use ctor::ctor;
-use log::{trace, error};
+use log::{error, trace};
 use serde::{Deserialize, Serialize};
+use sysinfo::{System, SystemExt};
 
 pub static SYSTEMINFO_FILE_NAME: &str = "system_info";
 
@@ -20,7 +20,7 @@ pub struct SystemInfo {
     pub os_version: String,
     pub host_name: String,
     pub total_cpus: usize,
-    pub instance_metadata: EC2Metadata
+    pub instance_metadata: EC2Metadata,
 }
 
 impl SystemInfo {
@@ -32,7 +32,7 @@ impl SystemInfo {
             os_version: String::new(),
             host_name: String::new(),
             total_cpus: 0,
-            instance_metadata: EC2Metadata::new()
+            instance_metadata: EC2Metadata::new(),
         }
     }
 
@@ -79,7 +79,7 @@ impl EC2Metadata {
             local_hostname: String::new(),
             ami_id: String::new(),
             region: String::new(),
-            instance_type: String::new()
+            instance_type: String::new(),
         }
     }
 
@@ -101,7 +101,7 @@ impl EC2Metadata {
             local_hostname,
             ami_id,
             region,
-            instance_type
+            instance_type,
         })
     }
 }
@@ -197,9 +197,7 @@ impl GetData for SystemInfo {
     }
 
     fn get_calls(&mut self) -> Result<Vec<String>> {
-        let mut end_values = Vec::new();
-        end_values.push("values".to_string());
-        Ok(end_values)
+        Ok(vec!["values".to_string()])
     }
 
     fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
@@ -227,9 +225,9 @@ fn init_systeminfo() {
     let dt = DataType::new(
         Data::SystemInfo(system_info.clone()),
         file_name.clone(),
-        true
+        true,
     );
-    let js_file_name = file_name.clone() + &".js".to_string();
+    let js_file_name = file_name.clone() + ".js";
     let dv = DataVisualizer::new(
         ProcessedData::SystemInfo(system_info.clone()),
         file_name.clone(),
@@ -250,7 +248,7 @@ fn init_systeminfo() {
 
 #[cfg(test)]
 mod tests {
-    use super::{SystemInfo, SUTConfigEntry};
+    use super::{SUTConfigEntry, SystemInfo};
     use crate::data::{CollectData, Data, ProcessedData};
     use crate::visualizer::GetData;
 
@@ -258,12 +256,12 @@ mod tests {
     fn test_collect_data() {
         let mut systeminfo = SystemInfo::new();
 
-        assert!(systeminfo.collect_data().unwrap() == ());
-        assert!(systeminfo.total_cpus != 0);
-        assert!(systeminfo.system_name != String::new());
-        assert!(systeminfo.kernel_version != String::new());
-        assert!(systeminfo.os_version != String::new());
-        assert!(systeminfo.host_name != String::new());
+        systeminfo.collect_data().unwrap();
+        assert_ne!(systeminfo.total_cpus, 0);
+        assert_ne!(systeminfo.system_name, String::new());
+        assert_ne!(systeminfo.kernel_version, String::new());
+        assert_ne!(systeminfo.os_version, String::new());
+        assert_ne!(systeminfo.host_name, String::new());
     }
 
     #[test]
@@ -274,9 +272,15 @@ mod tests {
 
         system_info.collect_data().unwrap();
         buffer.push(Data::SystemInfo(system_info));
-        processed_buffer.push(SystemInfo::new().process_raw_data(buffer[0].clone()).unwrap());
-        let json = SystemInfo::new().get_data(processed_buffer, "run=test&get=values".to_string()).unwrap();
+        processed_buffer.push(
+            SystemInfo::new()
+                .process_raw_data(buffer[0].clone())
+                .unwrap(),
+        );
+        let json = SystemInfo::new()
+            .get_data(processed_buffer, "run=test&get=values".to_string())
+            .unwrap();
         let values: Vec<SUTConfigEntry> = serde_json::from_str(&json).unwrap();
-        assert!(values.len() > 0);
+        assert!(!values.is_empty());
     }
 }

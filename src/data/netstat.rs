@@ -1,7 +1,7 @@
 extern crate ctor;
 
-use crate::data::{CollectData, Data, ProcessedData, DataType, TimeEnum};
-use crate::visualizer::{DataVisualizer, GetData, GraphMetadata, GraphLimitType};
+use crate::data::{CollectData, Data, DataType, ProcessedData, TimeEnum};
+use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata};
 use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
 use chrono::prelude::*;
@@ -99,7 +99,10 @@ fn get_entry(values: Vec<Netstat>, key: String) -> Result<String> {
         end_values.push(netstat_entry);
         prev_netstat = value.clone();
     }
-    let netdata = EndNetData {data: end_values, metadata: metadata};
+    let netdata = EndNetData {
+        data: end_values,
+        metadata,
+    };
     Ok(serde_json::to_string(&netdata)?)
 }
 
@@ -120,13 +123,12 @@ impl GetData for Netstat {
         let mut map: HashMap<String, u64> = HashMap::new();
         let mut lines = reader.lines();
 
-        while let (
-            Some(line1), Some(line2)) = (lines.next(), lines.next()) {
+        while let (Some(line1), Some(line2)) = (lines.next(), lines.next()) {
             let binding = line1.unwrap();
-            let params :Vec<&str> = binding.split_whitespace().collect();
+            let params: Vec<&str> = binding.split_whitespace().collect();
 
             let binding = line2.unwrap();
-            let values :Vec<&str> = binding.split_whitespace().collect();
+            let values: Vec<&str> = binding.split_whitespace().collect();
 
             if params.len() != values.len() {
                 panic!("Parameter count should match value count!")
@@ -140,7 +142,7 @@ impl GetData for Netstat {
 
             for param in param_itr {
                 let val = val_itr.next().ok_or(PDError::ProcessorOptionExtractError)?;
-                map.insert(tag.to_owned() + " " + &param.to_owned(), val.parse::<u64>()?);
+                map.insert(tag.to_owned() + " " + param.to_owned(), val.parse::<u64>()?);
             }
         }
 
@@ -151,10 +153,7 @@ impl GetData for Netstat {
     }
 
     fn get_calls(&mut self) -> Result<Vec<String>> {
-        let mut end_values = Vec::new();
-        end_values.push("keys".to_string());
-        end_values.push("values".to_string());
-        Ok(end_values)
+        Ok(vec!["keys".to_string(), "values".to_string()])
     }
 
     fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
@@ -169,10 +168,10 @@ impl GetData for Netstat {
         let (_, req_str) = &param[1];
 
         match req_str.as_str() {
-            "keys" => return get_entries(values[0].clone()),
+            "keys" => get_entries(values[0].clone()),
             "values" => {
                 let (_, key) = &param[2];
-                return get_entry(values, key.to_string());
+                get_entry(values, key.to_string())
             }
             _ => panic!("Unsupported API"),
         }
@@ -186,9 +185,9 @@ fn init_netstat() {
     let dt = DataType::new(
         Data::NetstatRaw(netstat_raw.clone()),
         file_name.clone(),
-        false
+        false,
     );
-    let js_file_name = file_name.clone() + &".js".to_string();
+    let js_file_name = file_name.clone() + ".js";
     let netstat = Netstat::new();
     let dv = DataVisualizer::new(
         ProcessedData::Netstat(netstat.clone()),
@@ -211,7 +210,7 @@ fn init_netstat() {
 
 #[cfg(test)]
 mod tests {
-    use super::{Netstat, NetstatRaw, EndNetData};
+    use super::{EndNetData, Netstat, NetstatRaw};
     use crate::data::{CollectData, Data, ProcessedData, TimeEnum};
     use crate::visualizer::GetData;
 
@@ -219,7 +218,7 @@ mod tests {
     fn test_collect_data() {
         let mut netstat = NetstatRaw::new();
 
-        assert!(netstat.collect_data().unwrap() == ());
+        netstat.collect_data().unwrap();
         assert!(!netstat.data.is_empty());
     }
 
@@ -229,12 +228,14 @@ mod tests {
         let mut netstat = NetstatRaw::new();
         let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
 
-        assert!(netstat.collect_data().unwrap() == ());
+        netstat.collect_data().unwrap();
         buffer.push(Data::NetstatRaw(netstat));
         processed_buffer.push(Netstat::new().process_raw_data(buffer[0].clone()).unwrap());
-        let json = Netstat::new().get_data(processed_buffer, "run=test&get=keys".to_string()).unwrap();
+        let json = Netstat::new()
+            .get_data(processed_buffer, "run=test&get=keys".to_string())
+            .unwrap();
         let values: Vec<&str> = serde_json::from_str(&json).unwrap();
-        assert!(values.len() > 0);
+        assert!(!values.is_empty());
     }
 
     #[test]
@@ -243,15 +244,20 @@ mod tests {
         let mut netstat = NetstatRaw::new();
         let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
 
-        assert!(netstat.collect_data().unwrap() == ());
+        netstat.collect_data().unwrap();
         buffer.push(Data::NetstatRaw(netstat));
         processed_buffer.push(Netstat::new().process_raw_data(buffer[0].clone()).unwrap());
-        let json = Netstat::new().get_data(processed_buffer, "run=test&get=values&key=TcpExt: TCPDSACKRecv".to_string()).unwrap();
+        let json = Netstat::new()
+            .get_data(
+                processed_buffer,
+                "run=test&get=values&key=TcpExt: TCPDSACKRecv".to_string(),
+            )
+            .unwrap();
         let data: EndNetData = serde_json::from_str(&json).unwrap();
-        assert!(data.data.len() > 0);
+        assert!(!data.data.is_empty());
         match data.data[0].time {
             TimeEnum::TimeDiff(value) => assert!(value == 0),
-            _ => assert!(false),
+            _ => unreachable!(),
         }
     }
 }

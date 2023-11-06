@@ -1,18 +1,18 @@
 extern crate ctor;
 
-use anyhow::Result;
-use crate::data::{CollectData, Data, ProcessedData, DataType, TimeEnum};
+use crate::data::{CollectData, Data, DataType, ProcessedData, TimeEnum};
+use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata};
 use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
-use crate::visualizer::{DataVisualizer, GetData, GraphMetadata, GraphLimitType};
+use anyhow::Result;
 use chrono::prelude::*;
 use ctor::ctor;
-use log::{trace};
-use serde::{Deserialize, Serialize};
+use log::trace;
 use procfs::Meminfo;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::BufReader;
 use strum::IntoEnumIterator;
-use strum_macros::{Display, EnumString, EnumIter};
+use strum_macros::{Display, EnumIter, EnumString};
 
 pub static MEMINFO_FILE_NAME: &str = "meminfo";
 
@@ -21,6 +21,12 @@ pub static MEMINFO_FILE_NAME: &str = "meminfo";
 pub struct MeminfoDataRaw {
     pub time: TimeEnum,
     pub data: String,
+}
+
+impl Default for MeminfoDataRaw {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MeminfoDataRaw {
@@ -148,7 +154,7 @@ fn get_keys() -> Result<String> {
     for key in MeminfoKeys::iter() {
         end_values.push(key.to_string());
     }
-    return Ok(serde_json::to_string(&end_values)?)
+    Ok(serde_json::to_string(&end_values)?)
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -172,18 +178,28 @@ struct EndMemValues {
 fn get_values(values: Vec<MeminfoData>, key: String) -> Result<String> {
     let time_zero = values[0].time;
     let mut metadata = GraphMetadata::new();
-    let mut end_value = MemData {name: key.clone(), values: Vec::new()};
+    let mut end_value = MemData {
+        name: key.clone(),
+        values: Vec::new(),
+    };
     for v in values {
-        let value = v.data
+        let value = v
+            .data
             .get(&key)
             .ok_or(PDError::VisualizerMeminfoValueGetError(key.to_string()))?;
         /* Bytes => kB */
-        let mementry = MemEntry {time: v.time - time_zero, value: *value / 1024};
+        let mementry = MemEntry {
+            time: v.time - time_zero,
+            value: *value / 1024,
+        };
         metadata.update_limits(GraphLimitType::UInt64(mementry.value));
         end_value.values.push(mementry);
     }
-    let end_values = EndMemValues {data: end_value, metadata: metadata};
-    return Ok(serde_json::to_string(&end_values)?)
+    let end_values = EndMemValues {
+        data: end_value,
+        metadata,
+    };
+    Ok(serde_json::to_string(&end_values)?)
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -220,70 +236,184 @@ impl GetData for MeminfoData {
         let mut meminfo_data = MeminfoData::new();
         meminfo_data.add(MeminfoKeys::MemTotal.to_string(), meminfo.mem_total);
         meminfo_data.add(MeminfoKeys::MemFree.to_string(), meminfo.mem_free);
-        meminfo_data.add(MeminfoKeys::MemAvailable.to_string(), meminfo.mem_available.unwrap_or_default());
+        meminfo_data.add(
+            MeminfoKeys::MemAvailable.to_string(),
+            meminfo.mem_available.unwrap_or_default(),
+        );
         meminfo_data.add(MeminfoKeys::Buffers.to_string(), meminfo.buffers);
         meminfo_data.add(MeminfoKeys::Cached.to_string(), meminfo.cached);
         meminfo_data.add(MeminfoKeys::SwapCached.to_string(), meminfo.swap_cached);
         meminfo_data.add(MeminfoKeys::Active.to_string(), meminfo.active);
         meminfo_data.add(MeminfoKeys::Inactive.to_string(), meminfo.inactive);
-        meminfo_data.add(MeminfoKeys::ActiveAnon.to_string(), meminfo.active_anon.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::InactiveAnon.to_string(), meminfo.inactive_anon.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::ActiveFile.to_string(), meminfo.active_file.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::InactiveFile.to_string(), meminfo.inactive_file.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::Unevictable.to_string(), meminfo.unevictable.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::Mlocked.to_string(), meminfo.mlocked.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::MmapCopy.to_string(), meminfo.mmap_copy.unwrap_or_default());
+        meminfo_data.add(
+            MeminfoKeys::ActiveAnon.to_string(),
+            meminfo.active_anon.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::InactiveAnon.to_string(),
+            meminfo.inactive_anon.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::ActiveFile.to_string(),
+            meminfo.active_file.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::InactiveFile.to_string(),
+            meminfo.inactive_file.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::Unevictable.to_string(),
+            meminfo.unevictable.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::Mlocked.to_string(),
+            meminfo.mlocked.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::MmapCopy.to_string(),
+            meminfo.mmap_copy.unwrap_or_default(),
+        );
         meminfo_data.add(MeminfoKeys::SwapTotal.to_string(), meminfo.swap_total);
         meminfo_data.add(MeminfoKeys::SwapFree.to_string(), meminfo.swap_free);
         meminfo_data.add(MeminfoKeys::Dirty.to_string(), meminfo.dirty);
         meminfo_data.add(MeminfoKeys::Writeback.to_string(), meminfo.writeback);
-        meminfo_data.add(MeminfoKeys::AnonPages.to_string(), meminfo.anon_pages.unwrap_or_default());
+        meminfo_data.add(
+            MeminfoKeys::AnonPages.to_string(),
+            meminfo.anon_pages.unwrap_or_default(),
+        );
         meminfo_data.add(MeminfoKeys::Mapped.to_string(), meminfo.mapped);
-        meminfo_data.add(MeminfoKeys::Shmem.to_string(), meminfo.shmem.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::KReclaimable.to_string(), meminfo.k_reclaimable.unwrap_or_default());
+        meminfo_data.add(
+            MeminfoKeys::Shmem.to_string(),
+            meminfo.shmem.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::KReclaimable.to_string(),
+            meminfo.k_reclaimable.unwrap_or_default(),
+        );
         meminfo_data.add(MeminfoKeys::Slab.to_string(), meminfo.slab);
-        meminfo_data.add(MeminfoKeys::SReclaimable.to_string(), meminfo.s_reclaimable.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::SUnreclaim.to_string(), meminfo.s_unreclaim.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::KernelStack.to_string(), meminfo.kernel_stack.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::PageTables.to_string(), meminfo.page_tables.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::Quicklists.to_string(), meminfo.quicklists.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::NfsUnstable.to_string(), meminfo.nfs_unstable.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::Bounce.to_string(), meminfo.bounce.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::WritebackTmp.to_string(), meminfo.writeback_tmp.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::CommitLimit.to_string(), meminfo.commit_limit.unwrap_or_default());
+        meminfo_data.add(
+            MeminfoKeys::SReclaimable.to_string(),
+            meminfo.s_reclaimable.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::SUnreclaim.to_string(),
+            meminfo.s_unreclaim.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::KernelStack.to_string(),
+            meminfo.kernel_stack.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::PageTables.to_string(),
+            meminfo.page_tables.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::Quicklists.to_string(),
+            meminfo.quicklists.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::NfsUnstable.to_string(),
+            meminfo.nfs_unstable.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::Bounce.to_string(),
+            meminfo.bounce.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::WritebackTmp.to_string(),
+            meminfo.writeback_tmp.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::CommitLimit.to_string(),
+            meminfo.commit_limit.unwrap_or_default(),
+        );
         meminfo_data.add(MeminfoKeys::CommittedAs.to_string(), meminfo.committed_as);
         meminfo_data.add(MeminfoKeys::VmallocTotal.to_string(), meminfo.vmalloc_total);
         meminfo_data.add(MeminfoKeys::VmallocUsed.to_string(), meminfo.vmalloc_used);
         meminfo_data.add(MeminfoKeys::VmallocChunk.to_string(), meminfo.vmalloc_chunk);
-        meminfo_data.add(MeminfoKeys::PerCpu.to_string(), meminfo.per_cpu.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::HardwareCorrupted.to_string(), meminfo.hardware_corrupted.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::AnonHugepages.to_string(), meminfo.anon_hugepages.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::ShmemHugepages.to_string(), meminfo.shmem_hugepages.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::ShmemPmdMapped.to_string(), meminfo.shmem_pmd_mapped.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::FilePmdMapped.to_string(), meminfo.file_pmd_mapped.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::FileHugePages.to_string(), meminfo.file_huge_pages.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::CmaTotal.to_string(), meminfo.cma_total.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::CmaFree.to_string(), meminfo.cma_free.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::HugepagesTotal.to_string(), meminfo.hugepages_total.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::HugepagesFree.to_string(), meminfo.hugepages_free.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::HugepagesRsvd.to_string(), meminfo.hugepages_rsvd.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::HugepagesSurp.to_string(), meminfo.hugepages_surp.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::Hugepagesize.to_string(), meminfo.hugepagesize.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::Hugetlb.to_string(), meminfo.hugetlb.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::DirectMap4k.to_string(), meminfo.direct_map_4k.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::DirectMap4M.to_string(), meminfo.direct_map_4M.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::DirectMap2M.to_string(), meminfo.direct_map_2M.unwrap_or_default());
-        meminfo_data.add(MeminfoKeys::DirectMap1G.to_string(), meminfo.direct_map_1G.unwrap_or_default());
+        meminfo_data.add(
+            MeminfoKeys::PerCpu.to_string(),
+            meminfo.per_cpu.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::HardwareCorrupted.to_string(),
+            meminfo.hardware_corrupted.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::AnonHugepages.to_string(),
+            meminfo.anon_hugepages.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::ShmemHugepages.to_string(),
+            meminfo.shmem_hugepages.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::ShmemPmdMapped.to_string(),
+            meminfo.shmem_pmd_mapped.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::FilePmdMapped.to_string(),
+            meminfo.file_pmd_mapped.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::FileHugePages.to_string(),
+            meminfo.file_huge_pages.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::CmaTotal.to_string(),
+            meminfo.cma_total.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::CmaFree.to_string(),
+            meminfo.cma_free.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::HugepagesTotal.to_string(),
+            meminfo.hugepages_total.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::HugepagesFree.to_string(),
+            meminfo.hugepages_free.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::HugepagesRsvd.to_string(),
+            meminfo.hugepages_rsvd.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::HugepagesSurp.to_string(),
+            meminfo.hugepages_surp.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::Hugepagesize.to_string(),
+            meminfo.hugepagesize.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::Hugetlb.to_string(),
+            meminfo.hugetlb.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::DirectMap4k.to_string(),
+            meminfo.direct_map_4k.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::DirectMap4M.to_string(),
+            meminfo.direct_map_4M.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::DirectMap2M.to_string(),
+            meminfo.direct_map_2M.unwrap_or_default(),
+        );
+        meminfo_data.add(
+            MeminfoKeys::DirectMap1G.to_string(),
+            meminfo.direct_map_1G.unwrap_or_default(),
+        );
         meminfo_data.set_time(raw_value.time);
         let processed_data = ProcessedData::MeminfoData(meminfo_data);
         Ok(processed_data)
     }
 
     fn get_calls(&mut self) -> Result<Vec<String>> {
-        let mut end_values = Vec::new();
-        end_values.push("keys".to_string());
-        end_values.push("values".to_string());
-        Ok(end_values)
+        Ok(vec!["keys".to_string(), "values".to_string()])
     }
 
     fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
@@ -298,13 +428,11 @@ impl GetData for MeminfoData {
         let (_, req_str) = &param[1];
 
         match req_str.as_str() {
-            "keys" => {
-                return get_keys();
-            },
+            "keys" => get_keys(),
             "values" => {
                 let (_, key) = &param[2];
-                return get_values(values, key.to_string());
-            },
+                get_values(values, key.to_string())
+            }
             _ => panic!("Unsupported API"),
         }
     }
@@ -317,9 +445,9 @@ fn init_meminfo() {
     let dt = DataType::new(
         Data::MeminfoDataRaw(meminfo_data_raw.clone()),
         file_name.clone(),
-        false
+        false,
     );
-    let js_file_name = file_name.clone() + &".js".to_string();
+    let js_file_name = file_name.clone() + ".js";
     let meminfo_data = MeminfoData::new();
     let dv = DataVisualizer::new(
         ProcessedData::MeminfoData(meminfo_data),
@@ -342,7 +470,7 @@ fn init_meminfo() {
 
 #[cfg(test)]
 mod tests {
-    use super::{MeminfoDataRaw, MeminfoData, MeminfoKeys, EndMemValues};
+    use super::{EndMemValues, MeminfoData, MeminfoDataRaw, MeminfoKeys};
     use crate::data::{CollectData, Data, ProcessedData};
     use crate::visualizer::GetData;
     use std::collections::HashMap;
@@ -352,7 +480,7 @@ mod tests {
     fn test_collect_data() {
         let mut meminfodata_raw = MeminfoDataRaw::new();
 
-        assert!(meminfodata_raw.collect_data().unwrap() == ());
+        meminfodata_raw.collect_data().unwrap();
         assert!(!meminfodata_raw.data.is_empty());
     }
 
@@ -364,11 +492,12 @@ mod tests {
             key_map.insert(key.to_string(), 0);
         }
         meminfodata_raw.collect_data().unwrap();
-        let processed_data = MeminfoData::new().process_raw_data(Data::MeminfoDataRaw(meminfodata_raw)).unwrap();
-        let mut meminfodata = MeminfoData::new();
-        match processed_data {
-            ProcessedData::MeminfoData(value) => meminfodata = value,
-            _ => assert!(false, "Invalid data type in processed data"),
+        let processed_data = MeminfoData::new()
+            .process_raw_data(Data::MeminfoDataRaw(meminfodata_raw))
+            .unwrap();
+        let meminfodata = match processed_data {
+            ProcessedData::MeminfoData(value) => value,
+            _ => unreachable!("Invalid data type in processed data"),
         };
         let keys: Vec<String> = meminfodata.data.clone().into_keys().collect();
         for key in keys {
@@ -389,10 +518,16 @@ mod tests {
 
         meminfodata_raw.collect_data().unwrap();
         buffer.push(Data::MeminfoDataRaw(meminfodata_raw));
-        processed_buffer.push(MeminfoData::new().process_raw_data(buffer[0].clone()).unwrap());
-        let json = MeminfoData::new().get_data(processed_buffer, "run=test&get=keys".to_string()).unwrap();
+        processed_buffer.push(
+            MeminfoData::new()
+                .process_raw_data(buffer[0].clone())
+                .unwrap(),
+        );
+        let json = MeminfoData::new()
+            .get_data(processed_buffer, "run=test&get=keys".to_string())
+            .unwrap();
         let values: Vec<String> = serde_json::from_str(&json).unwrap();
-        assert!(values.len() > 0);
+        assert!(!values.is_empty());
     }
 
     #[test]
@@ -409,9 +544,14 @@ mod tests {
         for buf in buffer {
             processed_buffer.push(MeminfoData::new().process_raw_data(buf).unwrap());
         }
-        let json = MeminfoData::new().get_data(processed_buffer, "run=test&get=values&key=Mem Total".to_string()).unwrap();
+        let json = MeminfoData::new()
+            .get_data(
+                processed_buffer,
+                "run=test&get=values&key=Mem Total".to_string(),
+            )
+            .unwrap();
         let memdata: EndMemValues = serde_json::from_str(&json).unwrap();
-        assert!(memdata.data.name == "Mem Total");
-        assert!(memdata.data.values.len() > 0);
+        assert_eq!(memdata.data.name, "Mem Total");
+        assert!(!memdata.data.values.is_empty());
     }
 }

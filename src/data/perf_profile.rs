@@ -1,14 +1,14 @@
 extern crate ctor;
 
-use anyhow::Result;
-use crate::data::{CollectData, Data, DataType, ProcessedData, CollectorParams};
-use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData};
 use crate::visualizer::{DataVisualizer, GetData, ReportParams};
+use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
+use anyhow::Result;
 use ctor::ctor;
-use log::{trace, error};
+use log::{error, trace};
 use serde::{Deserialize, Serialize};
-use std::process::Command;
 use std::io::ErrorKind;
+use std::process::Command;
 
 pub static PERF_PROFILE_FILE_NAME: &str = "perf_profile";
 
@@ -28,18 +28,35 @@ impl PerfProfileRaw {
 impl CollectData for PerfProfileRaw {
     fn prepare_data_collector(&mut self, params: CollectorParams) -> Result<()> {
         match Command::new("perf")
-            .args(["record", "-a", "-q", "-g", "-k", "1", "-F", "99", "-e", "cpu-clock:pppH", "-o", &params.data_file_path, "--", "sleep", &params.collection_time.to_string()])
-            .spawn() {
-                Err(e) => {
-                    if e.kind() == ErrorKind::NotFound {
-                        error!("'perf' command not found.");
-                    } else {
-                        error!("Unknown error: {}", e);
-                    }
-                    error!("Skipping Perf profile collection.");
-                },
-                Ok(_) => trace!("Recording Perf profiling data."),
+            .args([
+                "record",
+                "-a",
+                "-q",
+                "-g",
+                "-k",
+                "1",
+                "-F",
+                "99",
+                "-e",
+                "cpu-clock:pppH",
+                "-o",
+                &params.data_file_path,
+                "--",
+                "sleep",
+                &params.collection_time.to_string(),
+            ])
+            .spawn()
+        {
+            Err(e) => {
+                if e.kind() == ErrorKind::NotFound {
+                    error!("'perf' command not found.");
+                } else {
+                    error!("Unknown error: {}", e);
+                }
+                error!("Skipping Perf profile collection.");
             }
+            Ok(_) => trace!("Recording Perf profiling data."),
+        }
         Ok(())
     }
 
@@ -55,9 +72,7 @@ pub struct PerfProfile {
 
 impl PerfProfile {
     fn new() -> Self {
-        PerfProfile {
-            data: Vec::new(),
-        }
+        PerfProfile { data: Vec::new() }
     }
 }
 
@@ -67,7 +82,8 @@ impl GetData for PerfProfile {
         let mut profile = PerfProfile::new();
 
         let out = Command::new("perf")
-            .args(["report", "--stdio", "--percent-limit", "1", "-i", file_name]).output();
+            .args(["report", "--stdio", "--percent-limit", "1", "-i", file_name])
+            .output();
 
         match out {
             Err(e) => {
@@ -80,7 +96,7 @@ impl GetData for PerfProfile {
                 profile.data = vec!["Did not process profiling data".to_string()];
             }
             Ok(v) => {
-                if v.stdout.len() == 0 {
+                if v.stdout.is_empty() {
                     profile.data = vec!["No data collected".to_string()];
                 } else {
                     profile.data = std::str::from_utf8(&v.stdout)?
@@ -97,9 +113,7 @@ impl GetData for PerfProfile {
     }
 
     fn get_calls(&mut self) -> Result<Vec<String>> {
-        let mut end_values = Vec::new();
-        end_values.push("values".to_string());
-        Ok(end_values)
+        Ok(vec!["values".to_string()])
     }
 
     fn get_data(&mut self, buffer: Vec<ProcessedData>, _query: String) -> Result<String> {
@@ -121,10 +135,10 @@ fn init_perf_profile() {
     let dt = DataType::new(
         Data::PerfProfileRaw(perf_profile_raw.clone()),
         file_name.clone(),
-        false
+        false,
     );
     let perf_profile = PerfProfile::new();
-    let js_file_name = file_name.clone() + &".js".to_string();
+    let js_file_name = file_name.clone() + ".js";
     let mut dv = DataVisualizer::new(
         ProcessedData::PerfProfile(perf_profile.clone()),
         file_name.clone(),

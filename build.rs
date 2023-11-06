@@ -1,16 +1,13 @@
 use anyhow::Result;
 use std::env;
 use std::process::Command;
-use vergen::{Config, ShaKind, vergen};
+use vergen::{vergen, Config, ShaKind};
 
 fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=package.json");
     println!("cargo:rerun-if-changed=package-lock.json");
-    let status = Command::new("npm")
-        .arg("install")
-        .spawn()?
-        .wait()?;
-    if ! status.success() {
+    let status = Command::new("npm").arg("install").spawn()?.wait()?;
+    if !status.success() {
         std::process::exit(1);
     }
 
@@ -27,7 +24,7 @@ fn main() -> Result<()> {
         .arg(jsdir)
         .spawn()?
         .wait()?;
-    if ! status.success() {
+    if !status.success() {
         std::process::exit(1);
     }
 

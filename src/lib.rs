@@ -2,21 +2,21 @@
 extern crate lazy_static;
 
 pub mod data;
-pub mod visualizer;
 pub mod record;
 pub mod report;
+pub mod visualizer;
 use anyhow::Result;
 use chrono::prelude::*;
+use flate2::{write::GzEncoder, Compression};
 use log::{debug, error, info};
 use serde::{Deserialize, Serialize};
 use serde_json::{self};
 use std::collections::HashMap;
-use std::{fs, time};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::{fs, time};
 use thiserror::Error;
 use timerfd::{SetTimeFlags, TimerFd, TimerState};
-use flate2::{Compression, write::GzEncoder};
 
 pub static APERF_FILE_FORMAT: &str = "bin";
 
@@ -76,7 +76,6 @@ pub enum PDError {
     #[error("File not found {}", .0)]
     VisualizerFileNotFound(String),
 
-
     #[error("Run data not available")]
     InvalidRunData,
 
@@ -114,13 +113,17 @@ impl PerformanceData {
     }
 
     pub fn init_collectors(&mut self) -> Result<()> {
-        let _ret = fs::create_dir(self.init_params.dir_name.clone())?;
+        fs::create_dir(self.init_params.dir_name.clone())?;
 
         /*
          * Create a meta_data file to hold the InitParams that was used by the collector.
          * This will help when we visualize the data and we don't have to guess these values.
          */
-        let meta_data_path = format!("{}/meta_data.{}", self.init_params.dir_name.clone(), APERF_FILE_FORMAT);
+        let meta_data_path = format!(
+            "{}/meta_data.{}",
+            self.init_params.dir_name.clone(),
+            APERF_FILE_FORMAT
+        );
         let meta_data_handle = fs::OpenOptions::new()
             .create(true)
             .write(true)
@@ -138,8 +141,12 @@ impl PerformanceData {
     pub fn prepare_data_collectors(&mut self) -> Result<()> {
         let mut remove_entries: Vec<String> = Vec::new();
         if !self.init_params.profile {
-            self.collectors.remove(data::perf_profile::PERF_PROFILE_FILE_NAME).unwrap();
-            self.collectors.remove(data::flamegraphs::FLAMEGRAPHS_FILE_NAME).unwrap();
+            self.collectors
+                .remove(data::perf_profile::PERF_PROFILE_FILE_NAME)
+                .unwrap();
+            self.collectors
+                .remove(data::flamegraphs::FLAMEGRAPHS_FILE_NAME)
+                .unwrap();
         }
 
         for (_name, datatype) in self.collectors.iter_mut() {
@@ -148,7 +155,11 @@ impl PerformanceData {
             }
             match datatype.prepare_data_collector() {
                 Err(e) => {
-                    error!("Excluding {} from collection. Error msg: {}", _name, e.to_string());
+                    error!(
+                        "Excluding {} from collection. Error msg: {}",
+                        _name,
+                        e.to_string()
+                    );
                     remove_entries.push(_name.clone());
                 }
                 _ => continue,
@@ -217,8 +228,11 @@ impl PerformanceData {
         let tar_gz = fs::File::create(&archive_path)?;
         let enc = GzEncoder::new(tar_gz, Compression::default());
         let mut tar = tar::Builder::new(enc);
-        tar.append_dir_all(&dir_name, &self.init_params.dir_name)?;
-        info!("Data collected in {}/, archived in {}", self.init_params.dir_name, archive_path);
+        tar.append_dir_all(dir_name, &self.init_params.dir_name)?;
+        info!(
+            "Data collected in {}/, archived in {}",
+            self.init_params.dir_name, archive_path
+        );
         Ok(())
     }
 }
@@ -238,11 +252,10 @@ pub fn get_file(dir: String, name: String) -> Result<fs::File> {
             return Ok(fs::OpenOptions::new()
                 .read(true)
                 .open(file_name)
-                .expect("Could not open file")
-            );
+                .expect("Could not open file"));
         }
     }
-    return Err(PDError::VisualizerFileNotFound(name).into());
+    Err(PDError::VisualizerFileNotFound(name).into())
 }
 
 pub fn get_file_name(dir: String, name: String) -> Result<String> {
@@ -252,13 +265,15 @@ pub fn get_file_name(dir: String, name: String) -> Result<String> {
             return Ok(file_name);
         }
     }
-    return Err(PDError::VisualizerFileNotFound(name).into());
+    Err(PDError::VisualizerFileNotFound(name).into())
 }
 
 lazy_static! {
-    pub static ref VISUALIZATION_DATA: Mutex<VisualizationData> = Mutex::new(VisualizationData::new());
+    pub static ref VISUALIZATION_DATA: Mutex<VisualizationData> =
+        Mutex::new(VisualizationData::new());
 }
 
+#[derive(Default)]
 pub struct VisualizationData {
     pub visualizers: HashMap<String, visualizer::DataVisualizer>,
     pub js_files: HashMap<String, String>,
@@ -274,7 +289,12 @@ impl VisualizationData {
         }
     }
 
-    pub fn init_visualizers(&mut self, dir: String, tmp_dir: String, fin_dir: PathBuf) -> Result<String> {
+    pub fn init_visualizers(
+        &mut self,
+        dir: String,
+        tmp_dir: String,
+        fin_dir: PathBuf,
+    ) -> Result<String> {
         let dir_path = Path::new(&dir);
         let dir_name = dir_path.file_stem().unwrap().to_str().unwrap().to_string();
         self.run_names.push(dir_name.clone());
@@ -282,13 +302,15 @@ impl VisualizationData {
         let mut error_count = 0;
 
         for (_name, visualizer) in self.visualizers.iter_mut() {
-            match visualizer.init_visualizer(dir.clone(), dir_name.clone(), tmp_dir.clone(), fin_dir.clone()) {
-                Err(e) => {
-                    error!("{:#?}", e);
-                    visualizer.data_not_available(dir_name.clone())?;
-                    error_count += 1;
-                },
-                Ok(_) => {},
+            if let Err(e) = visualizer.init_visualizer(
+                dir.clone(),
+                dir_name.clone(),
+                tmp_dir.clone(),
+                fin_dir.clone(),
+            ) {
+                error!("{:#?}", e);
+                visualizer.data_not_available(dir_name.clone())?;
+                error_count += 1;
             }
         }
 
@@ -307,15 +329,20 @@ impl VisualizationData {
     pub fn get_all_js_files(&mut self) -> Result<Vec<(String, String)>> {
         let mut ret = Vec::new();
         for (name, visualizer) in self.visualizers.iter() {
-            let file = self.js_files.get(&visualizer.js_file_name)
-                .ok_or(PDError::VisualizerJSFileGetError(name.to_string().into()))?;
+            let file = self
+                .js_files
+                .get(&visualizer.js_file_name)
+                .ok_or(PDError::VisualizerJSFileGetError(name.to_string()))?;
             ret.push((visualizer.js_file_name.clone(), file.clone()));
         }
         Ok(ret)
     }
 
     pub fn get_js_file(&mut self, name: String) -> Result<&str> {
-        let file = self.js_files.get_mut(&name).ok_or(PDError::VisualizerJSFileGetError(name.to_string().into()))?;
+        let file = self
+            .js_files
+            .get_mut(&name)
+            .ok_or(PDError::VisualizerJSFileGetError(name.to_string()))?;
         Ok(file)
     }
 
@@ -329,7 +356,7 @@ impl VisualizationData {
 
     pub fn get_api(&mut self, name: String) -> Result<String> {
         let api = self.visualizers.get(&name).unwrap().api_name.clone();
-        return Ok(api);
+        Ok(api)
     }
 
     pub fn get_visualizer_names(&mut self) -> Result<Vec<String>> {
@@ -337,21 +364,28 @@ impl VisualizationData {
         for (name, _visualizer) in self.visualizers.iter() {
             visualizer_names.push(name.clone());
         }
-        return Ok(visualizer_names);
+        Ok(visualizer_names)
     }
 
     pub fn get_run_names(&mut self) -> Result<String> {
         Ok(serde_json::to_string(&self.run_names)?)
     }
 
-    pub fn get_data(&mut self, run_name: &String, visualizer_name: &str, query: String) -> Result<String> {
-        let visualizer = self.visualizers.get_mut(visualizer_name).ok_or(PDError::VisualizerHashMapEntryError(visualizer_name.to_string().into()))?;
+    pub fn get_data(
+        &mut self,
+        run_name: &String,
+        visualizer_name: &str,
+        query: String,
+    ) -> Result<String> {
+        let visualizer = self.visualizers.get_mut(visualizer_name).ok_or(
+            PDError::VisualizerHashMapEntryError(visualizer_name.to_string()),
+        )?;
         visualizer.get_data(run_name.to_string(), query.clone())
     }
 
     pub fn get_calls(&mut self, name: String) -> Result<Vec<String>> {
         let visualizer = self.visualizers.get_mut(&name).unwrap();
-        return visualizer.get_calls();
+        visualizer.get_calls()
     }
 }
 
@@ -374,12 +408,20 @@ impl InitParams {
         let time_str = time_now.format("%Y-%m-%d_%H_%M_%S").to_string();
         let mut dir_name = format!("./aperf_{}", time_str);
         let mut run_name = String::new();
-        if dir != "" {
-            dir_name = Path::new(&dir).components().as_path().to_str().unwrap().to_string();
+        if !dir.is_empty() {
+            dir_name = Path::new(&dir)
+                .components()
+                .as_path()
+                .to_str()
+                .unwrap()
+                .to_string();
             run_name = dir;
         } else {
             let path = Path::new(&dir_name);
-            info!("No run-name given. Using {}", path.file_stem().unwrap().to_str().unwrap());
+            info!(
+                "No run-name given. Using {}",
+                path.file_stem().unwrap().to_str().unwrap()
+            );
         }
         let collector_version = env!("CARGO_PKG_VERSION").to_string();
         let commit_sha_short = env!("VERGEN_GIT_SHA_SHORT").to_string();
@@ -431,7 +473,11 @@ mod tests {
         pd.set_params(params.clone());
         pd.init_collectors().unwrap();
         assert!(Path::new(&pd.init_params.dir_name).exists());
-        let full_path = format!("{}/meta_data.{}", params.dir_name.clone(), APERF_FILE_FORMAT);
+        let full_path = format!(
+            "{}/meta_data.{}",
+            params.dir_name.clone(),
+            APERF_FILE_FORMAT
+        );
         assert!(Path::new(&full_path).exists());
         fs::remove_dir_all(pd.init_params.dir_name).unwrap();
     }

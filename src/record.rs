@@ -1,6 +1,6 @@
+use crate::{InitParams, PERFORMANCE_DATA};
 use anyhow::Result;
 use clap::Args;
-use crate::{InitParams, PERFORMANCE_DATA};
 use log::{debug, error, info};
 
 #[derive(Args, Debug)]
@@ -34,7 +34,7 @@ fn start_collection_serial() -> Result<()> {
     Ok(())
 }
 
-fn collect_static_data() -> Result<()>  {
+fn collect_static_data() -> Result<()> {
     debug!("Collecting static data...");
     PERFORMANCE_DATA.lock().unwrap().collect_static_data()?;
     Ok(())
@@ -52,7 +52,7 @@ pub fn record(record: &Record) -> Result<()> {
     }
     match &record.run_name {
         Some(r) => run_name = r.clone(),
-        None => {},
+        None => {}
     }
     let mut params = InitParams::new(run_name);
     params.period = record.period;

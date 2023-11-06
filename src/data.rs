@@ -1,43 +1,43 @@
+pub mod constants;
 pub mod cpu_utilization;
-pub mod vmstat;
 pub mod diskstats;
-pub mod systeminfo;
-pub mod kernel_config;
+pub mod flamegraphs;
+#[cfg(target_arch = "aarch64")]
+pub mod grv_perf_events;
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+pub mod intel_perf_events;
 pub mod interrupts;
-pub mod sysctldata;
-pub mod perf_stat;
-pub mod processes;
+pub mod kernel_config;
 pub mod meminfodata;
 pub mod netstat;
 pub mod perf_profile;
-pub mod flamegraphs;
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-pub mod intel_perf_events;
-#[cfg(target_arch = "aarch64")]
-pub mod grv_perf_events;
-pub mod constants;
+pub mod perf_stat;
+pub mod processes;
+pub mod sysctldata;
+pub mod systeminfo;
+pub mod vmstat;
 
-use anyhow::Result;
-use crate::{APERF_FILE_FORMAT, InitParams};
 use crate::visualizer::{GetData, ReportParams};
+use crate::{InitParams, APERF_FILE_FORMAT};
+use anyhow::Result;
 use chrono::prelude::*;
 use cpu_utilization::{CpuUtilization, CpuUtilizationRaw};
+use diskstats::{Diskstats, DiskstatsRaw};
+use flamegraphs::{Flamegraph, FlamegraphRaw};
+use interrupts::{InterruptData, InterruptDataRaw};
+use kernel_config::KernelConfig;
 use log::trace;
+use meminfodata::{MeminfoData, MeminfoDataRaw};
+use netstat::{Netstat, NetstatRaw};
+use perf_profile::{PerfProfile, PerfProfileRaw};
+use perf_stat::{PerfStat, PerfStatRaw};
+use processes::{Processes, ProcessesRaw};
 use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
-use vmstat::{Vmstat, VmstatRaw};
-use diskstats::{Diskstats, DiskstatsRaw};
 use std::ops::Sub;
-use systeminfo::SystemInfo;
-use kernel_config::KernelConfig;
-use interrupts::{InterruptData, InterruptDataRaw};
 use sysctldata::SysctlData;
-use perf_stat::{PerfStatRaw, PerfStat};
-use processes::{ProcessesRaw, Processes};
-use meminfodata::{MeminfoDataRaw, MeminfoData};
-use netstat::{Netstat, NetstatRaw};
-use perf_profile::{PerfProfileRaw, PerfProfile};
-use flamegraphs::{FlamegraphRaw, Flamegraph};
+use systeminfo::SystemInfo;
+use vmstat::{Vmstat, VmstatRaw};
 
 #[derive(Clone, Debug)]
 pub struct CollectorParams {
@@ -64,7 +64,7 @@ pub struct DataType {
     pub file_name: String,
     pub full_path: String,
     pub dir_name: String,
-    pub is_static:  bool,
+    pub is_static: bool,
     pub collector_params: CollectorParams,
 }
 
@@ -87,7 +87,10 @@ impl DataType {
 
     pub fn init_data_type(&mut self, param: InitParams) -> Result<()> {
         trace!("Initializing data type...");
-        let name = format!("{}_{}.{}", self.file_name, param.time_str, APERF_FILE_FORMAT);
+        let name = format!(
+            "{}_{}.{}",
+            self.file_name, param.time_str, APERF_FILE_FORMAT
+        );
         let full_path = format!("{}/{}", param.dir_name, name);
 
         self.file_name = name;
@@ -112,7 +115,8 @@ impl DataType {
 
     pub fn prepare_data_collector(&mut self) -> Result<()> {
         trace!("Preparing data collector...");
-        self.data.prepare_data_collector(self.collector_params.clone())?;
+        self.data
+            .prepare_data_collector(self.collector_params.clone())?;
         Ok(())
     }
 
@@ -131,10 +135,10 @@ impl DataType {
 
     pub fn after_data_collection(&mut self) -> Result<()> {
         trace!("Running post collection actions...");
-        self.data.after_data_collection(self.collector_params.clone())?;
+        self.data
+            .after_data_collection(self.collector_params.clone())?;
         Ok(())
     }
-
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Eq, Ord, PartialEq, PartialOrd, Hash)]
@@ -147,16 +151,14 @@ impl Sub for TimeEnum {
     type Output = TimeEnum;
 
     fn sub(self, rhs: TimeEnum) -> TimeEnum {
-        let self_time;
-        let other_time;
-        match self {
-            TimeEnum::DateTime(value) => self_time = value,
+        let self_time = match self {
+            TimeEnum::DateTime(value) => value,
             _ => panic!("Cannot perform subtract op on TimeEnum::TimeDiff"),
-        }
-        match rhs {
-            TimeEnum::DateTime(value) => other_time = value,
-             _ => panic!("Cannot perform subtract op on TimeEnum::TimeDiff"),
-        }
+        };
+        let other_time = match rhs {
+            TimeEnum::DateTime(value) => value,
+            _ => panic!("Cannot perform subtract op on TimeEnum::TimeDiff"),
+        };
         let time_diff = (self_time - other_time).num_milliseconds() as u64;
         // Round up to the nearest second
         TimeEnum::TimeDiff((time_diff + 500) / 1000)
@@ -280,7 +282,9 @@ processed_data!(
     Flamegraph
 );
 
-macro_rules! noop { () => (); }
+macro_rules! noop {
+    () => {};
+}
 
 pub trait CollectData {
     fn prepare_data_collector(&mut self, _params: CollectorParams) -> Result<()> {
@@ -300,7 +304,7 @@ pub trait CollectData {
 #[cfg(test)]
 mod tests {
     use super::cpu_utilization::CpuUtilizationRaw;
-    use super::{Data, DataType, CollectorParams, TimeEnum};
+    use super::{CollectorParams, Data, DataType, TimeEnum};
     use crate::InitParams;
     use chrono::prelude::*;
     use std::fs;
@@ -317,18 +321,18 @@ mod tests {
             full_path: String::new(),
             dir_name: String::new(),
             is_static: false,
-            collector_params: CollectorParams::new()
+            collector_params: CollectorParams::new(),
         };
 
         param.dir_name = format!("./performance_data_init_test_{}", param.time_str);
-        let _ret = fs::DirBuilder::new()
+        fs::DirBuilder::new()
             .recursive(true)
             .create(param.dir_name.clone())
             .unwrap();
 
         dt.init_data_type(param).unwrap();
 
-        assert!(!dt.file_handle.is_none());
+        assert!(dt.file_handle.is_some());
         fs::remove_file(dt.full_path).unwrap();
         fs::remove_dir_all(dt.dir_name).unwrap();
     }
@@ -344,11 +348,11 @@ mod tests {
             full_path: String::new(),
             dir_name: String::new(),
             is_static: false,
-            collector_params: CollectorParams::new()
+            collector_params: CollectorParams::new(),
         };
 
         param.dir_name = format!("./performance_data_print_test_{}", param.time_str);
-        let _ret = fs::DirBuilder::new()
+        fs::DirBuilder::new()
             .recursive(true)
             .create(param.dir_name.clone())
             .unwrap();
@@ -356,19 +360,19 @@ mod tests {
         dt.init_data_type(param).unwrap();
 
         assert!(Path::new(&dt.full_path).exists());
-        assert!(dt.write_to_file().unwrap() == ());
+        dt.write_to_file().unwrap();
 
         loop {
             match bincode::deserialize_from::<_, Data>(dt.file_handle.as_ref().unwrap()) {
-                Ok(v) => {
-                    match v {
-                        Data::CpuUtilizationRaw(ref value) => assert!(value.data.is_empty()),
-                        _ => assert!(false),
-                    }
+                Ok(v) => match v {
+                    Data::CpuUtilizationRaw(ref value) => assert!(value.data.is_empty()),
+                    _ => unreachable!(),
                 },
                 Err(e) => match *e {
-                    bincode::ErrorKind::Io(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
-                    _ => assert!(false),
+                    bincode::ErrorKind::Io(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                        break
+                    }
+                    _ => unreachable!(),
                 },
             };
         }
@@ -388,7 +392,7 @@ mod tests {
         let time_diff = time_t1 - time_t0;
         match time_diff {
             TimeEnum::TimeDiff(value) => assert!(value == 1, "Time diff was expected to be 1"),
-            _ => assert!(false),
+            _ => unreachable!(),
         }
     }
 
@@ -404,7 +408,7 @@ mod tests {
         let time_diff = time_t1 - time_t0;
         match time_diff {
             TimeEnum::TimeDiff(value) => assert!(value == 0, "Time diff was expected to be 0"),
-            _ => assert!(false),
+            _ => unreachable!(),
         }
     }
 
@@ -420,7 +424,7 @@ mod tests {
         let time_diff = time_t1 - time_t0;
         match time_diff {
             TimeEnum::TimeDiff(value) => assert!(value == 1, "Time diff was expected to be 1"),
-            _ => assert!(false),
+            _ => unreachable!(),
         }
     }
 
@@ -436,7 +440,7 @@ mod tests {
         let time_diff = time_t1 - time_t0;
         match time_diff {
             TimeEnum::TimeDiff(value) => assert!(value == 1, "Time diff was expected to be 1"),
-            _ => assert!(false),
+            _ => unreachable!(),
         }
     }
 

@@ -1,26 +1,22 @@
 extern crate ctor;
 
-use anyhow::Result;
-use crate::data::{CollectData, Data, ProcessedData, CollectorParams, DataType, TimeEnum};
+use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
+use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata};
 use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
-use crate::visualizer::{DataVisualizer, GetData, GraphMetadata, GraphLimitType};
+use anyhow::Result;
 use chrono::prelude::*;
 use ctor::ctor;
-use log::{trace, error};
-use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
+use log::{error, trace};
 use perf_event::events::{Raw, Software};
 use perf_event::{Builder, Counter, Group, ReadFormat};
+use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, ErrorKind};
+use std::sync::Mutex;
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-use {
-    crate::PDError,
-    crate::data::intel_perf_events,
-    raw_cpuid::CpuId,
-};
 #[cfg(target_arch = "aarch64")]
 use crate::data::grv_perf_events;
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+use {crate::data::intel_perf_events, crate::PDError, raw_cpuid::CpuId};
 
 pub static PERF_STAT_FILE_NAME: &str = "perf_stat";
 
@@ -42,13 +38,23 @@ pub struct Ctr {
 }
 
 impl Ctr {
-    fn new(perf_type: u64, name: String, cpu: usize, config: u64, group: &mut Group) -> Result<Self> {
+    fn new(
+        perf_type: u64,
+        name: String,
+        cpu: usize,
+        config: u64,
+        group: &mut Group,
+    ) -> Result<Self> {
         let raw_config = Raw::new(config);
         Ok(Ctr {
-            perf_type: perf_type,
-            name: name,
-            config: config,
-            counter: Builder::new(raw_config).one_cpu(cpu).any_pid().include_kernel().build_with_group(group)?,
+            perf_type,
+            name,
+            config,
+            counter: Builder::new(raw_config)
+                .one_cpu(cpu)
+                .any_pid()
+                .include_kernel()
+                .build_with_group(group)?,
         })
     }
 }
@@ -118,41 +124,42 @@ impl CollectData for PerfStatRaw {
             if vendor_info.as_str() == "GenuineIntel" {
                 perf_list = intel_perf_events::PERF_LIST.to_vec();
             } else {
-                return Err(PDError::CollectorPerfUnsupportedCPU.into())
+                return Err(PDError::CollectorPerfUnsupportedCPU.into());
             }
         }
         for cpu in 0..num_cpus {
             for named_ctr in &perf_list {
-                let perf_group = Builder::new(Software::DUMMY).
-                    read_format(
+                let perf_group = Builder::new(Software::DUMMY)
+                    .read_format(
                         ReadFormat::GROUP
-                        | ReadFormat::TOTAL_TIME_ENABLED
-                        | ReadFormat::TOTAL_TIME_RUNNING
-                        | ReadFormat::ID,
+                            | ReadFormat::TOTAL_TIME_ENABLED
+                            | ReadFormat::TOTAL_TIME_RUNNING
+                            | ReadFormat::ID,
                     )
                     .any_pid()
                     .one_cpu(cpu)
                     .build_group();
 
-                let group: Group;
-                match perf_group {
+                let group = match perf_group {
                     Err(e) => {
                         match e.kind() {
-                            ErrorKind::PermissionDenied => error!("Set /proc/sys/kernel/perf_event_paranoid to 0"),
+                            ErrorKind::PermissionDenied => {
+                                error!("Set /proc/sys/kernel/perf_event_paranoid to 0")
+                            }
                             ErrorKind::NotFound => error!("Instance does not expose Perf counters"),
                             _ => error!("Unknown error when trying to use Perf API"),
                         }
                         return Err(e.into());
                     }
-                    Ok(g) => group = g,
-                }
+                    Ok(g) => g,
+                };
                 let mut cpu_group = CpuCtrGroup {
                     cpu: cpu as u64,
                     name: named_ctr.name.to_string(),
                     nr_ctrs: Vec::new(),
                     dr_ctrs: Vec::new(),
                     scale: named_ctr.scale,
-                    group: group
+                    group,
                 };
                 for nr in &named_ctr.nrs {
                     let nr_ctr = Ctr::new(
@@ -160,21 +167,23 @@ impl CollectData for PerfStatRaw {
                         nr.name.to_string(),
                         cpu,
                         nr.config,
-                        &mut cpu_group.group
+                        &mut cpu_group.group,
                     );
                     match nr_ctr {
                         Err(e) => {
                             if let Some(os_error) = e.downcast_ref::<std::io::Error>() {
                                 match os_error.kind() {
-                                    ErrorKind::NotFound => error!("Instance does not expose Perf counters"),
-                                    _ => {
-                                        match os_error.raw_os_error().unwrap() {
-                                            libc::EMFILE => error!("Too many open files. Increase limit with `ulimit -n`"),
-                                            _ => error!("Unknown error when trying to use Perf API."),
-                                        }
+                                    ErrorKind::NotFound => {
+                                        error!("Instance does not expose Perf counters")
                                     }
+                                    _ => match os_error.raw_os_error().unwrap() {
+                                        libc::EMFILE => error!(
+                                            "Too many open files. Increase limit with `ulimit -n`"
+                                        ),
+                                        _ => error!("Unknown error when trying to use Perf API."),
+                                    },
                                 }
-                                return Err(e.into());
+                                return Err(e);
                             }
                         }
                         Ok(v) => cpu_group.nr_ctr_add(v),
@@ -186,21 +195,23 @@ impl CollectData for PerfStatRaw {
                         dr.name.to_string(),
                         cpu,
                         dr.config,
-                        &mut cpu_group.group
+                        &mut cpu_group.group,
                     );
                     match dr_ctr {
                         Err(e) => {
                             if let Some(os_error) = e.downcast_ref::<std::io::Error>() {
                                 match os_error.kind() {
-                                    ErrorKind::NotFound => error!("Instance does not expose Perf counters"),
-                                    _ => {
-                                        match os_error.raw_os_error().unwrap() {
-                                            libc::EMFILE => error!("Too many open files. Increase limit with `ulimit -n`"),
-                                            _ => error!("Unknown error when trying to use Perf API."),
-                                        }
+                                    ErrorKind::NotFound => {
+                                        error!("Instance does not expose Perf counters")
                                     }
+                                    _ => match os_error.raw_os_error().unwrap() {
+                                        libc::EMFILE => error!(
+                                            "Too many open files. Increase limit with `ulimit -n`"
+                                        ),
+                                        _ => error!("Unknown error when trying to use Perf API."),
+                                    },
                                 }
-                                return Err(e.into());
+                                return Err(e);
                             }
                         }
                         Ok(v) => cpu_group.dr_ctr_add(v),
@@ -228,15 +239,15 @@ impl CollectData for PerfStatRaw {
                 let nr_string = format!(" {}", count[&nr.counter]);
                 group_data.push_str(&nr_string);
             }
-            group_data.push_str(";");
+            group_data.push(';');
             for dr in &cpu_group.dr_ctrs {
                 let dr_string = format!(" {}", count[&dr.counter]);
                 group_data.push_str(&dr_string);
             }
-            group_data.push_str(";");
+            group_data.push(';');
             let scale_string = format!("{}", cpu_group.scale);
             group_data.push_str(&scale_string);
-            group_data.push_str("\n");
+            group_data.push('\n');
             cpu_group.group.reset()?;
             self.data.push_str(&group_data);
         }
@@ -270,7 +281,6 @@ impl PerfStat {
         };
         per_cpu_named_stats.named_stats.push(stat);
         self.perf_stats.push(per_cpu_named_stats);
-        return;
     }
 }
 
@@ -320,12 +330,15 @@ fn get_named_stat_for_all_cpus(value: PerfStat, key: String) -> Vec<InterStat> {
     for per_cpu_named_stat in value.perf_stats {
         for named_stat in per_cpu_named_stat.named_stats {
             if named_stat.name == key {
-                named_stats.push(InterStat {cpu: per_cpu_named_stat.cpu, named_stat: named_stat});
+                named_stats.push(InterStat {
+                    cpu: per_cpu_named_stat.cpu,
+                    named_stat,
+                });
                 break;
             }
         }
     }
-    return named_stats;
+    named_stats
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -346,23 +359,34 @@ fn get_values(values: Vec<PerfStat>, key: String) -> Result<String> {
         let mut aggregate_nr = 0;
         let mut aggregate_dr = 0;
         for stat in &stats {
-            let this_cpu_end_stat_value = stat.named_stat.nr_value as f64 / stat.named_stat.dr_value as f64;
-            let this_cpu_end_stat = EndStat { cpu: stat.cpu as i64, value: this_cpu_end_stat_value * stat.named_stat.scale as f64 };
+            let this_cpu_end_stat_value =
+                stat.named_stat.nr_value as f64 / stat.named_stat.dr_value as f64;
+            let this_cpu_end_stat = EndStat {
+                cpu: stat.cpu as i64,
+                value: this_cpu_end_stat_value * stat.named_stat.scale as f64,
+            };
             metadata.update_limits(GraphLimitType::F64(this_cpu_end_stat.value));
             end_cpu_stats.push(this_cpu_end_stat);
             aggregate_nr += stat.named_stat.nr_value;
             aggregate_dr += stat.named_stat.dr_value;
         }
-        aggregate_value = (aggregate_nr as f64 / aggregate_dr as f64) * stats[0].named_stat.scale as f64;
+        aggregate_value =
+            (aggregate_nr as f64 / aggregate_dr as f64) * stats[0].named_stat.scale as f64;
         metadata.update_limits(GraphLimitType::F64(aggregate_value));
-        let aggr_cpu_stat = EndStat { cpu: -1, value: aggregate_value };
+        let aggr_cpu_stat = EndStat {
+            cpu: -1,
+            value: aggregate_value,
+        };
         end_cpu_stats.push(aggr_cpu_stat);
 
         end_stats.time = stats[0].named_stat.time - *time_zero;
         end_stats.cpus = end_cpu_stats;
         end_values.push(end_stats);
     }
-    let perf_data = EndPerfData {data: end_values, metadata: metadata};
+    let perf_data = EndPerfData {
+        data: end_values,
+        metadata,
+    };
     Ok(serde_json::to_string(&perf_data)?)
 }
 
@@ -414,7 +438,7 @@ impl GetData for PerfStat {
                 name: stat_name.to_string(),
                 nr_value,
                 dr_value,
-                scale
+                scale,
             };
             perf_stat.add_named_stat(cpu?, named_stat);
         }
@@ -423,10 +447,7 @@ impl GetData for PerfStat {
     }
 
     fn get_calls(&mut self) -> Result<Vec<String>> {
-        let mut end_values = Vec::new();
-        end_values.push("keys".to_string());
-        end_values.push("values".to_string());
-        Ok(end_values)
+        Ok(vec!["keys".to_string(), "values".to_string()])
     }
 
     fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
@@ -444,10 +465,10 @@ impl GetData for PerfStat {
         let (_, req_str) = &param[1];
 
         match req_str.as_str() {
-            "keys" => return get_named_events(values[0].clone()),
+            "keys" => get_named_events(values[0].clone()),
             "values" => {
                 let (_, key) = &param[2];
-                return get_values(values, key.to_string());
+                get_values(values, key.to_string())
             }
             _ => panic!("Unsupported API"),
         }
@@ -461,9 +482,9 @@ fn init_perf_stat_raw() {
     let dt = DataType::new(
         Data::PerfStatRaw(perf_stat_raw.clone()),
         file_name.clone(),
-        false
+        false,
     );
-    let js_file_name = file_name.clone() + &".js".to_string();
+    let js_file_name = file_name.clone() + ".js";
     let perf_stat = PerfStat::new();
     let dv = DataVisualizer::new(
         ProcessedData::PerfStat(perf_stat.clone()),
@@ -487,7 +508,7 @@ fn init_perf_stat_raw() {
 #[cfg(test)]
 mod tests {
     use super::{PerfStat, PerfStatRaw};
-    use crate::data::{CollectData, Data, ProcessedData, CollectorParams};
+    use crate::data::{CollectData, CollectorParams, Data, ProcessedData};
     use crate::visualizer::GetData;
     use std::collections::HashMap;
     use std::io::ErrorKind;
@@ -501,15 +522,16 @@ mod tests {
             Err(e) => {
                 if let Some(os_error) = e.downcast_ref::<std::io::Error>() {
                     match os_error.kind() {
-                        ErrorKind::PermissionDenied => assert!(false, "Set /proc/sys/kernel/perf_event_paranoid to 0"),
-                        ErrorKind::NotFound => assert!(true, "Instance does not expose Perf counters"),
-                        _ => assert!(false, "{}", os_error),
+                        ErrorKind::PermissionDenied => {
+                            panic!("Set /proc/sys/kernel/perf_event_paranoid to 0")
+                        }
+                        ErrorKind::NotFound => println!("Instance does not expose Perf counters"),
+                        _ => panic!("{}", os_error),
                     }
                 }
             }
-            Ok(v) => {
-                assert!(v == ());
-                assert!(perf_stat.collect_data().unwrap() == ());
+            Ok(_) => {
+                perf_stat.collect_data().unwrap();
                 assert!(!perf_stat.data.is_empty());
             }
         }
@@ -526,26 +548,39 @@ mod tests {
             Err(e) => {
                 if let Some(os_error) = e.downcast_ref::<std::io::Error>() {
                     match os_error.kind() {
-                        ErrorKind::PermissionDenied => assert!(false, "Set /proc/sys/kernel/perf_event_paranoid to 0"),
-                        ErrorKind::NotFound => assert!(true, "Instance does not expose Perf counters"),
-                        _ => assert!(false, "{}", os_error),
+                        ErrorKind::PermissionDenied => {
+                            panic!("Set /proc/sys/kernel/perf_event_paranoid to 0")
+                        }
+                        ErrorKind::NotFound => println!("Instance does not expose Perf counters"),
+                        _ => panic!("{}", os_error),
                     }
                 }
             }
-            Ok(v) => {
-                assert!(v == ());
+            Ok(_) => {
                 perf_stat.collect_data().unwrap();
                 buffer.push(Data::PerfStatRaw(perf_stat));
                 for buf in buffer {
                     processed_buffer.push(PerfStat::new().process_raw_data(buf).unwrap());
                 }
-                let events = PerfStat::new().get_data(processed_buffer, "run=test&get=keys".to_string()).unwrap();
+                let events = PerfStat::new()
+                    .get_data(processed_buffer, "run=test&get=keys".to_string())
+                    .unwrap();
                 let values: Vec<&str> = serde_json::from_str(&events).unwrap();
                 let mut key_map = HashMap::new();
                 let event_names = [
-                    "ipc", "branch-mpki", "data-l1-mpki", "inst-l1-mpki", "l2-mpki",
-                    "l3-mpki", "stall-frontend-pkc", "stall-backend-pkc", "inst-tlb-mpki",
-                    "inst-tlb-tw-pki", "data-tlb-mpki", "data-tlb-tw-pki", "code-sparsity"
+                    "ipc",
+                    "branch-mpki",
+                    "data-l1-mpki",
+                    "inst-l1-mpki",
+                    "l2-mpki",
+                    "l3-mpki",
+                    "stall-frontend-pkc",
+                    "stall-backend-pkc",
+                    "inst-tlb-mpki",
+                    "inst-tlb-tw-pki",
+                    "data-tlb-mpki",
+                    "data-tlb-tw-pki",
+                    "code-sparsity",
                 ];
                 for name in event_names {
                     key_map.insert(name.to_string(), 0);
@@ -557,7 +592,7 @@ mod tests {
                 }
                 let mut key_values: Vec<u64> = key_map.into_values().collect();
                 key_values.dedup();
-                assert!(key_values.len() == 1);
+                assert_eq!(key_values.len(), 1);
             }
         }
     }

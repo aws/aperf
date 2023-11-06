@@ -26,6 +26,7 @@ jobs:
           toolchain: stable
           profile: minimal
           override: true
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v1
       - name: Install gcc on Ubuntu
         if: ${{ matrix.distribution == 'Ubuntu' }}
@@ -70,4 +71,8 @@ jobs:
       - name: Set perf_event_paranoid to 0
         run: echo 0 | sudo tee /proc/sys/kernel/perf_event_paranoid
       - name: Run tests
-        run: source  ~/.nvm/nvm.sh && cargo test --verbose
+        run: source ~/.nvm/nvm.sh && cargo test --verbose -- --nocapture --color always
+      - name: Run clippy
+        run: source ~/.nvm/nvm.sh && cargo clippy --all-targets --all-features
+      - name: Run rustfmt
+        run: source ~/.nvm/nvm.sh && cargo fmt --all -- --check

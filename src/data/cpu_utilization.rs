@@ -1,9 +1,9 @@
 extern crate ctor;
 
-use anyhow::Result;
-use crate::data::{CollectData, Data, ProcessedData, DataType, TimeEnum};
-use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use crate::visualizer::{DataVisualizer, GetData};
+use crate::data::{CollectData, Data, DataType, ProcessedData, TimeEnum};
+use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
+use anyhow::Result;
 use chrono::prelude::*;
 use ctor::ctor;
 use log::trace;
@@ -12,7 +12,6 @@ use serde::{Deserialize, Serialize};
 use std::ops::Sub;
 
 pub static CPU_UTILIZATION_FILE_NAME: &str = "cpu_utilization";
-
 
 /// Gather CPU Utilization raw data.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -27,6 +26,12 @@ impl CpuUtilizationRaw {
             time: TimeEnum::DateTime(Utc::now()),
             data: String::new(),
         }
+    }
+}
+
+impl Default for CpuUtilizationRaw {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -67,10 +72,14 @@ impl UtilValues {
     }
 
     fn is_less_than(self, other: UtilValues) -> bool {
-        !(self.user >= other.user && self.nice >= other.nice &&
-            self.system >= other.system && self.irq >= other.irq &&
-            self.softirq >= other.softirq && self.idle >= other.idle &&
-            self.iowait >= other.iowait && self.steal >= other.steal)
+        !(self.user >= other.user
+            && self.nice >= other.nice
+            && self.system >= other.system
+            && self.irq >= other.irq
+            && self.softirq >= other.softirq
+            && self.idle >= other.idle
+            && self.iowait >= other.iowait
+            && self.steal >= other.steal)
     }
 }
 
@@ -127,6 +136,12 @@ impl CpuData {
 pub struct CpuUtilization {
     pub total: CpuData,
     pub per_cpu: Vec<CpuData>,
+}
+
+impl Default for CpuUtilization {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CpuUtilization {
@@ -199,12 +214,18 @@ fn percentage(value: u64, total: u64) -> u64 {
     if total > 0 {
         return ((value as f64 / total as f64) * 100.0) as u64;
     }
-    return 0;
+    0
 }
 
 fn set_as_percent(value: UtilValues) -> UtilValues {
-    let total = value.user + value.nice + value.system + value.irq +
-        value.softirq + value.idle + value.iowait + value.steal;
+    let total = value.user
+        + value.nice
+        + value.system
+        + value.irq
+        + value.softirq
+        + value.idle
+        + value.iowait
+        + value.steal;
 
     let mut new_values = UtilValues::new();
     new_values.user = percentage(value.user, total);
@@ -257,8 +278,8 @@ fn get_type(count: u64, values: Vec<CpuUtilization>, util_type: &str) -> Result<
     let mut end_values = Vec::new();
     for i in 0..count {
         let mut util_data = UtilData {
-           cpu: (i as i64),
-           data: Vec::new(),
+            cpu: (i as i64),
+            data: Vec::new(),
         };
 
         /* Get cpu 'i' values */
@@ -278,21 +299,20 @@ fn get_type(count: u64, values: Vec<CpuUtilization>, util_type: &str) -> Result<
             end_value.values = set_as_percent(current_cpu_data - prev_cpu_data);
             end_value.set_time(current_time - time_zero);
 
-            let value;
-            match util_type {
-                "user" => value = end_value.values.user,
-                "nice" => value = end_value.values.nice,
-                "system" => value = end_value.values.system,
-                "irq" => value = end_value.values.irq,
-                "softirq" => value = end_value.values.softirq,
-                "idle" => value = end_value.values.idle,
-                "iowait" => value = end_value.values.iowait,
-                "steal" => value = end_value.values.steal,
+            let value = match util_type {
+                "user" => end_value.values.user,
+                "nice" => end_value.values.nice,
+                "system" => end_value.values.system,
+                "irq" => end_value.values.irq,
+                "softirq" => end_value.values.softirq,
+                "idle" => end_value.values.idle,
+                "iowait" => end_value.values.iowait,
+                "steal" => end_value.values.steal,
                 _ => panic!("Invalid util type"),
-            }
+            };
             let time_data = TimeData {
                 time: end_value.time,
-                value: value,
+                value,
             };
             util_data.data.push(time_data);
             prev_cpu_data = current_cpu_data;
@@ -308,10 +328,7 @@ impl GetData for CpuUtilization {
     }
 
     fn get_calls(&mut self) -> Result<Vec<String>> {
-        let mut end_values = Vec::new();
-        end_values.push("keys".to_string());
-        end_values.push("values".to_string());
-        Ok(end_values)
+        Ok(vec!["keys".to_string(), "values".to_string()])
     }
 
     fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
@@ -327,9 +344,19 @@ impl GetData for CpuUtilization {
 
         match req_str.as_str() {
             "keys" => {
-                let end_values = ["aggregate", "user", "nice", "system", "irq", "softirq", "idle", "iowait", "steal"];
-                return Ok(serde_json::to_string(&end_values)?);
-            },
+                let end_values = [
+                    "aggregate",
+                    "user",
+                    "nice",
+                    "system",
+                    "irq",
+                    "softirq",
+                    "idle",
+                    "iowait",
+                    "steal",
+                ];
+                Ok(serde_json::to_string(&end_values)?)
+            }
             "values" => {
                 let (_, key) = &param[2];
                 if key == "aggregate" {
@@ -337,16 +364,15 @@ impl GetData for CpuUtilization {
                     for value in values {
                         temp_values.push(value.total);
                     }
-                    return get_aggregate_data(temp_values);
+                    get_aggregate_data(temp_values)
                 } else {
-                    return get_type(values[0].per_cpu.len() as u64, values, &key);
+                    get_type(values[0].per_cpu.len() as u64, values, key)
                 }
-            },
+            }
             _ => panic!("Unsupported API"),
         }
     }
 }
-
 
 #[ctor]
 fn init_cpu_utilization() {
@@ -355,9 +381,9 @@ fn init_cpu_utilization() {
     let dt = DataType::new(
         Data::CpuUtilizationRaw(cpu_utilization_raw.clone()),
         file_name.clone(),
-        false
+        false,
     );
-    let js_file_name = file_name.clone() + &".js".to_string();
+    let js_file_name = file_name.clone() + ".js";
     let cpu_utilization = CpuUtilization::new();
     let dv = DataVisualizer::new(
         ProcessedData::CpuUtilization(cpu_utilization),
@@ -387,7 +413,7 @@ mod cpu_tests {
     fn test_collect_data() {
         let mut cpu_utilization = CpuUtilizationRaw::new();
 
-        assert!(cpu_utilization.collect_data().unwrap() == ());
+        cpu_utilization.collect_data().unwrap();
         assert!(!cpu_utilization.data.is_empty());
     }
 
@@ -406,19 +432,27 @@ mod cpu_tests {
         for buf in buffer {
             processed_buffer.push(CpuUtilization::new().process_raw_data(buf).unwrap());
         }
-        let json = CpuUtilization::new().get_data(processed_buffer, "run=test&get=values&=aggregate".to_string()).unwrap();
+        let json = CpuUtilization::new()
+            .get_data(
+                processed_buffer,
+                "run=test&get=values&=aggregate".to_string(),
+            )
+            .unwrap();
         let values: Vec<CpuData> = serde_json::from_str(&json).unwrap();
         assert!(values[0].cpu == -1);
     }
 
     #[test]
     fn test_get_util_types() {
-        let types = CpuUtilization::new().get_data(Vec::new(), "run=test&get=keys".to_string()).unwrap();
+        let types = CpuUtilization::new()
+            .get_data(Vec::new(), "run=test&get=keys".to_string())
+            .unwrap();
         let values: Vec<&str> = serde_json::from_str(&types).unwrap();
         for type_str in values {
             match type_str {
-                "aggregate" | "user" | "nice" | "system" | "irq" | "softirq" | "idle" | "iowait" | "steal" => assert!(true),
-                _ => assert!(false),
+                "aggregate" | "user" | "nice" | "system" | "irq" | "softirq" | "idle"
+                | "iowait" | "steal" => {}
+                _ => unreachable!(),
             }
         }
     }
@@ -438,8 +472,10 @@ mod cpu_tests {
         for buf in buffer {
             processed_buffer.push(CpuUtilization::new().process_raw_data(buf).unwrap());
         }
-        let json = CpuUtilization::new().get_data(processed_buffer, "run=test&get=values&key=user".to_string()).unwrap();
+        let json = CpuUtilization::new()
+            .get_data(processed_buffer, "run=test&get=values&key=user".to_string())
+            .unwrap();
         let values: Vec<UtilData> = serde_json::from_str(&json).unwrap();
-        assert!(values.len() > 0);
+        assert!(!values.is_empty());
     }
 }

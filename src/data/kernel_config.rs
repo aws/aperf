@@ -1,17 +1,17 @@
 extern crate ctor;
 
-use anyhow::Result;
-use crate::data::{CollectData, Data, ProcessedData, DataType, TimeEnum};
-use crate::{PERFORMANCE_DATA, PDError, VISUALIZATION_DATA};
+use crate::data::{CollectData, Data, DataType, ProcessedData, TimeEnum};
 use crate::visualizer::{DataVisualizer, GetData};
+use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
+use anyhow::Result;
 use chrono::prelude::*;
 use ctor::ctor;
 use log::trace;
-use std::fmt::Debug;
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
+use std::fs::OpenOptions;
 use std::io::{self, BufRead, BufReader};
 use std::path::Path;
-use std::fs::OpenOptions;
 
 pub static KERNEL_CONFIG_FILE_NAME: &str = "kernel_config";
 const PROC_CONFIG_GZ: &str = "/proc/config.gz";
@@ -75,39 +75,36 @@ fn get_kernel_config_data() -> Result<Box<dyn BufRead>> {
     /* This is the same as procfs crate. We need access to the commented out CONFIGs and
      * headings in the Config file.
      */
-    let reader: Box<dyn BufRead> = if Path::new(PROC_CONFIG_GZ).exists() && cfg!(features = "flate2") {
-        #[cfg(feature = "flate2")]
-        {
-            let file = OpenOptions::new()
-                .read(true)
-                .open(PROC_CONFIG_GZ);
-            let decoder = flate2::read::GzDecoder::new(file);
-            Box::new(BufReader::new(decoder))
-        }
-        #[cfg(not(feature = "flate2"))]
-        {
-            unreachable!("flate2 feature not enabled")
-        }
-    } else {
-        let kernel = rustix::process::uname();
-        let filename = format!("{}-{}", BOOT_CONFIG, kernel.release().to_string_lossy());
-        let file = OpenOptions::new()
-            .read(true)
-            .open(filename);
-        match file {
-            Ok(file) => Box::new(BufReader::new(file)),
-            Err(e) => match e.kind() {
-                io::ErrorKind::NotFound => {
-                    let backup_config_file = OpenOptions::new()
-                        .read(true)
-                        .open(BOOT_CONFIG)
-                        .expect("Could not open file");
-                    Box::new(BufReader::new(backup_config_file))
-                }
-                _ => return Err(e.into()),
-            },
-        }
-    };
+    let reader: Box<dyn BufRead> =
+        if Path::new(PROC_CONFIG_GZ).exists() && cfg!(features = "flate2") {
+            #[cfg(feature = "flate2")]
+            {
+                let file = OpenOptions::new().read(true).open(PROC_CONFIG_GZ);
+                let decoder = flate2::read::GzDecoder::new(file);
+                Box::new(BufReader::new(decoder))
+            }
+            #[cfg(not(feature = "flate2"))]
+            {
+                unreachable!("flate2 feature not enabled")
+            }
+        } else {
+            let kernel = rustix::process::uname();
+            let filename = format!("{}-{}", BOOT_CONFIG, kernel.release().to_string_lossy());
+            let file = OpenOptions::new().read(true).open(filename);
+            match file {
+                Ok(file) => Box::new(BufReader::new(file)),
+                Err(e) => match e.kind() {
+                    io::ErrorKind::NotFound => {
+                        let backup_config_file = OpenOptions::new()
+                            .read(true)
+                            .open(BOOT_CONFIG)
+                            .expect("Could not open file");
+                        Box::new(BufReader::new(backup_config_file))
+                    }
+                    _ => return Err(e.into()),
+                },
+            }
+        };
     Ok(reader)
 }
 
@@ -126,11 +123,12 @@ impl CollectData for KernelConfig {
 
         for line in kernel_data.lines() {
             let line = line?;
-            if line.starts_with('#') &&
-                !line.contains("is not set") &&
-                !line.contains("NOTE") &&
-                !line.contains("also be needed") &&
-                !line.contains("end of") {
+            if line.starts_with('#')
+                && !line.contains("is not set")
+                && !line.contains("NOTE")
+                && !line.contains("also be needed")
+                && !line.contains("end of")
+            {
                 comments.push(line);
                 continue;
             } else {
@@ -147,9 +145,12 @@ impl CollectData for KernelConfig {
                 let value = s.next().ok_or(PDError::CollectorLineValueError)?;
                 let entry = KernelConfigEntry {
                     name: name.clone(),
-                    value: value.to_string()
+                    value: value.to_string(),
                 };
-                kernel_data_processed.last_mut().unwrap().add_entry(Entry::ConfigEntry(entry));
+                kernel_data_processed
+                    .last_mut()
+                    .unwrap()
+                    .add_entry(Entry::ConfigEntry(entry));
                 comments.clear();
             }
             if line.contains("is not set") {
@@ -159,9 +160,12 @@ impl CollectData for KernelConfig {
                 let value = "not set";
                 let entry = KernelConfigEntry {
                     name: name.clone(),
-                    value: value.to_string()
+                    value: value.to_string(),
                 };
-                kernel_data_processed.last_mut().unwrap().add_entry(Entry::ConfigEntry(entry));
+                kernel_data_processed
+                    .last_mut()
+                    .unwrap()
+                    .add_entry(Entry::ConfigEntry(entry));
                 comments.clear();
             }
             if line.contains("end of") {
@@ -179,11 +183,13 @@ impl CollectData for KernelConfig {
                         continue;
                     }
                     if start_appending {
-                        kernel_data_processed[group_to_add_index].add_entry(Entry::ConfigGroup(group.clone()));
+                        kernel_data_processed[group_to_add_index]
+                            .add_entry(Entry::ConfigGroup(group.clone()));
                     }
                 }
                 if start_appending {
-                    kernel_data_processed = kernel_data_processed[..group_to_add_index+1].to_vec();
+                    kernel_data_processed =
+                        kernel_data_processed[..group_to_add_index + 1].to_vec();
                 }
             }
         }
@@ -209,9 +215,7 @@ impl GetData for KernelConfig {
     }
 
     fn get_calls(&mut self) -> Result<Vec<String>> {
-        let mut end_values = Vec::new();
-        end_values.push("values".to_string());
-        return Ok(end_values);
+        Ok(vec!["values".to_string()])
     }
 
     fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
@@ -229,7 +233,7 @@ impl GetData for KernelConfig {
         let (_, req_str) = &param[1];
 
         match req_str.as_str() {
-            "values" => return get_kernel_config(values[0].clone()),
+            "values" => get_kernel_config(values[0].clone()),
             _ => panic!("Unsupported API"),
         }
     }
@@ -242,9 +246,9 @@ fn init_kernel_config() {
     let dt = DataType::new(
         Data::KernelConfig(kernel_config.clone()),
         file_name.clone(),
-        true
+        true,
     );
-    let js_file_name = file_name.clone() + &".js".to_string();
+    let js_file_name = file_name.clone() + ".js";
     let dv = DataVisualizer::new(
         ProcessedData::KernelConfig(kernel_config),
         file_name.clone(),
@@ -274,8 +278,8 @@ mod tests {
     fn test_collect_data() {
         let mut kernel_config = KernelConfig::new();
 
-        assert!(kernel_config.collect_data().unwrap() == ());
-        assert!(kernel_config.kernel_config_data.len() != 0);
+        kernel_config.collect_data().unwrap();
+        assert!(!kernel_config.kernel_config_data.is_empty());
     }
 
     #[test]
@@ -286,9 +290,15 @@ mod tests {
 
         kernel_config.collect_data().unwrap();
         buffer.push(Data::KernelConfig(kernel_config));
-        processed_buffer.push(KernelConfig::new().process_raw_data(buffer[0].clone()).unwrap());
-        let json = KernelConfig::new().get_data(processed_buffer, "run=test&get=values".to_string()).unwrap();
+        processed_buffer.push(
+            KernelConfig::new()
+                .process_raw_data(buffer[0].clone())
+                .unwrap(),
+        );
+        let json = KernelConfig::new()
+            .get_data(processed_buffer, "run=test&get=values".to_string())
+            .unwrap();
         let values: Vec<KernelConfigEntryGroup> = serde_json::from_str(&json).unwrap();
-        assert!(values.len() > 0);
+        assert!(!values.is_empty());
     }
 }

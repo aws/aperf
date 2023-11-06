@@ -1,10 +1,10 @@
 extern crate ctor;
 
-use anyhow::Result;
-use crate::data::{CollectData, Data, ProcessedData, DataType, TimeEnum};
 use crate::data::constants::*;
+use crate::data::{CollectData, Data, DataType, ProcessedData, TimeEnum};
+use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata};
 use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
-use crate::visualizer::{DataVisualizer, GetData, GraphMetadata, GraphLimitType};
+use anyhow::Result;
 use chrono::prelude::*;
 use ctor::ctor;
 use log::trace;
@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::io::{BufRead, BufReader};
 use strum::IntoEnumIterator;
-use strum_macros::{Display, EnumString, EnumIter};
+use strum_macros::{Display, EnumIter, EnumString};
 
 pub static DISKSTATS_FILE_NAME: &str = "disk_stats";
 
@@ -147,13 +147,13 @@ fn process_collected_raw_data(buffer: Data) -> Result<ProcessedData> {
         let time_in_progress = s.next().unwrap().parse::<u64>();
         let weighted_time_in_progress = s.next().unwrap().parse::<u64>();
         // Following since kernel 4.18
-        let discards = s.next().and_then(|s| u64::from_str_radix(s, 10).ok());
-        let discards_merged = s.next().and_then(|s| u64::from_str_radix(s, 10).ok());
-        let sectors_discarded = s.next().and_then(|s| u64::from_str_radix(s, 10).ok());
-        let time_discarding = s.next().and_then(|s| u64::from_str_radix(s, 10).ok());
+        let discards = s.next().and_then(|s| s.parse::<u64>().ok());
+        let discards_merged = s.next().and_then(|s| s.parse::<u64>().ok());
+        let sectors_discarded = s.next().and_then(|s| s.parse::<u64>().ok());
+        let time_discarding = s.next().and_then(|s| s.parse::<u64>().ok());
         // Following since kernel 5.5
-        let flushes = s.next().and_then(|s| u64::from_str_radix(s, 10).ok());
-        let time_flushing = s.next().and_then(|s| u64::from_str_radix(s, 10).ok());
+        let flushes = s.next().and_then(|s| s.parse::<u64>().ok());
+        let time_flushing = s.next().and_then(|s| s.parse::<u64>().ok());
 
         diskstat.add(DiskstatKeys::Reads.to_string(), reads?);
         diskstat.add(DiskstatKeys::Merged.to_string(), merged?);
@@ -165,13 +165,34 @@ fn process_collected_raw_data(buffer: Data) -> Result<ProcessedData> {
         diskstat.add(DiskstatKeys::TimeWriting.to_string(), time_writing?);
         diskstat.add(DiskstatKeys::InProgress.to_string(), in_progress?);
         diskstat.add(DiskstatKeys::TimeInProgress.to_string(), time_in_progress?);
-        diskstat.add(DiskstatKeys::WeightedTimeInProgress.to_string(), weighted_time_in_progress?);
-        diskstat.add(DiskstatKeys::Discards.to_string(), discards.unwrap_or_default());
-        diskstat.add(DiskstatKeys::DiscardsMerged.to_string(), discards_merged.unwrap_or_default());
-        diskstat.add(DiskstatKeys::SectorsDiscarded.to_string(), sectors_discarded.unwrap_or_default());
-        diskstat.add(DiskstatKeys::TimeDiscarding.to_string(), time_discarding.unwrap_or_default());
-        diskstat.add(DiskstatKeys::Flushes.to_string(), flushes.unwrap_or_default());
-        diskstat.add(DiskstatKeys::TimeFlushing.to_string(), time_flushing.unwrap_or_default());
+        diskstat.add(
+            DiskstatKeys::WeightedTimeInProgress.to_string(),
+            weighted_time_in_progress?,
+        );
+        diskstat.add(
+            DiskstatKeys::Discards.to_string(),
+            discards.unwrap_or_default(),
+        );
+        diskstat.add(
+            DiskstatKeys::DiscardsMerged.to_string(),
+            discards_merged.unwrap_or_default(),
+        );
+        diskstat.add(
+            DiskstatKeys::SectorsDiscarded.to_string(),
+            sectors_discarded.unwrap_or_default(),
+        );
+        diskstat.add(
+            DiskstatKeys::TimeDiscarding.to_string(),
+            time_discarding.unwrap_or_default(),
+        );
+        diskstat.add(
+            DiskstatKeys::Flushes.to_string(),
+            flushes.unwrap_or_default(),
+        );
+        diskstat.add(
+            DiskstatKeys::TimeFlushing.to_string(),
+            time_flushing.unwrap_or_default(),
+        );
 
         data.push(diskstat);
     }
@@ -241,16 +262,18 @@ fn get_values(values: Vec<Diskstats>, key: String) -> Result<String> {
             prev_value.insert(disk.name.clone(), *disk.stat.get(&key.clone()).unwrap());
         }
         for disk in &v.disk_stats {
-            let stat_value;
             /*
              * The only counter to go to zero.
              * See https://www.kernel.org/doc/html/latest/admin-guide/iostats.html Field #9
              */
-            if key == "In Progress" {
-                stat_value = *disk.stat.get(&key.clone()).unwrap() as f64;
+            let stat_value = if key == "In Progress" {
+                *disk.stat.get(&key.clone()).unwrap() as f64
             } else {
-                stat_value = (*disk.stat.get(&key.clone()).unwrap() as i64 - *prev_value.get(&disk.name).unwrap() as i64) as f64 * mult_factor as f64 / factor as f64;
-            }
+                (*disk.stat.get(&key.clone()).unwrap() as i64
+                    - *prev_value.get(&disk.name).unwrap() as i64) as f64
+                    * mult_factor as f64
+                    / factor as f64
+            };
             let dv = DiskValue {
                 time: (v.time - time_zero),
                 value: stat_value,
@@ -261,7 +284,10 @@ fn get_values(values: Vec<Diskstats>, key: String) -> Result<String> {
         }
         prev_data = v.clone();
     }
-    let end_values = EndDiskValues{data: ev.into_values().collect(), metadata: metadata};
+    let end_values = EndDiskValues {
+        data: ev.into_values().collect(),
+        metadata,
+    };
     Ok(serde_json::to_string(&end_values)?)
 }
 
@@ -270,7 +296,7 @@ fn get_keys() -> Result<String> {
     for key in DiskstatKeys::iter() {
         end_values.push(key.to_string());
     }
-    return Ok(serde_json::to_string(&end_values)?)
+    Ok(serde_json::to_string(&end_values)?)
 }
 
 impl GetData for Diskstats {
@@ -279,10 +305,7 @@ impl GetData for Diskstats {
     }
 
     fn get_calls(&mut self) -> Result<Vec<String>> {
-        let mut end_values = Vec::new();
-        end_values.push("keys".to_string());
-        end_values.push("values".to_string());
-        Ok(end_values)
+        Ok(vec!["keys".to_string(), "values".to_string()])
     }
 
     fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
@@ -297,12 +320,10 @@ impl GetData for Diskstats {
         let (_, req_str) = &param[1];
 
         match req_str.as_str() {
-            "keys" => {
-                return get_keys();
-            }
+            "keys" => get_keys(),
             "values" => {
                 let (_, key) = &param[2];
-                return get_values(values, key.to_string());
+                get_values(values, key.to_string())
             }
             _ => panic!("Unsupported API"),
         }
@@ -316,9 +337,9 @@ fn init_diskstats() {
     let dt = DataType::new(
         Data::DiskstatsRaw(diskstats_raw.clone()),
         file_name.clone(),
-        false
+        false,
     );
-    let js_file_name = file_name.clone() + &".js".to_string();
+    let js_file_name = file_name.clone() + ".js";
     let diskstats = Diskstats::new();
     let dv = DataVisualizer::new(
         ProcessedData::Diskstats(diskstats),
@@ -341,7 +362,7 @@ fn init_diskstats() {
 
 #[cfg(test)]
 mod tests {
-    use super::{Diskstats, DiskstatsRaw, DiskstatKeys, EndDiskValues};
+    use super::{DiskstatKeys, Diskstats, DiskstatsRaw, EndDiskValues};
     use crate::data::{CollectData, Data, ProcessedData};
     use crate::visualizer::GetData;
     use std::collections::HashMap;
@@ -351,7 +372,7 @@ mod tests {
     fn test_collect_data() {
         let mut diskstats = DiskstatsRaw::new();
 
-        assert!(diskstats.collect_data().unwrap() == ());
+        diskstats.collect_data().unwrap();
         assert!(!diskstats.data.is_empty());
     }
 
@@ -363,11 +384,12 @@ mod tests {
             key_map.insert(key.to_string(), 0);
         }
         stat.collect_data().unwrap();
-        let processed_stat = Diskstats::new().process_raw_data(Data::DiskstatsRaw(stat)).unwrap();
-        let mut disk_stat: Diskstats = Diskstats::new();
-        match processed_stat {
-            ProcessedData::Diskstats(value) => disk_stat = value,
-            _ => assert!(false, "Invalid data type in processed data"),
+        let processed_stat = Diskstats::new()
+            .process_raw_data(Data::DiskstatsRaw(stat))
+            .unwrap();
+        let disk_stat = match processed_stat {
+            ProcessedData::Diskstats(value) => value,
+            _ => unreachable!("Invalid data type in processed data"),
         };
         let keys: Vec<String> = disk_stat.disk_stats[0].stat.clone().into_keys().collect();
         for key in keys {
@@ -377,7 +399,7 @@ mod tests {
         }
         let mut values: Vec<u64> = key_map.into_values().collect();
         values.dedup();
-        assert!(values.len() == 1);
+        assert_eq!(values.len(), 1);
     }
 
     #[test]
@@ -388,10 +410,16 @@ mod tests {
 
         diskstat.collect_data().unwrap();
         buffer.push(Data::DiskstatsRaw(diskstat));
-        processed_buffer.push(Diskstats::new().process_raw_data(buffer[0].clone()).unwrap());
-        let json = Diskstats::new().get_data(processed_buffer, "run=test&get=keys".to_string()).unwrap();
+        processed_buffer.push(
+            Diskstats::new()
+                .process_raw_data(buffer[0].clone())
+                .unwrap(),
+        );
+        let json = Diskstats::new()
+            .get_data(processed_buffer, "run=test&get=keys".to_string())
+            .unwrap();
         let values: Vec<String> = serde_json::from_str(&json).unwrap();
-        assert!(values.len() > 0);
+        assert!(!values.is_empty());
     }
 
     #[test]
@@ -408,9 +436,14 @@ mod tests {
         for buf in buffer {
             processed_buffer.push(Diskstats::new().process_raw_data(buf).unwrap());
         }
-        let json = Diskstats::new().get_data(processed_buffer, "run=test&get=values&key=Reads".to_string()).unwrap();
+        let json = Diskstats::new()
+            .get_data(
+                processed_buffer,
+                "run=test&get=values&key=Reads".to_string(),
+            )
+            .unwrap();
         let data: EndDiskValues = serde_json::from_str(&json).unwrap();
-        assert!(data.data[0].name != "");
-        assert!(data.data[0].values.len() > 0);
+        assert!(!data.data[0].name.is_empty());
+        assert!(!data.data[0].values.is_empty());
     }
 }

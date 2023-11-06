@@ -1,11 +1,11 @@
-use anyhow::Result;
 use crate::{data::Data, data::ProcessedData, get_file, PDError};
-use std::{collections::HashMap, fs::File};
+use anyhow::Result;
 use log::debug;
-use std::path::{Path, PathBuf};
-use serde::{Deserialize, Serialize};
 use rustix::fd::AsRawFd;
+use serde::{Deserialize, Serialize};
 use std::fs;
+use std::path::{Path, PathBuf};
+use std::{collections::HashMap, fs::File};
 
 #[derive(Clone, Debug)]
 pub struct ReportParams {
@@ -42,15 +42,21 @@ pub struct DataVisualizer {
 }
 
 impl DataVisualizer {
-    pub fn new(data: ProcessedData, file_name: String, js_file_name: String, js: String, api_name: String) -> Self {
+    pub fn new(
+        data: ProcessedData,
+        file_name: String,
+        js_file_name: String,
+        js: String,
+        api_name: String,
+    ) -> Self {
         DataVisualizer {
-            data: data,
+            data,
             file_handle: None,
             run_values: HashMap::new(),
-            file_name: file_name,
-            js_file_name: js_file_name,
-            js: js,
-            api_name: api_name,
+            file_name,
+            js_file_name,
+            js,
+            api_name,
             has_custom_raw_data_parser: false,
             data_available: HashMap::new(),
             report_params: ReportParams::new(),
@@ -61,7 +67,13 @@ impl DataVisualizer {
         self.has_custom_raw_data_parser = true;
     }
 
-    pub fn init_visualizer(&mut self, dir: String, name: String, tmp_dir: String, fin_dir: PathBuf) -> Result<()> {
+    pub fn init_visualizer(
+        &mut self,
+        dir: String,
+        name: String,
+        tmp_dir: String,
+        fin_dir: PathBuf,
+    ) -> Result<()> {
         let file = get_file(dir.clone(), self.file_name.clone())?;
         let full_path = Path::new("/proc/self/fd").join(file.as_raw_fd().to_string());
         self.report_params.data_dir = dir.clone();
@@ -83,11 +95,15 @@ impl DataVisualizer {
     pub fn process_raw_data(&mut self, name: String) -> Result<()> {
         if !self.data_available.get(&name).unwrap() {
             debug!("Raw data unavailable for: {}", self.api_name);
-            return Ok(())
+            return Ok(());
         }
         debug!("Processing raw data for: {}", self.api_name);
         if self.has_custom_raw_data_parser {
-            self.run_values.insert(name.clone(), self.data.custom_raw_data_parser(self.report_params.clone())?);
+            self.run_values.insert(
+                name.clone(),
+                self.data
+                    .custom_raw_data_parser(self.report_params.clone())?,
+            );
             return Ok(());
         }
         let mut raw_data = Vec::new();
@@ -96,7 +112,9 @@ impl DataVisualizer {
                 Ok(v) => raw_data.push(v),
                 Err(e) => match *e {
                     // EOF
-                    bincode::ErrorKind::Io(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+                    bincode::ErrorKind::Io(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                        break
+                    }
                     e => panic!("Error when Deserializing {} data {}", self.api_name, e),
                 },
             };
@@ -119,8 +137,11 @@ impl DataVisualizer {
         let param: Vec<(String, String)> = serde_urlencoded::from_str(&query)?;
         let (_, run) = param[0].clone();
 
-        let values = self.run_values.get_mut(&run).ok_or(PDError::VisualizerRunValueGetError(run.to_string()))?;
-        if values.len() == 0 {
+        let values = self
+            .run_values
+            .get_mut(&run)
+            .ok_or(PDError::VisualizerRunValueGetError(run.to_string()))?;
+        if values.is_empty() {
             return Ok("No data collected".to_string());
         }
         self.data.get_data(values.clone(), query)
@@ -136,7 +157,7 @@ pub enum GraphLimitType {
     F64(f64),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Default, Serialize, Deserialize, Debug, Clone)]
 pub struct GraphLimits {
     pub low: u64,
     pub high: u64,
@@ -153,7 +174,7 @@ impl GraphLimits {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Default, Serialize, Deserialize, Debug, Clone)]
 pub struct GraphMetadata {
     pub limits: GraphLimits,
 }
@@ -226,9 +247,9 @@ pub trait GetData {
 
 #[cfg(test)]
 mod tests {
+    use super::DataVisualizer;
     use crate::data::cpu_utilization::{CpuData, CpuUtilization};
     use crate::data::{ProcessedData, TimeEnum};
-    use super::DataVisualizer;
     use std::path::PathBuf;
 
     #[test]
@@ -240,25 +261,29 @@ mod tests {
             String::new(),
             "cpu_utilization".to_string(),
         );
-        assert!(
-            dv.init_visualizer(
-                "test/aperf_2023-07-26_18_37_43/".to_string(),
+        dv.init_visualizer(
+            "test/aperf_2023-07-26_18_37_43/".to_string(),
+            "test".to_string(),
+            String::new(),
+            PathBuf::new(),
+        )
+        .unwrap();
+        dv.process_raw_data("test".to_string()).unwrap();
+        let ret = dv
+            .get_data(
                 "test".to_string(),
-                String::new(),
-                PathBuf::new()
-            ).unwrap() == ()
-        );
-        assert!(dv.process_raw_data("test".to_string()).unwrap() == ());
-        let ret = dv.get_data("test".to_string(), "run=test&get=values&key=aggregate".to_string()).unwrap();
+                "run=test&get=values&key=aggregate".to_string(),
+            )
+            .unwrap();
         let values: Vec<CpuData> = serde_json::from_str(&ret).unwrap();
         assert!(values[0].cpu == -1);
         match values[0].time {
             TimeEnum::TimeDiff(value) => assert!(value == 0),
-            _ => assert!(false),
+            _ => unreachable!(),
         }
         match values[1].time {
             TimeEnum::TimeDiff(value) => assert!(value == 1),
-            _ => assert!(false),
+            _ => unreachable!(),
         }
     }
 }
