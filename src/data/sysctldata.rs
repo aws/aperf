@@ -1,9 +1,9 @@
 extern crate ctor;
 
-use anyhow::Result;
-use crate::data::{CollectData, Data, ProcessedData, DataType, TimeEnum};
-use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::data::{CollectData, Data, DataType, ProcessedData, TimeEnum};
 use crate::visualizer::{DataVisualizer, GetData};
+use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
+use anyhow::Result;
 use chrono::prelude::*;
 use ctor::ctor;
 use log::trace;
@@ -15,8 +15,8 @@ pub static SYSCTL_FILE_NAME: &str = "sysctl";
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SysctlData {
-   pub time: TimeEnum,
-   pub sysctl_data: BTreeMap<String, String>,
+    pub time: TimeEnum,
+    pub sysctl_data: BTreeMap<String, String>,
 }
 
 impl SysctlData {
@@ -32,9 +32,7 @@ impl SysctlData {
     }
 }
 
-const DONT_COLLECT: &[&str] = &[
-    "rss_key",
-];
+const DONT_COLLECT: &[&str] = &["rss_key"];
 
 fn can_collect(name: String) -> bool {
     for item in DONT_COLLECT {
@@ -42,7 +40,7 @@ fn can_collect(name: String) -> bool {
             return false;
         }
     }
-    return true;
+    true
 }
 
 impl CollectData for SysctlData {
@@ -54,16 +52,14 @@ impl CollectData for SysctlData {
                 Err(_) => continue,
             };
             if !flags.contains(sysctl::CtlFlags::SKIP) && can_collect(ctl.name()?) {
-                let name;
-                let value;
-                match ctl.name() {
-                    Ok(s) => name = s,
+                let name = match ctl.name() {
+                    Ok(s) => s,
                     _ => continue,
-                }
-                match ctl.value_string() {
-                    Ok(s) => value = s,
+                };
+                let value = match ctl.value_string() {
+                    Ok(s) => s,
                     _ => continue,
-                }
+                };
                 self.add_ctl(name, value);
             }
         }
@@ -87,9 +83,7 @@ impl GetData for SysctlData {
     }
 
     fn get_calls(&mut self) -> Result<Vec<String>> {
-        let mut end_values = Vec::new();
-        end_values.push("values".to_string());
-        Ok(end_values)
+        Ok(vec!["values".to_string()])
     }
 
     fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
@@ -107,7 +101,7 @@ impl GetData for SysctlData {
         let (_, req_str) = &param[1];
 
         match req_str.as_str() {
-            "values" => return get_sysctl_data(values[0].clone()),
+            "values" => get_sysctl_data(values[0].clone()),
             _ => panic!("Unsupported API"),
         }
     }
@@ -120,9 +114,9 @@ fn init_sysctl() {
     let dt = DataType::new(
         Data::SysctlData(sysctl_data.clone()),
         file_name.clone(),
-        true
+        true,
     );
-    let js_file_name = file_name.clone() + &".js".to_string();
+    let js_file_name = file_name.clone() + ".js";
     let dv = DataVisualizer::new(
         ProcessedData::SysctlData(sysctl_data),
         file_name.clone(),
@@ -153,8 +147,8 @@ mod tests {
     fn test_collect_data() {
         let mut sysctl = SysctlData::new();
 
-        assert!(sysctl.collect_data().unwrap() == ());
-        assert!(sysctl.sysctl_data.len() != 0);
+        sysctl.collect_data().unwrap();
+        assert!(!sysctl.sysctl_data.is_empty());
     }
 
     #[test]
@@ -166,7 +160,7 @@ mod tests {
         for key in keys {
             for item in DONT_COLLECT {
                 if key.contains(item) {
-                    assert!(false, "Should not collect: {}", key);
+                    unreachable!("Should not collect: {}", key);
                 }
             }
         }
@@ -180,9 +174,15 @@ mod tests {
 
         sysctl.collect_data().unwrap();
         buffer.push(Data::SysctlData(sysctl));
-        processed_buffer.push(SysctlData::new().process_raw_data(buffer[0].clone()).unwrap());
-        let json = SysctlData::new().get_data(processed_buffer, "run=test&get=values".to_string()).unwrap();
+        processed_buffer.push(
+            SysctlData::new()
+                .process_raw_data(buffer[0].clone())
+                .unwrap(),
+        );
+        let json = SysctlData::new()
+            .get_data(processed_buffer, "run=test&get=values".to_string())
+            .unwrap();
         let values: BTreeMap<String, String> = serde_json::from_str(&json).unwrap();
-        assert!(values.len() != 0);
+        assert!(!values.is_empty());
     }
 }

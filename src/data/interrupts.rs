@@ -1,15 +1,15 @@
 extern crate ctor;
 
-use anyhow::Result;
-use crate::data::{CollectData, Data, ProcessedData, DataType, TimeEnum};
-use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::data::{CollectData, Data, DataType, ProcessedData, TimeEnum};
 use crate::visualizer::{DataVisualizer, GetData};
+use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
+use anyhow::Result;
 use chrono::prelude::*;
 use ctor::ctor;
-use log::{trace, error};
+use log::{error, trace};
 use serde::{Deserialize, Serialize};
-use std::io::{BufRead, BufReader};
 use std::collections::HashMap;
+use std::io::{BufRead, BufReader};
 
 pub static INTERRUPTS_FILE_NAME: &str = "interrupts";
 
@@ -158,7 +158,9 @@ fn process_collected_raw_data(buffer: Data) -> Result<ProcessedData> {
         interrupt_line_data.set_time(raw_value.time);
 
         let line = line?;
-        let mut split = line.split(|c: char| c.is_whitespace() || c == ':').filter(|s| !s.is_empty());
+        let mut split = line
+            .split(|c: char| c.is_whitespace() || c == ':')
+            .filter(|s| !s.is_empty());
 
         /* Get type of interrupt line */
         let intr_line = get_intr_line(split.next().unwrap())?;
@@ -174,8 +176,10 @@ fn process_collected_raw_data(buffer: Data) -> Result<ProcessedData> {
                 } else {
                     /* Other named INTRs are per-cpu */
                     for cpu in 0..cpu_count {
-                        let interrupt_cpu_data = get_interrupt_cpu_data(split.next().unwrap(),
-                        *cpus_nr.get(cpu as usize).unwrap())?;
+                        let interrupt_cpu_data = get_interrupt_cpu_data(
+                            split.next().unwrap(),
+                            *cpus_nr.get(cpu as usize).unwrap(),
+                        )?;
                         interrupt_line_data.push_to_per_cpu(interrupt_cpu_data);
                     }
                     /*
@@ -199,8 +203,10 @@ fn process_collected_raw_data(buffer: Data) -> Result<ProcessedData> {
             InterruptLine::InterruptNr(_) => {
                 /* Numbered interrupt lines are per-cpu */
                 for cpu in 0..cpu_count {
-                    let interrupt_cpu_data = get_interrupt_cpu_data(split.next().unwrap(),
-                                                                    *cpus_nr.get(cpu as usize).unwrap())?;
+                    let interrupt_cpu_data = get_interrupt_cpu_data(
+                        split.next().unwrap(),
+                        *cpus_nr.get(cpu as usize).unwrap(),
+                    )?;
                     interrupt_line_data.push_to_per_cpu(interrupt_cpu_data);
                 }
                 /* They also contain additional information about type, edge and device name */
@@ -222,12 +228,11 @@ fn process_collected_raw_data(buffer: Data) -> Result<ProcessedData> {
 fn get_lines(value: InterruptData) -> Result<String> {
     let mut lines = Vec::new();
     for line_data in value.interrupt_data {
-        let line_name;
-        match line_data.interrupt_line {
-            InterruptLine::InterruptStr(v) => line_name = v,
-            InterruptLine::InterruptNr(v) => line_name = v.to_string(),
+        let line_name = match line_data.interrupt_line {
+            InterruptLine::InterruptStr(v) => v,
+            InterruptLine::InterruptNr(v) => v.to_string(),
             _ => panic!("Line Nr cannot be None"),
-        }
+        };
         lines.push(line_name);
     }
     Ok(serde_json::to_string(&lines)?)
@@ -237,12 +242,11 @@ fn get_key_data(values: Vec<InterruptData>, key: String) -> Vec<InterruptLineDat
     let mut key_values = Vec::new();
     for value in values {
         for line_data in value.interrupt_data {
-            let line_name;
-            match line_data.interrupt_line.clone() {
-                InterruptLine::InterruptStr(v) => line_name = v,
-                InterruptLine::InterruptNr(v) => line_name = v.to_string(),
+            let line_name = match line_data.interrupt_line.clone() {
+                InterruptLine::InterruptStr(v) => v,
+                InterruptLine::InterruptNr(v) => v.to_string(),
                 _ => panic!("Can't be None"),
-            }
+            };
             if line_name == key {
                 key_values.push(line_data);
             }
@@ -263,9 +267,9 @@ fn get_line_data(values: Vec<InterruptData>, key: String) -> Result<String> {
         let mut end_value = data.clone();
         end_value.set_time(data.time - time_zero);
         for cpu_data in &mut end_value.per_cpu {
-            cpu_data.count -= prev_data_map
-                .get(&cpu_data.cpu)
-                .ok_or(PDError::VisualizerInterruptLineCPUCountError(format!("{}", cpu_data.cpu)))?;
+            cpu_data.count -= prev_data_map.get(&cpu_data.cpu).ok_or(
+                PDError::VisualizerInterruptLineCPUCountError(format!("{}", cpu_data.cpu)),
+            )?;
         }
         end_values.push(end_value);
         prev_data_map.clear();
@@ -282,10 +286,7 @@ impl GetData for InterruptData {
     }
 
     fn get_calls(&mut self) -> Result<Vec<String>> {
-        let mut end_values = Vec::new();
-        end_values.push("keys".to_string());
-        end_values.push("values".to_string());
-        Ok(end_values)
+        Ok(vec!["keys".to_string(), "values".to_string()])
     }
 
     fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
@@ -300,12 +301,10 @@ impl GetData for InterruptData {
         let (_, req_str) = &param[1];
 
         match req_str.as_str() {
-            "keys" => {
-                return get_lines(values[0].clone());
-            }
+            "keys" => get_lines(values[0].clone()),
             "values" => {
                 let (_, key) = &param[2];
-                return get_line_data(values.clone(), key.to_string());
+                get_line_data(values.clone(), key.to_string())
             }
             _ => panic!("Unsupported API"),
         }
@@ -319,16 +318,16 @@ fn init_interrupts() {
     let dt = DataType::new(
         Data::InterruptDataRaw(interrupt_data_raw.clone()),
         file_name.clone(),
-        false
+        false,
     );
     let interrupt_data = InterruptData::new();
-    let js_file_name = file_name.clone() + &".js".to_string();
+    let js_file_name = file_name.clone() + ".js";
     let dv = DataVisualizer::new(
         ProcessedData::InterruptData(interrupt_data),
         file_name.clone(),
         js_file_name,
         include_str!(concat!(env!("JS_DIR"), "/interrupts.js")).to_string(),
-        file_name.clone()
+        file_name.clone(),
     );
     PERFORMANCE_DATA
         .lock()
@@ -343,16 +342,16 @@ fn init_interrupts() {
 
 #[cfg(test)]
 mod tests {
-    use super::{InterruptData, InterruptDataRaw, InterruptLineData, InterruptLine};
+    use super::{InterruptData, InterruptDataRaw, InterruptLine, InterruptLineData};
     use crate::data::{CollectData, Data, ProcessedData};
-    use crate::visualizer::{DataVisualizer, GetData};
     use crate::get_file;
+    use crate::visualizer::{DataVisualizer, GetData};
 
     #[test]
     fn test_collect_data() {
         let mut id = InterruptDataRaw::new();
 
-        assert!(id.collect_data().unwrap() == ());
+        id.collect_data().unwrap();
         assert!(!id.data.is_empty());
     }
 
@@ -368,29 +367,28 @@ mod tests {
         for buf in buffer {
             processed_buffer.push(InterruptData::new().process_raw_data(buf).unwrap());
         }
-        let mut id = InterruptData::new();
-        match &processed_buffer[0] {
-            ProcessedData::InterruptData(value) => id = value.clone(),
-            _ => assert!(false),
+        let id = match &processed_buffer[0] {
+            ProcessedData::InterruptData(value) => value.clone(),
+            _ => unreachable!(),
         };
         for interrupt_line_data in &id.interrupt_data {
             match &interrupt_line_data.interrupt_line {
                 InterruptLine::InterruptNr(_) => {
-                    assert!(interrupt_line_data.interrupt_type != "");
-                    assert!(interrupt_line_data.interrupt_device != "");
-                    assert!(interrupt_line_data.per_cpu.len() > 0);
+                    assert!(!interrupt_line_data.interrupt_type.is_empty());
+                    assert!(!interrupt_line_data.interrupt_device.is_empty());
+                    assert!(!interrupt_line_data.per_cpu.is_empty());
                 }
                 InterruptLine::InterruptStr(value) => {
                     if value.to_uppercase() == "MIS" || value.to_uppercase() == "ERR" {
-                        assert!(interrupt_line_data.interrupt_type == value.to_string());
-                        assert!(interrupt_line_data.per_cpu.len() == 1);
+                        assert_eq!(interrupt_line_data.interrupt_type, *value);
+                        assert_eq!(interrupt_line_data.per_cpu.len(), 1);
                     } else {
-                        assert!(interrupt_line_data.interrupt_type != "");
-                        assert!(interrupt_line_data.per_cpu.len() > 0);
+                        assert!(!interrupt_line_data.interrupt_type.is_empty());
+                        assert!(!interrupt_line_data.per_cpu.is_empty());
                     }
-                    assert!(interrupt_line_data.interrupt_device == "");
+                    assert!(interrupt_line_data.interrupt_device.is_empty());
                 }
-                InterruptLine::None => assert!(false),
+                InterruptLine::None => unreachable!(),
             }
         }
     }
@@ -410,9 +408,11 @@ mod tests {
         for buf in buffer {
             processed_buffer.push(InterruptData::new().process_raw_data(buf).unwrap());
         }
-        let json = InterruptData::new().get_data(processed_buffer, "run=test&get=keys".to_string()).unwrap();
+        let json = InterruptData::new()
+            .get_data(processed_buffer, "run=test&get=keys".to_string())
+            .unwrap();
         let values: Vec<String> = serde_json::from_str(&json).unwrap();
-        assert!(values.len() > 0);
+        assert!(!values.is_empty());
     }
 
     #[test]
@@ -427,24 +427,32 @@ mod tests {
         for buf in buffer {
             processed_buffer.push(InterruptData::new().process_raw_data(buf).unwrap());
         }
-        let json = InterruptData::new().get_data(processed_buffer.clone(), "run=test&get=keys".to_string()).unwrap();
+        let json = InterruptData::new()
+            .get_data(processed_buffer.clone(), "run=test&get=keys".to_string())
+            .unwrap();
         let values: Vec<String> = serde_json::from_str(&json).unwrap();
         let key_query = format!("run=test&get=values&key={}", values[0]);
-        let ld_json = InterruptData::new().get_data(processed_buffer, key_query).unwrap();
+        let ld_json = InterruptData::new()
+            .get_data(processed_buffer, key_query)
+            .unwrap();
         let line_data: Vec<InterruptLineData> = serde_json::from_str(&ld_json).unwrap();
-        assert!(line_data.len() > 0);
-        assert!(line_data[0].per_cpu.len() > 0);
+        assert!(!line_data.is_empty());
+        assert!(!line_data[0].per_cpu.is_empty());
     }
 
     #[test]
     fn test_process_raw_data() {
         let mut raw_data = Vec::new();
-        let file = get_file("test/aperf_2023-07-26_18_37_43/".to_string(), "interrupts".to_string()).unwrap();
+        let file = get_file(
+            "test/aperf_2023-07-26_18_37_43/".to_string(),
+            "interrupts".to_string(),
+        )
+        .unwrap();
         match bincode::deserialize_from::<_, Data>(file) {
             Ok(v) => raw_data.push(v),
             Err(e) => match *e {
-                bincode::ErrorKind::Io(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => assert!(true),
-                e => assert!(false, "{:#?}", e),
+                bincode::ErrorKind::Io(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {}
+                e => panic!("{:#?}", e),
             },
         };
         let mut dv = DataVisualizer::new(
@@ -452,16 +460,27 @@ mod tests {
             String::new(),
             String::new(),
             String::new(),
-            String::new()
+            String::new(),
         );
         let processed_data = dv.data.process_raw_data(raw_data[0].clone()).unwrap();
         match processed_data {
             ProcessedData::InterruptData(ref value) => {
-                assert!(value.interrupt_data[0].interrupt_line == InterruptLine::InterruptNr(1), "{:#?}", value);
-                assert!(value.interrupt_data[0].interrupt_type == "IO-APIC".to_string(), "Invalid interrupt type");
-                assert!(value.interrupt_data[0].interrupt_device == "i8042".to_string(), "Invalid interrupt device");
+                assert_eq!(
+                    value.interrupt_data[0].interrupt_line,
+                    InterruptLine::InterruptNr(1),
+                    "{:#?}",
+                    value
+                );
+                assert_eq!(
+                    value.interrupt_data[0].interrupt_type, *"IO-APIC",
+                    "Invalid interrupt type"
+                );
+                assert_eq!(
+                    value.interrupt_data[0].interrupt_device, *"i8042",
+                    "Invalid interrupt device"
+                );
             }
-            _ => assert!(false, "Invalid data type in interrupts"),
+            _ => unreachable!("Invalid data type in interrupts"),
         }
     }
 }

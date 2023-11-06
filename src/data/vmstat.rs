@@ -1,7 +1,7 @@
 extern crate ctor;
 
-use crate::data::{CollectData, Data, ProcessedData, DataType, TimeEnum};
-use crate::visualizer::{DataVisualizer, GetData, GraphMetadata, GraphLimitType};
+use crate::data::{CollectData, Data, DataType, ProcessedData, TimeEnum};
+use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata};
 use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
 use chrono::prelude::*;
@@ -103,7 +103,10 @@ fn get_entry(values: Vec<Vmstat>, key: String) -> Result<String> {
         end_values.push(vmstat_entry);
         prev_vmstat = value.clone();
     }
-    let vmstat_data = EndVmstatData {data: end_values, metadata: metadata};
+    let vmstat_data = EndVmstatData {
+        data: end_values,
+        metadata,
+    };
     Ok(serde_json::to_string(&vmstat_data)?)
 }
 
@@ -120,15 +123,15 @@ impl GetData for Vmstat {
             _ => panic!("Invalid Data type in raw file"),
         };
         let mut vmstat = Vmstat::new();
-	let reader = BufReader::new(raw_value.data.as_bytes());
-	let mut map: HashMap<String, i64> = HashMap::new();
-	for line in reader.lines() {
+        let reader = BufReader::new(raw_value.data.as_bytes());
+        let mut map: HashMap<String, i64> = HashMap::new();
+        for line in reader.lines() {
             let line = line?;
             let mut split = line.split_whitespace();
             let name = split.next().ok_or(PDError::ProcessorOptionExtractError)?;
             let val = split.next().ok_or(PDError::ProcessorOptionExtractError)?;
-	    map.insert(name.to_owned(), val.parse::<i64>()?);
-	}
+            map.insert(name.to_owned(), val.parse::<i64>()?);
+        }
         vmstat.set_time(raw_value.time);
         vmstat.set_data(map);
         let processed_data = ProcessedData::Vmstat(vmstat);
@@ -136,10 +139,7 @@ impl GetData for Vmstat {
     }
 
     fn get_calls(&mut self) -> Result<Vec<String>> {
-        let mut end_values = Vec::new();
-        end_values.push("keys".to_string());
-        end_values.push("values".to_string());
-        Ok(end_values)
+        Ok(vec!["keys".to_string(), "values".to_string()])
     }
 
     fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
@@ -154,10 +154,10 @@ impl GetData for Vmstat {
         let (_, req_str) = &param[1];
 
         match req_str.as_str() {
-            "keys" => return get_entries(values[0].clone()),
+            "keys" => get_entries(values[0].clone()),
             "values" => {
                 let (_, key) = &param[2];
-                return get_entry(values, key.to_string());
+                get_entry(values, key.to_string())
             }
             _ => panic!("Unsupported API"),
         }
@@ -171,9 +171,9 @@ fn init_vmstat() {
     let dt = DataType::new(
         Data::VmstatRaw(vmstat_raw.clone()),
         file_name.clone(),
-        false
+        false,
     );
-    let js_file_name = file_name.clone() + &".js".to_string();
+    let js_file_name = file_name.clone() + ".js";
     let vmstat = Vmstat::new();
     let dv = DataVisualizer::new(
         ProcessedData::Vmstat(vmstat.clone()),
@@ -196,7 +196,7 @@ fn init_vmstat() {
 
 #[cfg(test)]
 mod tests {
-    use super::{Vmstat, VmstatRaw, EndVmstatData};
+    use super::{EndVmstatData, Vmstat, VmstatRaw};
     use crate::data::{CollectData, Data, ProcessedData, TimeEnum};
     use crate::visualizer::GetData;
 
@@ -204,7 +204,7 @@ mod tests {
     fn test_collect_data() {
         let mut vmstat = VmstatRaw::new();
 
-        assert!(vmstat.collect_data().unwrap() == ());
+        vmstat.collect_data().unwrap();
         assert!(!vmstat.data.is_empty());
     }
 
@@ -214,12 +214,14 @@ mod tests {
         let mut vmstat = VmstatRaw::new();
         let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
 
-        assert!(vmstat.collect_data().unwrap() == ());
+        vmstat.collect_data().unwrap();
         buffer.push(Data::VmstatRaw(vmstat));
         processed_buffer.push(Vmstat::new().process_raw_data(buffer[0].clone()).unwrap());
-        let json = Vmstat::new().get_data(processed_buffer, "run=test&get=keys".to_string()).unwrap();
+        let json = Vmstat::new()
+            .get_data(processed_buffer, "run=test&get=keys".to_string())
+            .unwrap();
         let values: Vec<&str> = serde_json::from_str(&json).unwrap();
-        assert!(values.len() > 0);
+        assert!(!values.is_empty());
     }
 
     #[test]
@@ -228,15 +230,20 @@ mod tests {
         let mut vmstat = VmstatRaw::new();
         let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
 
-        assert!(vmstat.collect_data().unwrap() == ());
+        vmstat.collect_data().unwrap();
         buffer.push(Data::VmstatRaw(vmstat));
         processed_buffer.push(Vmstat::new().process_raw_data(buffer[0].clone()).unwrap());
-        let json = Vmstat::new().get_data(processed_buffer, "run=test&get=values&key=nr_dirty".to_string()).unwrap();
+        let json = Vmstat::new()
+            .get_data(
+                processed_buffer,
+                "run=test&get=values&key=nr_dirty".to_string(),
+            )
+            .unwrap();
         let data: EndVmstatData = serde_json::from_str(&json).unwrap();
-        assert!(data.data.len() > 0);
+        assert!(!data.data.is_empty());
         match data.data[0].time {
             TimeEnum::TimeDiff(value) => assert!(value == 0),
-            _ => assert!(false),
+            _ => unreachable!(),
         }
     }
 }

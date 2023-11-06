@@ -1,17 +1,17 @@
 extern crate ctor;
 extern crate lazy_static;
 
-use anyhow::Result;
-use crate::data::{CollectData, Data, ProcessedData, CollectorParams, DataType, TimeEnum};
-use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
 use crate::visualizer::{DataVisualizer, GetData};
+use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
+use anyhow::Result;
 use chrono::prelude::*;
 use ctor::ctor;
 use log::trace;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader};
-use std::collections::HashMap;
 use std::sync::Mutex;
 
 pub static PROCESS_FILE_NAME: &str = "processes";
@@ -39,6 +39,12 @@ impl ProcessesRaw {
     }
 }
 
+impl Default for ProcessesRaw {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CollectData for ProcessesRaw {
     fn prepare_data_collector(&mut self, _params: CollectorParams) -> Result<()> {
         *TICKS_PER_SECOND.lock().unwrap() = procfs::ticks_per_second()? as u64;
@@ -55,9 +61,8 @@ impl CollectData for ProcessesRaw {
             if file_name.chars().all(char::is_numeric) {
                 let mut path = entry.path();
                 path.push("stat");
-                match fs::read_to_string(path) {
-                    Ok(v) => self.data.push_str(&v),
-                    Err(_) => {},
+                if let Ok(v) = fs::read_to_string(path) {
+                    self.data.push_str(&v)
                 }
             }
         }
@@ -140,14 +145,11 @@ pub fn get_values(values: Vec<Processes>) -> Result<String> {
             match process_map.get_mut(&entry.name) {
                 Some(pe) => {
                     let mut sample_cpu_time: u64 = entry.cpu_time;
-                    match pe.samples.get(&time) {
-                        Some(v) => {
-                            sample_cpu_time += v;
-                        },
-                        None => {},
+                    if let Some(v) = pe.samples.get(&time) {
+                        sample_cpu_time += v;
                     }
                     pe.samples.insert(time, sample_cpu_time);
-                },
+                }
                 None => {
                     let mut process_entry = ProcessEntry {
                         name: entry.name.clone(),
@@ -156,7 +158,7 @@ pub fn get_values(values: Vec<Processes>) -> Result<String> {
                     };
                     process_entry.samples.insert(time, entry.cpu_time);
                     process_map.insert(entry.name, process_entry);
-                },
+                }
             }
         }
     }
@@ -172,16 +174,22 @@ pub fn get_values(values: Vec<Processes>) -> Result<String> {
             entries: Vec::new(),
         };
         let mut entries: Vec<(TimeEnum, u64)> = process.samples.clone().into_iter().collect();
-        entries.sort_by(|(a, _), (c, _)| a.cmp(&c));
-        let entry_zero: (TimeEnum, u64) = entries[0].clone();
-        let mut prev_sample = Sample {time: entry_zero.0, cpu_time: entry_zero.1};
+        entries.sort_by(|(a, _), (c, _)| a.cmp(c));
+        let entry_zero: (TimeEnum, u64) = entries[0];
+        let mut prev_sample = Sample {
+            time: entry_zero.0,
+            cpu_time: entry_zero.1,
+        };
         let mut prev_time: u64 = 0;
         let mut time_now;
         if let TimeEnum::TimeDiff(v) = prev_sample.time {
             prev_time = v;
         }
         for (time, cpu_time) in &entries {
-            let sample = Sample {cpu_time: *cpu_time, time: *time};
+            let sample = Sample {
+                cpu_time: *cpu_time,
+                time: *time,
+            };
             /* End sample */
             let mut end_sample = sample.clone();
 
@@ -217,7 +225,9 @@ pub fn get_values(values: Vec<Processes>) -> Result<String> {
         end_values.end_entries.push(end_entry);
     }
     /* Order the processes by Total CPU Time per collection time */
-    end_values.end_entries.sort_by(|a, b| (b.total_cpu_time).cmp(&(a.total_cpu_time)));
+    end_values
+        .end_entries
+        .sort_by(|a, b| (b.total_cpu_time).cmp(&(a.total_cpu_time)));
 
     if end_values.end_entries.len() > 16 {
         end_values.end_entries = end_values.end_entries[0..15].to_vec();
@@ -240,20 +250,18 @@ impl GetData for Processes {
             let line = line?;
 
             let open_parenthesis = line.find('(');
-            let open_pos;
-            match open_parenthesis {
-                Some(v) => open_pos = v,
+            let open_pos = match open_parenthesis {
+                Some(v) => v,
                 None => continue,
-            }
+            };
             let close_parenthesis = line.find(')');
-            let close_pos;
-            match close_parenthesis {
-                Some(v) => close_pos = v,
+            let close_pos = match close_parenthesis {
+                Some(v) => v,
                 None => continue,
-            }
-            let pid = line[..open_pos-1].parse::<u64>()?;
-            let name = line[open_pos+1..close_pos].to_string();
-            let values: Vec<&str> = line[close_pos+2..].split_whitespace().collect();
+            };
+            let pid = line[..open_pos - 1].parse::<u64>()?;
+            let name = line[open_pos + 1..close_pos].to_string();
+            let values: Vec<&str> = line[close_pos + 2..].split_whitespace().collect();
 
             if values.len() < PROC_PID_STAT_KERNELSPACE_TIME_POS + 1 {
                 continue;
@@ -262,16 +270,18 @@ impl GetData for Processes {
             let kernel_time = values[PROC_PID_STAT_KERNELSPACE_TIME_POS].parse::<u64>()?;
             let cpu_time = user_time + kernel_time;
 
-            processes.entries.push(SampleEntry{name, pid, cpu_time});
+            processes.entries.push(SampleEntry {
+                name,
+                pid,
+                cpu_time,
+            });
         }
         let processed_data = ProcessedData::Processes(processes);
         Ok(processed_data)
     }
 
     fn get_calls(&mut self) -> Result<Vec<String>> {
-        let mut end_values = Vec::new();
-        end_values.push("values".to_string());
-        Ok(end_values)
+        Ok(vec!["values".to_string()])
     }
 
     fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
@@ -302,9 +312,9 @@ fn init_system_processes() {
     let dt = DataType::new(
         Data::ProcessesRaw(processes_raw.clone()),
         file_name.clone(),
-        false
+        false,
     );
-    let js_file_name = file_name.clone() + &".js".to_string();
+    let js_file_name = file_name.clone() + ".js";
     let processes = Processes::new();
     let dv = DataVisualizer::new(
         ProcessedData::Processes(processes),
@@ -328,15 +338,15 @@ fn init_system_processes() {
 #[cfg(test)]
 mod process_test {
     use super::{Processes, ProcessesRaw};
-    use crate::data::{CollectData, Data, CollectorParams, ProcessedData};
+    use crate::data::{CollectData, CollectorParams, Data, ProcessedData};
     use crate::visualizer::GetData;
 
     #[test]
     fn test_collect_data() {
         let mut processes = ProcessesRaw::new();
         let params = CollectorParams::new();
-        assert!(processes.prepare_data_collector(params).unwrap() == ());
-        assert!(processes.collect_data().unwrap() == ());
+        processes.prepare_data_collector(params).unwrap();
+        processes.collect_data().unwrap();
         assert!(!processes.data.is_empty());
     }
 
@@ -348,8 +358,10 @@ mod process_test {
         let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
         let params = CollectorParams::new();
 
-        assert!(processes_zero.prepare_data_collector(params.clone()).unwrap() == ());
-        assert!(processes_one.prepare_data_collector(params).unwrap() == ());
+        processes_zero
+            .prepare_data_collector(params.clone())
+            .unwrap();
+        processes_one.prepare_data_collector(params).unwrap();
         processes_zero.collect_data().unwrap();
         processes_one.collect_data().unwrap();
 
@@ -358,6 +370,6 @@ mod process_test {
         for buf in buffer {
             processed_buffer.push(Processes::new().process_raw_data(buf).unwrap());
         }
-        assert!(processed_buffer.len() > 0, "{:#?}", processed_buffer);
+        assert!(!processed_buffer.is_empty(), "{:#?}", processed_buffer);
     }
 }

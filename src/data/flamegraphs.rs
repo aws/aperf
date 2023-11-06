@@ -1,19 +1,19 @@
 extern crate ctor;
 
-use anyhow::Result;
-use crate::data::{CollectData, Data, DataType, CollectorParams, ProcessedData};
-use crate::{get_file_name, PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData};
 use crate::visualizer::{DataVisualizer, GetData, ReportParams};
+use crate::{get_file_name, PERFORMANCE_DATA, VISUALIZATION_DATA};
+use anyhow::Result;
 use ctor::ctor;
-use log::{error, trace};
-use serde::{Deserialize, Serialize};
-use std::fs::File;
-use std::process::Command;
-use std::io::{ErrorKind, Write};
-use std::path::PathBuf;
 use inferno::collapse::perf::Folder;
 use inferno::collapse::Collapse;
 use inferno::flamegraph::{self, Options};
+use log::{error, trace};
+use serde::{Deserialize, Serialize};
+use std::fs::File;
+use std::io::{ErrorKind, Write};
+use std::path::PathBuf;
+use std::process::Command;
 
 pub static FLAMEGRAPHS_FILE_NAME: &str = "flamegraph";
 
@@ -35,14 +35,24 @@ impl CollectData for FlamegraphRaw {
         let data_dir = PathBuf::from(params.data_dir.clone());
 
         let mut file_pathbuf = data_dir.clone();
-        file_pathbuf.push(get_file_name(params.data_dir.clone(), "perf_profile".to_string())?);
+        file_pathbuf.push(get_file_name(
+            params.data_dir.clone(),
+            "perf_profile".to_string(),
+        )?);
 
         let mut perf_jit_loc = data_dir.clone();
         perf_jit_loc.push(format!("{}-perf.data.jit", params.run_name));
 
         println!("Running Perf inject...");
         let out_jit = Command::new("perf")
-            .args(["inject", "-j", "-i", &file_pathbuf.to_str().unwrap(), "-o", perf_jit_loc.clone().to_str().unwrap()])
+            .args([
+                "inject",
+                "-j",
+                "-i",
+                &file_pathbuf.to_str().unwrap(),
+                "-o",
+                perf_jit_loc.clone().to_str().unwrap(),
+            ])
             .status();
         match out_jit {
             Err(e) => {
@@ -52,7 +62,7 @@ impl CollectData for FlamegraphRaw {
                     error!("Unknown error: {}", e);
                 }
                 error!("Skip processing profiling data.");
-            },
+            }
             Ok(_) => trace!("Perf inject successful."),
         }
         Ok(())
@@ -76,7 +86,10 @@ impl GetData for Flamegraph {
     fn custom_raw_data_parser(&mut self, params: ReportParams) -> Result<Vec<ProcessedData>> {
         /* Get the perf_profile file */
         let mut file_pathbuf = PathBuf::from(params.data_dir.clone());
-        file_pathbuf.push(get_file_name(params.data_dir.clone(), "perf_profile".to_string())?);
+        file_pathbuf.push(get_file_name(
+            params.data_dir.clone(),
+            "perf_profile".to_string(),
+        )?);
 
         let _file_name = file_pathbuf.to_str().unwrap();
         let profile = Flamegraph::new();
@@ -113,13 +126,21 @@ impl GetData for Flamegraph {
                     }
                     error!("Skip processing profiling data.");
                     write!(fg_out, "<svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" width=\"100%\" height=\"100%\"><text x=\"0%\" y=\"1%\">Did not process profiling data</text></svg>")?;
-                },
+                }
                 Ok(v) => {
-                    write!(script_out, "{}", std::str::from_utf8(&v.stdout)?.to_string())?;
+                    write!(script_out, "{}", std::str::from_utf8(&v.stdout)?)?;
                     Folder::default().collapse_file(Some(script_loc), collapse_out)?;
-                    fg_out = std::fs::OpenOptions::new().read(true).write(true).truncate(true).open(fg_loc)?;
-                    flamegraph::from_files(&mut Options::default(), &vec![collapse_loc.to_path_buf()], fg_out)?;
-                },
+                    fg_out = std::fs::OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .truncate(true)
+                        .open(fg_loc)?;
+                    flamegraph::from_files(
+                        &mut Options::default(),
+                        &[collapse_loc.to_path_buf()],
+                        fg_out,
+                    )?;
+                }
             }
         } else {
             write!(fg_out, "<svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" width=\"100%\" height=\"100%\"><text x=\"0%\" y=\"1%\">No data collected</text></svg>")?;
@@ -129,9 +150,7 @@ impl GetData for Flamegraph {
     }
 
     fn get_calls(&mut self) -> Result<Vec<String>> {
-        let mut end_values = Vec::new();
-        end_values.push("values".to_string());
-        Ok(end_values)
+        Ok(vec!["values".to_string()])
     }
 
     fn get_data(&mut self, _buffer: Vec<ProcessedData>, _query: String) -> Result<String> {
@@ -147,10 +166,10 @@ fn init_flamegraph() {
     let dt = DataType::new(
         Data::FlamegraphRaw(flamegraph_raw.clone()),
         file_name.clone(),
-        false
+        false,
     );
     let flamegraph = Flamegraph::new();
-    let js_file_name = file_name.clone() + &".js".to_string();
+    let js_file_name = file_name.clone() + ".js";
     let mut dv = DataVisualizer::new(
         ProcessedData::Flamegraph(flamegraph.clone()),
         file_name.clone(),

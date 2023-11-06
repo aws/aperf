@@ -1,10 +1,10 @@
 use anyhow::Result;
-use env_logger::Builder;
-use log::LevelFilter;
-use clap::{Parser, Subcommand};
 use aperf_lib::record::{record, Record};
 use aperf_lib::report::{report, Report};
 use aperf_lib::PDError;
+use clap::{Parser, Subcommand};
+use env_logger::Builder;
+use log::LevelFilter;
 
 #[derive(Parser)]
 #[command(author, about, long_about = None)]
@@ -30,13 +30,12 @@ enum Commands {
 }
 
 fn init_logger(verbose: u8) -> Result<()> {
-    let level;
-    match verbose {
-        0 => level = LevelFilter::Info,
-        1 => level = LevelFilter::Debug,
-        2 => level = LevelFilter::Trace,
+    let level = match verbose {
+        0 => LevelFilter::Info,
+        1 => LevelFilter::Debug,
+        2 => LevelFilter::Trace,
         _ => return Err(PDError::InvalidVerboseOption.into()),
-    }
+    };
     Builder::new().filter_level(level).init();
     Ok(())
 }

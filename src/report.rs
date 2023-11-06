@@ -1,14 +1,14 @@
-use anyhow::Result;
 use crate::{PDError, VISUALIZATION_DATA};
-use std::path::{Path, PathBuf};
+use anyhow::Result;
+use clap::Args;
+use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use log::{error, info};
-use std::fs::File;
-use std::io::Write;
-use std::fs;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use clap::Args;
-use flate2::{Compression, write::GzEncoder, read::GzDecoder};
+use std::fs;
+use std::fs::File;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Args, Debug)]
 pub struct Report {
@@ -22,7 +22,7 @@ pub struct Report {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-struct API {
+struct Api {
     name: String,
     runs: Vec<Run>,
 }
@@ -36,9 +36,14 @@ struct Run {
 
 pub static APERF_TMP: &str = "aperf_tmp";
 
-pub fn form_and_copy_archive(loc: String, report_name: &PathBuf) -> Result<()> {
+pub fn form_and_copy_archive(loc: String, report_name: &Path) -> Result<()> {
     if Path::new(&loc).is_dir() {
-        let dir_stem = Path::new(&loc).file_stem().unwrap().to_str().unwrap().to_string();
+        let dir_stem = Path::new(&loc)
+            .file_stem()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
 
         /* Create a temp archive */
         let archive_name = format!("{}.tar.gz", &dir_stem);
@@ -56,14 +61,19 @@ pub fn form_and_copy_archive(loc: String, report_name: &PathBuf) -> Result<()> {
         return Ok(());
     }
     if infer::get_from_path(&loc)?.unwrap().mime_type() == "application/gzip" {
-        let file_name = Path::new(&loc).file_name().unwrap().to_str().unwrap().to_string();
+        let file_name = Path::new(&loc)
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
 
         /* Copy archive to aperf_report */
         let archive_dst = report_name.join(format!("data/archive/{}", file_name));
         fs::copy(loc, archive_dst)?;
         return Ok(());
     }
-    return Err(PDError::RecordNotArchiveOrDirectory.into());
+    Err(PDError::RecordNotArchiveOrDirectory.into())
 }
 
 pub fn get_dir(dir: String) -> Result<String> {
@@ -78,7 +88,10 @@ pub fn get_dir(dir: String) -> Result<String> {
         let mut archive = tar::Archive::new(tar);
         archive.unpack(APERF_TMP)?;
         let dir_name = Path::new(&dir)
-            .file_name().unwrap().to_str().unwrap()
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
             .strip_suffix(".tar.gz")
             .ok_or(PDError::InvalidArchiveName)?;
         if !Path::new(&format!("{}/{}", APERF_TMP, dir_name)).exists() {
@@ -86,7 +99,7 @@ pub fn get_dir(dir: String) -> Result<String> {
         }
         return Ok(format!("{}/{}", APERF_TMP, dir_name));
     }
-    return Err(PDError::RecordNotArchiveOrDirectory.into());
+    Err(PDError::RecordNotArchiveOrDirectory.into())
 }
 
 pub fn report(report: &Report) -> Result<()> {
@@ -103,7 +116,7 @@ pub fn report(report: &Report) -> Result<()> {
         let path = Path::new(&directory);
         if dir_stems.contains(&path.file_stem().unwrap().to_str().unwrap().to_string()) {
             error!("Cannot process two runs with the same name");
-            return Ok(())
+            return Ok(());
         }
         dir_stems.push(path.file_stem().unwrap().to_str().unwrap().to_string());
         dir_paths.push(path.to_str().unwrap().to_string());
@@ -116,12 +129,11 @@ pub fn report(report: &Report) -> Result<()> {
             /* Generate report name */
             let mut file_name = "aperf_report".to_string();
             for stem in &dir_stems {
-                let name;
-                if stem.ends_with(".tar.gz") {
-                    name = stem.strip_suffix(".tar.gz").unwrap().to_string();
+                let name = if stem.ends_with(".tar.gz") {
+                    stem.strip_suffix(".tar.gz").unwrap().to_string()
                 } else {
-                    name = stem.to_string();
-                }
+                    stem.to_string()
+                };
                 file_name = format!("{}_{}", file_name, name);
             }
             report_name.push(file_name);
@@ -138,7 +150,10 @@ pub fn report(report: &Report) -> Result<()> {
     let index_css = include_str!("html_files/index.css");
     let index_js = include_str!(concat!(env!("JS_DIR"), "/index.js"));
     let utils_js = include_str!(concat!(env!("JS_DIR"), "/utils.js"));
-    let plotly_js = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/node_modules/plotly.js/dist/plotly.min.js"));
+    let plotly_js = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/node_modules/plotly.js/dist/plotly.min.js"
+    ));
     let run_names = dir_stems.clone();
 
     fs::create_dir_all(report_name.join("js"))?;
@@ -165,8 +180,11 @@ pub fn report(report: &Report) -> Result<()> {
 
     /* Init visualizers */
     for dir in dir_paths {
-        let name = VISUALIZATION_DATA.lock().unwrap()
-            .init_visualizers(dir.to_owned(), APERF_TMP.to_string(), report_name.clone())?;
+        let name = VISUALIZATION_DATA.lock().unwrap().init_visualizers(
+            dir.to_owned(),
+            APERF_TMP.to_string(),
+            report_name.clone(),
+        )?;
         VISUALIZATION_DATA.lock().unwrap().unpack_data(name)?;
     }
 
@@ -179,23 +197,40 @@ pub fn report(report: &Report) -> Result<()> {
     /* Generate run.js */
     let out_loc = report_name.join("data/js/runs.js");
     let mut runs_file = File::create(out_loc)?;
-    write!(runs_file, "runs_raw = {}", serde_json::to_string(&run_names)?)?;
+    write!(
+        runs_file,
+        "runs_raw = {}",
+        serde_json::to_string(&run_names)?
+    )?;
     let visualizer_names = VISUALIZATION_DATA.lock().unwrap().get_visualizer_names()?;
 
     /* Get visualizer data */
     for name in visualizer_names {
         let api_name = VISUALIZATION_DATA.lock().unwrap().get_api(name.clone())?;
-        let calls = VISUALIZATION_DATA.lock().unwrap().get_calls(api_name.clone())?;
-        let mut api = API {name: name.clone(), runs: Vec::new()};
+        let calls = VISUALIZATION_DATA
+            .lock()
+            .unwrap()
+            .get_calls(api_name.clone())?;
+        let mut api = Api {
+            name: name.clone(),
+            runs: Vec::new(),
+        };
         for run_name in &run_names {
             let mut temp_keys: Vec<String> = Vec::<String>::new();
-            let mut run = Run {name: run_name.clone(), keys: Vec::new(), key_values: HashMap::new()};
+            let mut run = Run {
+                name: run_name.clone(),
+                keys: Vec::new(),
+                key_values: HashMap::new(),
+            };
             let mut keys = false;
             for call in &calls {
                 let query = format!("run={}&get={}", run_name, call);
                 let mut data;
                 if call == "keys" {
-                    data = VISUALIZATION_DATA.lock().unwrap().get_data(run_name, &api_name, query)?;
+                    data = VISUALIZATION_DATA
+                        .lock()
+                        .unwrap()
+                        .get_data(run_name, &api_name, query)?;
                     if data != "No data collected" {
                         temp_keys = serde_json::from_str(&data)?;
                     }
@@ -206,12 +241,18 @@ pub fn report(report: &Report) -> Result<()> {
                     if keys {
                         for key in &temp_keys {
                             let query = format!("run={}&get=values&key={}", run_name, key);
-                            data = VISUALIZATION_DATA.lock().unwrap().get_data(run_name, &api_name, query)?;
+                            data = VISUALIZATION_DATA
+                                .lock()
+                                .unwrap()
+                                .get_data(run_name, &api_name, query)?;
                             run.key_values.insert(key.clone(), data.clone());
                         }
                     } else {
                         let query = format!("run={}&get=values", run_name);
-                        data = VISUALIZATION_DATA.lock().unwrap().get_data(run_name, &api_name, query)?;
+                        data = VISUALIZATION_DATA
+                            .lock()
+                            .unwrap()
+                            .get_data(run_name, &api_name, query)?;
                         run.key_values.insert(call.clone(), data.clone());
                     }
                 }
