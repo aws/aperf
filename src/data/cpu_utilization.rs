@@ -1,7 +1,7 @@
 extern crate ctor;
 
-use crate::visualizer::{DataVisualizer, GetData};
 use crate::data::{CollectData, Data, DataType, ProcessedData, TimeEnum};
+use crate::visualizer::{DataVisualizer, GetData};
 use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
 use chrono::prelude::*;
