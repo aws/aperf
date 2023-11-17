@@ -1,14 +1,20 @@
 * {box-sizing: border-box}
-body {font-family: "Lato", sans-serif;}
+body {
+  overflow-y: scroll;
+  font-family: "Lato", sans-serif;
+  display: grid;
+  grid-template-columns: 10% 1fr;
+  grid-column-gap: 1px;
+}
 
 /* Style the tab */
 .tab {
-  float: left;
+  grid-column: 1;
   border: 1px solid #ccc;
   background-color: #f1f1f1;
-  width: 10%;
-  height: 100%;
-  position: fixed;
+  position: sticky;
+  align-self: start;
+  top: 0;
 }
 
 .aperf {
@@ -16,9 +22,18 @@ body {font-family: "Lato", sans-serif;}
   text-align: center;
   color: black;
   padding: 5%;
-  width: 100%;
   font-size: 27px;
+}
+
+.extra {
+  padding: 5px 12px;
+}
+
+.content {
+  grid-column: 2;
   display: grid;
+  grid-template-rows: auto 1fr;
+  grid-row-gap: 1px;
 }
 
 /* Style the buttons inside the tab */
@@ -36,6 +51,13 @@ body {font-family: "Lato", sans-serif;}
   font-size: 17px;
 }
 
+.all-runs {
+  grid-row: 1;
+  position: sticky;
+  z-index: 2;
+  top: 0;
+}
+
 /* Change background color of buttons on hover */
 .tab button:hover {
   background-color: #ddd;
@@ -48,9 +70,8 @@ body {font-family: "Lato", sans-serif;}
 
 /* Style the tab content */
 .tabcontent {
-  float: right;
-  padding: 0px 12px;
+  grid-row: 2;
   border: 1px solid #ccc;
-  width: 90%;
+  width: 100%;
   height: 100%;
 }
