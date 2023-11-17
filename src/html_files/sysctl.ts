@@ -24,6 +24,7 @@ function form_sysctl_data(run, run_data) {
 function sysctlNoDiff(run, container_id) {
     var dl = document.createElement('dl');
     dl.id = `${run}-dl-sysctl-data`;
+    dl.classList.add("extra");
     dl.style.float = "none";
     var dl_id = dl.id;
     addElemToNode(container_id, dl);
@@ -38,6 +39,7 @@ function sysctlDiff(value) {
     clearElements(agg_id);
     var dl = document.createElement('dl');
     dl.id = `${value}-dl-sysctl-data`;
+    dl.classList.add("extra");
     dl.style.float = "none";
     var dl_id = dl.id;
     addElemToNode(agg_id, dl);
@@ -82,11 +84,6 @@ function sysctl(diff: boolean) {
         split_keys(sysctl_runs, sysctl_common_keys);
     }
 
-    var float_style = "none";
-    if (data.length > 1) {
-        float_style = "left";
-    }
-    var run_width = 100 / data.length;
     clearElements('sysctl-data-runs');
     data.forEach(function (value, index, arr) {
         // Run div
@@ -96,12 +93,6 @@ function sysctl(diff: boolean) {
         run_div.style.width = `${run_width}%`;
         addElemToNode('sysctl-data-runs', run_div);
         var run_node_id = run_div.id;
-
-        // Run name
-        var h3_run_name = document.createElement('h3');
-        h3_run_name.innerHTML = `${value}`;
-        h3_run_name.style.textAlign = "center";
-        addElemToNode(run_node_id, h3_run_name);
 
         //Show aggregate data
         var agg_elem = document.createElement('div');

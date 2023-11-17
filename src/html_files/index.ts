@@ -98,5 +98,37 @@ DataTypes.forEach((datatype: DataType, key: string) => {
 		})
 	}
 });
+
+var run_width = 100;
+var float_style = "none";
+
+function create_runs_header() {
+	var data = runs_raw;
+	float_style = "none";
+	if (data.length > 1) {
+		float_style = "left";
+	}
+	run_width = 100 / data.length;
+	data.forEach(function(value, index, arr) {
+		var run_div = document.createElement('div');
+		run_div.id = value;
+		run_div.style.float = float_style;
+		run_div.style.width = `${run_width}%`;
+		run_div.style.border = "1px solid black";
+		run_div.style.background = "lightgray";
+		run_div.style.opacity = "0.95";
+		addElemToNode('header', run_div);
+		var run_node_id = run_div.id;
+
+		var h3_run_name = document.createElement('h3');
+		h3_run_name.innerHTML = value;
+		h3_run_name.style.textAlign = "center";
+		addElemToNode(run_node_id, h3_run_name);
+	});
+}
+
+// Set Runs header
+create_runs_header();
+
 // Show landing page
 document.getElementById("default").click();

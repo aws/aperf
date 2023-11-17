@@ -137,14 +137,8 @@ function cpuUtilization() {
     if (got_cpu_util_data) {
         return;
     }
-    var data = runs_raw;
-    var float_style = "none";
-    if (data.length > 1) {
-        float_style = "left";
-    }
-    var run_width = 100 / data.length;
     clearElements('cpu-util-runs');
-    data.forEach(function (value, index, arr) {
+    runs_raw.forEach(function (value, index, arr) {
         // Run div
         var run_div = document.createElement('div');
         let this_run_data;
@@ -162,11 +156,6 @@ function cpuUtilization() {
                 this_run_data = cpu_utilization_raw_data['runs'][i];
                 let aggregate_data = this_run_data['key_values']['aggregate'];
                 getCpuUtilization(agg_elem, value, aggregate_data);
-                //Run name
-                var h3_run_per_cpu = document.createElement('h3');
-                h3_run_per_cpu.innerHTML = `${value} - Per CPU Stat`;
-                h3_run_per_cpu.style.textAlign = "center";
-                addElemToNode(run_node_id, h3_run_per_cpu);
                 // Show per type data
                 var per_type_div = document.createElement('div');
                 per_type_div.id = `${value}-cpu-per-type`;

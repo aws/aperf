@@ -59,6 +59,7 @@ function kernelConfigNoDiff(run, container_id) {
     let data = JSON.parse(run_entry.raw_entries['key_values']['values']);
     var dl = document.createElement('dl');
     dl.id = `${run}-dl-kernel-config`;
+    dl.classList.add("extra");
     dl.style.float = "none";
     var dl_id = dl.id;
     addElemToNode(container_id, dl);
@@ -75,6 +76,7 @@ function kernelConfigNoDiff(run, container_id) {
 function kernelConfigDiff(value, container_id) {
     var dl = document.createElement('dl');
     dl.id = `${value}-dl-kernel-config`;
+    dl.classList.add("extra");
     dl.style.float = "none";
     var dl_id = dl.id;
     addElemToNode(container_id, dl);
@@ -118,11 +120,6 @@ function kernelConfig(diff: boolean) {
         })
         split_keys(kernel_config_runs, kernel_config_common_keys);
     }
-    var float_style = "none";
-    if (data.length > 1) {
-        float_style = "left";
-    }
-    var run_width = 100 / data.length;
     clearElements('kernel-config-runs');
     data.forEach(function (value, index, arr) {
         // Run div
@@ -132,12 +129,6 @@ function kernelConfig(diff: boolean) {
         run_div.style.width = `${run_width}%`;
         addElemToNode('kernel-config-runs', run_div);
         var run_node_id = run_div.id;
-
-        // Run name
-        var h3_run_name = document.createElement('h3');
-        h3_run_name.innerHTML = `${value}`;
-        h3_run_name.style.textAlign = "center";
-        addElemToNode(run_node_id, h3_run_name);
 
         //Show aggregate data
         var agg_elem = document.createElement('div');

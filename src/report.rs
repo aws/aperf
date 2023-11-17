@@ -27,11 +27,30 @@ struct Api {
     runs: Vec<Run>,
 }
 
+impl Api {
+    fn new(name: String) -> Self {
+        Api {
+            name,
+            runs: Vec::new(),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct Run {
     name: String,
     keys: Vec<String>,
     key_values: HashMap<String, String>,
+}
+
+impl Run {
+    fn new(name: String) -> Self {
+        Run {
+            name,
+            keys: Vec::new(),
+            key_values: HashMap::new(),
+        }
+    }
 }
 
 pub static APERF_TMP: &str = "aperf_tmp";
@@ -178,18 +197,19 @@ pub fn report(report: &Report) -> Result<()> {
     write!(utils_js_file, "{}", utils_js)?;
     write!(plotly_js_file, "{}", plotly_js)?;
 
+    let mut visualizer = VISUALIZATION_DATA.lock().unwrap();
     /* Init visualizers */
     for dir in dir_paths {
-        let name = VISUALIZATION_DATA.lock().unwrap().init_visualizers(
+        let name = visualizer.init_visualizers(
             dir.to_owned(),
             APERF_TMP.to_string(),
             report_name.clone(),
         )?;
-        VISUALIZATION_DATA.lock().unwrap().unpack_data(name)?;
+        visualizer.unpack_data(name)?;
     }
 
     /* Generate visualizer JS files */
-    for (name, file) in VISUALIZATION_DATA.lock().unwrap().get_all_js_files()? {
+    for (name, file) in visualizer.get_all_js_files()? {
         let mut created_file = File::create(report_name.join(format!("js/{}", name)))?;
         write!(created_file, "{}", file)?;
     }
@@ -202,35 +222,22 @@ pub fn report(report: &Report) -> Result<()> {
         "runs_raw = {}",
         serde_json::to_string(&run_names)?
     )?;
-    let visualizer_names = VISUALIZATION_DATA.lock().unwrap().get_visualizer_names()?;
+    let visualizer_names = visualizer.get_visualizer_names()?;
 
     /* Get visualizer data */
     for name in visualizer_names {
-        let api_name = VISUALIZATION_DATA.lock().unwrap().get_api(name.clone())?;
-        let calls = VISUALIZATION_DATA
-            .lock()
-            .unwrap()
-            .get_calls(api_name.clone())?;
-        let mut api = Api {
-            name: name.clone(),
-            runs: Vec::new(),
-        };
+        let api_name = visualizer.get_api(name.clone())?;
+        let calls = visualizer.get_calls(api_name.clone())?;
+        let mut api = Api::new(name.clone());
         for run_name in &run_names {
             let mut temp_keys: Vec<String> = Vec::<String>::new();
-            let mut run = Run {
-                name: run_name.clone(),
-                keys: Vec::new(),
-                key_values: HashMap::new(),
-            };
+            let mut run = Run::new(run_name.clone());
             let mut keys = false;
             for call in &calls {
                 let query = format!("run={}&get={}", run_name, call);
                 let mut data;
                 if call == "keys" {
-                    data = VISUALIZATION_DATA
-                        .lock()
-                        .unwrap()
-                        .get_data(run_name, &api_name, query)?;
+                    data = visualizer.get_data(run_name, &api_name, query)?;
                     if data != "No data collected" {
                         temp_keys = serde_json::from_str(&data)?;
                     }
@@ -241,18 +248,12 @@ pub fn report(report: &Report) -> Result<()> {
                     if keys {
                         for key in &temp_keys {
                             let query = format!("run={}&get=values&key={}", run_name, key);
-                            data = VISUALIZATION_DATA
-                                .lock()
-                                .unwrap()
-                                .get_data(run_name, &api_name, query)?;
+                            data = visualizer.get_data(run_name, &api_name, query)?;
                             run.key_values.insert(key.clone(), data.clone());
                         }
                     } else {
                         let query = format!("run={}&get=values", run_name);
-                        data = VISUALIZATION_DATA
-                            .lock()
-                            .unwrap()
-                            .get_data(run_name, &api_name, query)?;
+                        data = visualizer.get_data(run_name, &api_name, query)?;
                         run.key_values.insert(call.clone(), data.clone());
                     }
                 }
