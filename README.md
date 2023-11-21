@@ -1,3 +1,5 @@
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/aws/aperf/badge)](https://securityscorecards.dev/viewer/?uri=github.com/aws/aperf)
+
 # APerf
 ## What is APerf?
 A CLI tool to gather many pieces of performance data in one go. APerf includes a recorder and a reporter sub tool. The recorder gathers performance metrics, stores them in a set of local files that can then be analyzed via the reporter sub tool.
