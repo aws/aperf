@@ -20,6 +20,11 @@ jobs:
     needs:
       - Build
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895 # v2.6.1
+        with:
+          egress-policy: audit
+
       - name: Tar X64 artifacts # Below workaround will allow files to be extracted to a directory e.g. aperf-v0.1-x86_64/
         if: ${{ matrix.architecture == 'X64' }}
         run: sudo mkdir -p aperf-${{ github.ref_name }}-x86_64 && sudo cp ./target/x86_64-unknown-linux-musl/release/aperf ./aperf-${{ github.ref_name }}-x86_64 && sudo tar -cvzf aperf-${{ github.ref_name }}-x86_64.tar.gz aperf-${{ github.ref_name }}-x86_64/ && sudo rm -rf aperf-${{ github.ref_name }}-x86_64
@@ -29,7 +34,7 @@ jobs:
       - name: Create Release
         if: github.run_number == 1
         id: create_release
-        uses: actions/create-release@v1
+        uses: actions/create-release@0cb9c9b65d5d1901c1f53e5e66eaf4afd303e70e # v1.1.4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -39,7 +44,7 @@ jobs:
           prerelease: false
       - name: Upload X64 artifacts.
         if: ${{ matrix.architecture == 'X64' }}
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@1beeb572c19a9242f4361f4cee78f8e0d9aec5df # v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: ./aperf-${{ github.ref_name }}-x86_64.tar.gz
@@ -47,7 +52,7 @@ jobs:
           asset_name: aperf-${{ github.ref_name }}-x86_64.tar.gz
       - name: Upload ARM64 artifacts
         if: ${{ matrix.architecture == 'ARM64' }}
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@1beeb572c19a9242f4361f4cee78f8e0d9aec5df # v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: ./aperf-${{ github.ref_name }}-aarch64.tar.gz
