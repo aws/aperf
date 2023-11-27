@@ -26,7 +26,7 @@ chrono = { version = "0.4", features = ["serde"] }
 rustix = { version = "0.35.6", features = ["process"] }
 serde_yaml = "0.8"
 thiserror = "1.0"
-log = "0.4.0"
+log = "0.4.20"
 env_logger = "0.8.4"
 lazy_static = "1.4.0"
 timerfd = "1.3.0"
