@@ -6,7 +6,7 @@ use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
 use chrono::prelude::*;
 use ctor::ctor;
-use log::{error, trace};
+use log::{trace, warn};
 use perf_event::events::{Raw, Software};
 use perf_event::{Builder, Counter, Group, ReadFormat};
 use serde::{Deserialize, Serialize};
@@ -144,10 +144,10 @@ impl CollectData for PerfStatRaw {
                     Err(e) => {
                         match e.kind() {
                             ErrorKind::PermissionDenied => {
-                                error!("Set /proc/sys/kernel/perf_event_paranoid to 0")
+                                warn!("Set /proc/sys/kernel/perf_event_paranoid to 0")
                             }
-                            ErrorKind::NotFound => error!("Instance does not expose Perf counters"),
-                            _ => error!("Unknown error when trying to use Perf API"),
+                            ErrorKind::NotFound => warn!("Instance does not expose Perf counters"),
+                            _ => warn!("Unknown error when trying to use Perf API"),
                         }
                         return Err(e.into());
                     }
@@ -174,13 +174,13 @@ impl CollectData for PerfStatRaw {
                             if let Some(os_error) = e.downcast_ref::<std::io::Error>() {
                                 match os_error.kind() {
                                     ErrorKind::NotFound => {
-                                        error!("Instance does not expose Perf counters")
+                                        warn!("Instance does not expose Perf counters")
                                     }
                                     _ => match os_error.raw_os_error().unwrap() {
-                                        libc::EMFILE => error!(
-                                            "Too many open files. Increase limit with `ulimit -n`"
+                                        libc::EMFILE => warn!(
+                                            "Too many open files. Increase limit with `ulimit -n 65536`"
                                         ),
-                                        _ => error!("Unknown error when trying to use Perf API."),
+                                        _ => warn!("Unknown error when trying to use Perf API."),
                                     },
                                 }
                                 return Err(e);
@@ -202,13 +202,13 @@ impl CollectData for PerfStatRaw {
                             if let Some(os_error) = e.downcast_ref::<std::io::Error>() {
                                 match os_error.kind() {
                                     ErrorKind::NotFound => {
-                                        error!("Instance does not expose Perf counters")
+                                        warn!("Instance does not expose Perf counters")
                                     }
                                     _ => match os_error.raw_os_error().unwrap() {
-                                        libc::EMFILE => error!(
-                                            "Too many open files. Increase limit with `ulimit -n`"
+                                        libc::EMFILE => warn!(
+                                            "Too many open files. Increase limit with `ulimit -n 65536`"
                                         ),
-                                        _ => error!("Unknown error when trying to use Perf API."),
+                                        _ => warn!("Unknown error when trying to use Perf API."),
                                     },
                                 }
                                 return Err(e);

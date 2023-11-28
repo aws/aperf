@@ -6,7 +6,7 @@ use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
 use chrono::prelude::*;
 use ctor::ctor;
-use log::trace;
+use log::{debug, trace};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::fs::OpenOptions;
@@ -14,8 +14,6 @@ use std::io::{self, BufRead, BufReader};
 use std::path::Path;
 
 pub static KERNEL_CONFIG_FILE_NAME: &str = "kernel_config";
-const PROC_CONFIG_GZ: &str = "/proc/config.gz";
-const BOOT_CONFIG: &str = "/boot/config";
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Entry {
@@ -75,36 +73,22 @@ fn get_kernel_config_data() -> Result<Box<dyn BufRead>> {
     /* This is the same as procfs crate. We need access to the commented out CONFIGs and
      * headings in the Config file.
      */
-    let reader: Box<dyn BufRead> =
-        if Path::new(PROC_CONFIG_GZ).exists() && cfg!(features = "flate2") {
-            #[cfg(feature = "flate2")]
-            {
-                let file = OpenOptions::new().read(true).open(PROC_CONFIG_GZ);
-                let decoder = flate2::read::GzDecoder::new(file);
-                Box::new(BufReader::new(decoder))
+    let mut conf = format!(
+        "/boot/config-{}",
+        rustix::process::uname().release().to_string_lossy()
+    );
+    let reader: Box<dyn BufRead> = {
+        if !Path::new(&conf).exists() {
+            conf = "/boot/config".to_string();
+        }
+        match OpenOptions::new().read(true).open(&conf) {
+            Ok(file) => Box::new(BufReader::new(file)),
+            Err(e) => {
+                debug!("Error: {} when opening {}", e, conf);
+                Box::new(io::Cursor::new(b"KERNEL_CONFIG=NOT FOUND"))
             }
-            #[cfg(not(feature = "flate2"))]
-            {
-                unreachable!("flate2 feature not enabled")
-            }
-        } else {
-            let kernel = rustix::process::uname();
-            let filename = format!("{}-{}", BOOT_CONFIG, kernel.release().to_string_lossy());
-            let file = OpenOptions::new().read(true).open(filename);
-            match file {
-                Ok(file) => Box::new(BufReader::new(file)),
-                Err(e) => match e.kind() {
-                    io::ErrorKind::NotFound => {
-                        let backup_config_file = OpenOptions::new()
-                            .read(true)
-                            .open(BOOT_CONFIG)
-                            .expect("Could not open file");
-                        Box::new(BufReader::new(backup_config_file))
-                    }
-                    _ => return Err(e.into()),
-                },
-            }
-        };
+        }
+    };
     Ok(reader)
 }
 

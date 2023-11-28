@@ -6,7 +6,7 @@ use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
 use chrono::prelude::*;
 use ctor::ctor;
-use log::{error, trace};
+use log::{trace, warn};
 use serde::{Deserialize, Serialize};
 use sysinfo::{System, SystemExt};
 
@@ -121,7 +121,17 @@ impl CollectData for SystemInfo {
 
         match rt.block_on(EC2Metadata::get_instance_metadata()) {
             Ok(s) => self.set_instance_metadata(s),
-            Err(e) => error!("An error occurred: {}", e),
+            Err(e) => {
+                warn!("Unable to get instance metadata: {}", e);
+                let s = EC2Metadata {
+                    instance_id: "N/A".to_string(),
+                    local_hostname: "N/A".to_string(),
+                    ami_id: "N/A".to_string(),
+                    region: "N/A".to_string(),
+                    instance_type: "N/A".to_string(),
+                };
+                self.set_instance_metadata(s);
+            }
         };
 
         trace!("SysInfo:\n{:#?}", self);
