@@ -5,6 +5,8 @@ on:
     tags:
       - '*'
 
+permissions: read-all
+
 jobs:
   Build:
     uses: ./.github/workflows/ci.yml
@@ -17,6 +19,8 @@ jobs:
       - self-hosted
       - Linux
       - ${{matrix.architecture}}
+    permissions:
+      contents: write
     needs:
       - Build
     steps:
