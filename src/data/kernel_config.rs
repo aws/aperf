@@ -75,7 +75,7 @@ fn get_kernel_config_data() -> Result<Box<dyn BufRead>> {
      */
     let mut conf = format!(
         "/boot/config-{}",
-        rustix::process::uname().release().to_string_lossy()
+        rustix::system::uname().release().to_string_lossy()
     );
     let reader: Box<dyn BufRead> = {
         if !Path::new(&conf).exists() {
