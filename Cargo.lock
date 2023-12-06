@@ -1161,9 +1161,9 @@ dependencies = [
 
 [[package]]
 name = "inferno"
-version = "0.11.15"
+version = "0.11.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2fb7c1b80a1dfa604bb4a649a5c5aeef3d913f7c520cb42b40e534e8a61bcdfc"
+checksum = "321f0f839cd44a4686e9504b0a62b4d69a50b62072144c71c68f5873c167b8d9"
 dependencies = [
  "ahash",
  "clap",
@@ -1171,7 +1171,7 @@ dependencies = [
  "crossbeam-utils",
  "dashmap",
  "env_logger 0.10.0",
- "indexmap 1.9.1",
+ "indexmap 2.1.0",
  "is-terminal",
  "itoa",
  "log",
