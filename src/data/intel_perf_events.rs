@@ -39,7 +39,7 @@ static L1_INSTRUCTIONS: NamedTypeCtr = NamedTypeCtr {
 static BACKEND_STALLS: NamedTypeCtr = NamedTypeCtr {
     perf_type: PerfType::RAW,
     name: "Backend-Stalls",
-    config: 0x10a2,
+    config: 0x01a2,
 };
 static L3: NamedTypeCtr = NamedTypeCtr {
     perf_type: PerfType::RAW,
