@@ -16,11 +16,15 @@ use std::sync::Mutex;
 #[cfg(target_arch = "aarch64")]
 use crate::data::grv_perf_events;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-use {crate::data::intel_perf_events, crate::PDError, raw_cpuid::CpuId};
+use {
+    crate::data::intel_icelake_perf_events::ICX_CTRS, crate::data::intel_perf_events,
+    crate::data::intel_sapphire_rapids_perf_events::SPR_CTRS, crate::data::utils::get_cpu_info,
+    crate::PDError, indexmap::IndexMap,
+};
 
 pub static PERF_STAT_FILE_NAME: &str = "perf_stat";
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum PerfType {
     RAW = 4,
 }
@@ -59,7 +63,7 @@ impl Ctr {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct NamedCtr<'a> {
     pub name: &'a str,
     pub nrs: Vec<NamedTypeCtr<'a>>,
@@ -67,7 +71,7 @@ pub struct NamedCtr<'a> {
     pub scale: u64,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct NamedTypeCtr<'a> {
     pub perf_type: PerfType,
     pub name: &'a str,
@@ -111,18 +115,44 @@ impl CollectData for PerfStatRaw {
     fn prepare_data_collector(&mut self, _params: CollectorParams) -> Result<()> {
         let num_cpus = num_cpus::get();
         let mut cpu_groups: Vec<CpuCtrGroup> = Vec::new();
-        let perf_list;
 
-        #[cfg(target_arch = "aarch64")]
-        {
-            perf_list = grv_perf_events::PERF_LIST.to_vec();
-        }
-        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-        {
-            let cpuid = CpuId::new();
-            let vendor_info = cpuid.get_vendor_info().unwrap();
-            if vendor_info.as_str() == "GenuineIntel" {
-                perf_list = intel_perf_events::PERF_LIST.to_vec();
+        cfg_if::cfg_if! {
+            if #[cfg(target_arch = "aarch64")] {
+                let perf_list = grv_perf_events::PERF_LIST.to_vec();
+            } else if #[cfg(any(target_arch = "x86", target_arch = "x86_64"))] {
+                let platform_specific_counter;
+                let cpu_info = get_cpu_info()?;
+                let mut perf_list;
+
+                /* Get Vendor Specific Perf events */
+                if cpu_info.vendor == "GenuineIntel" {
+                    perf_list = intel_perf_events::PERF_LIST.to_vec();
+
+                    /* Get Model specific events */
+                    platform_specific_counter = match cpu_info.model_name.as_str() {
+                        "Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz" => ICX_CTRS.to_vec(),
+                        "Intel(R) Xeon(R) Platinum 8488C" => SPR_CTRS.to_vec(),
+                        _ => Vec::new(),
+                    };
+                } else {
+                    return Err(PDError::CollectorPerfUnsupportedCPU.into());
+                }
+
+                let mut events_map = IndexMap::new();
+                for event in &perf_list {
+                    events_map.insert(event.name, event.clone());
+                }
+
+                for event in platform_specific_counter {
+                    if let Some(ctr) = events_map.get_mut(event.name) {
+                        ctr.nrs = event.nrs;
+                        ctr.drs = event.drs;
+                        ctr.scale = event.scale;
+                    } else {
+                        events_map.insert(event.name, event);
+                    }
+                }
+                perf_list = events_map.into_values().collect();
             } else {
                 return Err(PDError::CollectorPerfUnsupportedCPU.into());
             }

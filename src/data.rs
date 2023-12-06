@@ -2,10 +2,15 @@ pub mod constants;
 pub mod cpu_utilization;
 pub mod diskstats;
 pub mod flamegraphs;
-#[cfg(target_arch = "aarch64")]
-pub mod grv_perf_events;
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-pub mod intel_perf_events;
+cfg_if::cfg_if! {
+    if #[cfg(target_arch = "aarch64")] {
+        pub mod grv_perf_events;
+    } else if #[cfg(any(target_arch = "x86", target_arch = "x86_64"))] {
+        pub mod intel_perf_events;
+        pub mod intel_icelake_perf_events;
+        pub mod intel_sapphire_rapids_perf_events;
+    }
+}
 pub mod interrupts;
 pub mod kernel_config;
 pub mod meminfodata;
@@ -15,6 +20,7 @@ pub mod perf_stat;
 pub mod processes;
 pub mod sysctldata;
 pub mod systeminfo;
+pub mod utils;
 pub mod vmstat;
 
 use crate::visualizer::{GetData, ReportParams};
