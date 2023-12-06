@@ -9,7 +9,7 @@ publish = false
 
 [build-dependencies]
 anyhow = "1.0"
-vergen = "6"
+vergen = "7"
 
 [lib]
 name = "aperf_lib"
