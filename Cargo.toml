@@ -24,7 +24,7 @@ clap = { version = "4.2.5", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
 rustix = { version = "0.38.26", features = ["system"] }
-serde_yaml = "0.8"
+serde_yaml = "0.9"
 thiserror = "1.0"
 log = "0.4.20"
 env_logger = "0.8.4"
