@@ -23,29 +23,14 @@ function systemInfo() {
     if (got_system_info_data) {
         return;
     }
-    clearElements('system-info-runs');
-    runs_raw.forEach(function (value, index, arr) {
-        // Run div
-        var run_div = document.createElement('div');
-        let this_run_data;
-        run_div.id = `${value}-system-info`;
-        run_div.style.float = float_style;
-        run_div.style.width = `${run_width}%`;
-        addElemToNode('system-info-runs', run_div);
-        var run_node_id = run_div.id;
-
-        // Show data
-        var per_run_div = document.createElement('div');
-        per_run_div.id = `${value}-system-info-run`;
-        addElemToNode(run_node_id, per_run_div);
-        for (let i = 0; i < system_info_raw_data['runs'].length; i++) {
-            if (system_info_raw_data['runs'][i]['name'] == value) {
-                this_run_data = system_info_raw_data['runs'][i];
-                setTimeout(() => {
-                    getSystemInfo(value, per_run_div.id, this_run_data['key_values']['values']);
-                }, 0);
-            }
-        }
-    })
+    clear_and_create('systeminfo');
+    for (let i = 0; i < system_info_raw_data['runs'].length; i++) {
+        let run_name = system_info_raw_data['runs'][i]['name'];
+        let elem_id = `${run_name}-systeminfo-per-data`;
+        let this_run_data = system_info_raw_data['runs'][i];
+        setTimeout(() => {
+            getSystemInfo(run_name, elem_id, this_run_data['key_values']['values']);
+        }, 0);
+    }
     got_system_info_data = true;
 }

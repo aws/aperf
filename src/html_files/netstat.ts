@@ -45,28 +45,13 @@ function netStat(hide: boolean) {
         return;
     }
     netstat_hide_zero_na_graphs = hide;
-    clearElements('netstat-runs');
+    clear_and_create('netstat');
     form_graph_limits(netstat_raw_data);
-    runs_raw.forEach(function (value, index, arr) {
-        // Run div
-        var run_div = document.createElement('div');
-        let this_run_data;
-        run_div.id = `${value}-netstat`;
-        run_div.style.float = float_style;
-        run_div.style.width = `${run_width}%`;
-        addElemToNode('netstat-runs', run_div);
-        var run_node_id = run_div.id;
-
-        // Show data
-        var per_value_div = document.createElement('div');
-        per_value_div.id = `${value}-netstat-per-data`;
-        addElemToNode(run_node_id, per_value_div);
-        for (let i = 0; i < netstat_raw_data['runs'].length; i++) {
-            if (netstat_raw_data['runs'][i]['name'] == value) {
-                this_run_data = netstat_raw_data['runs'][i];
-                getNetstatEntries(value, per_value_div.id, this_run_data['keys'], this_run_data['key_values']);
-            }
-        }
-    })
+    for (let i = 0; i < netstat_raw_data['runs'].length; i++) {
+        let run_name = netstat_raw_data['runs'][i]['name'];
+        let elem_id = `${run_name}-netstat-per-data`;
+        let this_run_data = netstat_raw_data['runs'][i];
+        getNetstatEntries(run_name, elem_id, this_run_data['keys'], this_run_data['key_values']);
+    }
     got_netstat_data = true;
 }

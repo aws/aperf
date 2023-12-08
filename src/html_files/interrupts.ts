@@ -59,27 +59,12 @@ function interrupts() {
     if (got_interrupt_data) {
         return;
     }
-    clearElements('interrupt-runs');
-    runs_raw.forEach(function (value, index, arr) {
-        // Run div
-        var run_div = document.createElement('div');
-        let this_run_data;
-        run_div.id = `${value}-interrupts`;
-        run_div.style.float = float_style;
-        run_div.style.width = `${run_width}%`;
-        addElemToNode('interrupt-runs', run_div);
-        var run_node_id = run_div.id;
-        // Show data
-        var per_value_div = document.createElement('div');
-        per_value_div.id = `${value}-interrupt-per-data`;
-        addElemToNode(run_node_id, per_value_div);
-        for (let i = 0; i < interrupts_raw_data['runs'].length; i++) {
-            if (interrupts_raw_data['runs'][i]['name'] == value) {
-                this_run_data = interrupts_raw_data['runs'][i];
-                getLines(value, per_value_div.id, this_run_data['keys'], this_run_data['key_values']);
-                break;
-            }
-        }
-    })
+    clear_and_create('interrupts');
+    for (let i = 0; i < interrupts_raw_data['runs'].length; i++) {
+        let run_name = interrupts_raw_data['runs'][i]['name'];
+        let elem_id = `${run_name}-interrupts-per-data`;
+        let this_run_data = interrupts_raw_data['runs'][i];
+        getLines(run_name, elem_id, this_run_data['keys'], this_run_data['key_values']);
+    }
     got_interrupt_data = true;
 }
