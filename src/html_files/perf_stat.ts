@@ -83,30 +83,13 @@ function perfStat() {
     if (got_perf_stat_data) {
         return;
     }
-    clearElements('perfstat-runs');
+    clear_and_create('perfstat');
     form_graph_limits(perf_stat_raw_data);
-    runs_raw.forEach(function (value, index, arr) {
-        // Run div
-        var run_div = document.createElement('div');
-        let this_run_data;
-        let run_data_found = false;
-        run_div.id = `${value}-perfstat`;
-        run_div.style.float = float_style;
-        run_div.style.width = `${run_width}%`;
-        addElemToNode('perfstat-runs', run_div);
-        var run_node_id = run_div.id;
-
-        // Show data
-        var per_value_div = document.createElement('div');
-        per_value_div.id = `${value}-perfstat-per-data`;
-        addElemToNode(run_node_id, per_value_div);
-        for (let i = 0; i < perf_stat_raw_data['runs'].length; i++) {
-            if (perf_stat_raw_data['runs'][i]['name'] == value) {
-                this_run_data = perf_stat_raw_data['runs'][i];
-                getEvents(value, per_value_div.id, this_run_data['keys'], this_run_data['key_values']);
-                break;
-            }
-        }
-    })
+    for (let i = 0; i < perf_stat_raw_data['runs'].length; i++) {
+        let run_name = perf_stat_raw_data['runs'][i]['name'];
+        let elem_id = `${run_name}-perfstat-per-data`;
+        let this_run_data = perf_stat_raw_data['runs'][i];
+        getEvents(run_name, elem_id, this_run_data['keys'], this_run_data['key_values']);
+    }
     got_perf_stat_data = true;
 }

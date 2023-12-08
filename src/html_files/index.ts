@@ -4,6 +4,9 @@ class DataType {
 	hideClass: string;
 	callback;
 }
+
+function empty(b) {}
+
 var DataTypes: Map<string, DataType> = new Map<string, DataType>();
 DataTypes.set('kernel', {name: 'kernel', hideClass: 'kernelDiff', trueId: 'kernel_diff_yes', callback: kernelConfig});
 DataTypes.set('sysctl', {name: 'sysctl', hideClass: 'sysctlDiff', trueId: 'sysctl_diff_yes', callback: sysctl});
@@ -11,6 +14,13 @@ DataTypes.set('vmstat', {name: 'vmstat', hideClass: 'vmstatHide', trueId: 'vmsta
 DataTypes.set('diskstat', {name: 'diskstat', hideClass: 'diskstatHide', trueId: 'diskstat_hide_yes', callback: diskStats});
 DataTypes.set('meminfo', {name: 'meminfo', hideClass: 'meminfoHide', trueId: 'meminfo_hide_yes', callback: meminfo});
 DataTypes.set('netstat', {name: 'netstat', hideClass: 'netstatHide', trueId: 'netstat_hide_yes', callback: netStat});
+DataTypes.set('interrupts', {name: 'interrupts', hideClass: '', trueId: '', callback: empty });
+DataTypes.set('cpuutilization', {name: 'cpuutilization', hideClass: '', trueId: '', callback: empty });
+DataTypes.set('systeminfo', {name: 'systeminfo', hideClass: '', trueId: '', callback: empty });
+DataTypes.set('flamegraphs', {name: 'flamegraphs', hideClass: '', trueId: '', callback: empty });
+DataTypes.set('topfunctions', {name: 'topfunctions', hideClass: '', trueId: '', callback: empty });
+DataTypes.set('processes', {name: 'processes', hideClass: '', trueId: '', callback: empty });
+DataTypes.set('perfstat', {name: 'perfstat', hideClass: '', trueId: '', callback: empty });
 
 function openData(evt: Event, elem: HTMLButtonElement) {
 	var tabName: string = elem.name;
@@ -102,6 +112,20 @@ DataTypes.forEach((datatype: DataType, key: string) => {
 var run_width = 100;
 var float_style = "none";
 
+function clear_and_create(datatype) {
+	clearElements(`${datatype}-runs`);
+	runs_raw.forEach(function (value, index, arr) {
+		var datatype_div = document.createElement('div');
+		datatype_div.id = `${value}-${datatype}`;
+		datatype_div.style.float = float_style;
+		datatype_div.style.width = `${run_width}%`;
+		addElemToNode(`${datatype}-runs`, datatype_div);
+		var per_run_datatype = document.createElement('div');
+		per_run_datatype.id = `${value}-${datatype}-per-data`;
+		addElemToNode(datatype_div.id, per_run_datatype);
+	});
+}
+
 function create_runs_header() {
 	var data = runs_raw;
 	float_style = "none";
@@ -124,6 +148,9 @@ function create_runs_header() {
 		h3_run_name.innerHTML = value;
 		h3_run_name.style.textAlign = "center";
 		addElemToNode(run_node_id, h3_run_name);
+	});
+	DataTypes.forEach((datatype, key) => {
+		clear_and_create(datatype.name);
 	});
 }
 

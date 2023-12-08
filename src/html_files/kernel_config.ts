@@ -120,24 +120,13 @@ function kernelConfig(diff: boolean) {
         })
         split_keys(kernel_config_runs, kernel_config_common_keys);
     }
-    clearElements('kernel-config-runs');
+    clear_and_create('kernel');
     data.forEach(function (value, index, arr) {
-        // Run div
-        var run_div = document.createElement('div');
-        run_div.id = `${value}-kernel-config`;
-        run_div.style.float = float_style;
-        run_div.style.width = `${run_width}%`;
-        addElemToNode('kernel-config-runs', run_div);
-        var run_node_id = run_div.id;
-
-        //Show aggregate data
-        var agg_elem = document.createElement('div');
-        agg_elem.id = `${value}-kernel-config-div`;
-        addElemToNode(run_node_id, agg_elem);
+        let elem_id = `${value}-kernel-per-data`;
         if (current_kernel_diff_status) {
-            kernelConfigDiff(value, agg_elem.id);
+            kernelConfigDiff(value, elem_id);
         } else {
-            kernelConfigNoDiff(value, agg_elem.id);
+            kernelConfigNoDiff(value, elem_id);
         }
     })
     got_kernel_config_data = true;

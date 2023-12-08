@@ -34,15 +34,14 @@ function sysctlNoDiff(run, container_id) {
     }
 }
 
-function sysctlDiff(value) {
-    var agg_id = `${value}-sysctl-data-div`;
-    clearElements(agg_id);
+function sysctlDiff(value, container_id) {
+    clearElements(container_id);
     var dl = document.createElement('dl');
     dl.id = `${value}-dl-sysctl-data`;
     dl.classList.add("extra");
     dl.style.float = "none";
     var dl_id = dl.id;
-    addElemToNode(agg_id, dl);
+    addElemToNode(container_id, dl);
     let run_entry = sysctl_runs.get(value);
     var h3_common = document.createElement('h3');
     h3_common.innerHTML = 'Common Keys';
@@ -84,25 +83,12 @@ function sysctl(diff: boolean) {
         split_keys(sysctl_runs, sysctl_common_keys);
     }
 
-    clearElements('sysctl-data-runs');
+    clear_and_create('sysctl');
     data.forEach(function (value, index, arr) {
-        // Run div
-        var run_div = document.createElement('div');
-        run_div.id = `${value}-sysctl-data`;
-        run_div.style.float = float_style;
-        run_div.style.width = `${run_width}%`;
-        addElemToNode('sysctl-data-runs', run_div);
-        var run_node_id = run_div.id;
-
-        //Show aggregate data
-        var agg_elem = document.createElement('div');
-        agg_elem.id = `${value}-sysctl-data-div`;
-        addElemToNode(run_node_id, agg_elem);
-
         if (current_sysctl_diff_status) {
-            sysctlDiff(value);
+            sysctlDiff(value, `${value}-sysctl-per-data`);
         } else {
-            sysctlNoDiff(value, agg_elem.id);
+            sysctlNoDiff(value, `${value}-sysctl-per-data`);
         }
     })
     got_sysctl_data = true;

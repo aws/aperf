@@ -58,29 +58,13 @@ function diskStats(hide: boolean) {
         return;
     }
     diskstat_hide_zero_na_graphs = hide;
-    clearElements('disk-stat-runs');
+    clear_and_create('diskstat');
     form_graph_limits(disk_stats_raw_data);
-    runs_raw.forEach(function (value, index, arr) {
-        // Run div
-        var run_div = document.createElement('div');
-        let this_run_data;
-        run_div.id = `${value}-disk-stat`;
-        run_div.style.float = float_style;
-        run_div.style.width = `${run_width}%`;
-        addElemToNode('disk-stat-runs', run_div);
-        var run_node_id = run_div.id;
-
-        // Show data
-        var per_value_div = document.createElement('div');
-        per_value_div.id = `${value}-disk-stat-per-data`;
-        addElemToNode(run_node_id, per_value_div);
-        for (let i = 0; i < disk_stats_raw_data['runs'].length; i++) {
-            if (disk_stats_raw_data['runs'][i]['name'] == value) {
-                this_run_data = disk_stats_raw_data['runs'][i];
-                getStatKeys(value, per_value_div.id, this_run_data['keys'], this_run_data['key_values']);
-                break;
-            }
-        }
-    })
+    for (let i = 0; i < disk_stats_raw_data['runs'].length; i++) {
+        let run_name = disk_stats_raw_data['runs'][i]['name']
+        let elem_id = `${run_name}-diskstat-per-data`;
+        let this_run_data = disk_stats_raw_data['runs'][i];
+        getStatKeys(run_name, elem_id, this_run_data['keys'], this_run_data['key_values']);
+    }
     got_disk_stat_data = true;
 }

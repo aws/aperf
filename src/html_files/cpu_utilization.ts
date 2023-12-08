@@ -137,33 +137,13 @@ function cpuUtilization() {
     if (got_cpu_util_data) {
         return;
     }
-    clearElements('cpu-util-runs');
-    runs_raw.forEach(function (value, index, arr) {
-        // Run div
-        var run_div = document.createElement('div');
-        let this_run_data;
-        run_div.id = `${value}-cpu-util`;
-        run_div.style.float = float_style;
-        run_div.style.width = `${run_width}%`;
-        addElemToNode('cpu-util-runs', run_div);
-        var run_node_id = run_div.id;
-        //Show aggregate data
-        var agg_elem = document.createElement('div');
-        agg_elem.id = `${value}-cpu-aggregate`;
-        addElemToNode(run_node_id, agg_elem);
-        for (let i = 0; i < cpu_utilization_raw_data['runs'].length; i++) {
-            if (cpu_utilization_raw_data['runs'][i]['name'] == value) {
-                this_run_data = cpu_utilization_raw_data['runs'][i];
-                let aggregate_data = this_run_data['key_values']['aggregate'];
-                getCpuUtilization(agg_elem, value, aggregate_data);
-                // Show per type data
-                var per_type_div = document.createElement('div');
-                per_type_div.id = `${value}-cpu-per-type`;
-                addElemToNode(run_node_id, per_type_div);
-                getUtilizationTypes(value, per_type_div.id, this_run_data['keys'], this_run_data['key_values']);
-                break;
-            }
-        }
-    });
+    clear_and_create('cpuutilization');
+    for (let i = 0; i < cpu_utilization_raw_data['runs'].length; i++) {
+        let run_name = cpu_utilization_raw_data['runs'][i]['name'];
+        let elem_id = `${run_name}-cpuutilization-per-data`;
+        let this_run_data = cpu_utilization_raw_data['runs'][i];
+        getCpuUtilization(document.getElementById(elem_id), run_name, this_run_data['key_values']['aggregate']);
+        getUtilizationTypes(run_name, elem_id, this_run_data['keys'], this_run_data['key_values']);
+    }
     got_cpu_util_data = true;
 }

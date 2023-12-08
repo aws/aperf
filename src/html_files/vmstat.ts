@@ -45,28 +45,13 @@ function vmStat(hide: boolean) {
         return;
     }
     vmstat_hide_zero_na_graphs = hide;
-    clearElements('vmstat-runs');
+    clear_and_create('vmstat');
     form_graph_limits(vmstat_raw_data);
-    runs_raw.forEach(function (value, index, arr) {
-        // Run div
-        var run_div = document.createElement('div');
-        let this_run_data;
-        run_div.id = `${value}-vmstat`;
-        run_div.style.float = float_style;
-        run_div.style.width = `${run_width}%`;
-        addElemToNode('vmstat-runs', run_div);
-        var run_node_id = run_div.id;
-
-        // Show data
-        var per_value_div = document.createElement('div');
-        per_value_div.id = `${value}-vmstat-per-data`;
-        addElemToNode(run_node_id, per_value_div);
-        for (let i = 0; i < vmstat_raw_data['runs'].length; i++) {
-            if (vmstat_raw_data['runs'][i]['name'] == value) {
-                this_run_data = vmstat_raw_data['runs'][i];
-                getEntries(value, per_value_div.id, this_run_data['keys'], this_run_data['key_values']);
-            }
-        }
-    })
+    for (let i = 0; i < vmstat_raw_data['runs'].length; i++) {
+        let run_name = vmstat_raw_data['runs'][i]['name'];
+        let elem_id = `${run_name}-vmstat-per-data`;
+        let this_run_data = vmstat_raw_data['runs'][i];
+        getEntries(run_name, elem_id, this_run_data['keys'], this_run_data['key_values']);
+    }
     got_vmstat_data = true;
 }

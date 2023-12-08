@@ -1,6 +1,6 @@
 let got_process_data = false;
 
-function getProcesses(run, run_data, container_id) {
+function getProcesses(run, container_id, run_data) {
     if (run_data.values == "No data collected") {
         var no_data_div = document.createElement('div');
         no_data_div.id = `processes-${run}-no-data`;
@@ -46,26 +46,12 @@ function processes() {
     if (got_process_data) {
         return;
     }
-    clearElements('processes-runs');
-    runs_raw.forEach(function (value, index, arr) {
-        var run_div = document.createElement('div');
-        let this_run_data;
-        run_div.id = `${value}-processes`;
-        run_div.style.float = float_style;
-        run_div.style.width = `${run_width}%`;
-        addElemToNode('processes-runs', run_div);
-        var run_node_id = run_div.id;
-
-        // Show data
-        var per_value_div = document.createElement('div');
-        per_value_div.id = `${value}-process-per-data`;
-        addElemToNode(run_node_id, per_value_div);
-        for (let i = 0; i < processes_raw_data['runs'].length; i++) {
-            if (processes_raw_data['runs'][i]['name'] == value) {
-                this_run_data = processes_raw_data['runs'][i];
-                getProcesses(value, this_run_data['key_values'], per_value_div.id);
-            }
-        }
-    })
+    clear_and_create('processes');
+    for (let i = 0; i < processes_raw_data['runs'].length; i++) {
+        let run_name = processes_raw_data['runs'][i]['name'];
+        let elem_id = `${run_name}-processes-per-data`;
+        let this_run_data = processes_raw_data['runs'][i];
+        getProcesses(run_name, elem_id, this_run_data['key_values']);
+    }
     got_process_data = true;
 }
