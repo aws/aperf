@@ -111,6 +111,15 @@ To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 
 `-vv, --verbose --verbose` more verbose messages
 
+## APerf Issues?
+Below are some prerequisites for profiling with APerf:
+1. Select the [appropriate instance size](https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/debug_hw_perf.md) if you need PMU stats.
+2. For collecting PMU counter metrics w/o `root` or `sudo` permissions, set the `perf_event_paranoid` to `0`.
+3. To collect PMU counter metrics, APerf needs to open up to 50 file descriptors per vCPU. So, increase `ulimit` settings accordingly.
+4. APerf needs access to `/proc/kallsyms`, so we need to relax `kptr_restrict` by setting it to `0` (on Ubuntu OS).
+5. To enable function-level profiling, install the `perf` binary on your instances.
+6. Download to the instance the right [APerf binary](https://github.com/aws/aperf/releases), based on the instance type (x86/Intel/AMD or aarch64/Graviton).
+
 ## Logging
 * `env_logger` is used to log information about the tool run to stdout.
 * To see it, use `./aperf <command> -v`.
