@@ -5,7 +5,7 @@ A CLI tool to gather many pieces of performance data in one go. APerf includes a
 ## Why does APerf exist?
 Performance issues in applications are investigated by recreating them locally and collecting data/metrics using monitoring tools like sysstat, perf, sysctl, ebpf, etc... or by running these tools remotely. Installing and executing various performance monitoring tools is a manual process and prone to errors. Even with the [Graviton Performance Runbook](https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/graviton_perfrunbook.md), understanding the output of these tools requires deep domain specific knowledge.
 
-The aim of APerf is to enable anyone to collect performance data in their enviornment while providing tools to analyze and visualize application performance. APerf will hopefully enable faster troubleshooting by analyzing and highlighting deviations in performance between two application environments automatically. 
+The aim of APerf is to enable anyone to collect performance data in their environment while providing tools to analyze and visualize application performance. APerf will hopefully enable faster troubleshooting by analyzing and highlighting deviations in performance between two application environments automatically. 
 
 ## What data does APerf collect?
 APerf collects the following metadata:
