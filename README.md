@@ -47,10 +47,10 @@ cargo test
 
 **KNOWN LIMITATION**
 
-The default configuration of 10ms for `/sys/devices/cpu/perf_event_mux_interval_ms` is known to cause serious performance overhead for systems with large core counts. We recommend setting this value to 100ms by doing the following:
+The default configuration of 10ms for `perf_event_mux_interval_ms` is known to cause serious performance overhead for systems with large core counts. We recommend setting this value to 100ms by doing the following:
 
 ```
-echo 100 | sudo tee /sys/devices/cpu/perf_event_mux_interval_ms 
+echo 100 | sudo tee /sys/devices/*/perf_event_mux_interval_ms
 ```
 
 **aperf record**
