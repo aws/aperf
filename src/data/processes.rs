@@ -243,7 +243,7 @@ impl GetData for Processes {
             Data::ProcessesRaw(ref value) => value,
             _ => panic!("Invalid Data type in raw file"),
         };
-        *TICKS_PER_SECOND.lock().unwrap() = raw_value.ticks_per_second as u64;
+        *TICKS_PER_SECOND.lock().unwrap() = raw_value.ticks_per_second;
         let reader = BufReader::new(raw_value.data.as_bytes());
         processes.time = raw_value.time;
         for line in reader.lines() {
