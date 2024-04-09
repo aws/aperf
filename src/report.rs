@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 #[derive(Clone, Args, Debug)]
 pub struct Report {
     /// Run data to be visualized. Can be a directory or a tarball.
-    #[clap(short, long, value_parser)]
+    #[clap(short, long, value_parser, required = true, num_args = 1..)]
     run: Vec<String>,
 
     /// Report name.
