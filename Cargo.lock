@@ -1471,9 +1471,9 @@ dependencies = [
 
 [[package]]
 name = "perf-event2"
-version = "0.7.1"
+version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "463b1e66002294e9bded57bb46be9170b3876b7ceb090ce595f20b607577474a"
+checksum = "5e25284c4a86df3bccd1818dee1fe9390424fce73a58fe2f19957f2cc5de8b28"
 dependencies = [
  "bitflags 2.4.0",
  "c-enum",
