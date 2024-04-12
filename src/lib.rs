@@ -215,6 +215,9 @@ impl PerformanceData {
             debug!("Collection time: {:?}", data_collection_time);
         }
         for (_name, datatype) in self.collectors.iter_mut() {
+            datatype.finish_data_collection()?;
+        }
+        for (_name, datatype) in self.collectors.iter_mut() {
             datatype.after_data_collection()?;
         }
         tfd.set_state(TimerState::Disarmed, SetTimeFlags::Default);

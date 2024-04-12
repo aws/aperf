@@ -139,6 +139,13 @@ impl DataType {
         Ok(())
     }
 
+    pub fn finish_data_collection(&mut self) -> Result<()> {
+        trace!("Finish data collection...");
+        self.data
+            .finish_data_collection(self.collector_params.clone())?;
+        Ok(())
+    }
+
     pub fn after_data_collection(&mut self) -> Result<()> {
         trace!("Running post collection actions...");
         self.data
@@ -202,6 +209,14 @@ macro_rules! data {
                 Ok(())
             }
 
+            fn finish_data_collection(&mut self, params: CollectorParams) -> Result<()> {
+                match self {
+                    $(
+                        Data::$x(ref mut value) => value.finish_data_collection(params)?,
+                    )*
+                }
+                Ok(())
+            }
             fn after_data_collection(&mut self, params: CollectorParams) -> Result<()> {
                 match self {
                     $(
@@ -298,6 +313,10 @@ pub trait CollectData {
         Ok(())
     }
     fn collect_data(&mut self) -> Result<()> {
+        noop!();
+        Ok(())
+    }
+    fn finish_data_collection(&mut self, _params: CollectorParams) -> Result<()> {
         noop!();
         Ok(())
     }
