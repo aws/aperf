@@ -5,22 +5,20 @@ class DataType {
 	callback;
 }
 
-function empty(b) {}
-
 var DataTypes: Map<string, DataType> = new Map<string, DataType>();
-DataTypes.set('kernel', {name: 'kernel', hideClass: 'kernelDiff', trueId: 'kernel_diff_yes', callback: kernelConfig});
+DataTypes.set('kernel_config', {name: 'kernel', hideClass: 'kernelDiff', trueId: 'kernel_diff_yes', callback: kernelConfig});
 DataTypes.set('sysctl', {name: 'sysctl', hideClass: 'sysctlDiff', trueId: 'sysctl_diff_yes', callback: sysctl});
 DataTypes.set('vmstat', {name: 'vmstat', hideClass: 'vmstatHide', trueId: 'vmstat_hide_yes', callback: vmStat});
-DataTypes.set('diskstat', {name: 'diskstat', hideClass: 'diskstatHide', trueId: 'diskstat_hide_yes', callback: diskStats});
+DataTypes.set('disk_stats', {name: 'diskstat', hideClass: 'diskstatHide', trueId: 'diskstat_hide_yes', callback: diskStats});
 DataTypes.set('meminfo', {name: 'meminfo', hideClass: 'meminfoHide', trueId: 'meminfo_hide_yes', callback: meminfo});
 DataTypes.set('netstat', {name: 'netstat', hideClass: 'netstatHide', trueId: 'netstat_hide_yes', callback: netStat});
-DataTypes.set('interrupts', {name: 'interrupts', hideClass: '', trueId: '', callback: empty });
-DataTypes.set('cpuutilization', {name: 'cpuutilization', hideClass: '', trueId: '', callback: empty });
-DataTypes.set('systeminfo', {name: 'systeminfo', hideClass: '', trueId: '', callback: empty });
-DataTypes.set('flamegraphs', {name: 'flamegraphs', hideClass: '', trueId: '', callback: empty });
-DataTypes.set('topfunctions', {name: 'topfunctions', hideClass: '', trueId: '', callback: empty });
-DataTypes.set('processes', {name: 'processes', hideClass: '', trueId: '', callback: empty });
-DataTypes.set('perfstat', {name: 'perfstat', hideClass: '', trueId: '', callback: empty });
+DataTypes.set('interrupts', {name: 'interrupts', hideClass: '', trueId: '', callback: interrupts});
+DataTypes.set('cpu_utilization', {name: 'cpuutilization', hideClass: '', trueId: '', callback: cpuUtilization});
+DataTypes.set('system_info', {name: 'systeminfo', hideClass: '', trueId: '', callback: systemInfo});
+DataTypes.set('flamegraphs', {name: 'flamegraphs', hideClass: '', trueId: '', callback: flamegraphs});
+DataTypes.set('top_functions', {name: 'topfunctions', hideClass: '', trueId: '', callback: topFunctions});
+DataTypes.set('processes', {name: 'processes', hideClass: '', trueId: '', callback: processes});
+DataTypes.set('perfstat', {name: 'perfstat', hideClass: '', trueId: '', callback: perfStat});
 
 function openData(evt: Event, elem: HTMLButtonElement) {
 	var tabName: string = elem.name;
@@ -35,55 +33,17 @@ function openData(evt: Event, elem: HTMLButtonElement) {
 	document.getElementById(tabName).style.display = "block";
 	const currentTarget = evt.currentTarget as HTMLButtonElement;
 	currentTarget.className += " active";
-	if (tabName == "system_info") {
-		systemInfo();
-	}
-	if (tabName == "cpu_utilization") {
-		cpuUtilization();
-	}
-	if (tabName == "flamegraphs") {
-		flamegraphs();
-	}
-	if (tabName == "top_functions") {
-		topFunctions();
-	}
-	if (tabName == "processes") {
-		processes();
-	}
-	if (tabName == "interrupts") {
-		interrupts();
-	}
-	if (tabName == "perfstat") {
-		perfStat();
-	}
-	if (tabName == "kernel_config") {
-		callChecked('kernel');
-	}
-	if (tabName == "sysctl") {
-		callChecked('sysctl');
-	}
-	if (tabName == "meminfo") {
-		callChecked('meminfo');
-	}
-	if (tabName == "vmstat") {
-		callChecked('vmstat');
-	}
-	if (tabName == "disk_stats") {
-		callChecked('diskstat');
-	}
-	if (tabName == "netstat") {
-		callChecked('netstat');
-	}
+	display_tab(tabName);
 }
 
-function callChecked(name) {
+function display_tab(name) {
 	let datatype = DataTypes.get(name);
-	let queryInput = `input[name="${datatype.hideClass}"]:checked`;
-	let id = document.querySelector(queryInput).id;
-	if (id == datatype.trueId) {
-		datatype.callback(true);
+	if (datatype.hideClass != "") {
+		let queryInput = `input[name="${datatype.hideClass}"]:checked`;
+		let checkedId = document.querySelector(queryInput).id;
+		datatype.callback(checkedId == datatype.trueId);
 	} else {
-		datatype.callback(false);
+		datatype.callback();
 	}
 }
 
