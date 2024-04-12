@@ -8,9 +8,14 @@ use ctor::ctor;
 use log::{error, trace};
 use serde::{Deserialize, Serialize};
 use std::io::ErrorKind;
-use std::process::Command;
+use std::process::{Child, Command};
+use std::sync::Mutex;
 
 pub static PERF_PROFILE_FILE_NAME: &str = "perf_profile";
+
+lazy_static! {
+    pub static ref PERF_CHILD: Mutex<Option<Child>> = Mutex::new(None);
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PerfProfileRaw {
@@ -55,12 +60,33 @@ impl CollectData for PerfProfileRaw {
                 }
                 error!("Skipping Perf profile collection.");
             }
-            Ok(_) => trace!("Recording Perf profiling data."),
+            Ok(child) => {
+                trace!("Recording Perf profiling data.");
+                *PERF_CHILD.lock().unwrap() = Some(child);
+            }
         }
         Ok(())
     }
 
     fn collect_data(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn finish_data_collection(&mut self, _params: CollectorParams) -> Result<()> {
+        let mut child = PERF_CHILD.lock().unwrap();
+        match child.as_ref() {
+            None => return Ok(()),
+            Some(_) => {}
+        }
+
+        trace!("Waiting for perf profile collection to complete...");
+        match child.as_mut().unwrap().wait() {
+            Err(e) => {
+                error!("'perf' did not exit successfully: {}", e);
+                return Ok(());
+            }
+            Ok(_) => trace!("'perf record' executed successfully."),
+        }
         Ok(())
     }
 }
