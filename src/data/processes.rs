@@ -111,7 +111,7 @@ pub struct ProcessEntry {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct EndEntry {
     pub name: String,
-    pub total_cpu_time: u64,
+    pub total_cpu_time: f64,
     pub entries: Vec<Sample>,
 }
 
@@ -123,7 +123,7 @@ pub struct EndEntries {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Sample {
-    pub cpu_time: u64,
+    pub cpu_time: f64,
     pub time: TimeEnum,
 }
 
@@ -170,7 +170,7 @@ pub fn get_values(values: Vec<Processes>) -> Result<String> {
     for (_, process) in process_map.iter_mut() {
         let mut end_entry = EndEntry {
             name: process.name.clone(),
-            total_cpu_time: 0,
+            total_cpu_time: 0.0,
             entries: Vec::new(),
         };
         let mut entries: Vec<(TimeEnum, u64)> = process.samples.clone().into_iter().collect();
@@ -178,7 +178,7 @@ pub fn get_values(values: Vec<Processes>) -> Result<String> {
         let entry_zero: (TimeEnum, u64) = entries[0];
         let mut prev_sample = Sample {
             time: entry_zero.0,
-            cpu_time: entry_zero.1,
+            cpu_time: entry_zero.1 as f64,
         };
         let mut prev_time: u64 = 0;
         let mut time_now;
@@ -187,8 +187,8 @@ pub fn get_values(values: Vec<Processes>) -> Result<String> {
         }
         for (time, cpu_time) in &entries {
             let sample = Sample {
-                cpu_time: *cpu_time,
                 time: *time,
+                cpu_time: *cpu_time as f64,
             };
             /* End sample */
             let mut end_sample = sample.clone();
@@ -197,7 +197,7 @@ pub fn get_values(values: Vec<Processes>) -> Result<String> {
                 /* Update sample based on previous sample */
                 end_sample.cpu_time -= prev_sample.cpu_time;
             } else {
-                end_sample.cpu_time = 0;
+                end_sample.cpu_time = 0.0;
             }
             /* Add to total_cpu_time */
             end_entry.total_cpu_time += end_sample.cpu_time;
@@ -213,8 +213,8 @@ pub fn get_values(values: Vec<Processes>) -> Result<String> {
             }
 
             /* Percentage utilization */
-            end_sample.cpu_time /= ticks_per_second * (time_now - prev_time);
-            end_sample.cpu_time *= 100;
+            end_sample.cpu_time /= (ticks_per_second * (time_now - prev_time)) as f64;
+            end_sample.cpu_time *= 100.0;
 
             prev_time = time_now;
             end_entry.entries.push(end_sample);
@@ -227,7 +227,7 @@ pub fn get_values(values: Vec<Processes>) -> Result<String> {
     /* Order the processes by Total CPU Time per collection time */
     end_values
         .end_entries
-        .sort_by(|a, b| (b.total_cpu_time).cmp(&(a.total_cpu_time)));
+        .sort_by(|a, b| (b.total_cpu_time).total_cmp(&(a.total_cpu_time)));
 
     if end_values.end_entries.len() > 16 {
         end_values.end_entries = end_values.end_entries[0..15].to_vec();
