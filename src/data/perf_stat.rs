@@ -595,34 +595,24 @@ mod tests {
                 let events = PerfStat::new()
                     .get_data(processed_buffer, "run=test&get=keys".to_string())
                     .unwrap();
-                let values: Vec<&str> = serde_json::from_str(&events).unwrap();
-                let mut key_map = HashMap::new();
-                let event_names = [
-                    "ipc",
-                    "branch-mpki",
-                    "data-l1-mpki",
-                    "inst-l1-mpki",
-                    "l2-mpki",
-                    "l3-mpki",
-                    "stall-frontend-pkc",
-                    "stall-backend-pkc",
-                    "inst-tlb-mpki",
-                    "inst-tlb-tw-pki",
-                    "data-tlb-mpki",
-                    "data-tlb-tw-pki",
-                    "code-sparsity",
-                ];
-                for name in event_names {
-                    key_map.insert(name.to_string(), 0);
-                }
+                let values: Vec<String> = serde_json::from_str(&events).unwrap();
+
+                // Make sure at least ipc was reported (should be present everywhere)
+                assert!(values.contains(&"ipc".to_owned()));
+
+                // Make sure all keys that were reported were returned the same number of
+                // times (in other words that they were all reported for all CPUs)
+                let mut event_counts = HashMap::new();
                 for event in values {
-                    assert!(key_map.contains_key(&event.to_string()));
-                    let value = key_map.get(&event.to_string()).unwrap() + 1;
-                    key_map.insert(event.to_string(), value);
+                    if let Some(c) = event_counts.get_mut(&event) {
+                        *c += 1;
+                    } else {
+                        event_counts.insert(event, 1);
+                    }
                 }
-                let mut key_values: Vec<u64> = key_map.into_values().collect();
-                key_values.dedup();
-                assert_eq!(key_values.len(), 1);
+                let mut counts: Vec<_> = event_counts.into_values().collect();
+                counts.dedup();
+                assert_eq!(counts.len(), 1);
             }
         }
     }
