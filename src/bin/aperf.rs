@@ -9,7 +9,7 @@ use log::LevelFilter;
 #[derive(Parser)]
 #[command(author, about, long_about = None)]
 #[command(name = "aperf")]
-#[command(version = concat!(env!("CARGO_PKG_VERSION"), " (", env!("VERGEN_GIT_SHA_SHORT"), ")"))]
+#[command(version = concat!(env!("CARGO_PKG_VERSION"), " (", env!("VERGEN_GIT_SHA"), ")"))]
 #[command(propagate_version = true)]
 struct Cli {
     #[command(subcommand)]

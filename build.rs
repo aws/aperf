@@ -1,16 +1,16 @@
 use anyhow::Result;
 use std::env;
 use std::process::Command;
-use vergen::{vergen, Config, ShaKind};
 
 fn main() -> Result<()> {
+    let _ = vergen::EmitBuilder::builder().git_sha(true).emit();
+
     println!("cargo:rerun-if-changed=package.json");
     println!("cargo:rerun-if-changed=package-lock.json");
     let status = Command::new("npm").arg("install").spawn()?.wait()?;
     if !status.success() {
         std::process::exit(1);
     }
-
     let jsdir = format!("{}/js", env::var("OUT_DIR").unwrap());
     println!("cargo:rustc-env=JS_DIR={}", jsdir);
     println!("cargo:rerun-if-changed=src/html_files/");
@@ -27,8 +27,5 @@ fn main() -> Result<()> {
     if !status.success() {
         std::process::exit(1);
     }
-
-    let mut config = Config::default();
-    *config.git_mut().sha_kind_mut() = ShaKind::Short;
-    vergen(config)
+    Ok(())
 }

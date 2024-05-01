@@ -427,7 +427,7 @@ impl InitParams {
             );
         }
         let collector_version = env!("CARGO_PKG_VERSION").to_string();
-        let commit_sha_short = env!("VERGEN_GIT_SHA_SHORT").to_string();
+        let commit_sha_short = env!("VERGEN_GIT_SHA").to_string();
 
         InitParams {
             time_now,
