@@ -55,14 +55,9 @@ impl Run {
 
 pub static APERF_TMP: &str = "aperf_tmp";
 
-pub fn form_and_copy_archive(loc: String, report_name: &Path) -> Result<()> {
-    if Path::new(&loc).is_dir() {
-        let dir_stem = Path::new(&loc)
-            .file_stem()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .to_string();
+pub fn form_and_copy_archive(loc: PathBuf, report_name: &Path) -> Result<()> {
+    if loc.is_dir() {
+        let dir_stem = loc.file_stem().unwrap().to_str().unwrap().to_string();
 
         /* Create a temp archive */
         let archive_name = format!("{}.tar.gz", &dir_stem);
@@ -80,12 +75,7 @@ pub fn form_and_copy_archive(loc: String, report_name: &Path) -> Result<()> {
         return Ok(());
     }
     if infer::get_from_path(&loc)?.unwrap().mime_type() == "application/gzip" {
-        let file_name = Path::new(&loc)
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .to_string();
+        let file_name = loc.file_name().unwrap().to_str().unwrap().to_string();
 
         /* Copy archive to aperf_report */
         let archive_dst = report_name.join(format!("data/archive/{}", file_name));
@@ -95,9 +85,29 @@ pub fn form_and_copy_archive(loc: String, report_name: &Path) -> Result<()> {
     Err(PDError::RecordNotArchiveOrDirectory.into())
 }
 
-pub fn get_dir(dir: String) -> Result<String> {
+pub fn is_report_dir(dir: PathBuf) -> Option<PathBuf> {
+    if dir.join("index.css").exists()
+        && dir.join("index.html").exists()
+        && dir.join("index.js").exists()
+        && dir.join("data").exists()
+        && dir.join("data/archive").exists()
+    {
+        return Some(dir.join("data/archive"));
+    }
+    None
+}
+
+pub fn get_report_archives(dir: PathBuf) -> Result<Vec<PathBuf>> {
+    let mut archives = Vec::new();
+    for entry in fs::read_dir(dir)? {
+        archives.push(entry?.path());
+    }
+    Ok(archives)
+}
+
+pub fn get_dir(dir: PathBuf) -> Result<PathBuf> {
     /* If dir return */
-    if Path::new(&dir).is_dir() {
+    if dir.is_dir() {
         return Ok(dir);
     }
     /* Unpack if archive */
@@ -106,33 +116,57 @@ pub fn get_dir(dir: String) -> Result<String> {
         let tar = GzDecoder::new(tar_gz);
         let mut archive = tar::Archive::new(tar);
         archive.unpack(APERF_TMP)?;
-        let dir_name = Path::new(&dir)
+        let dir_name = dir
             .file_name()
             .unwrap()
             .to_str()
             .unwrap()
             .strip_suffix(".tar.gz")
             .ok_or(PDError::InvalidArchiveName)?;
-        if !Path::new(&format!("{}/{}", APERF_TMP, dir_name)).exists() {
+        let out = PathBuf::from(APERF_TMP).join(dir_name);
+        if !out.exists() {
             return Err(PDError::ArchiveDirectoryMismatch.into());
         }
-        return Ok(format!("{}/{}", APERF_TMP, dir_name));
+        return Ok(out);
     }
     Err(PDError::RecordNotArchiveOrDirectory.into())
 }
 
 pub fn report(report: &Report) -> Result<()> {
     let dirs: Vec<String> = report.run.clone();
+    let mut pathbuf_dirs: Vec<PathBuf> = Vec::new();
+    let mut data_dirs: Vec<PathBuf> = Vec::new();
     let mut dir_paths: Vec<String> = Vec::new();
     let mut dir_stems: Vec<String> = Vec::new();
+
+    /* Form PathBuf from dirs */
+    for dir in &dirs {
+        pathbuf_dirs.push(PathBuf::from(dir));
+    }
+
+    /* Check if dirs contains report */
+    for dir in pathbuf_dirs {
+        let path_dir = get_dir(dir.to_path_buf())?;
+        if let Some(archive_dir) = is_report_dir(path_dir.clone()) {
+            if report.name.is_none() {
+                return Err(PDError::VisualizerReportFromReportNoNameError.into());
+            }
+            if let Ok(archives) = get_report_archives(archive_dir) {
+                for path in archives {
+                    data_dirs.push(path);
+                }
+            }
+        } else {
+            data_dirs.push(path_dir);
+        }
+    }
 
     /* Create a tmp dir for aperf to work with */
     fs::create_dir_all(APERF_TMP)?;
 
     /* Get dir paths, stems */
-    for dir in &dirs {
-        let directory = get_dir(dir.to_string())?;
-        let path = Path::new(&directory);
+    for dir in &data_dirs {
+        let path = get_dir(dir.to_path_buf())?;
         if dir_stems.contains(&path.file_stem().unwrap().to_str().unwrap().to_string()) {
             error!("Cannot process two runs with the same name");
             return Ok(());
@@ -180,8 +214,8 @@ pub fn report(report: &Report) -> Result<()> {
     fs::create_dir_all(report_name.join("data/js"))?;
 
     /* Generate/copy the archives of the collected data into aperf_report */
-    for dir in &dirs {
-        form_and_copy_archive(dir.clone(), &report_name)?;
+    for dir in &data_dirs {
+        form_and_copy_archive(dir.to_path_buf(), &report_name)?;
     }
     /* Generate base HTML, JS files */
     let mut ico_file = File::create(report_name.join("favicon.ico"))?;
