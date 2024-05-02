@@ -73,6 +73,9 @@ pub enum PDError {
     #[error("All processes collection error")]
     CollectorAllProcessError,
 
+    #[error("Generating report from other reports. Name must be given.")]
+    VisualizerReportFromReportNoNameError,
+
     #[error("File not found {}", .0)]
     VisualizerFileNotFound(String),
 
