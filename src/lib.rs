@@ -145,11 +145,9 @@ impl PerformanceData {
         let mut remove_entries: Vec<String> = Vec::new();
         if !self.init_params.profile {
             self.collectors
-                .remove(data::perf_profile::PERF_PROFILE_FILE_NAME)
-                .unwrap();
+                .remove(data::perf_profile::PERF_PROFILE_FILE_NAME);
             self.collectors
-                .remove(data::flamegraphs::FLAMEGRAPHS_FILE_NAME)
-                .unwrap();
+                .remove(data::flamegraphs::FLAMEGRAPHS_FILE_NAME);
         }
 
         for (_name, datatype) in self.collectors.iter_mut() {
