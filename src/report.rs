@@ -14,11 +14,11 @@ use std::path::{Path, PathBuf};
 pub struct Report {
     /// Run data to be visualized. Can be a directory or a tarball.
     #[clap(short, long, value_parser, required = true, num_args = 1..)]
-    run: Vec<String>,
+    pub run: Vec<String>,
 
     /// Report name.
     #[clap(short, long, value_parser)]
-    name: Option<String>,
+    pub name: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

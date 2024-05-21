@@ -444,7 +444,7 @@ mod tests {
     fn test_process_raw_data() {
         let mut raw_data = Vec::new();
         let file = get_file(
-            "test/aperf_2023-07-26_18_37_43/".to_string(),
+            "tests/test-data/aperf_2023-07-26_18_37_43/".to_string(),
             "interrupts".to_string(),
         )
         .unwrap();

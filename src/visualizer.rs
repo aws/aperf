@@ -262,7 +262,7 @@ mod tests {
             "cpu_utilization".to_string(),
         );
         dv.init_visualizer(
-            "test/aperf_2023-07-26_18_37_43/".to_string(),
+            "tests/test-data/aperf_2023-07-26_18_37_43/".to_string(),
             "test".to_string(),
             String::new(),
             PathBuf::new(),

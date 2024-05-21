@@ -7,19 +7,19 @@ use log::{debug, error, info};
 pub struct Record {
     /// Name of the run.
     #[clap(short, long, value_parser)]
-    run_name: Option<String>,
+    pub run_name: Option<String>,
 
     /// Interval (in seconds) at which performance data is to be collected.
     #[clap(short, long, value_parser, default_value_t = 1)]
-    interval: u64,
+    pub interval: u64,
 
     /// Time (in seconds) for which the performance data is to be collected.
     #[clap(short, long, value_parser, default_value_t = 10)]
-    period: u64,
+    pub period: u64,
 
     /// Gather profiling data using the 'perf' binary.
     #[clap(long, value_parser, default_value_t = false)]
-    profile: bool,
+    pub profile: bool,
 }
 
 fn prepare_data_collectors() -> Result<()> {
