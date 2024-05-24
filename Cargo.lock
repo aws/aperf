@@ -118,7 +118,6 @@ dependencies = [
  "lazy_static",
  "libc",
  "log",
- "num_cpus",
  "perf-event2",
  "procfs",
  "rustix 0.38.28",
