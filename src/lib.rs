@@ -73,6 +73,9 @@ pub enum PDError {
     #[error("All processes collection error")]
     CollectorAllProcessError,
 
+    #[error("Could not get the total number of online CPUs with sysconf")]
+    CollectorPMUCPUError,
+
     #[error("Generating report from other reports. Name must be given.")]
     VisualizerReportFromReportNoNameError,
 
