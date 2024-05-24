@@ -2,7 +2,7 @@ extern crate ctor;
 
 use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
 use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata};
-use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
 use chrono::prelude::*;
 use ctor::ctor;
@@ -19,7 +19,7 @@ use crate::data::grv_perf_events;
 use {
     crate::data::intel_icelake_perf_events::ICX_CTRS, crate::data::intel_perf_events,
     crate::data::intel_sapphire_rapids_perf_events::SPR_CTRS, crate::data::utils::get_cpu_info,
-    crate::PDError, indexmap::IndexMap,
+    indexmap::IndexMap,
 };
 
 pub static PERF_STAT_FILE_NAME: &str = "perf_stat";
@@ -113,7 +113,13 @@ impl PerfStatRaw {
 
 impl CollectData for PerfStatRaw {
     fn prepare_data_collector(&mut self, _params: CollectorParams) -> Result<()> {
-        let num_cpus = num_cpus::get();
+        let num_cpus = match unsafe { libc::sysconf(libc::_SC_NPROCESSORS_ONLN as libc::c_int) } {
+            -1 => {
+                warn!("Could not get the number of cpus in the system with sysconf.");
+                return Err(PDError::CollectorPMUCPUError.into());
+            }
+            ret => ret as usize,
+        };
         let mut cpu_groups: Vec<CpuCtrGroup> = Vec::new();
 
         cfg_if::cfg_if! {
