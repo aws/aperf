@@ -2,73 +2,109 @@ use anyhow::Result;
 use aperf_lib::record::{record, Record};
 use aperf_lib::report::{report, Report};
 use flate2::read::GzDecoder;
-use std::fs;
 use std::path::{Path, PathBuf};
+use std::{fs, panic};
 use tar::Archive;
+use tempfile::TempDir;
+
+fn run_test<T>(test_func: T)
+where
+    T: FnOnce(PathBuf) -> Result<()> + panic::UnwindSafe,
+{
+    let tempdir = TempDir::with_prefix("aperf").unwrap();
+    let result = panic::catch_unwind(|| test_func(tempdir.path().to_path_buf()));
+    tempdir.close().unwrap();
+    if let Err(e) = result {
+        panic::resume_unwind(e);
+    }
+}
 
 #[test]
 fn test_record() {
-    let rec = Record {
-        run_name: Some("test_record".to_string()),
-        interval: 1,
-        period: 2,
-        profile: false,
-    };
+    run_test(|tempdir| {
+        let run_name = tempdir
+            .join("test_record")
+            .into_os_string()
+            .into_string()
+            .unwrap();
+        let rec = Record {
+            run_name: Some(run_name.clone()),
+            interval: 1,
+            period: 2,
+            profile: false,
+        };
 
-    record(&rec).unwrap();
-    assert!(Path::new("test_record").exists());
-    assert!(Path::new("test_record.tar.gz").exists());
+        record(&rec).unwrap();
+        assert!(Path::new(&run_name).exists());
+        assert!(Path::new(&(run_name.clone() + ".tar.gz")).exists());
 
-    fs::remove_dir_all("test_record").unwrap();
-    fs::remove_file("test_record.tar.gz").unwrap();
+        fs::remove_dir_all(&run_name).unwrap();
+        fs::remove_file(run_name + ".tar.gz").unwrap();
+        Ok(())
+    })
 }
 
 #[test]
 fn test_report() {
-    let rec = Record {
-        run_name: Some("record_data".to_string()),
-        interval: 1,
-        period: 2,
-        profile: false,
-    };
+    run_test(|tempdir| {
+        let run_name = tempdir
+            .join("record_data")
+            .into_os_string()
+            .into_string()
+            .unwrap();
+        let rec = Record {
+            run_name: Some(run_name.clone()),
+            interval: 1,
+            period: 2,
+            profile: false,
+        };
 
-    record(&rec).unwrap();
-    let rep = Report {
-        run: ["record_data".to_string()].to_vec(),
-        name: Some("test_report".to_string()),
-    };
-    report(&rep).unwrap();
+        record(&rec).unwrap();
 
-    // Check if the directory has the proper structure
-    assert!(Path::new("test_report").exists());
-    assert!(Path::new("test_report/index.html").exists());
-    assert!(Path::new("test_report/index.css").exists());
-    assert!(Path::new("test_report/index.js").exists());
-    assert!(Path::new("test_report/data/archive").exists());
-    assert!(Path::new("test_report.tar.gz").exists());
+        let test_report_path = PathBuf::from("test_report");
+        let report_loc = tempdir
+            .join("test_report")
+            .into_os_string()
+            .into_string()
+            .unwrap();
+        let report_path = tempdir.join("test_report");
+        let rep = Report {
+            run: [run_name.clone()].to_vec(),
+            name: Some(report_loc.clone()),
+        };
+        report(&rep).unwrap();
 
-    let tar_gz = fs::File::open("test_report.tar.gz").unwrap();
-    let mut archive = Archive::new(GzDecoder::new(tar_gz));
+        // Check if the directory has the proper structure
+        assert!(report_path.exists());
+        assert!(report_path.join("index.css").exists());
+        assert!(report_path.join("index.js").exists());
+        assert!(report_path.join("data/archive").exists());
+        assert!(Path::new(&(report_loc.clone() + ".tar.gz")).exists());
 
-    let paths: Vec<PathBuf> = archive
-        .entries()
-        .unwrap()
-        .map(|entry| -> Result<PathBuf> {
-            let binding = entry.unwrap();
-            let path = binding.path().unwrap().into_owned();
-            Ok(path.to_path_buf())
-        })
-        .filter_map(|e| e.ok())
-        .collect();
+        let tar_gz = fs::File::open(report_loc.clone() + ".tar.gz").unwrap();
+        let mut archive = Archive::new(GzDecoder::new(tar_gz));
 
-    // Check if the tarball of the directory has the proper structure
-    assert!(paths.contains(&PathBuf::from("test_report/index.html")));
-    assert!(paths.contains(&PathBuf::from("test_report/index.css")));
-    assert!(paths.contains(&PathBuf::from("test_report/index.js")));
-    assert!(paths.contains(&PathBuf::from("test_report/data/archive")));
+        let paths: Vec<PathBuf> = archive
+            .entries()
+            .unwrap()
+            .map(|entry| -> Result<PathBuf> {
+                let binding = entry.unwrap();
+                let path = binding.path().unwrap().into_owned();
+                Ok(path.to_path_buf())
+            })
+            .filter_map(|e| e.ok())
+            .collect();
 
-    fs::remove_dir_all("record_data").unwrap();
-    fs::remove_dir_all("test_report").unwrap();
-    fs::remove_file("record_data.tar.gz").unwrap();
-    fs::remove_file("test_report.tar.gz").unwrap();
+        // Check if the tarball of the directory has the proper structure
+        assert!(paths.contains(&test_report_path.join("index.html")));
+        assert!(paths.contains(&test_report_path.join("index.css")));
+        assert!(paths.contains(&test_report_path.join("index.js")));
+        assert!(paths.contains(&test_report_path.join("data/archive")));
+
+        fs::remove_dir_all(&run_name).unwrap();
+        fs::remove_dir_all(&report_loc).unwrap();
+        fs::remove_file(run_name.clone() + ".tar.gz").unwrap();
+        fs::remove_file(report_loc.clone() + ".tar.gz").unwrap();
+        Ok(())
+    })
 }

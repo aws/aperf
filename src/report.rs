@@ -305,7 +305,13 @@ pub fn report(report: &Report) -> Result<()> {
     let tar_gz = File::create(&report_name_tgz)?;
     let enc = GzEncoder::new(tar_gz, Compression::default());
     let mut tar = tar::Builder::new(enc);
-    tar.append_dir_all(&report_name, &report_name)?;
+    let report_stem = report_name
+        .file_stem()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    tar.append_dir_all(&report_stem, &report_name)?;
     fs::remove_dir_all(APERF_TMP)?;
     Ok(())
 }
