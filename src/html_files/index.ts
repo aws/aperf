@@ -19,6 +19,7 @@ DataTypes.set('flamegraphs', {name: 'flamegraphs', hideClass: '', trueId: '', ca
 DataTypes.set('top_functions', {name: 'topfunctions', hideClass: '', trueId: '', callback: topFunctions});
 DataTypes.set('processes', {name: 'processes', hideClass: '', trueId: '', callback: processes});
 DataTypes.set('perfstat', {name: 'perfstat', hideClass: '', trueId: '', callback: perfStat});
+DataTypes.set('aperfstat', {name: 'aperfstat', hideClass: '', trueId: '', callback: aperfStat});
 
 function openData(evt: Event, elem: HTMLButtonElement) {
 	var tabName: string = elem.name;
