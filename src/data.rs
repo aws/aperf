@@ -1,3 +1,4 @@
+pub mod aperf_stats;
 pub mod constants;
 pub mod cpu_utilization;
 pub mod diskstats;
@@ -26,6 +27,7 @@ pub mod vmstat;
 use crate::visualizer::{GetData, ReportParams};
 use crate::{InitParams, APERF_FILE_FORMAT};
 use anyhow::Result;
+use aperf_stats::AperfStat;
 use chrono::prelude::*;
 use cpu_utilization::{CpuUtilization, CpuUtilizationRaw};
 use diskstats::{Diskstats, DiskstatsRaw};
@@ -300,7 +302,8 @@ processed_data!(
     MeminfoData,
     Netstat,
     PerfProfile,
-    Flamegraph
+    Flamegraph,
+    AperfStat
 );
 
 macro_rules! noop {

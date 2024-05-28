@@ -7,6 +7,7 @@ pub mod report;
 pub mod visualizer;
 use anyhow::Result;
 use chrono::prelude::*;
+use data::TimeEnum;
 use flate2::{write::GzEncoder, Compression};
 use log::{debug, error, info};
 use serde::{Deserialize, Serialize};
@@ -93,10 +94,40 @@ lazy_static! {
     pub static ref PERFORMANCE_DATA: Mutex<PerformanceData> = Mutex::new(PerformanceData::new());
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AperfStat {
+    pub time: TimeEnum,
+    pub name: String,
+    pub data: HashMap<String, u64>,
+}
+
+impl AperfStat {
+    fn new(name: String) -> Self {
+        AperfStat {
+            time: TimeEnum::DateTime(Utc::now()),
+            name,
+            data: HashMap::new(),
+        }
+    }
+
+    fn measure<F>(&mut self, name: String, mut func: F) -> Result<()>
+    where
+        F: FnMut() -> Result<()>,
+    {
+        let start_time = time::Instant::now();
+        func()?;
+        let func_time: u64 = (time::Instant::now() - start_time).as_micros() as u64;
+        self.data.insert(name, func_time);
+        Ok(())
+    }
+}
+
 #[allow(missing_docs)]
 pub struct PerformanceData {
     pub collectors: HashMap<String, data::DataType>,
     pub init_params: InitParams,
+    pub aperf_stats_path: PathBuf,
+    pub aperf_stats_handle: Option<fs::File>,
 }
 
 impl PerformanceData {
@@ -107,6 +138,8 @@ impl PerformanceData {
         PerformanceData {
             collectors,
             init_params,
+            aperf_stats_path: PathBuf::new(),
+            aperf_stats_handle: None,
         }
     }
 
@@ -138,6 +171,16 @@ impl PerformanceData {
 
         bincode::serialize_into(meta_data_handle, &self.init_params)?;
 
+        self.aperf_stats_path = PathBuf::from(self.init_params.dir_name.clone())
+            .join(format!("aperf_run_stats.{}", APERF_FILE_FORMAT));
+        self.aperf_stats_handle = Some(
+            fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .open(self.aperf_stats_path.clone())
+                .expect("Could not create aperf-stats file"),
+        );
+
         for (_name, datatype) in self.collectors.iter_mut() {
             datatype.init_data_type(self.init_params.clone())?;
         }
@@ -153,7 +196,7 @@ impl PerformanceData {
                 .remove(data::flamegraphs::FLAMEGRAPHS_FILE_NAME);
         }
 
-        for (_name, datatype) in self.collectors.iter_mut() {
+        for (name, datatype) in self.collectors.iter_mut() {
             if datatype.is_static {
                 continue;
             }
@@ -161,10 +204,10 @@ impl PerformanceData {
                 Err(e) => {
                     error!(
                         "Excluding {} from collection. Error msg: {}",
-                        _name,
+                        name,
                         e.to_string()
                     );
-                    remove_entries.push(_name.clone());
+                    remove_entries.push(name.clone());
                 }
                 _ => continue,
             }
@@ -172,7 +215,6 @@ impl PerformanceData {
         for key in remove_entries {
             self.collectors.remove_entry(&key);
         }
-
         Ok(())
     }
 
@@ -190,10 +232,11 @@ impl PerformanceData {
 
     pub fn collect_data_serial(&mut self) -> Result<()> {
         let start = time::Instant::now();
+        let mut aperf_collect_data = AperfStat::new("aperf-collect-data".to_string());
         let mut current = time::Instant::now();
         let end = current + time::Duration::from_secs(self.init_params.period);
 
-        let mut tfd = TimerFd::new().unwrap();
+        let mut tfd = TimerFd::new()?;
         tfd.set_state(
             TimerState::Periodic {
                 current: time::Duration::from_secs(self.init_params.interval),
@@ -202,21 +245,37 @@ impl PerformanceData {
             SetTimeFlags::Default,
         );
         while current <= end {
+            aperf_collect_data.time = TimeEnum::DateTime(Utc::now());
+            aperf_collect_data.data = HashMap::new();
             let ret = tfd.read();
             if ret > 1 {
                 error!("Missed {} interval(s)", ret - 1);
             }
             debug!("Time elapsed: {:?}", start.elapsed());
             current += time::Duration::from_secs(ret * self.init_params.interval);
-            for (_name, datatype) in self.collectors.iter_mut() {
+            for (name, datatype) in self.collectors.iter_mut() {
                 if datatype.is_static {
                     continue;
                 }
-                datatype.collect_data()?;
-                datatype.write_to_file()?;
+
+                aperf_collect_data.measure(name.clone() + "-collect", || -> Result<()> {
+                    datatype.collect_data()?;
+                    Ok(())
+                })?;
+                aperf_collect_data.measure(name.clone() + "-print", || -> Result<()> {
+                    datatype.write_to_file()?;
+                    Ok(())
+                })?;
             }
             let data_collection_time = time::Instant::now() - current;
+            aperf_collect_data
+                .data
+                .insert("aperf".to_string(), data_collection_time.as_micros() as u64);
             debug!("Collection time: {:?}", data_collection_time);
+            bincode::serialize_into(
+                self.aperf_stats_handle.as_ref().unwrap(),
+                &aperf_collect_data,
+            )?;
         }
         for (_name, datatype) in self.collectors.iter_mut() {
             datatype.finish_data_collection()?;
