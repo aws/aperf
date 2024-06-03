@@ -1,4 +1,5 @@
 let got_cpu_util_data = false;
+let util_cpu_list: Map<string, CPUList> = new Map<string, CPUList>();
 
 function getUtilizationType(run, elem, type, run_data) {
     var cpu_type_datas = [];
@@ -9,18 +10,21 @@ function getUtilizationType(run, elem, type, run_data) {
     data.forEach(function (value, index, arr) {
         var x_time = [];
         var y_data = [];
-        cpu = value.cpu;
+        cpu = value.cpu.toString();
         type_data = value.data;
         type_data.forEach(function (i_value, i_index, i_arr) {
             x_time.push(i_value.time.TimeDiff);
             y_data.push(i_value.value);
         });
-        var cpu_type_data = {
+        var cpu_type_data: Partial<Plotly.PlotData> = {
             name: `CPU ${cpu}`,
             x: x_time,
             y: y_data,
             type: 'scatter',
-        };
+        }
+        if (util_cpu_list.get(run).cpulist.indexOf(cpu) == -1) {
+            cpu_type_data.visible = 'legendonly';
+        }
         cpu_type_datas.push(cpu_type_data);
     });
     var TESTER = elem;
@@ -134,12 +138,13 @@ function getCpuUtilization(elem, run, run_data) {
     Plotly.newPlot(TESTER, data_list, layout, { frameMargins: 0 });
 }
 function cpuUtilization() {
-    if (got_cpu_util_data) {
+    if (got_cpu_util_data && allRunCPUListUnchanged(util_cpu_list)) {
         return;
     }
     clear_and_create('cpuutilization');
     for (let i = 0; i < cpu_utilization_raw_data['runs'].length; i++) {
         let run_name = cpu_utilization_raw_data['runs'][i]['name'];
+        util_cpu_list.set(run_name, getCPUList(run_name));
         let elem_id = `${run_name}-cpuutilization-per-data`;
         let this_run_data = cpu_utilization_raw_data['runs'][i];
         getCpuUtilization(document.getElementById(elem_id), run_name, this_run_data['key_values']['aggregate']);

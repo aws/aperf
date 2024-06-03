@@ -1,4 +1,5 @@
 let got_interrupt_data = false;
+let interrupt_cpu_list: Map<string, CPUList> = new Map<string, CPUList>();
 
 function getLine(run, elem, key, run_data) {
     var data = JSON.parse(run_data);
@@ -15,12 +16,15 @@ function getLine(run, elem, key, run_data) {
                 }
             })
         })
-        var interrupt_cpu_data = {
+        var interrupt_cpu_data: Partial<Plotly.PlotData> = {
             name: `CPU ${cpu}`,
             x: x_time,
             y: y_data,
             type: 'scatter',
         };
+        if (interrupt_cpu_list.get(run).cpulist.indexOf(cpu.toString()) == -1) {
+            interrupt_cpu_data.visible = 'legendonly';
+        }
         interrupt_type_datas.push(interrupt_cpu_data);
     }
     var title;
@@ -56,12 +60,13 @@ function getLines(run, container_id, keys, run_data) {
 }
 
 function interrupts() {
-    if (got_interrupt_data) {
+    if (got_interrupt_data && allRunCPUListUnchanged(interrupt_cpu_list)) {
         return;
     }
     clear_and_create('interrupts');
     for (let i = 0; i < interrupts_raw_data['runs'].length; i++) {
         let run_name = interrupts_raw_data['runs'][i]['name'];
+        interrupt_cpu_list.set(run_name, getCPUList(run_name));
         let elem_id = `${run_name}-interrupts-per-data`;
         let this_run_data = interrupts_raw_data['runs'][i];
         getLines(run_name, elem_id, this_run_data['keys'], this_run_data['key_values']);

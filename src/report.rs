@@ -199,6 +199,7 @@ pub fn report(report: &Report) -> Result<()> {
 
     info!("Creating APerf report...");
     let ico = include_bytes!("html_files/favicon.ico");
+    let configure = include_bytes!("html_files/configure.png");
     let index_html = include_str!("html_files/index.html");
     let index_css = include_str!("html_files/index.css");
     let index_js = include_str!(concat!(env!("JS_DIR"), "/index.js"));
@@ -207,8 +208,10 @@ pub fn report(report: &Report) -> Result<()> {
         env!("CARGO_MANIFEST_DIR"),
         "/node_modules/plotly.js/dist/plotly.min.js"
     ));
+    let configure_js = include_str!(concat!(env!("JS_DIR"), "/configure.js"));
     let run_names = dir_stems.clone();
 
+    fs::create_dir_all(report_name.join("images"))?;
     fs::create_dir_all(report_name.join("js"))?;
     fs::create_dir_all(report_name.join("data/archive"))?;
     fs::create_dir_all(report_name.join("data/js"))?;
@@ -218,18 +221,22 @@ pub fn report(report: &Report) -> Result<()> {
         form_and_copy_archive(dir.to_path_buf(), &report_name)?;
     }
     /* Generate base HTML, JS files */
-    let mut ico_file = File::create(report_name.join("favicon.ico"))?;
+    let mut ico_file = File::create(report_name.join("images/favicon.ico"))?;
+    let mut configure_file = File::create(report_name.join("images/configure.png"))?;
     let mut index_html_file = File::create(report_name.join("index.html"))?;
     let mut index_css_file = File::create(report_name.join("index.css"))?;
     let mut index_js_file = File::create(report_name.join("index.js"))?;
     let mut utils_js_file = File::create(report_name.join("js/utils.js"))?;
     let mut plotly_js_file = File::create(report_name.join("js/plotly.js"))?;
+    let mut configure_js_file = File::create(report_name.join("js/configure.js"))?;
     ico_file.write_all(ico)?;
+    configure_file.write_all(configure)?;
     write!(index_html_file, "{}", index_html)?;
     write!(index_css_file, "{}", index_css)?;
     write!(index_js_file, "{}", index_js)?;
     write!(utils_js_file, "{}", utils_js)?;
     write!(plotly_js_file, "{}", plotly_js)?;
+    write!(configure_js_file, "{}", configure_js)?;
 
     let mut visualizer = VISUALIZATION_DATA.lock().unwrap();
     /* Init visualizers */

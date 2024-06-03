@@ -2,13 +2,15 @@
 <html>
 	<head>
 		<link rel="stylesheet" href="index.css">
-		<link rel="icon" type="image/x-icon" href="favicon.ico">
+		<link rel="icon" type="image/x-icon" href="images/favicon.ico">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<title>APerf</title>
 	</head>
 	<body>
 		<div class="tab">
 			<div class="aperf">APerf</div>
+			<button class="tablinks" name="configure"><div class="icon-text">Configure</div><div class="configure"/></button>
+			<!--- Configure should be the first tab. Add any new tabs below this. -->
 			<button class="tablinks" name="system_info" id="default">SUT Config</button>
 			<button class="tablinks" name="cpu_utilization">CPU Utilization</button>
 			<button class="tablinks" name="flamegraphs">Flamegraphs</button>
@@ -98,6 +100,11 @@
 			<div id="aperfstat" class="tabcontent">
 				<div id="aperfstat-runs"></div>
 			</div>
+			<div id="configure" class="tabcontent">
+				<div id="configure-runs" class="extra">
+					<div id="cpus-configure"></div>
+				</div>
+			</div>
 		</div>
 		<script type="text/javascript" src="data/js/runs.js"></script>
 		<script type="text/javascript" src="data/js/system_info.js"></script>
@@ -130,6 +137,7 @@
 		<script type="text/javascript" src="js/perf_stat.js"></script>
 		<script type="text/javascript" src="js/netstat.js"></script>
 		<script type="text/javascript" src="js/aperf_run_stats.js"></script>
+		<script type="text/javascript" src="js/configure.js"></script>
 		<script type="text/javascript" src="index.js"></script>
 	</body>
 </html>
