@@ -38,7 +38,7 @@ body {
 
 /* Style the buttons inside the tab */
 .tab button {
-  display: block;
+  display: grid;
   background-color: inherit;
   color: black;
   padding: 22px 16px;
@@ -49,6 +49,20 @@ body {
   cursor: pointer;
   transition: 0.3s;
   font-size: 17px;
+}
+
+.icon-text {
+  grid-column: 1;
+}
+
+.configure {
+  grid-column: 2;
+  background-image: url("images/configure.png");
+  height: 100%;
+  width: 100%;
+  background-repeat: no-repeat;
+  background-position-x: center;
+  background-position-y: center;
 }
 
 .all-runs {

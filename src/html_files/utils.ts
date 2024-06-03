@@ -70,7 +70,7 @@ function canHide(hide, keys, key) {
     }
     return false;
 }
-function emptyOrCallback(keys, hide, callback, elem, key, run_data) {
+function emptyOrCallback(keys, hide, callback, elem, key, run_data, run="") {
     if (canHide(hide, keys, key)) {
         return;
     }
@@ -80,7 +80,7 @@ function emptyOrCallback(keys, hide, callback, elem, key, run_data) {
         }, 0);
     } else {
         setTimeout(() => {
-            callback(elem, key, run_data[key]);
+            callback(elem, key, run_data[key], run);
         }, 0);
     }
 }
@@ -158,4 +158,14 @@ function split_keys(check_runs, check_common_keys) {
             }
         }
     }
+}
+
+function allRunCPUListUnchanged(cpu_list) {
+    for (let i = 0; i < runs_raw.length; i++) {
+        let run_name = runs_raw[i];
+        if (!isCPUListUnchanged(cpu_list.get(run_name).cpulist, run_name)) {
+            return false;
+        }
+    }
+    return true;
 }

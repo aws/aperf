@@ -20,6 +20,7 @@ DataTypes.set('top_functions', {name: 'topfunctions', hideClass: '', trueId: '',
 DataTypes.set('processes', {name: 'processes', hideClass: '', trueId: '', callback: processes});
 DataTypes.set('perfstat', {name: 'perfstat', hideClass: '', trueId: '', callback: perfStat});
 DataTypes.set('aperfstat', {name: 'aperfstat', hideClass: '', trueId: '', callback: aperfStat});
+DataTypes.set('configure', {name: 'configure', hideClass: '', trueId: '', callback: configure});
 
 function openData(evt: Event, elem: HTMLButtonElement) {
 	var tabName: string = elem.name;
@@ -117,6 +118,8 @@ function create_runs_header() {
 
 // Set Runs header
 create_runs_header();
+
+formGlobalConfig();
 
 // Show landing page
 document.getElementById("default").click();
