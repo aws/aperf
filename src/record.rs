@@ -1,7 +1,24 @@
-use crate::{InitParams, PERFORMANCE_DATA};
+use crate::{data, InitParams, PERFORMANCE_DATA};
 use anyhow::Result;
-use clap::Args;
+use clap::{Args, Subcommand};
 use log::{debug, error, info};
+
+#[derive(Subcommand, Debug)]
+pub enum ProfilerSubCommand {
+    //Use profilers
+    #[clap(name = "--profile")]
+    Profile(Profile),
+}
+#[derive(Args, Debug)]
+pub struct Profile {
+    /// Gather profiling data using 'perf' binary. Automatically selected if no options are passed to '--profile'.
+    #[clap(short, long, value_parser)]
+    pub perf: bool,
+
+    /// Profile JVM using async-profiler. Specify args using comma separated values: <PID/Name>,<PID/Name>,...,<PID/Name>.
+    #[clap(short, long, value_parser, default_missing_value = Some("jps"), num_args=0..=1)]
+    pub java: Option<String>,
+}
 
 #[derive(Args, Debug)]
 pub struct Record {
@@ -17,9 +34,9 @@ pub struct Record {
     #[clap(short, long, value_parser, default_value_t = 10)]
     pub period: u64,
 
-    /// Gather profiling data using the 'perf' binary.
-    #[clap(long, value_parser, default_value_t = false)]
-    pub profile: bool,
+    /// Gather profiling data using the 'perf' binary or additional profilers.
+    #[command(subcommand)]
+    pub profile: Option<ProfilerSubCommand>,
 }
 
 fn prepare_data_collectors() -> Result<()> {
@@ -56,8 +73,34 @@ pub fn record(record: &Record) -> Result<()> {
     }
     let mut params = InitParams::new(run_name);
     params.period = record.period;
-    params.profile = record.profile;
     params.interval = record.interval;
+
+    let mut flag = false;
+    match &record.profile {
+        Some(ProfilerSubCommand::Profile(p)) => {
+            match &p.java {
+                Some(j) => {
+                    params.profile.insert(
+                        String::from(data::java_profile::JAVA_PROFILE_FILE_NAME),
+                        j.clone(),
+                    );
+                    flag = true;
+                }
+                None => {}
+            }
+            if !flag || p.perf {
+                params.profile.insert(
+                    String::from(data::perf_profile::PERF_PROFILE_FILE_NAME),
+                    String::new(),
+                );
+                params.profile.insert(
+                    String::from(data::flamegraphs::FLAMEGRAPHS_FILE_NAME),
+                    String::new(),
+                );
+            }
+        }
+        None => {}
+    }
 
     PERFORMANCE_DATA.lock().unwrap().set_params(params);
     PERFORMANCE_DATA.lock().unwrap().init_collectors()?;

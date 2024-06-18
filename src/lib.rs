@@ -143,25 +143,24 @@ impl PerformanceData {
 
     pub fn prepare_data_collectors(&mut self) -> Result<()> {
         let mut remove_entries: Vec<String> = Vec::new();
-        if !self.init_params.profile {
-            self.collectors
-                .remove(data::perf_profile::PERF_PROFILE_FILE_NAME);
-            self.collectors
-                .remove(data::flamegraphs::FLAMEGRAPHS_FILE_NAME);
-        }
 
-        for (_name, datatype) in self.collectors.iter_mut() {
+        for (name, datatype) in self.collectors.iter_mut() {
             if datatype.is_static {
+                continue;
+            } else if datatype.is_profile_option
+                && !self.init_params.profile.contains_key(name.as_str())
+            {
+                remove_entries.push(name.clone());
                 continue;
             }
             match datatype.prepare_data_collector() {
                 Err(e) => {
                     error!(
                         "Excluding {} from collection. Error msg: {}",
-                        _name,
+                        name,
                         e.to_string()
                     );
-                    remove_entries.push(_name.clone());
+                    remove_entries.push(name.clone());
                 }
                 _ => continue,
             }
@@ -333,6 +332,9 @@ impl VisualizationData {
     pub fn get_all_js_files(&mut self) -> Result<Vec<(String, String)>> {
         let mut ret = Vec::new();
         for (name, visualizer) in self.visualizers.iter() {
+            if visualizer.js_file_name.is_empty() {
+                continue;
+            }
             let file = self
                 .js_files
                 .get(&visualizer.js_file_name)
@@ -399,7 +401,7 @@ pub struct InitParams {
     pub time_str: String,
     pub dir_name: String,
     pub period: u64,
-    pub profile: bool,
+    pub profile: HashMap<String, String>,
     pub interval: u64,
     pub run_name: String,
     pub collector_version: String,
@@ -435,7 +437,7 @@ impl InitParams {
             time_str,
             dir_name,
             period: 0,
-            profile: false,
+            profile: HashMap::new(),
             interval: 0,
             run_name,
             collector_version,

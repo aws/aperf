@@ -163,11 +163,12 @@ impl GetData for Flamegraph {
 fn init_flamegraph() {
     let flamegraph_raw = FlamegraphRaw::new();
     let file_name = FLAMEGRAPHS_FILE_NAME.to_string();
-    let dt = DataType::new(
+    let mut dt = DataType::new(
         Data::FlamegraphRaw(flamegraph_raw.clone()),
         file_name.clone(),
         false,
     );
+    dt.is_profile_option();
     let flamegraph = Flamegraph::new();
     let js_file_name = file_name.clone() + ".js";
     let mut dv = DataVisualizer::new(

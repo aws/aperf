@@ -23,6 +23,7 @@ APerf collects the following performance data:
 - Network stats
 - Meminfo
 - Profile data (if enabled with `--profile` and `perf` binary present)
+    - Java profile with `jps` command and [async-profiler](https://github.com/async-profiler/async-profiler/tree/master) binary 
 
 ## Requirements
 * [Rust toolchain (v1.61.0+)](https://www.rust-lang.org/tools/install)
@@ -60,6 +61,22 @@ echo 100 | sudo tee /sys/devices/*/perf_event_mux_interval_ms
 ./aperf record -r <RUN_NAME> -i <INTERVAL_NUMBER> -p <COLLECTION_PERIOD>
 ```
 
+**aperf record Profiling Options**
+
+Aperf can also use additional binaries to provide more profiling data. To list possible profilers run:
+
+```
+./aperf record --profile -h
+```
+
+Since --profile is a subcommand, it must be specified after all other options for aperf record. Here is an example command to record and generate flamegraphs for JVMs running on the system:
+
+```
+./aperf record -i 1 -p 10 --profile --java
+```
+
+If no options are specified, --profile will default to use the 'perf' binary. Otherwise, all desired profilers and their respective arguments must be specified.
+
 **aperf report**
 1. Download the `aperf` binary.
 2. Download the directory created by `aperf record`.
@@ -94,10 +111,17 @@ To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 
 `-vv, --verbose --verbose` more verbose messages
 
-`--profile` gather profiling data using the 'perf' binary
+`./aperf record -h`
 
+**Recorder Profile Subcommand:**
 
-`./aperf report -h`
+`aperf record --profile` specify profilers with flags:
+
+`-p, --perf` gathers profiling data using the 'perf' binary.
+
+`-j, --java` profile JVMs by PID or name using async-profiler, `<PID/Name>,<PID/Name>,...,<PID/Name>` (default profiles all currently running JVMs)
+
+`./aperf report --profile -h`
 
 **Reporter Flags:**
 
@@ -110,6 +134,8 @@ To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 `-v, --verbose` verbose messages
 
 `-vv, --verbose --verbose` more verbose messages
+
+`./aperf report -h` 
 
 ## APerf Issues?
 Below are some prerequisites for profiling with APerf:

@@ -12,6 +12,7 @@ cfg_if::cfg_if! {
     }
 }
 pub mod interrupts;
+pub mod java_profile;
 pub mod kernel_config;
 pub mod meminfodata;
 pub mod netstat;
@@ -31,6 +32,7 @@ use cpu_utilization::{CpuUtilization, CpuUtilizationRaw};
 use diskstats::{Diskstats, DiskstatsRaw};
 use flamegraphs::{Flamegraph, FlamegraphRaw};
 use interrupts::{InterruptData, InterruptDataRaw};
+use java_profile::{JavaProfile, JavaProfileRaw};
 use kernel_config::KernelConfig;
 use log::trace;
 use meminfodata::{MeminfoData, MeminfoDataRaw};
@@ -39,6 +41,7 @@ use perf_profile::{PerfProfile, PerfProfileRaw};
 use perf_stat::{PerfStat, PerfStatRaw};
 use processes::{Processes, ProcessesRaw};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::ops::Sub;
 use sysctldata::SysctlData;
@@ -51,6 +54,7 @@ pub struct CollectorParams {
     pub data_file_path: String,
     pub data_dir: String,
     pub run_name: String,
+    pub profile: HashMap<String, String>,
 }
 
 impl CollectorParams {
@@ -60,6 +64,7 @@ impl CollectorParams {
             data_file_path: String::new(),
             data_dir: String::new(),
             run_name: String::new(),
+            profile: HashMap::new(),
         }
     }
 }
@@ -71,6 +76,7 @@ pub struct DataType {
     pub full_path: String,
     pub dir_name: String,
     pub is_static: bool,
+    pub is_profile_option: bool,
     pub collector_params: CollectorParams,
 }
 
@@ -83,12 +89,17 @@ impl DataType {
             full_path: String::new(),
             dir_name: String::new(),
             is_static,
+            is_profile_option: false,
             collector_params: CollectorParams::new(),
         }
     }
 
     pub fn set_file_handle(&mut self, handle: Option<File>) {
         self.file_handle = handle;
+    }
+
+    pub fn is_profile_option(&mut self) {
+        self.is_profile_option = true;
     }
 
     pub fn init_data_type(&mut self, param: InitParams) -> Result<()> {
@@ -106,6 +117,7 @@ impl DataType {
         self.collector_params.collection_time = param.period;
         self.collector_params.data_file_path = self.full_path.clone();
         self.collector_params.data_dir = param.dir_name.clone();
+        self.collector_params.profile = param.profile.clone();
 
         self.file_handle = Some(
             OpenOptions::new()
@@ -284,7 +296,8 @@ data!(
     MeminfoDataRaw,
     NetstatRaw,
     PerfProfileRaw,
-    FlamegraphRaw
+    FlamegraphRaw,
+    JavaProfileRaw
 );
 
 processed_data!(
@@ -300,7 +313,8 @@ processed_data!(
     MeminfoData,
     Netstat,
     PerfProfile,
-    Flamegraph
+    Flamegraph,
+    JavaProfile
 );
 
 macro_rules! noop {
@@ -346,6 +360,7 @@ mod tests {
             full_path: String::new(),
             dir_name: String::new(),
             is_static: false,
+            is_profile_option: false,
             collector_params: CollectorParams::new(),
         };
 
@@ -373,6 +388,7 @@ mod tests {
             full_path: String::new(),
             dir_name: String::new(),
             is_static: false,
+            is_profile_option: false,
             collector_params: CollectorParams::new(),
         };
 

@@ -31,7 +31,7 @@ fn test_record() {
             run_name: Some(run_name.clone()),
             interval: 1,
             period: 2,
-            profile: false,
+            profile: None,
         };
 
         record(&rec).unwrap();
@@ -56,7 +56,7 @@ fn test_report() {
             run_name: Some(run_name.clone()),
             interval: 1,
             period: 2,
-            profile: false,
+            profile: None,
         };
 
         record(&rec).unwrap();
