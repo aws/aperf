@@ -2,6 +2,7 @@ use crate::{data, InitParams, PERFORMANCE_DATA};
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use log::{debug, error, info};
+use struct_iterable::Iterable;
 
 #[derive(Subcommand, Debug)]
 pub enum ProfilerSubCommand {
@@ -9,15 +10,15 @@ pub enum ProfilerSubCommand {
     #[clap(name = "--profile")]
     Profile(Profile),
 }
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Iterable)]
 pub struct Profile {
     /// Gather profiling data using 'perf' binary. Automatically selected if no options are passed to '--profile'.
-    #[clap(short, long, value_parser)]
-    pub perf: bool,
+    #[clap(short='p', long="perf", value_parser)]
+    pub perf_profile: bool,
 
-    /// Profile JVM using async-profiler. Specify args using comma separated values: <PID/Name>,<PID/Name>,...,<PID/Name>.
-    #[clap(short, long, value_parser, default_missing_value = Some("jps"), num_args=0..=1)]
-    pub java: Option<String>,
+    /// Profile JVM using async-profiler. Specify args using comma separated values. Profiles all currently running JVMs if no args are provided.
+    #[clap(short='j', long="java", value_parser, default_missing_value=Some("jps"), value_names=&["PID/Name>,<PID/Name>,...,<PID/Name"], num_args=0..=1)]
+    pub java_profile: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -75,20 +76,17 @@ pub fn record(record: &Record) -> Result<()> {
     params.period = record.period;
     params.interval = record.interval;
 
-    let mut flag = false;
     match &record.profile {
         Some(ProfilerSubCommand::Profile(p)) => {
-            match &p.java {
-                Some(j) => {
-                    params.profile.insert(
-                        String::from(data::java_profile::JAVA_PROFILE_FILE_NAME),
-                        j.clone(),
-                    );
-                    flag = true;
+            for (field, value) in p.iter() {
+                match value.downcast_ref::<Option<String>>().unwrap_or(&None) {
+                    Some(v) => {
+                        params.profile.insert(String::from(field), v.clone());
+                    }
+                    None => {}
                 }
-                None => {}
             }
-            if !flag || p.perf {
+            if params.profile.is_empty() || p.perf_profile {
                 params.profile.insert(
                     String::from(data::perf_profile::PERF_PROFILE_FILE_NAME),
                     String::new(),

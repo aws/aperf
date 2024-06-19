@@ -29,6 +29,20 @@ impl JavaProfileRaw {
     }
 }
 
+fn get_jid(key: &str, map: HashMap<String, Vec<String>>) -> Option<String> {
+    if map.contains_key(key) {
+        return Some(key.to_string());
+    }
+
+    map.iter().find_map(|(jid, name)| {
+        if key == name[0] {
+            Some(jid.to_string())
+        } else {
+            None
+        }
+    })
+}
+
 impl CollectData for JavaProfileRaw {
     fn prepare_data_collector(&mut self, params: CollectorParams) -> Result<()> {
         let jps_out = Command::new("jps").output().expect("'jps' command failed.");
@@ -47,15 +61,21 @@ impl CollectData for JavaProfileRaw {
             "jps" => jids = process_map.clone().into_keys().collect(),
             _ => {
                 let args: Vec<&str> = jprofile.split(',').collect();
-                for jid in args {
-                    if !jps.contains(&jid) {
-                        error!("No JVM with name/PID '{}'.", jid);
-                    } else if jps.iter().position(|&r| r == jid).unwrap()
-                        != jps.iter().rposition(|&r| r == jid).unwrap()
+                for arg in args {
+                    if !jps.contains(&arg) {
+                        error!("No JVM with name/PID '{}'.", arg);
+                        continue;
+                    } else if jps.iter().position(|&r| r == arg).unwrap()
+                        != jps.iter().rposition(|&r| r == arg).unwrap()
                     {
-                        error!("Multiple JVMs with the name '{}', please provide PID.", jid);
-                    } else {
-                        jids.push(String::from(jid));
+                        error!("Multiple JVMs with the name '{}', please provide PID.", arg);
+                        continue;
+                    }
+                    match get_jid(arg, process_map.clone()) {
+                        Some(jid) => {
+                            jids.push(jid);
+                        }
+                        None => {}
                     }
                 }
             }
