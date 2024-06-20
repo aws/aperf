@@ -65,10 +65,11 @@ pub fn record(record: &Record) -> Result<()> {
     match &record.profile_java {
         Some(j) => {
             params.profile.insert(
-                String::from(data::java_profile::JAVA_PROFILE_FILE_NAME), 
-                j.clone());
+                String::from(data::java_profile::JAVA_PROFILE_FILE_NAME),
+                j.clone(),
+            );
         }
-        None =>{}
+        None => {}
     }
     if record.profile {
         params.profile.insert(
