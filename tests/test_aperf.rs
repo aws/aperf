@@ -32,6 +32,7 @@ fn test_record() {
             interval: 1,
             period: 2,
             profile: false,
+            profile_java: None,
         };
 
         record(&rec).unwrap();
@@ -57,6 +58,7 @@ fn test_report() {
             interval: 1,
             period: 2,
             profile: false,
+            profile_java: None,
         };
 
         record(&rec).unwrap();
