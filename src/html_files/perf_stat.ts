@@ -1,4 +1,5 @@
 let got_perf_stat_data = false;
+let perf_cpu_list: Map<string, Array<string>> = new Map<string, Array<string>>();
 
 function getEvents(run, container_id, keys, run_data) {
     if (keys.length == 0) {
@@ -13,7 +14,7 @@ function getEvents(run, container_id, keys, run_data) {
             elem.id = `perfstat-${run}-${value}`;
             elem.style.float = "none";
             addElemToNode(container_id, elem);
-            emptyOrCallback(keys, false, getEvent, elem, value, run_data);
+            emptyOrCallback(keys, false, getEvent, elem, value, run_data, run);
         }
     }
 }
@@ -32,7 +33,7 @@ function addData(perfstat_data, stat, timediff) {
         }
     })
 }
-function getEvent(elem, key, run_data) {
+function getEvent(elem, key, run_data, run) {
     var data = JSON.parse(run_data);
     var perfstat_datas = [];
     data.data[0].cpus.forEach(function (value, index, arr) {
@@ -51,6 +52,7 @@ function getEvent(elem, key, run_data) {
     var end_datas = [];
     perfstat_datas.forEach(function (value, index, arr) {
         var cpu_string = "";
+        let cpu = value.cpu.toString();
         if (value.cpu > -1) {
             cpu_string = `CPU ${value.cpu}`;
         }
@@ -63,7 +65,14 @@ function getEvent(elem, key, run_data) {
             y: value.y_data,
             type: 'scatter',
         };
-        end_datas.push(perfstat_line);
+        if (cpu_string != 'Aggregate' && perf_cpu_list.get(run).indexOf(cpu) == -1) {
+            perfstat_line.visible = 'legendonly';
+        }
+        if (cpu_string == 'Aggregate') {
+            end_datas.unshift(perfstat_line);
+        } else {
+            end_datas.push(perfstat_line);
+        }
     })
     let limits = key_limits.get(key);
     var layout = {
@@ -80,13 +89,14 @@ function getEvent(elem, key, run_data) {
 }
 
 function perfStat() {
-    if (got_perf_stat_data) {
+    if (got_perf_stat_data && allRunCPUListUnchanged(perf_cpu_list)) {
         return;
     }
     clear_and_create('perfstat');
     form_graph_limits(perf_stat_raw_data);
     for (let i = 0; i < perf_stat_raw_data['runs'].length; i++) {
         let run_name = perf_stat_raw_data['runs'][i]['name'];
+        perf_cpu_list.set(run_name, getCPUList(run_name).slice());
         let elem_id = `${run_name}-perfstat-per-data`;
         let this_run_data = perf_stat_raw_data['runs'][i];
         getEvents(run_name, elem_id, this_run_data['keys'], this_run_data['key_values']);
