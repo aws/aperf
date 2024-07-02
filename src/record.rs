@@ -21,7 +21,7 @@ pub struct Record {
     #[clap(long, value_parser)]
     pub profile: bool,
 
-    /// Profile JVMs using async-profiler. Specify args using comma separated values. Profiles all currently running JVMs if no args are provided.
+    /// Profile JVMs using async-profiler. Specify args using comma separated values. Profiles all JVMs if no args are provided.
     #[clap(long, value_parser, default_missing_value = Some("jps"), value_names = &["PID/Name>,<PID/Name>,...,<PID/Name"], num_args = 0..=1)]
     pub profile_java: Option<String>,
 }

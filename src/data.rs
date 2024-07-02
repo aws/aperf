@@ -53,6 +53,7 @@ use vmstat::{Vmstat, VmstatRaw};
 #[derive(Clone, Debug)]
 pub struct CollectorParams {
     pub collection_time: u64,
+    pub collection_interval: u64,
     pub data_file_path: String,
     pub data_dir: String,
     pub run_name: String,
@@ -63,6 +64,7 @@ impl CollectorParams {
     fn new() -> Self {
         CollectorParams {
             collection_time: 0,
+            collection_interval: 0,
             data_file_path: String::new(),
             data_dir: String::new(),
             run_name: String::new(),
@@ -117,6 +119,7 @@ impl DataType {
         self.dir_name = param.dir_name.clone();
         self.collector_params.run_name = param.dir_name.clone();
         self.collector_params.collection_time = param.period;
+        self.collector_params.collection_interval = param.interval;
         self.collector_params.data_file_path = self.full_path.clone();
         self.collector_params.data_dir = param.dir_name.clone();
         self.collector_params.profile = param.profile.clone();
@@ -142,7 +145,7 @@ impl DataType {
 
     pub fn collect_data(&mut self) -> Result<()> {
         trace!("Collecting Data...");
-        self.data.collect_data()?;
+        self.data.collect_data(self.collector_params.clone())?;
         Ok(())
     }
 
@@ -205,10 +208,10 @@ macro_rules! data {
         }
 
         impl Data {
-            fn collect_data(&mut self) -> Result<()> {
+            fn collect_data(&mut self, params: CollectorParams) -> Result<()> {
                 match self {
                     $(
-                        Data::$x(ref mut value) => value.collect_data()?,
+                        Data::$x(ref mut value) => value.collect_data(params)?,
                     )*
                 }
                 Ok(())
@@ -329,7 +332,7 @@ pub trait CollectData {
         noop!();
         Ok(())
     }
-    fn collect_data(&mut self) -> Result<()> {
+    fn collect_data(&mut self, _params: CollectorParams) -> Result<()> {
         noop!();
         Ok(())
     }

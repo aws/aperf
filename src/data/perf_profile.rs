@@ -68,7 +68,7 @@ impl CollectData for PerfProfileRaw {
         Ok(())
     }
 
-    fn collect_data(&mut self) -> Result<()> {
+    fn collect_data(&mut self, _params: CollectorParams) -> Result<()> {
         Ok(())
     }
 

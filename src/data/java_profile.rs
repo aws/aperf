@@ -5,12 +5,13 @@ use crate::visualizer::{DataVisualizer, GetData};
 use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
 use ctor::ctor;
-use log::{error, trace};
+use log::{error, info, trace};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{ErrorKind, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::{fs, fs::File};
 
@@ -21,75 +22,24 @@ lazy_static! {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct JavaProfileRaw {}
+pub struct JavaProfileRaw {
+    process_map: HashMap<String, Vec<String>>,
+}
 
 impl JavaProfileRaw {
     pub fn new() -> Self {
-        JavaProfileRaw {}
-    }
-}
-
-fn get_jid(key: &str, map: HashMap<String, Vec<String>>) -> Option<String> {
-    if map.contains_key(key) {
-        return Some(key.to_string());
+        JavaProfileRaw {
+            process_map: HashMap::new(),
+        }
     }
 
-    map.iter().find_map(|(jid, name)| {
-        if key == name[0] {
-            Some(jid.to_string())
-        } else {
-            None
-        }
-    })
-}
-
-impl CollectData for JavaProfileRaw {
-    fn prepare_data_collector(&mut self, params: CollectorParams) -> Result<()> {
-        let jps_out = Command::new("jps").output().expect("'jps' command failed.");
-        let jps_str = String::from_utf8(jps_out.stdout).unwrap();
-        let jps: Vec<&str> = jps_str.split_whitespace().collect();
-        let mut process_map: HashMap<String, Vec<String>> = HashMap::new();
-        for i in (0..jps.len()).step_by(2) {
-            if jps[i + 1] != "Jps" {
-                process_map.insert(String::from(jps[i]), vec![String::from(jps[i + 1])]);
-            }
-        }
-
-        let mut jids: Vec<String> = Vec::new();
-        let jprofile = params.profile.get(JAVA_PROFILE_FILE_NAME).unwrap().as_str();
-        match jprofile {
-            "jps" => jids = process_map.clone().into_keys().collect(),
-            _ => {
-                let args: Vec<&str> = jprofile.split(',').collect();
-                for arg in args {
-                    if !jps.contains(&arg) {
-                        error!("No JVM with name/PID '{}'.", arg);
-                        continue;
-                    } else if jps.iter().position(|&r| r == arg).unwrap()
-                        != jps.iter().rposition(|&r| r == arg).unwrap()
-                    {
-                        error!("Multiple JVMs with the name '{}', please provide PID.", arg);
-                        continue;
-                    }
-                    match get_jid(arg, process_map.clone()) {
-                        Some(jid) => {
-                            jids.push(jid);
-                        }
-                        None => {}
-                    }
-                }
-            }
-        }
-
+    fn launch_asprof(
+        &self,
+        jids: Vec<String>,
+        elapsed_time: u64,
+        params: CollectorParams,
+    ) -> Result<()> {
         let data_dir = PathBuf::from(params.data_dir.clone());
-
-        let mut jps_map = File::create(
-            data_dir
-                .clone()
-                .join(format!("{}-jps-map.json", params.run_name)),
-        )?;
-        write!(jps_map, "{}", serde_json::to_string(&process_map)?)?;
-
         for jid in &jids {
             let mut html_loc = data_dir.clone();
             html_loc.push(format!("{}-java-flamegraph-{}.html", params.run_name, jid));
@@ -97,11 +47,9 @@ impl CollectData for JavaProfileRaw {
             match Command::new("asprof")
                 .args([
                     "-d",
-                    &params.collection_time.to_string(),
+                    &(params.collection_time - elapsed_time).to_string(),
                     "-f",
                     html_loc.to_str().unwrap(),
-                    "-L",
-                    "none",
                     jid.as_str(),
                 ])
                 .spawn()
@@ -117,7 +65,7 @@ impl CollectData for JavaProfileRaw {
                 Ok(child) => {
                     trace!(
                         "Recording asprof profiling data for '{}' with PID, {}.",
-                        process_map
+                        self.process_map
                             .get(jid.as_str())
                             .unwrap_or(&vec![String::from("JVM")])[0],
                         jid
@@ -126,15 +74,112 @@ impl CollectData for JavaProfileRaw {
                 }
             }
         }
-
         Ok(())
     }
 
-    fn collect_data(&mut self) -> Result<()> {
-        Ok(())
+    fn get_jid(&mut self, key: &str) -> Option<String> {
+        if self.process_map.contains_key(key) {
+            return Some(key.to_string());
+        }
+
+        self.process_map.iter().find_map(|(jid, name)| {
+            if key == name[0] {
+                Some(jid.to_string())
+            } else {
+                None
+            }
+        })
     }
 
-    fn finish_data_collection(&mut self, _params: CollectorParams) -> Result<()> {
+    fn update_process_map(&mut self) -> String {
+        info!("Running jps (may incur utilization spike)...");
+        let jps_cmd = Command::new("jps").output();
+        let mut jps_str = String::new();
+        match jps_cmd {
+            Ok(jps_out) => {
+                jps_str = String::from_utf8(jps_out.stdout).unwrap_or_default();
+                let jps: Vec<&str> = jps_str.split_whitespace().collect();
+                for i in (0..jps.len()).step_by(2) {
+                    if jps[i + 1] != "Jps" {
+                        self.process_map
+                            .insert(String::from(jps[i]), vec![String::from(jps[i + 1])]);
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Jps command failed: {}", e);
+            }
+        }
+        jps_str
+    }
+}
+
+impl CollectData for JavaProfileRaw {
+    fn prepare_data_collector(&mut self, params: CollectorParams) -> Result<()> {
+        let jps_str = self.update_process_map();
+        let jps: Vec<&str> = jps_str.split_whitespace().collect();
+
+        let mut jids: Vec<String> = Vec::new();
+        let default = String::from("jps");
+        let jprofile = params
+            .profile
+            .get(JAVA_PROFILE_FILE_NAME)
+            .unwrap_or(&default)
+            .as_str();
+        match jprofile {
+            "jps" => jids = self.process_map.clone().into_keys().collect(),
+            _ => {
+                let args: Vec<&str> = jprofile.split(',').collect();
+                for arg in args {
+                    if !jps.contains(&arg) {
+                        error!("No JVM with name/PID '{}'.", arg);
+                        continue;
+                    } else if jps.iter().position(|&r| r == arg).unwrap()
+                        != jps.iter().rposition(|&r| r == arg).unwrap()
+                    {
+                        error!("Multiple JVMs with the name '{}', please provide PID.", arg);
+                        continue;
+                    }
+                    if let Some(jid) = self.get_jid(arg) {
+                        jids.push(jid);
+                    }
+                }
+            }
+        }
+
+        self.launch_asprof(jids, 0, params)
+    }
+
+    fn collect_data(&mut self, params: CollectorParams) -> Result<()> {
+        let jprofile = params.profile.get(JAVA_PROFILE_FILE_NAME).unwrap().as_str();
+        if jprofile != "jps" {
+            return Ok(());
+        }
+
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        COUNTER.fetch_add(params.collection_interval, Ordering::Relaxed);
+        let count = COUNTER.load(Ordering::Relaxed);
+        let pgrep_out = Command::new("pgrep").arg("java").output().unwrap();
+        let pgrep_str = String::from_utf8(pgrep_out.stdout).unwrap();
+        let pgrep: Vec<&str> = pgrep_str.split_whitespace().collect();
+
+        let mut jids: Vec<String> = Vec::new();
+        for pid in pgrep {
+            if self.process_map.contains_key(pid) {
+                continue;
+            }
+            jids.push(String::from(pid));
+        }
+
+        if jids.is_empty() {
+            return Ok(());
+        }
+
+        self.update_process_map();
+        self.launch_asprof(jids, count, params)
+    }
+
+    fn finish_data_collection(&mut self, params: CollectorParams) -> Result<()> {
         trace!("Waiting for asprof profile collection to complete...");
         while ASPROF_CHILDREN.lock().unwrap().len() > 0 {
             match ASPROF_CHILDREN.lock().unwrap().pop().unwrap().wait() {
@@ -145,6 +190,15 @@ impl CollectData for JavaProfileRaw {
                 Ok(_) => trace!("'asprof' executed successfully."),
             }
         }
+
+        let data_dir = PathBuf::from(params.data_dir.clone());
+        let mut jps_map = File::create(
+            data_dir
+                .clone()
+                .join(format!("{}-jps-map.json", params.run_name)),
+        )?;
+        write!(jps_map, "{}", serde_json::to_string(&self.process_map)?)?;
+
         Ok(())
     }
 

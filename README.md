@@ -97,7 +97,7 @@ To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 
 `--profile` gather profiling data using the 'perf' binary
 
-`--profile-java` profile JVMs by PID or name using async-profiler (default profiles all currently running JVMs)
+`--profile-java` profile JVMs by PID or name using async-profiler (default profiles all JVMs)
 
 `./aperf record -h`
 

@@ -15,7 +15,7 @@ DataTypes.set('netstat', {name: 'netstat', hideClass: 'netstatHide', trueId: 'ne
 DataTypes.set('interrupts', {name: 'interrupts', hideClass: '', trueId: '', callback: interrupts});
 DataTypes.set('cpu_utilization', {name: 'cpuutilization', hideClass: '', trueId: '', callback: cpuUtilization});
 DataTypes.set('system_info', {name: 'systeminfo', hideClass: '', trueId: '', callback: systemInfo});
-DataTypes.set('flamegraphs', { name: 'flamegraphs', hideClass: 'flamegraphsSelection', trueId: '', callback: flamegraphs });
+DataTypes.set('flamegraphs', {name: 'flamegraphs', hideClass: 'flamegraphsSelection', trueId: '', callback: flamegraphs});
 DataTypes.set('top_functions', {name: 'topfunctions', hideClass: '', trueId: '', callback: topFunctions});
 DataTypes.set('processes', {name: 'processes', hideClass: '', trueId: '', callback: processes});
 DataTypes.set('perfstat', {name: 'perfstat', hideClass: '', trueId: '', callback: perfStat});
@@ -39,9 +39,9 @@ function openData(evt: Event, elem: HTMLButtonElement) {
 
 function display_tab(name) {
 	let datatype = DataTypes.get(name);
-	if(datatype.hideClass == "flamegraphsSelection"){
-        datatype.callback(name);
-    }else if (datatype.hideClass != "") {
+	if(datatype.hideClass == "flamegraphsSelection") {
+		datatype.callback(name);
+	} else if (datatype.hideClass != "") {
 		let queryInput = `input[name="${datatype.hideClass}"]:checked`;
 		let checkedId = document.querySelector(queryInput).id;
 		datatype.callback(checkedId == datatype.trueId);
