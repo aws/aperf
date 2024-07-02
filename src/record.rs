@@ -1,4 +1,4 @@
-use crate::{InitParams, PERFORMANCE_DATA};
+use crate::{data, InitParams, PERFORMANCE_DATA};
 use anyhow::Result;
 use clap::Args;
 use log::{debug, error, info};
@@ -17,9 +17,13 @@ pub struct Record {
     #[clap(short, long, value_parser, default_value_t = 10)]
     pub period: u64,
 
-    /// Gather profiling data using the 'perf' binary.
-    #[clap(long, value_parser, default_value_t = false)]
+    /// Gather profiling data using 'perf' binary.
+    #[clap(long, value_parser)]
     pub profile: bool,
+
+    /// Profile JVMs using async-profiler. Specify args using comma separated values. Profiles all JVMs if no args are provided.
+    #[clap(long, value_parser, default_missing_value = Some("jps"), value_names = &["PID/Name>,<PID/Name>,...,<PID/Name"], num_args = 0..=1)]
+    pub profile_java: Option<String>,
 }
 
 fn prepare_data_collectors() -> Result<()> {
@@ -56,8 +60,27 @@ pub fn record(record: &Record) -> Result<()> {
     }
     let mut params = InitParams::new(run_name);
     params.period = record.period;
-    params.profile = record.profile;
     params.interval = record.interval;
+
+    match &record.profile_java {
+        Some(j) => {
+            params.profile.insert(
+                String::from(data::java_profile::JAVA_PROFILE_FILE_NAME),
+                j.clone(),
+            );
+        }
+        None => {}
+    }
+    if record.profile {
+        params.profile.insert(
+            String::from(data::perf_profile::PERF_PROFILE_FILE_NAME),
+            String::new(),
+        );
+        params.profile.insert(
+            String::from(data::flamegraphs::FLAMEGRAPHS_FILE_NAME),
+            String::new(),
+        );
+    }
 
     PERFORMANCE_DATA.lock().unwrap().set_params(params);
     PERFORMANCE_DATA.lock().unwrap().init_collectors()?;
