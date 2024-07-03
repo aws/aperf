@@ -5,6 +5,6 @@
   },
   "devDependencies": {
     "@types/plotly.js": "^2.29.5",
-    "typescript": "^5.4.5"
+    "typescript": "^5.5.3"
   }
 }
