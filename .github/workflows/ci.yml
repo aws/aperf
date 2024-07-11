@@ -14,7 +14,7 @@ jobs:
     strategy:
       matrix:
         architecture: [X64, ARM64]
-        distribution: [Ubuntu, AL2]
+        distribution: [Ubuntu]
     runs-on:
       - self-hosted
       - Linux
