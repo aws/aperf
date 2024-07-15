@@ -1,6 +1,6 @@
 extern crate ctor;
 
-use crate::data::{CollectData, Data, DataType, ProcessedData, TimeEnum};
+use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
 use crate::visualizer::{DataVisualizer, GetData};
 use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
@@ -107,7 +107,7 @@ impl EC2Metadata {
 }
 
 impl CollectData for SystemInfo {
-    fn collect_data(&mut self) -> Result<()> {
+    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
         let mut sys = System::new();
         sys.refresh_system();
 
@@ -259,14 +259,15 @@ fn init_systeminfo() {
 #[cfg(test)]
 mod tests {
     use super::{SUTConfigEntry, SystemInfo};
-    use crate::data::{CollectData, Data, ProcessedData};
+    use crate::data::{CollectData, CollectorParams, Data, ProcessedData};
     use crate::visualizer::GetData;
 
     #[test]
     fn test_collect_data() {
         let mut systeminfo = SystemInfo::new();
+        let params = CollectorParams::new();
 
-        systeminfo.collect_data().unwrap();
+        systeminfo.collect_data(&params).unwrap();
         assert_ne!(systeminfo.total_cpus, 0);
         assert_ne!(systeminfo.system_name, String::new());
         assert_ne!(systeminfo.kernel_version, String::new());
@@ -279,8 +280,9 @@ mod tests {
         let mut buffer: Vec<Data> = Vec::<Data>::new();
         let mut system_info = SystemInfo::new();
         let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
+        let params = CollectorParams::new();
 
-        system_info.collect_data().unwrap();
+        system_info.collect_data(&params).unwrap();
         buffer.push(Data::SystemInfo(system_info));
         processed_buffer.push(
             SystemInfo::new()

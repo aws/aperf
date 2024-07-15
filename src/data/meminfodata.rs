@@ -1,6 +1,6 @@
 extern crate ctor;
 
-use crate::data::{CollectData, Data, DataType, ProcessedData, TimeEnum};
+use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
 use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata};
 use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
@@ -39,7 +39,7 @@ impl MeminfoDataRaw {
 }
 
 impl CollectData for MeminfoDataRaw {
-    fn collect_data(&mut self) -> Result<()> {
+    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
         self.data = std::fs::read_to_string("/proc/meminfo")?;
@@ -471,7 +471,7 @@ fn init_meminfo() {
 #[cfg(test)]
 mod tests {
     use super::{EndMemValues, MeminfoData, MeminfoDataRaw, MeminfoKeys};
-    use crate::data::{CollectData, Data, ProcessedData};
+    use crate::data::{CollectData, CollectorParams, Data, ProcessedData};
     use crate::visualizer::GetData;
     use std::collections::HashMap;
     use strum::IntoEnumIterator;
@@ -479,8 +479,9 @@ mod tests {
     #[test]
     fn test_collect_data() {
         let mut meminfodata_raw = MeminfoDataRaw::new();
+        let params = CollectorParams::new();
 
-        meminfodata_raw.collect_data().unwrap();
+        meminfodata_raw.collect_data(&params).unwrap();
         assert!(!meminfodata_raw.data.is_empty());
     }
 
@@ -491,7 +492,8 @@ mod tests {
         for key in MeminfoKeys::iter() {
             key_map.insert(key.to_string(), 0);
         }
-        meminfodata_raw.collect_data().unwrap();
+        let params = CollectorParams::new();
+        meminfodata_raw.collect_data(&params).unwrap();
         let processed_data = MeminfoData::new()
             .process_raw_data(Data::MeminfoDataRaw(meminfodata_raw))
             .unwrap();
@@ -515,8 +517,9 @@ mod tests {
         let mut buffer: Vec<Data> = Vec::new();
         let mut meminfodata_raw = MeminfoDataRaw::new();
         let mut processed_buffer: Vec<ProcessedData> = Vec::new();
+        let params = CollectorParams::new();
 
-        meminfodata_raw.collect_data().unwrap();
+        meminfodata_raw.collect_data(&params).unwrap();
         buffer.push(Data::MeminfoDataRaw(meminfodata_raw));
         processed_buffer.push(
             MeminfoData::new()
@@ -536,9 +539,10 @@ mod tests {
         let mut meminfodata_raw_zero = MeminfoDataRaw::new();
         let mut meminfodata_raw_one = MeminfoDataRaw::new();
         let mut processed_buffer: Vec<ProcessedData> = Vec::new();
+        let params = CollectorParams::new();
 
-        meminfodata_raw_zero.collect_data().unwrap();
-        meminfodata_raw_one.collect_data().unwrap();
+        meminfodata_raw_zero.collect_data(&params).unwrap();
+        meminfodata_raw_one.collect_data(&params).unwrap();
         buffer.push(Data::MeminfoDataRaw(meminfodata_raw_zero));
         buffer.push(Data::MeminfoDataRaw(meminfodata_raw_one));
         for buf in buffer {

@@ -1,6 +1,6 @@
 extern crate ctor;
 
-use crate::data::{CollectData, Data, DataType, ProcessedData, TimeEnum};
+use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
 use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata};
 use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
@@ -29,7 +29,7 @@ impl VmstatRaw {
 }
 
 impl CollectData for VmstatRaw {
-    fn collect_data(&mut self) -> Result<()> {
+    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
         self.data = std::fs::read_to_string("/proc/vmstat")?;
@@ -197,14 +197,15 @@ fn init_vmstat() {
 #[cfg(test)]
 mod tests {
     use super::{EndVmstatData, Vmstat, VmstatRaw};
-    use crate::data::{CollectData, Data, ProcessedData, TimeEnum};
+    use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
     use crate::visualizer::GetData;
 
     #[test]
     fn test_collect_data() {
         let mut vmstat = VmstatRaw::new();
+        let params = CollectorParams::new();
 
-        vmstat.collect_data().unwrap();
+        vmstat.collect_data(&params).unwrap();
         assert!(!vmstat.data.is_empty());
     }
 
@@ -213,8 +214,9 @@ mod tests {
         let mut buffer: Vec<Data> = Vec::<Data>::new();
         let mut vmstat = VmstatRaw::new();
         let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
+        let params = CollectorParams::new();
 
-        vmstat.collect_data().unwrap();
+        vmstat.collect_data(&params).unwrap();
         buffer.push(Data::VmstatRaw(vmstat));
         processed_buffer.push(Vmstat::new().process_raw_data(buffer[0].clone()).unwrap());
         let json = Vmstat::new()
@@ -229,8 +231,9 @@ mod tests {
         let mut buffer: Vec<Data> = Vec::<Data>::new();
         let mut vmstat = VmstatRaw::new();
         let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
+        let params = CollectorParams::new();
 
-        vmstat.collect_data().unwrap();
+        vmstat.collect_data(&params).unwrap();
         buffer.push(Data::VmstatRaw(vmstat));
         processed_buffer.push(Vmstat::new().process_raw_data(buffer[0].clone()).unwrap());
         let json = Vmstat::new()

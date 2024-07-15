@@ -264,7 +264,7 @@ impl CollectData for PerfStatRaw {
         Ok(())
     }
 
-    fn collect_data(&mut self) -> Result<()> {
+    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
         let cpu_groups = &mut *CPU_CTR_GROUPS.lock().unwrap();
@@ -554,7 +554,7 @@ mod tests {
         let mut perf_stat = PerfStatRaw::new();
         let params = CollectorParams::new();
 
-        match perf_stat.prepare_data_collector(params) {
+        match perf_stat.prepare_data_collector(params.clone()) {
             Err(e) => {
                 if let Some(os_error) = e.downcast_ref::<std::io::Error>() {
                     match os_error.kind() {
@@ -567,7 +567,7 @@ mod tests {
                 }
             }
             Ok(_) => {
-                perf_stat.collect_data().unwrap();
+                perf_stat.collect_data(&params).unwrap();
                 assert!(!perf_stat.data.is_empty());
             }
         }
@@ -580,7 +580,7 @@ mod tests {
         let mut processed_buffer: Vec<ProcessedData> = Vec::new();
         let params = CollectorParams::new();
 
-        match perf_stat.prepare_data_collector(params) {
+        match perf_stat.prepare_data_collector(params.clone()) {
             Err(e) => {
                 if let Some(os_error) = e.downcast_ref::<std::io::Error>() {
                     match os_error.kind() {
@@ -593,7 +593,7 @@ mod tests {
                 }
             }
             Ok(_) => {
-                perf_stat.collect_data().unwrap();
+                perf_stat.collect_data(&params).unwrap();
                 buffer.push(Data::PerfStatRaw(perf_stat));
                 for buf in buffer {
                     processed_buffer.push(PerfStat::new().process_raw_data(buf).unwrap());

@@ -1,6 +1,6 @@
 extern crate ctor;
 
-use crate::data::{CollectData, Data, DataType, ProcessedData, TimeEnum};
+use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
 use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata};
 use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
@@ -29,7 +29,7 @@ impl NetstatRaw {
 }
 
 impl CollectData for NetstatRaw {
-    fn collect_data(&mut self) -> Result<()> {
+    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
         self.data = std::fs::read_to_string("/proc/net/netstat")?;
@@ -211,14 +211,15 @@ fn init_netstat() {
 #[cfg(test)]
 mod tests {
     use super::{EndNetData, Netstat, NetstatRaw};
-    use crate::data::{CollectData, Data, ProcessedData, TimeEnum};
+    use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
     use crate::visualizer::GetData;
 
     #[test]
     fn test_collect_data() {
         let mut netstat = NetstatRaw::new();
+        let params = CollectorParams::new();
 
-        netstat.collect_data().unwrap();
+        netstat.collect_data(&params).unwrap();
         assert!(!netstat.data.is_empty());
     }
 
@@ -227,8 +228,9 @@ mod tests {
         let mut buffer: Vec<Data> = Vec::<Data>::new();
         let mut netstat = NetstatRaw::new();
         let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
+        let params = CollectorParams::new();
 
-        netstat.collect_data().unwrap();
+        netstat.collect_data(&params).unwrap();
         buffer.push(Data::NetstatRaw(netstat));
         processed_buffer.push(Netstat::new().process_raw_data(buffer[0].clone()).unwrap());
         let json = Netstat::new()
@@ -243,8 +245,9 @@ mod tests {
         let mut buffer: Vec<Data> = Vec::<Data>::new();
         let mut netstat = NetstatRaw::new();
         let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
+        let params = CollectorParams::new();
 
-        netstat.collect_data().unwrap();
+        netstat.collect_data(&params).unwrap();
         buffer.push(Data::NetstatRaw(netstat));
         processed_buffer.push(Netstat::new().process_raw_data(buffer[0].clone()).unwrap());
         let json = Netstat::new()

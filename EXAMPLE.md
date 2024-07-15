@@ -62,3 +62,5 @@ Here are some example screenshots showing the comparison of two different perfor
 ![Compare Kernel Configs](images/kernel_config_compare.png "Comparing Kernel Connfigs")
 ### Comparing PMU Data
 ![Compare PMU Data](images/pmu_stat_compare.png "Comparing PMU Data")
+### Comparing Flamegraphs
+![Compare Flamegraphs](images/flamegraph_compare.png "Comparing Flamegraphs")

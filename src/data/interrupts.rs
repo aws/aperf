@@ -1,6 +1,6 @@
 extern crate ctor;
 
-use crate::data::{CollectData, Data, DataType, ProcessedData, TimeEnum};
+use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
 use crate::visualizer::{DataVisualizer, GetData};
 use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
@@ -29,7 +29,7 @@ impl InterruptDataRaw {
 }
 
 impl CollectData for InterruptDataRaw {
-    fn collect_data(&mut self) -> Result<()> {
+    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
         self.data = std::fs::read_to_string("/proc/interrupts")?;
@@ -343,15 +343,16 @@ fn init_interrupts() {
 #[cfg(test)]
 mod tests {
     use super::{InterruptData, InterruptDataRaw, InterruptLine, InterruptLineData};
-    use crate::data::{CollectData, Data, ProcessedData};
+    use crate::data::{CollectData, CollectorParams, Data, ProcessedData};
     use crate::get_file;
     use crate::visualizer::{DataVisualizer, GetData};
 
     #[test]
     fn test_collect_data() {
         let mut id = InterruptDataRaw::new();
+        let params = CollectorParams::new();
 
-        id.collect_data().unwrap();
+        id.collect_data(&params).unwrap();
         assert!(!id.data.is_empty());
     }
 
@@ -360,8 +361,9 @@ mod tests {
         let mut buffer: Vec<Data> = Vec::<Data>::new();
         let mut id_raw = InterruptDataRaw::new();
         let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
+        let params = CollectorParams::new();
 
-        id_raw.collect_data().unwrap();
+        id_raw.collect_data(&params).unwrap();
 
         buffer.push(Data::InterruptDataRaw(id_raw));
         for buf in buffer {
@@ -399,9 +401,10 @@ mod tests {
         let mut id_zero = InterruptDataRaw::new();
         let mut id_one = InterruptDataRaw::new();
         let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
+        let params = CollectorParams::new();
 
-        id_zero.collect_data().unwrap();
-        id_one.collect_data().unwrap();
+        id_zero.collect_data(&params).unwrap();
+        id_one.collect_data(&params).unwrap();
 
         buffer.push(Data::InterruptDataRaw(id_zero));
         buffer.push(Data::InterruptDataRaw(id_one));
@@ -420,8 +423,9 @@ mod tests {
         let mut buffer: Vec<Data> = Vec::<Data>::new();
         let mut id = InterruptDataRaw::new();
         let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
+        let params = CollectorParams::new();
 
-        id.collect_data().unwrap();
+        id.collect_data(&params).unwrap();
 
         buffer.push(Data::InterruptDataRaw(id));
         for buf in buffer {
