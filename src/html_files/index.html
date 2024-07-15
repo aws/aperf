@@ -35,6 +35,10 @@
 				<div id="cpuutilization-runs"></div>
 			</div>
 			<div id="flamegraphs" class="tabcontent">
+				<div class="extra">
+					<input type="radio" class="flamegraphs-select" id="flamegraphs" name="flamegraphsSelection" checked>perf</button>
+					<input type="radio" class="flamegraphs-select" id="javaprofile" name="flamegraphsSelection">java</button>
+				</div>
 				<div id="flamegraphs-runs"></div>
 			</div>
 			<div id="top_functions" class="tabcontent extra">
@@ -121,6 +125,7 @@
 		<script type="text/javascript" src="data/js/perf_profile.js"></script>
 		<script type="text/javascript" src="data/js/flamegraph.js"></script>
 		<script type="text/javascript" src="data/js/aperf_run_stats.js"></script>
+		<script type="text/javascript" src="data/js/java_profile.js"></script>
 		<script type="text/javascript" src="js/utils.js"></script>
 		<script type="text/javascript" src="js/plotly.js" charset="utf-8"></script>
 		<script type="text/javascript" src="js/system_info.js"></script>

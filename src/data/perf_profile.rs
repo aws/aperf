@@ -68,7 +68,7 @@ impl CollectData for PerfProfileRaw {
         Ok(())
     }
 
-    fn collect_data(&mut self) -> Result<()> {
+    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
         Ok(())
     }
 
@@ -158,11 +158,12 @@ impl GetData for PerfProfile {
 fn init_perf_profile() {
     let perf_profile_raw = PerfProfileRaw::new();
     let file_name = PERF_PROFILE_FILE_NAME.to_string();
-    let dt = DataType::new(
+    let mut dt = DataType::new(
         Data::PerfProfileRaw(perf_profile_raw.clone()),
         file_name.clone(),
         false,
     );
+    dt.is_profile_option();
     let perf_profile = PerfProfile::new();
     let js_file_name = file_name.clone() + ".js";
     let mut dv = DataVisualizer::new(

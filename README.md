@@ -23,6 +23,7 @@ APerf collects the following performance data:
 - Network stats
 - Meminfo
 - Profile data (if enabled with `--profile` and `perf` binary present)
+- JVM profile data with [async-profiler](https://github.com/async-profiler/async-profiler/tree/master) binary
 
 ## Requirements
 * [Rust toolchain (v1.61.0+)](https://www.rust-lang.org/tools/install)
@@ -96,8 +97,9 @@ To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 
 `--profile` gather profiling data using the 'perf' binary
 
+`--profile-java` profile JVMs by PID or name using async-profiler (default profiles all JVMs)
 
-`./aperf report -h`
+`./aperf record -h`
 
 **Reporter Flags:**
 
@@ -110,6 +112,8 @@ To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 `-v, --verbose` verbose messages
 
 `-vv, --verbose --verbose` more verbose messages
+
+`./aperf report -h`
 
 ## APerf Issues?
 Below are some prerequisites for profiling with APerf:

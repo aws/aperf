@@ -15,7 +15,7 @@ DataTypes.set('netstat', {name: 'netstat', hideClass: 'netstatHide', trueId: 'ne
 DataTypes.set('interrupts', {name: 'interrupts', hideClass: '', trueId: '', callback: interrupts});
 DataTypes.set('cpu_utilization', {name: 'cpuutilization', hideClass: '', trueId: '', callback: cpuUtilization});
 DataTypes.set('system_info', {name: 'systeminfo', hideClass: '', trueId: '', callback: systemInfo});
-DataTypes.set('flamegraphs', {name: 'flamegraphs', hideClass: '', trueId: '', callback: flamegraphs});
+DataTypes.set('flamegraphs', {name: 'flamegraphs', hideClass: 'flamegraphsSelection', trueId: '', callback: flamegraphs});
 DataTypes.set('top_functions', {name: 'topfunctions', hideClass: '', trueId: '', callback: topFunctions});
 DataTypes.set('processes', {name: 'processes', hideClass: '', trueId: '', callback: processes});
 DataTypes.set('perfstat', {name: 'perfstat', hideClass: '', trueId: '', callback: perfStat});
@@ -59,14 +59,22 @@ for (var i=0; i < elems.length; i++) {
 
 // Set Click listener
 DataTypes.forEach((datatype: DataType, key: string) => {
-	var elems = document.getElementsByClassName(`${datatype.name}-button`);
-	for (var j = 0; j < elems.length; j++) {
-		elems[j].addEventListener("click", function (evn: Event) {
+	var button_elems = document.getElementsByClassName(`${datatype.name}-button`);
+	var select_elems = document.getElementsByClassName(`${datatype.name}-select`);
+
+	for (var j = 0; j < button_elems.length; j++) {
+		button_elems[j].addEventListener("click", function (evn: Event) {
 			if (this.id == datatype.trueId) {
 				datatype.callback(true);
 			} else {
 				datatype.callback(false);
 			}
+		})
+	}
+
+	for (var j = 0; j < select_elems.length; j++) {
+		select_elems[j].addEventListener("click", function (evn: Event) {
+			datatype.callback(this.id)
 		})
 	}
 });

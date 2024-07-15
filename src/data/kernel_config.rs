@@ -13,6 +13,8 @@ use std::fs::OpenOptions;
 use std::io::{self, BufRead, BufReader};
 use std::path::Path;
 
+use super::CollectorParams;
+
 pub static KERNEL_CONFIG_FILE_NAME: &str = "kernel_config";
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -93,7 +95,7 @@ fn get_kernel_config_data() -> Result<Box<dyn BufRead>> {
 }
 
 impl CollectData for KernelConfig {
-    fn collect_data(&mut self) -> Result<()> {
+    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
         let time_now = Utc::now();
         let mut kernel_data_processed: Vec<KernelConfigEntryGroup> = Vec::new();
         let mut comments = Vec::new();
@@ -255,14 +257,15 @@ fn init_kernel_config() {
 #[cfg(test)]
 mod tests {
     use super::{KernelConfig, KernelConfigEntryGroup};
-    use crate::data::{CollectData, Data, ProcessedData};
+    use crate::data::{CollectData, CollectorParams, Data, ProcessedData};
     use crate::visualizer::GetData;
 
     #[test]
     fn test_collect_data() {
         let mut kernel_config = KernelConfig::new();
+        let params = CollectorParams::new();
 
-        kernel_config.collect_data().unwrap();
+        kernel_config.collect_data(&params).unwrap();
         assert!(!kernel_config.kernel_config_data.is_empty());
     }
 
@@ -271,8 +274,9 @@ mod tests {
         let mut buffer: Vec<Data> = Vec::<Data>::new();
         let mut kernel_config = KernelConfig::new();
         let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
+        let params = CollectorParams::new();
 
-        kernel_config.collect_data().unwrap();
+        kernel_config.collect_data(&params).unwrap();
         buffer.push(Data::KernelConfig(kernel_config));
         processed_buffer.push(
             KernelConfig::new()

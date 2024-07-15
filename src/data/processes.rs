@@ -51,7 +51,7 @@ impl CollectData for ProcessesRaw {
         Ok(())
     }
 
-    fn collect_data(&mut self) -> Result<()> {
+    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
         let ticks_per_second: u64 = *TICKS_PER_SECOND.lock().unwrap();
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
@@ -345,8 +345,8 @@ mod process_test {
     fn test_collect_data() {
         let mut processes = ProcessesRaw::new();
         let params = CollectorParams::new();
-        processes.prepare_data_collector(params).unwrap();
-        processes.collect_data().unwrap();
+        processes.prepare_data_collector(params.clone()).unwrap();
+        processes.collect_data(&params).unwrap();
         assert!(!processes.data.is_empty());
     }
 
@@ -361,9 +361,11 @@ mod process_test {
         processes_zero
             .prepare_data_collector(params.clone())
             .unwrap();
-        processes_one.prepare_data_collector(params).unwrap();
-        processes_zero.collect_data().unwrap();
-        processes_one.collect_data().unwrap();
+        processes_one
+            .prepare_data_collector(params.clone())
+            .unwrap();
+        processes_zero.collect_data(&params).unwrap();
+        processes_one.collect_data(&params).unwrap();
 
         buffer.push(Data::ProcessesRaw(processes_zero));
         buffer.push(Data::ProcessesRaw(processes_one));

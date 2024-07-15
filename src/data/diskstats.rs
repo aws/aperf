@@ -1,7 +1,7 @@
 extern crate ctor;
 
 use crate::data::constants::*;
-use crate::data::{CollectData, Data, DataType, ProcessedData, TimeEnum};
+use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
 use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata};
 use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
@@ -32,7 +32,7 @@ impl DiskstatsRaw {
 }
 
 impl CollectData for DiskstatsRaw {
-    fn collect_data(&mut self) -> Result<()> {
+    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
         self.data = std::fs::read_to_string("/proc/diskstats")?;
@@ -363,7 +363,7 @@ fn init_diskstats() {
 #[cfg(test)]
 mod tests {
     use super::{DiskstatKeys, Diskstats, DiskstatsRaw, EndDiskValues};
-    use crate::data::{CollectData, Data, ProcessedData};
+    use crate::data::{CollectData, CollectorParams, Data, ProcessedData};
     use crate::visualizer::GetData;
     use std::collections::HashMap;
     use strum::IntoEnumIterator;
@@ -371,8 +371,9 @@ mod tests {
     #[test]
     fn test_collect_data() {
         let mut diskstats = DiskstatsRaw::new();
+        let params = CollectorParams::new();
 
-        diskstats.collect_data().unwrap();
+        diskstats.collect_data(&params).unwrap();
         assert!(!diskstats.data.is_empty());
     }
 
@@ -383,7 +384,9 @@ mod tests {
         for key in DiskstatKeys::iter() {
             key_map.insert(key.to_string(), 0);
         }
-        stat.collect_data().unwrap();
+        let params = CollectorParams::new();
+
+        stat.collect_data(&params).unwrap();
         let processed_stat = Diskstats::new()
             .process_raw_data(Data::DiskstatsRaw(stat))
             .unwrap();
@@ -407,8 +410,9 @@ mod tests {
         let mut buffer: Vec<Data> = Vec::<Data>::new();
         let mut diskstat = DiskstatsRaw::new();
         let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
+        let params = CollectorParams::new();
 
-        diskstat.collect_data().unwrap();
+        diskstat.collect_data(&params).unwrap();
         buffer.push(Data::DiskstatsRaw(diskstat));
         processed_buffer.push(
             Diskstats::new()
@@ -428,9 +432,10 @@ mod tests {
         let mut diskstat_zero = DiskstatsRaw::new();
         let mut diskstat_one = DiskstatsRaw::new();
         let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
+        let params = CollectorParams::new();
 
-        diskstat_zero.collect_data().unwrap();
-        diskstat_one.collect_data().unwrap();
+        diskstat_zero.collect_data(&params).unwrap();
+        diskstat_one.collect_data(&params).unwrap();
         buffer.push(Data::DiskstatsRaw(diskstat_zero));
         buffer.push(Data::DiskstatsRaw(diskstat_one));
         for buf in buffer {

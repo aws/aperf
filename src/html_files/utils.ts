@@ -13,6 +13,7 @@ declare let netstat_raw_data;
 declare let perf_profile_raw_data;
 declare let flamegraph_raw_data;
 declare let aperf_run_stats_raw_data;
+declare let java_profile_raw_data;
 
 let all_run_keys: Array<string> = new Array<string>();
 let key_limits: Map<string, Limits> = new Map<string, Limits>();

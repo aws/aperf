@@ -1,6 +1,6 @@
 extern crate ctor;
 
-use crate::data::{CollectData, Data, DataType, ProcessedData, TimeEnum};
+use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
 use crate::visualizer::{DataVisualizer, GetData};
 use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
@@ -36,7 +36,7 @@ impl Default for CpuUtilizationRaw {
 }
 
 impl CollectData for CpuUtilizationRaw {
-    fn collect_data(&mut self) -> Result<()> {
+    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
         self.data = std::fs::read_to_string("/proc/stat")?;
@@ -406,14 +406,15 @@ fn init_cpu_utilization() {
 #[cfg(test)]
 mod cpu_tests {
     use super::{CpuData, CpuUtilization, CpuUtilizationRaw, UtilData};
-    use crate::data::{CollectData, Data, ProcessedData};
+    use crate::data::{CollectData, CollectorParams, Data, ProcessedData};
     use crate::visualizer::GetData;
 
     #[test]
     fn test_collect_data() {
         let mut cpu_utilization = CpuUtilizationRaw::new();
+        let params = CollectorParams::new();
 
-        cpu_utilization.collect_data().unwrap();
+        cpu_utilization.collect_data(&params).unwrap();
         assert!(!cpu_utilization.data.is_empty());
     }
 
@@ -423,9 +424,10 @@ mod cpu_tests {
         let mut cpu_util_zero = CpuUtilizationRaw::new();
         let mut cpu_util_one = CpuUtilizationRaw::new();
         let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
+        let params = CollectorParams::new();
 
-        cpu_util_zero.collect_data().unwrap();
-        cpu_util_one.collect_data().unwrap();
+        cpu_util_zero.collect_data(&params).unwrap();
+        cpu_util_one.collect_data(&params).unwrap();
 
         buffer.push(Data::CpuUtilizationRaw(cpu_util_zero));
         buffer.push(Data::CpuUtilizationRaw(cpu_util_one));
@@ -463,9 +465,10 @@ mod cpu_tests {
         let mut cpu_util_zero = CpuUtilizationRaw::new();
         let mut cpu_util_one = CpuUtilizationRaw::new();
         let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
+        let params = CollectorParams::new();
 
-        cpu_util_zero.collect_data().unwrap();
-        cpu_util_one.collect_data().unwrap();
+        cpu_util_zero.collect_data(&params).unwrap();
+        cpu_util_one.collect_data(&params).unwrap();
 
         buffer.push(Data::CpuUtilizationRaw(cpu_util_zero));
         buffer.push(Data::CpuUtilizationRaw(cpu_util_one));

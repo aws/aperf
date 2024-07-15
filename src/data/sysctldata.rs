@@ -1,6 +1,6 @@
 extern crate ctor;
 
-use crate::data::{CollectData, Data, DataType, ProcessedData, TimeEnum};
+use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
 use crate::visualizer::{DataVisualizer, GetData};
 use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
@@ -44,7 +44,7 @@ fn can_collect(name: String) -> bool {
 }
 
 impl CollectData for SysctlData {
-    fn collect_data(&mut self) -> Result<()> {
+    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
         let ctls = sysctl::CtlIter::root().filter_map(Result::ok);
         for ctl in ctls {
             let flags = match ctl.flags() {
@@ -139,23 +139,25 @@ fn init_sysctl() {
 #[cfg(test)]
 mod tests {
     use super::{SysctlData, DONT_COLLECT};
-    use crate::data::{CollectData, Data, ProcessedData};
+    use crate::data::{CollectData, CollectorParams, Data, ProcessedData};
     use crate::visualizer::GetData;
     use std::collections::BTreeMap;
 
     #[test]
     fn test_collect_data() {
         let mut sysctl = SysctlData::new();
+        let params = CollectorParams::new();
 
-        sysctl.collect_data().unwrap();
+        sysctl.collect_data(&params).unwrap();
         assert!(!sysctl.sysctl_data.is_empty());
     }
 
     #[test]
     fn test_dont_collect() {
         let mut sysctl = SysctlData::new();
+        let params = CollectorParams::new();
 
-        sysctl.collect_data().unwrap();
+        sysctl.collect_data(&params).unwrap();
         let keys: Vec<String> = sysctl.sysctl_data.keys().cloned().collect();
         for key in keys {
             for item in DONT_COLLECT {
@@ -171,8 +173,9 @@ mod tests {
         let mut buffer: Vec<Data> = Vec::<Data>::new();
         let mut sysctl = SysctlData::new();
         let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
+        let params = CollectorParams::new();
 
-        sysctl.collect_data().unwrap();
+        sysctl.collect_data(&params).unwrap();
         buffer.push(Data::SysctlData(sysctl));
         processed_buffer.push(
             SysctlData::new()
