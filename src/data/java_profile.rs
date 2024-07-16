@@ -25,6 +25,12 @@ pub struct JavaProfileRaw {
     process_map: HashMap<String, Vec<String>>,
 }
 
+impl Default for JavaProfileRaw {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl JavaProfileRaw {
     pub fn new() -> Self {
         JavaProfileRaw {
@@ -51,7 +57,7 @@ impl JavaProfileRaw {
                 Err(e) => {
                     return Err(PDError::DependencyError(format!(
                         "'asprof' command failed. {}",
-                        e.to_string()
+                        e
                     ))
                     .into());
                 }
@@ -105,7 +111,7 @@ impl JavaProfileRaw {
             }
             Err(e) => Err(PDError::DependencyError(format!(
                 "Jps command failed. {}",
-                e.to_string()
+                e
             ))),
         }
     }
@@ -122,7 +128,7 @@ impl JavaProfileRaw {
             }
             Err(e) => Err(PDError::DependencyError(format!(
                 "pgrep command failed. {}",
-                e.to_string()
+                e
             ))),
         }
     }
@@ -233,15 +239,22 @@ impl JavaProfile {
     }
 }
 
+impl Default for JavaProfile {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GetData for JavaProfile {
     fn custom_raw_data_parser(
         &mut self,
         params: crate::visualizer::ReportParams,
     ) -> Result<Vec<ProcessedData>> {
-        let mut processes_loc = PathBuf::from(params.data_dir.clone());
-        processes_loc.push(format!("{}-jps-map.json", params.run_name));
+        let processes_loc = params
+            .data_dir
+            .join(format!("{}-jps-map.json", params.run_name));
         let processes_json =
-            fs::read_to_string(processes_loc.to_str().unwrap()).unwrap_or(String::new());
+            fs::read_to_string(processes_loc.to_str().unwrap()).unwrap_or_default();
         let mut process_map: HashMap<String, Vec<String>> =
             serde_json::from_str(&processes_json).unwrap_or(HashMap::new());
         let process_list: Vec<String> = process_map.clone().into_keys().collect();
@@ -252,7 +265,7 @@ impl GetData for JavaProfile {
                 "data/js/{}-java-flamegraph-{}.html",
                 params.run_name, process
             ));
-            let mut html_loc = PathBuf::from(params.data_dir.clone());
+            let mut html_loc = params.data_dir.clone();
             html_loc.push(format!(
                 "{}-java-flamegraph-{}.html",
                 params.run_name, process

@@ -2,16 +2,18 @@ extern crate ctor;
 
 use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData};
 use crate::visualizer::{DataVisualizer, GetData, ReportParams};
-use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
 use ctor::ctor;
 use log::{error, trace};
 use serde::{Deserialize, Serialize};
-use std::io::ErrorKind;
-use std::process::{Child, Command};
+use std::io::Write;
+use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
+use std::{fs, path::PathBuf};
 
 pub static PERF_PROFILE_FILE_NAME: &str = "perf_profile";
+pub static PERF_TOP_FUNCTIONS_FILE_NAME: &str = "top_functions";
 
 lazy_static! {
     pub static ref PERF_CHILD: Mutex<Option<Child>> = Mutex::new(None);
@@ -33,6 +35,7 @@ impl PerfProfileRaw {
 impl CollectData for PerfProfileRaw {
     fn prepare_data_collector(&mut self, params: CollectorParams) -> Result<()> {
         match Command::new("perf")
+            .stdout(Stdio::null())
             .args([
                 "record",
                 "-a",
@@ -52,27 +55,24 @@ impl CollectData for PerfProfileRaw {
             ])
             .spawn()
         {
-            Err(e) => {
-                if e.kind() == ErrorKind::NotFound {
-                    error!("'perf' command not found.");
-                } else {
-                    error!("Unknown error: {}", e);
-                }
-                error!("Skipping Perf profile collection.");
-            }
+            Err(e) => Err(PDError::DependencyError(format!(
+                "Skipping Perf profile collection due to: {}",
+                e
+            ))
+            .into()),
             Ok(child) => {
                 trace!("Recording Perf profiling data.");
                 *PERF_CHILD.lock().unwrap() = Some(child);
+                Ok(())
             }
         }
-        Ok(())
     }
 
     fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
         Ok(())
     }
 
-    fn finish_data_collection(&mut self, _params: CollectorParams) -> Result<()> {
+    fn finish_data_collection(&mut self, params: CollectorParams) -> Result<()> {
         let mut child = PERF_CHILD.lock().unwrap();
         match child.as_ref() {
             None => return Ok(()),
@@ -86,6 +86,34 @@ impl CollectData for PerfProfileRaw {
                 return Ok(());
             }
             Ok(_) => trace!("'perf record' executed successfully."),
+        }
+        let mut top_functions_file =
+            fs::File::create(PathBuf::from(params.data_dir).join(PERF_TOP_FUNCTIONS_FILE_NAME))?;
+
+        let out = Command::new("perf")
+            .args([
+                "report",
+                "--stdio",
+                "--percent-limit",
+                "1",
+                "-i",
+                &params.data_file_path,
+            ])
+            .output();
+
+        match out {
+            Err(e) => {
+                let out = format!("Skipped processing profiling data due to : {}", e);
+                error!("{}", out);
+                write!(top_functions_file, "{}", out)?;
+            }
+            Ok(v) => {
+                let mut top_functions = "No data collected";
+                if !v.stdout.is_empty() {
+                    top_functions = std::str::from_utf8(&v.stdout)?;
+                }
+                write!(top_functions_file, "{}", top_functions)?;
+            }
         }
         Ok(())
     }
@@ -104,34 +132,15 @@ impl PerfProfile {
 
 impl GetData for PerfProfile {
     fn custom_raw_data_parser(&mut self, params: ReportParams) -> Result<Vec<ProcessedData>> {
-        let file_name = params.data_file_path.to_str().unwrap();
         let mut profile = PerfProfile::new();
-
-        let out = Command::new("perf")
-            .args(["report", "--stdio", "--percent-limit", "1", "-i", file_name])
-            .output();
-
-        match out {
-            Err(e) => {
-                if e.kind() == ErrorKind::NotFound {
-                    error!("'perf' command not found.");
-                } else {
-                    error!("Unknown error: {}", e);
-                }
-                error!("Skip processing profiling data.");
-                profile.data = vec!["Did not process profiling data".to_string()];
-            }
-            Ok(v) => {
-                if v.stdout.is_empty() {
-                    profile.data = vec!["No data collected".to_string()];
-                } else {
-                    profile.data = std::str::from_utf8(&v.stdout)?
-                        .to_string()
-                        .split('\n')
-                        .map(|x| x.to_string())
-                        .collect();
-                }
-            }
+        let file_loc = params.data_dir.join(PERF_TOP_FUNCTIONS_FILE_NAME);
+        if file_loc.exists() {
+            profile.data = fs::read_to_string(&file_loc)?
+                .split('\n')
+                .map(|x| x.to_string())
+                .collect();
+        } else {
+            profile.data = vec!["No data collected".to_string()];
         }
 
         let processed_data = vec![ProcessedData::PerfProfile(profile)];

@@ -9,8 +9,8 @@ use std::{collections::HashMap, fs::File};
 
 #[derive(Clone, Debug)]
 pub struct ReportParams {
-    pub data_dir: String,
-    pub tmp_dir: String,
+    pub data_dir: PathBuf,
+    pub tmp_dir: PathBuf,
     pub report_dir: PathBuf,
     pub run_name: String,
     pub data_file_path: PathBuf,
@@ -19,8 +19,8 @@ pub struct ReportParams {
 impl ReportParams {
     fn new() -> Self {
         ReportParams {
-            data_dir: String::new(),
-            tmp_dir: String::new(),
+            data_dir: PathBuf::new(),
+            tmp_dir: PathBuf::new(),
             report_dir: PathBuf::new(),
             run_name: String::new(),
             data_file_path: PathBuf::new(),
@@ -76,8 +76,8 @@ impl DataVisualizer {
     ) -> Result<()> {
         let file = get_file(dir.clone(), self.file_name.clone())?;
         let full_path = Path::new("/proc/self/fd").join(file.as_raw_fd().to_string());
-        self.report_params.data_dir = dir.clone();
-        self.report_params.tmp_dir = tmp_dir;
+        self.report_params.data_dir = PathBuf::from(dir.clone());
+        self.report_params.tmp_dir = PathBuf::from(tmp_dir);
         self.report_params.report_dir = fin_dir;
         self.report_params.run_name = name.clone();
         self.report_params.data_file_path = fs::read_link(full_path).unwrap();
