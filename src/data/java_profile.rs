@@ -6,6 +6,7 @@ use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
 use ctor::ctor;
 use log::{debug, error, trace};
+use nix::{sys::signal, unistd::Pid};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Write;
@@ -201,6 +202,10 @@ impl CollectData for JavaProfileRaw {
     }
 
     fn finish_data_collection(&mut self, params: CollectorParams) -> Result<()> {
+        for child in ASPROF_CHILDREN.lock().unwrap().iter() {
+            signal::kill(Pid::from_raw(child.id() as i32), params.signal)?;
+        }
+
         trace!("Waiting for asprof profile collection to complete...");
         while ASPROF_CHILDREN.lock().unwrap().len() > 0 {
             match ASPROF_CHILDREN.lock().unwrap().pop().unwrap().wait() {

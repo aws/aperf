@@ -10,9 +10,15 @@ use chrono::prelude::*;
 use data::TimeEnum;
 use flate2::{write::GzEncoder, Compression};
 use log::{debug, error, info};
+use nix::poll::{poll, PollFd, PollFlags, PollTimeout};
+use nix::sys::{
+    signal,
+    signalfd::{SfdFlags, SigSet, SignalFd},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{self};
 use std::collections::HashMap;
+use std::os::unix::io::AsFd;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::{fs, process, time};
@@ -243,6 +249,7 @@ impl PerformanceData {
         let mut current = time::Instant::now();
         let end = current + time::Duration::from_secs(self.init_params.period);
 
+        // TimerFd
         let mut tfd = TimerFd::new()?;
         tfd.set_state(
             TimerState::Periodic {
@@ -251,42 +258,81 @@ impl PerformanceData {
             },
             SetTimeFlags::Default,
         );
+        let timer_pollfd = PollFd::new(tfd.as_fd(), PollFlags::POLLIN);
+
+        // SignalFd
+        let mut mask = SigSet::empty();
+        mask.add(signal::SIGINT);
+        mask.add(signal::SIGTERM);
+        mask.thread_block()?;
+        let sfd = SignalFd::with_flags(&mask, SfdFlags::SFD_NONBLOCK)?;
+        let signal_pollfd = PollFd::new(sfd.as_fd(), PollFlags::POLLIN);
+
+        let mut poll_fds = [timer_pollfd, signal_pollfd];
+        let mut datatype_signal = signal::SIGTERM;
+
         while current <= end {
             aperf_collect_data.time = TimeEnum::DateTime(Utc::now());
             aperf_collect_data.data = HashMap::new();
-            let ret = tfd.read();
-            if ret > 1 {
-                error!("Missed {} interval(s)", ret - 1);
+            if poll(&mut poll_fds, PollTimeout::NONE)? <= 0 {
+                error!("Poll error.");
             }
-            debug!("Time elapsed: {:?}", start.elapsed());
-            current += time::Duration::from_secs(ret * self.init_params.interval);
-            for (name, datatype) in self.collectors.iter_mut() {
-                if datatype.is_static {
-                    continue;
+            if let Some(ev) = poll_fds[0].revents() {
+                if ev.contains(PollFlags::POLLIN) {
+                    let ret = tfd.read();
+                    if ret > 1 {
+                        error!("Missed {} interval(s)", ret - 1);
+                    }
+                    debug!("Time elapsed: {:?}", start.elapsed());
+                    current += time::Duration::from_secs(ret * self.init_params.interval);
+                    for (name, datatype) in self.collectors.iter_mut() {
+                        if datatype.is_static {
+                            continue;
+                        }
+
+                        datatype.collector_params.elapsed_time = start.elapsed().as_secs();
+
+                        aperf_collect_data.measure(
+                            name.clone() + "-collect",
+                            || -> Result<()> {
+                                datatype.collect_data()?;
+                                Ok(())
+                            },
+                        )?;
+                        aperf_collect_data.measure(name.clone() + "-print", || -> Result<()> {
+                            datatype.write_to_file()?;
+                            Ok(())
+                        })?;
+                    }
+                    let data_collection_time = time::Instant::now() - current;
+                    aperf_collect_data
+                        .data
+                        .insert("aperf".to_string(), data_collection_time.as_micros() as u64);
+                    debug!("Collection time: {:?}", data_collection_time);
+                    bincode::serialize_into(
+                        self.aperf_stats_handle.as_ref().unwrap(),
+                        &aperf_collect_data,
+                    )?;
                 }
-
-                datatype.collector_params.elapsed_time = start.elapsed().as_secs();
-
-                aperf_collect_data.measure(name.clone() + "-collect", || -> Result<()> {
-                    datatype.collect_data()?;
-                    Ok(())
-                })?;
-                aperf_collect_data.measure(name.clone() + "-print", || -> Result<()> {
-                    datatype.write_to_file()?;
-                    Ok(())
-                })?;
             }
-            let data_collection_time = time::Instant::now() - current;
-            aperf_collect_data
-                .data
-                .insert("aperf".to_string(), data_collection_time.as_micros() as u64);
-            debug!("Collection time: {:?}", data_collection_time);
-            bincode::serialize_into(
-                self.aperf_stats_handle.as_ref().unwrap(),
-                &aperf_collect_data,
-            )?;
+            if let Some(ev) = poll_fds[1].revents() {
+                if ev.contains(PollFlags::POLLIN) {
+                    if let Ok(Some(siginfo)) = sfd.read_signal() {
+                        if siginfo.ssi_signo == signal::SIGINT as u32 {
+                            info!("Caught SIGINT. Exiting...");
+                            datatype_signal = signal::SIGINT;
+                        } else if siginfo.ssi_signo == signal::SIGTERM as u32 {
+                            info!("Caught SIGTERM. Exiting...");
+                        } else {
+                            panic!("Caught an unknown signal: {}", siginfo.ssi_signo);
+                        }
+                        break;
+                    }
+                }
+            }
         }
         for (_name, datatype) in self.collectors.iter_mut() {
+            datatype.set_signal(datatype_signal);
             datatype.finish_data_collection()?;
         }
         for (_name, datatype) in self.collectors.iter_mut() {
