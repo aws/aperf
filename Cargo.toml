@@ -20,6 +20,7 @@ name = "aperf"
 path = "src/bin/aperf.rs"
 
 [dependencies]
+nix = { version = "0.29.0", features = ["signal", "poll"] }
 clap = { version = "4.2.5", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
@@ -29,7 +30,7 @@ thiserror = "1.0"
 log = "0.4.21"
 env_logger = "0.10.0"
 lazy_static = "1.4.0"
-timerfd = "1.3.0"
+timerfd = "1.6.0"
 procfs = "0.12.0"
 ctor = "0.2.6"
 sysinfo = "0.26.2"

@@ -39,6 +39,7 @@ use kernel_config::KernelConfig;
 use log::trace;
 use meminfodata::{MeminfoData, MeminfoDataRaw};
 use netstat::{Netstat, NetstatRaw};
+use nix::sys::{signal, signal::Signal};
 use perf_profile::{PerfProfile, PerfProfileRaw};
 use perf_stat::{PerfStat, PerfStatRaw};
 use processes::{Processes, ProcessesRaw};
@@ -60,6 +61,7 @@ pub struct CollectorParams {
     pub run_name: String,
     pub profile: HashMap<String, String>,
     pub tmp_dir: PathBuf,
+    pub signal: Signal,
 }
 
 impl CollectorParams {
@@ -72,6 +74,7 @@ impl CollectorParams {
             run_name: String::new(),
             profile: HashMap::new(),
             tmp_dir: PathBuf::new(),
+            signal: signal::SIGTERM,
         }
     }
 }
@@ -107,6 +110,10 @@ impl DataType {
 
     pub fn is_profile_option(&mut self) {
         self.is_profile_option = true;
+    }
+
+    pub fn set_signal(&mut self, signal: Signal) {
+        self.collector_params.signal = signal;
     }
 
     pub fn init_data_type(&mut self, param: InitParams) -> Result<()> {

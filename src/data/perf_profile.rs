@@ -6,6 +6,7 @@ use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
 use ctor::ctor;
 use log::{error, trace};
+use nix::{sys::signal, unistd::Pid};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
@@ -78,6 +79,11 @@ impl CollectData for PerfProfileRaw {
             None => return Ok(()),
             Some(_) => {}
         }
+
+        signal::kill(
+            Pid::from_raw(child.as_mut().unwrap().id() as i32),
+            params.signal,
+        )?;
 
         trace!("Waiting for perf profile collection to complete...");
         match child.as_mut().unwrap().wait() {
