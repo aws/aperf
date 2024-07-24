@@ -2,6 +2,7 @@ use anyhow::Result;
 use aperf_lib::record::{record, Record};
 use aperf_lib::report::{report, Report};
 use flate2::read::GzDecoder;
+use serial_test::serial;
 use std::path::{Path, PathBuf};
 use std::{fs, panic};
 use tar::Archive;
@@ -20,6 +21,7 @@ where
 }
 
 #[test]
+#[serial]
 fn test_record() {
     run_test(|tempdir| {
         let run_name = tempdir
@@ -46,6 +48,7 @@ fn test_record() {
 }
 
 #[test]
+#[serial]
 fn test_report() {
     run_test(|tempdir| {
         let run_name = tempdir

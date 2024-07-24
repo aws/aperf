@@ -478,6 +478,7 @@ pub struct InitParams {
     pub run_name: String,
     pub collector_version: String,
     pub commit_sha_short: String,
+    pub tmp_dir: String,
 }
 
 impl InitParams {
@@ -514,6 +515,7 @@ impl InitParams {
             run_name,
             collector_version,
             commit_sha_short,
+            tmp_dir: String::new(),
         }
     }
 }

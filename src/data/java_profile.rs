@@ -9,7 +9,6 @@ use log::{debug, error, trace};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Write;
-use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::sync::Mutex;
 use std::{fs, fs::File};
@@ -39,17 +38,19 @@ impl JavaProfileRaw {
     }
 
     fn launch_asprof(&self, jids: Vec<String>, params: CollectorParams) -> Result<()> {
-        let data_dir = PathBuf::from(params.data_dir.clone());
         for jid in &jids {
-            let mut html_loc = data_dir.clone();
-            html_loc.push(format!("{}-java-flamegraph-{}.html", params.run_name, jid));
-
             match Command::new("asprof")
                 .args([
                     "-d",
                     &(params.collection_time - params.elapsed_time).to_string(),
                     "-f",
-                    html_loc.to_str().unwrap(),
+                    format!(
+                        "{}/{}-java-flamegraph-{}.html",
+                        params.tmp_dir.display(),
+                        params.run_name,
+                        jid
+                    )
+                    .as_str(),
                     jid.as_str(),
                 ])
                 .spawn()
@@ -79,7 +80,7 @@ impl JavaProfileRaw {
     fn get_jids(&mut self, arg: &str) -> Vec<String> {
         let mut jids: Vec<String> = Vec::new();
         for (key, value) in self.process_map.clone().into_iter() {
-            if arg == value[0] {
+            if arg == value[0] || arg == key {
                 jids.push(key);
             }
         }
@@ -163,12 +164,13 @@ impl CollectData for JavaProfileRaw {
                             error!("No JVM with name/PID '{}'.", arg);
                             continue;
                         }
-                        jids = self.get_jids(arg);
+                        jids.append(&mut self.get_jids(arg));
                     }
                 }
             }
         }
-
+        jids.sort();
+        jids.dedup();
         self.launch_asprof(jids, params.clone())
     }
 
@@ -210,7 +212,22 @@ impl CollectData for JavaProfileRaw {
             }
         }
 
-        let data_dir = PathBuf::from(params.data_dir.clone());
+        let data_dir = params.data_dir.clone();
+        for key in self.process_map.keys() {
+            let mut html_path = data_dir.clone();
+            html_path.push(format!("{}-java-flamegraph-{}.html", params.run_name, key));
+
+            let html_loc = html_path.to_str().unwrap();
+            let tmp_loc = format!(
+                "{}/{}-java-flamegraph-{}.html",
+                params.tmp_dir.display(),
+                params.run_name,
+                key
+            );
+
+            fs::rename(tmp_loc.clone(), html_loc).ok();
+        }
+
         let mut jps_map = File::create(
             data_dir
                 .clone()
