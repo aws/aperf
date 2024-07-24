@@ -2,6 +2,10 @@ use crate::{data, InitParams, PERFORMANCE_DATA};
 use anyhow::Result;
 use clap::Args;
 use log::{debug, error, info};
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
+
+pub static APERF_TMP: &str = "/tmp/aperf_tmp";
 
 #[derive(Args, Debug)]
 pub struct Record {
@@ -61,6 +65,7 @@ pub fn record(record: &Record) -> Result<()> {
     let mut params = InitParams::new(run_name);
     params.period = record.period;
     params.interval = record.interval;
+    params.tmp_dir = APERF_TMP.to_string();
 
     match &record.profile_java {
         Some(j) => {
@@ -82,6 +87,12 @@ pub fn record(record: &Record) -> Result<()> {
         );
     }
 
+    fs::remove_dir_all(APERF_TMP).ok();
+    fs::create_dir(APERF_TMP)?;
+    let mut perms: fs::Permissions = fs::metadata(APERF_TMP)?.permissions();
+    perms.set_mode(0o777);
+    fs::set_permissions(APERF_TMP, perms)?;
+
     PERFORMANCE_DATA.lock().unwrap().set_params(params);
     PERFORMANCE_DATA.lock().unwrap().init_collectors()?;
     info!("Starting Data collection...");
@@ -89,5 +100,7 @@ pub fn record(record: &Record) -> Result<()> {
     collect_static_data()?;
     start_collection_serial()?;
     info!("Data collection complete.");
+
+    fs::remove_dir_all(APERF_TMP)?;
     Ok(())
 }

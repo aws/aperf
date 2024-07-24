@@ -7,10 +7,10 @@ use anyhow::Result;
 use ctor::ctor;
 use log::{error, trace};
 use serde::{Deserialize, Serialize};
+use std::fs;
 use std::io::Write;
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
-use std::{fs, path::PathBuf};
 
 pub static PERF_PROFILE_FILE_NAME: &str = "perf_profile";
 pub static PERF_TOP_FUNCTIONS_FILE_NAME: &str = "top_functions";
@@ -48,7 +48,7 @@ impl CollectData for PerfProfileRaw {
                 "-e",
                 "cpu-clock:pppH",
                 "-o",
-                &params.data_file_path,
+                &params.data_file_path.display().to_string(),
                 "--",
                 "sleep",
                 &params.collection_time.to_string(),
@@ -88,7 +88,7 @@ impl CollectData for PerfProfileRaw {
             Ok(_) => trace!("'perf record' executed successfully."),
         }
         let mut top_functions_file =
-            fs::File::create(PathBuf::from(params.data_dir).join(PERF_TOP_FUNCTIONS_FILE_NAME))?;
+            fs::File::create(params.data_dir.join(PERF_TOP_FUNCTIONS_FILE_NAME))?;
 
         let out = Command::new("perf")
             .args([
@@ -97,7 +97,7 @@ impl CollectData for PerfProfileRaw {
                 "--percent-limit",
                 "1",
                 "-i",
-                &params.data_file_path,
+                &params.data_file_path.display().to_string(),
             ])
             .output();
 

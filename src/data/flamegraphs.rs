@@ -50,8 +50,10 @@ impl CollectData for FlamegraphRaw {
     fn after_data_collection(&mut self, params: CollectorParams) -> Result<()> {
         let data_dir = PathBuf::from(&params.data_dir);
 
-        let file_pathbuf =
-            data_dir.join(get_file_name(params.data_dir, "perf_profile".to_string())?);
+        let file_pathbuf = data_dir.join(get_file_name(
+            params.data_dir.display().to_string(),
+            "perf_profile".to_string(),
+        )?);
 
         let perf_jit_loc = data_dir.join("perf.data.jit");
 

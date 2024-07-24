@@ -46,6 +46,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::ops::Sub;
+use std::path::PathBuf;
 use sysctldata::SysctlData;
 use systeminfo::SystemInfo;
 use vmstat::{Vmstat, VmstatRaw};
@@ -54,10 +55,11 @@ use vmstat::{Vmstat, VmstatRaw};
 pub struct CollectorParams {
     pub collection_time: u64,
     pub elapsed_time: u64,
-    pub data_file_path: String,
-    pub data_dir: String,
+    pub data_file_path: PathBuf,
+    pub data_dir: PathBuf,
     pub run_name: String,
     pub profile: HashMap<String, String>,
+    pub tmp_dir: PathBuf,
 }
 
 impl CollectorParams {
@@ -65,10 +67,11 @@ impl CollectorParams {
         CollectorParams {
             collection_time: 0,
             elapsed_time: 0,
-            data_file_path: String::new(),
-            data_dir: String::new(),
+            data_file_path: PathBuf::new(),
+            data_dir: PathBuf::new(),
             run_name: String::new(),
             profile: HashMap::new(),
+            tmp_dir: PathBuf::new(),
         }
     }
 }
@@ -115,14 +118,15 @@ impl DataType {
         let full_path = format!("{}/{}", param.dir_name, name);
 
         self.file_name = name;
-        self.full_path = full_path;
+        self.full_path = full_path.clone();
         self.dir_name = param.dir_name.clone();
         self.collector_params.run_name = param.dir_name.clone();
         self.collector_params.collection_time = param.period;
         self.collector_params.elapsed_time = 0;
-        self.collector_params.data_file_path = self.full_path.clone();
-        self.collector_params.data_dir = param.dir_name.clone();
+        self.collector_params.data_file_path = PathBuf::from(full_path);
+        self.collector_params.data_dir = PathBuf::from(param.dir_name);
         self.collector_params.profile = param.profile.clone();
+        self.collector_params.tmp_dir = PathBuf::from(param.tmp_dir);
 
         self.file_handle = Some(
             OpenOptions::new()
