@@ -2,8 +2,8 @@ use crate::{data, InitParams, PERFORMANCE_DATA};
 use anyhow::Result;
 use clap::Args;
 use log::{debug, error, info};
-use std::fs;
 use std::os::unix::fs::PermissionsExt;
+use std::{fs, process};
 
 pub static APERF_TMP: &str = "/tmp/aperf_tmp";
 
@@ -88,7 +88,10 @@ pub fn record(record: &Record) -> Result<()> {
     }
 
     fs::remove_dir_all(APERF_TMP).ok();
-    fs::create_dir(APERF_TMP)?;
+    if let Err(e) = fs::create_dir(APERF_TMP) {
+        error!("Could not create /tmp/aperf_tmp folder.\n{}: Remove using 'sudo rm -rf /tmp/aperf_tmp'.", e);
+        process::exit(1);
+    }
     let mut perms: fs::Permissions = fs::metadata(APERF_TMP)?.permissions();
     perms.set_mode(0o777);
     fs::set_permissions(APERF_TMP, perms)?;
