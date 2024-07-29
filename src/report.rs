@@ -53,15 +53,13 @@ impl Run {
     }
 }
 
-pub static APERF_TMP: &str = "aperf_tmp";
-
-pub fn form_and_copy_archive(loc: PathBuf, report_name: &Path) -> Result<()> {
+pub fn form_and_copy_archive(loc: PathBuf, report_name: &Path, tmp_dir: &Path) -> Result<()> {
     if loc.is_dir() {
         let dir_stem = loc.file_stem().unwrap().to_str().unwrap().to_string();
 
         /* Create a temp archive */
         let archive_name = format!("{}.tar.gz", &dir_stem);
-        let archive_path = format!("{}/{}", APERF_TMP, archive_name);
+        let archive_path = tmp_dir.join(&archive_name);
         let archive_dst = report_name.join(format!("data/archive/{}", archive_name));
         {
             let tar_gz = fs::File::create(&archive_path)?;
@@ -105,7 +103,7 @@ pub fn get_report_archives(dir: PathBuf) -> Result<Vec<PathBuf>> {
     Ok(archives)
 }
 
-pub fn get_dir(dir: PathBuf) -> Result<PathBuf> {
+pub fn get_dir(dir: PathBuf, tmp_dir: &PathBuf) -> Result<PathBuf> {
     /* If dir return */
     if dir.is_dir() {
         return Ok(dir);
@@ -115,7 +113,7 @@ pub fn get_dir(dir: PathBuf) -> Result<PathBuf> {
         let tar_gz = File::open(&dir)?;
         let tar = GzDecoder::new(tar_gz);
         let mut archive = tar::Archive::new(tar);
-        archive.unpack(APERF_TMP)?;
+        archive.unpack(tmp_dir)?;
         let dir_name = dir
             .file_name()
             .unwrap()
@@ -123,7 +121,7 @@ pub fn get_dir(dir: PathBuf) -> Result<PathBuf> {
             .unwrap()
             .strip_suffix(".tar.gz")
             .ok_or(PDError::InvalidArchiveName)?;
-        let out = PathBuf::from(APERF_TMP).join(dir_name);
+        let out = tmp_dir.join(dir_name);
         if !out.exists() {
             return Err(PDError::ArchiveDirectoryMismatch.into());
         }
@@ -132,7 +130,7 @@ pub fn get_dir(dir: PathBuf) -> Result<PathBuf> {
     Err(PDError::RecordNotArchiveOrDirectory.into())
 }
 
-pub fn report(report: &Report) -> Result<()> {
+pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
     let dirs: Vec<String> = report.run.clone();
     let mut pathbuf_dirs: Vec<PathBuf> = Vec::new();
     let mut data_dirs: Vec<PathBuf> = Vec::new();
@@ -146,7 +144,7 @@ pub fn report(report: &Report) -> Result<()> {
 
     /* Check if dirs contains report */
     for dir in pathbuf_dirs {
-        let path_dir = get_dir(dir.to_path_buf())?;
+        let path_dir = get_dir(dir.to_path_buf(), tmp_dir)?;
         if let Some(archive_dir) = is_report_dir(path_dir.clone()) {
             if report.name.is_none() {
                 return Err(PDError::VisualizerReportFromReportNoNameError.into());
@@ -161,12 +159,9 @@ pub fn report(report: &Report) -> Result<()> {
         }
     }
 
-    /* Create a tmp dir for aperf to work with */
-    fs::create_dir_all(APERF_TMP)?;
-
     /* Get dir paths, stems */
     for dir in &data_dirs {
-        let path = get_dir(dir.to_path_buf())?;
+        let path = get_dir(dir.to_path_buf(), tmp_dir)?;
         if dir_stems.contains(&path.file_stem().unwrap().to_str().unwrap().to_string()) {
             error!("Cannot process two runs with the same name");
             return Ok(());
@@ -218,7 +213,7 @@ pub fn report(report: &Report) -> Result<()> {
 
     /* Generate/copy the archives of the collected data into aperf_report */
     for dir in &data_dirs {
-        form_and_copy_archive(dir.to_path_buf(), &report_name)?;
+        form_and_copy_archive(dir.to_path_buf(), &report_name, tmp_dir)?;
     }
     /* Generate base HTML, JS files */
     let mut ico_file = File::create(report_name.join("images/favicon.ico"))?;
@@ -239,13 +234,10 @@ pub fn report(report: &Report) -> Result<()> {
     write!(configure_js_file, "{}", configure_js)?;
 
     let mut visualizer = VISUALIZATION_DATA.lock().unwrap();
+
     /* Init visualizers */
     for dir in dir_paths {
-        let name = visualizer.init_visualizers(
-            dir.to_owned(),
-            APERF_TMP.to_string(),
-            report_name.clone(),
-        )?;
+        let name = visualizer.init_visualizers(dir.to_owned(), tmp_dir, &report_name)?;
         visualizer.unpack_data(name)?;
     }
 
@@ -319,6 +311,5 @@ pub fn report(report: &Report) -> Result<()> {
         .unwrap()
         .to_string();
     tar.append_dir_all(&report_stem, &report_name)?;
-    fs::remove_dir_all(APERF_TMP)?;
     Ok(())
 }

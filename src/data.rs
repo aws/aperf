@@ -119,31 +119,30 @@ impl DataType {
         self.collector_params.signal = signal;
     }
 
-    pub fn init_data_type(&mut self, param: InitParams) -> Result<()> {
+    pub fn init_data_type(&mut self, param: &InitParams) -> Result<()> {
         trace!("Initializing data type...");
         let name = format!(
             "{}_{}.{}",
             self.file_name, param.time_str, APERF_FILE_FORMAT
         );
-        let full_path = format!("{}/{}", param.dir_name, name);
 
-        self.file_name = name;
-        self.full_path = full_path.clone();
+        self.file_name = name.clone();
+        self.full_path = format!("{}/{}", param.dir_name, name);
         self.dir_name = param.dir_name.clone();
         self.collector_params.run_name = param.dir_name.clone();
         self.collector_params.collection_time = param.period;
         self.collector_params.elapsed_time = 0;
-        self.collector_params.data_file_path = PathBuf::from(full_path);
-        self.collector_params.data_dir = PathBuf::from(param.dir_name);
+        self.collector_params.data_file_path = PathBuf::from(&self.full_path);
+        self.collector_params.data_dir = PathBuf::from(param.dir_name.clone());
         self.collector_params.profile = param.profile.clone();
-        self.collector_params.tmp_dir = PathBuf::from(param.tmp_dir);
+        self.collector_params.tmp_dir = param.tmp_dir.clone();
 
         self.file_handle = Some(
             OpenOptions::new()
                 .read(true)
                 .create(true)
                 .append(true)
-                .open(self.full_path.clone())
+                .open(&self.full_path)
                 .expect("Could not create file for data"),
         );
 
@@ -152,8 +151,7 @@ impl DataType {
 
     pub fn prepare_data_collector(&mut self) -> Result<()> {
         trace!("Preparing data collector...");
-        self.data
-            .prepare_data_collector(self.collector_params.clone())?;
+        self.data.prepare_data_collector(&self.collector_params)?;
         Ok(())
     }
 
@@ -172,15 +170,13 @@ impl DataType {
 
     pub fn finish_data_collection(&mut self) -> Result<()> {
         trace!("Finish data collection...");
-        self.data
-            .finish_data_collection(self.collector_params.clone())?;
+        self.data.finish_data_collection(&self.collector_params)?;
         Ok(())
     }
 
     pub fn after_data_collection(&mut self) -> Result<()> {
         trace!("Running post collection actions...");
-        self.data
-            .after_data_collection(self.collector_params.clone())?;
+        self.data.after_data_collection(&self.collector_params)?;
         Ok(())
     }
 }
@@ -231,7 +227,7 @@ macro_rules! data {
                 Ok(())
             }
 
-            fn prepare_data_collector(&mut self, params: CollectorParams) -> Result<()> {
+            fn prepare_data_collector(&mut self, params: &CollectorParams) -> Result<()> {
                 match self {
                     $(
                         Data::$x(ref mut value) => value.prepare_data_collector(params)?,
@@ -240,7 +236,7 @@ macro_rules! data {
                 Ok(())
             }
 
-            fn finish_data_collection(&mut self, params: CollectorParams) -> Result<()> {
+            fn finish_data_collection(&mut self, params: &CollectorParams) -> Result<()> {
                 match self {
                     $(
                         Data::$x(ref mut value) => value.finish_data_collection(params)?,
@@ -248,7 +244,7 @@ macro_rules! data {
                 }
                 Ok(())
             }
-            fn after_data_collection(&mut self, params: CollectorParams) -> Result<()> {
+            fn after_data_collection(&mut self, params: &CollectorParams) -> Result<()> {
                 match self {
                     $(
                         Data::$x(ref mut value) => value.after_data_collection(params)?,
@@ -342,7 +338,7 @@ macro_rules! noop {
 }
 
 pub trait CollectData {
-    fn prepare_data_collector(&mut self, _params: CollectorParams) -> Result<()> {
+    fn prepare_data_collector(&mut self, _params: &CollectorParams) -> Result<()> {
         noop!();
         Ok(())
     }
@@ -350,11 +346,11 @@ pub trait CollectData {
         noop!();
         Ok(())
     }
-    fn finish_data_collection(&mut self, _params: CollectorParams) -> Result<()> {
+    fn finish_data_collection(&mut self, _params: &CollectorParams) -> Result<()> {
         noop!();
         Ok(())
     }
-    fn after_data_collection(&mut self, _params: CollectorParams) -> Result<()> {
+    fn after_data_collection(&mut self, _params: &CollectorParams) -> Result<()> {
         noop!();
         Ok(())
     }
@@ -390,7 +386,7 @@ mod tests {
             .create(param.dir_name.clone())
             .unwrap();
 
-        dt.init_data_type(param).unwrap();
+        dt.init_data_type(&param).unwrap();
 
         assert!(dt.file_handle.is_some());
         fs::remove_file(dt.full_path).unwrap();
@@ -418,7 +414,7 @@ mod tests {
             .create(param.dir_name.clone())
             .unwrap();
 
-        dt.init_data_type(param).unwrap();
+        dt.init_data_type(&param).unwrap();
 
         assert!(Path::new(&dt.full_path).exists());
         dt.write_to_file().unwrap();

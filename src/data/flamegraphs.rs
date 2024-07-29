@@ -40,14 +40,14 @@ impl FlamegraphRaw {
 }
 
 impl CollectData for FlamegraphRaw {
-    fn prepare_data_collector(&mut self, _params: CollectorParams) -> Result<()> {
+    fn prepare_data_collector(&mut self, _params: &CollectorParams) -> Result<()> {
         match Command::new("perf").args(["--version"]).output() {
             Err(e) => Err(PDError::DependencyError(format!("'perf' command failed. {}", e)).into()),
             _ => Ok(()),
         }
     }
 
-    fn after_data_collection(&mut self, params: CollectorParams) -> Result<()> {
+    fn after_data_collection(&mut self, params: &CollectorParams) -> Result<()> {
         let data_dir = PathBuf::from(&params.data_dir);
 
         let file_pathbuf = data_dir.join(get_file_name(

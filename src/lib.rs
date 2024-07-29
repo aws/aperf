@@ -26,9 +26,13 @@ use thiserror::Error;
 use timerfd::{SetTimeFlags, TimerFd, TimerState};
 
 pub static APERF_FILE_FORMAT: &str = "bin";
+pub static APERF_TMP: &str = "/tmp";
 
 #[derive(Error, Debug)]
 pub enum PDError {
+    #[error("Error initializing logger")]
+    LoggerInitError,
+
     #[error("Error getting JavaScript file for {}", .0)]
     VisualizerJSFileGetError(String),
 
@@ -191,7 +195,7 @@ impl PerformanceData {
         );
 
         for (_name, datatype) in self.collectors.iter_mut() {
-            datatype.init_data_type(self.init_params.clone())?;
+            datatype.init_data_type(&self.init_params)?;
         }
         Ok(())
     }
@@ -339,6 +343,11 @@ impl PerformanceData {
             datatype.after_data_collection()?;
         }
         tfd.set_state(TimerState::Disarmed, SetTimeFlags::Default);
+        Ok(())
+    }
+
+    pub fn end(&mut self) -> Result<()> {
+        // All activities in the record folder should be complete before this.
         self.create_data_archive()?;
         Ok(())
     }
@@ -413,8 +422,8 @@ impl VisualizationData {
     pub fn init_visualizers(
         &mut self,
         dir: String,
-        tmp_dir: String,
-        fin_dir: PathBuf,
+        tmp_dir: &Path,
+        fin_dir: &Path,
     ) -> Result<String> {
         let dir_path = Path::new(&dir);
         let dir_name = dir_path.file_stem().unwrap().to_str().unwrap().to_string();
@@ -423,13 +432,10 @@ impl VisualizationData {
         let mut error_count = 0;
 
         for (_name, visualizer) in self.visualizers.iter_mut() {
-            if let Err(e) = visualizer.init_visualizer(
-                dir.clone(),
-                dir_name.clone(),
-                tmp_dir.clone(),
-                fin_dir.clone(),
-            ) {
-                error!("{:#?}", e);
+            if let Err(e) =
+                visualizer.init_visualizer(dir.clone(), dir_name.clone(), tmp_dir, fin_dir)
+            {
+                debug!("{:#?}", e);
                 visualizer.data_not_available(dir_name.clone())?;
                 error_count += 1;
             }
@@ -524,7 +530,7 @@ pub struct InitParams {
     pub run_name: String,
     pub collector_version: String,
     pub commit_sha_short: String,
-    pub tmp_dir: String,
+    pub tmp_dir: PathBuf,
 }
 
 impl InitParams {
@@ -561,7 +567,7 @@ impl InitParams {
             run_name,
             collector_version,
             commit_sha_short,
-            tmp_dir: String::new(),
+            tmp_dir: PathBuf::from(APERF_TMP),
         }
     }
 }

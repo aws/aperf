@@ -9,9 +9,11 @@ use log::{error, trace};
 use nix::{sys::signal, unistd::Pid};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::io::Write;
-use std::process::{Child, Command, Stdio};
-use std::sync::Mutex;
+use std::{
+    io::Write,
+    process::{Child, Command, Stdio},
+    sync::Mutex,
+};
 
 pub static PERF_PROFILE_FILE_NAME: &str = "perf_profile";
 pub static PERF_TOP_FUNCTIONS_FILE_NAME: &str = "top_functions";
@@ -34,7 +36,7 @@ impl PerfProfileRaw {
 }
 
 impl CollectData for PerfProfileRaw {
-    fn prepare_data_collector(&mut self, params: CollectorParams) -> Result<()> {
+    fn prepare_data_collector(&mut self, params: &CollectorParams) -> Result<()> {
         match Command::new("perf")
             .stdout(Stdio::null())
             .args([
@@ -73,7 +75,7 @@ impl CollectData for PerfProfileRaw {
         Ok(())
     }
 
-    fn finish_data_collection(&mut self, params: CollectorParams) -> Result<()> {
+    fn finish_data_collection(&mut self, params: &CollectorParams) -> Result<()> {
         let mut child = PERF_CHILD.lock().unwrap();
         match child.as_ref() {
             None => return Ok(()),
