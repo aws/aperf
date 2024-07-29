@@ -2,10 +2,7 @@ use crate::{data, InitParams, PERFORMANCE_DATA};
 use anyhow::Result;
 use clap::Args;
 use log::{debug, error, info};
-use std::os::unix::fs::PermissionsExt;
-use std::{fs, process};
-
-pub static APERF_TMP: &str = "/tmp/aperf_tmp";
+use std::path::Path;
 
 #[derive(Args, Debug)]
 pub struct Record {
@@ -48,7 +45,7 @@ fn collect_static_data() -> Result<()> {
     Ok(())
 }
 
-pub fn record(record: &Record) -> Result<()> {
+pub fn record(record: &Record, tmp_dir: &Path) -> Result<()> {
     let mut run_name = String::new();
     if record.period == 0 {
         error!("Collection period cannot be 0.");
@@ -65,7 +62,7 @@ pub fn record(record: &Record) -> Result<()> {
     let mut params = InitParams::new(run_name);
     params.period = record.period;
     params.interval = record.interval;
-    params.tmp_dir = APERF_TMP.to_string();
+    params.tmp_dir = tmp_dir.to_path_buf();
 
     match &record.profile_java {
         Some(j) => {
@@ -87,15 +84,6 @@ pub fn record(record: &Record) -> Result<()> {
         );
     }
 
-    fs::remove_dir_all(APERF_TMP).ok();
-    if let Err(e) = fs::create_dir(APERF_TMP) {
-        error!("Could not create /tmp/aperf_tmp folder.\n{}: Remove using 'sudo rm -rf /tmp/aperf_tmp'.", e);
-        process::exit(1);
-    }
-    let mut perms: fs::Permissions = fs::metadata(APERF_TMP)?.permissions();
-    perms.set_mode(0o777);
-    fs::set_permissions(APERF_TMP, perms)?;
-
     PERFORMANCE_DATA.lock().unwrap().set_params(params);
     PERFORMANCE_DATA.lock().unwrap().init_collectors()?;
     info!("Starting Data collection...");
@@ -103,7 +91,7 @@ pub fn record(record: &Record) -> Result<()> {
     collect_static_data()?;
     start_collection_serial()?;
     info!("Data collection complete.");
+    PERFORMANCE_DATA.lock().unwrap().end()?;
 
-    fs::remove_dir_all(APERF_TMP)?;
     Ok(())
 }

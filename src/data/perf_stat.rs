@@ -115,7 +115,7 @@ impl PerfStatRaw {
 }
 
 impl CollectData for PerfStatRaw {
-    fn prepare_data_collector(&mut self, _params: CollectorParams) -> Result<()> {
+    fn prepare_data_collector(&mut self, _params: &CollectorParams) -> Result<()> {
         let num_cpus = match unsafe { libc::sysconf(libc::_SC_NPROCESSORS_ONLN as libc::c_int) } {
             -1 => {
                 warn!("Could not get the number of cpus in the system with sysconf.");
@@ -567,7 +567,7 @@ mod tests {
         let mut perf_stat = PerfStatRaw::new();
         let params = CollectorParams::new();
 
-        match perf_stat.prepare_data_collector(params.clone()) {
+        match perf_stat.prepare_data_collector(&params) {
             Err(e) => {
                 if let Some(os_error) = e.downcast_ref::<std::io::Error>() {
                     match os_error.kind() {
@@ -593,7 +593,7 @@ mod tests {
         let mut processed_buffer: Vec<ProcessedData> = Vec::new();
         let params = CollectorParams::new();
 
-        match perf_stat.prepare_data_collector(params.clone()) {
+        match perf_stat.prepare_data_collector(&params) {
             Err(e) => {
                 if let Some(os_error) = e.downcast_ref::<std::io::Error>() {
                     match os_error.kind() {

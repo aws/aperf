@@ -1,10 +1,12 @@
 use anyhow::Result;
 use aperf_lib::record::{record, Record};
 use aperf_lib::report::{report, Report};
-use aperf_lib::PDError;
+use aperf_lib::{PDError, APERF_TMP};
 use clap::{Parser, Subcommand};
 use env_logger::Builder;
 use log::LevelFilter;
+use std::{fs, os::unix::fs::PermissionsExt};
+use tempfile::Builder as TempBuilder;
 
 #[derive(Parser)]
 #[command(author, about, long_about = None)]
@@ -18,6 +20,10 @@ struct Cli {
     /// Show debug messages. Use -vv for more verbose messages.
     #[clap(short, long, global = true, action = clap::ArgAction::Count)]
     verbose: u8,
+
+    /// Temporary directory for intermediate files.
+    #[clap(short, long, value_parser, default_value_t = APERF_TMP.to_string(), global = true)]
+    tmp_dir: String,
 }
 
 #[derive(Subcommand)]
@@ -42,11 +48,19 @@ fn init_logger(verbose: u8) -> Result<()> {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+
+    let tmp_dir = TempBuilder::new()
+        .prefix("aperf-tmp-")
+        .tempdir_in(&cli.tmp_dir)?;
+    fs::set_permissions(&tmp_dir, fs::Permissions::from_mode(0o1777))?;
+    let tmp_dir_path_buf = tmp_dir.path().to_path_buf();
+
     init_logger(cli.verbose)?;
 
-    match &cli.command {
-        Commands::Record(r) => record(r),
-        Commands::Report(r) => report(r),
+    match cli.command {
+        Commands::Record(r) => record(&r, &tmp_dir_path_buf),
+        Commands::Report(r) => report(&r, &tmp_dir_path_buf),
     }?;
+    fs::remove_dir_all(tmp_dir_path_buf)?;
     Ok(())
 }

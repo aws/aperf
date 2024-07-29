@@ -71,14 +71,14 @@ impl DataVisualizer {
         &mut self,
         dir: String,
         name: String,
-        tmp_dir: String,
-        fin_dir: PathBuf,
+        tmp_dir: &Path,
+        fin_dir: &Path,
     ) -> Result<()> {
         let file = get_file(dir.clone(), self.file_name.clone())?;
         let full_path = Path::new("/proc/self/fd").join(file.as_raw_fd().to_string());
         self.report_params.data_dir = PathBuf::from(dir.clone());
-        self.report_params.tmp_dir = PathBuf::from(tmp_dir);
-        self.report_params.report_dir = fin_dir;
+        self.report_params.tmp_dir = tmp_dir.to_path_buf();
+        self.report_params.report_dir = fin_dir.to_path_buf();
         self.report_params.run_name = name.clone();
         self.report_params.data_file_path = fs::read_link(full_path).unwrap();
         self.file_handle = Some(file);
@@ -264,8 +264,8 @@ mod tests {
         dv.init_visualizer(
             "tests/test-data/aperf_2023-07-26_18_37_43/".to_string(),
             "test".to_string(),
-            String::new(),
-            PathBuf::new(),
+            &PathBuf::new(),
+            &PathBuf::new(),
         )
         .unwrap();
         dv.process_raw_data("test".to_string()).unwrap();

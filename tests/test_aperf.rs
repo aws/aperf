@@ -10,11 +10,16 @@ use tempfile::TempDir;
 
 fn run_test<T>(test_func: T)
 where
-    T: FnOnce(PathBuf) -> Result<()> + panic::UnwindSafe,
+    T: FnOnce(PathBuf, PathBuf) -> Result<()> + panic::UnwindSafe,
 {
     let tempdir = TempDir::with_prefix("aperf").unwrap();
-    let result = panic::catch_unwind(|| test_func(tempdir.path().to_path_buf()));
+    let aperf_tmp = TempDir::with_prefix("tmp_aperf").unwrap();
+
+    let result = panic::catch_unwind(|| {
+        test_func(tempdir.path().to_path_buf(), aperf_tmp.path().to_path_buf())
+    });
     tempdir.close().unwrap();
+    aperf_tmp.close().unwrap();
     if let Err(e) = result {
         panic::resume_unwind(e);
     }
@@ -23,7 +28,7 @@ where
 #[test]
 #[serial]
 fn test_record() {
-    run_test(|tempdir| {
+    run_test(|tempdir, aperf_tmp| {
         let run_name = tempdir
             .join("test_record")
             .into_os_string()
@@ -37,7 +42,7 @@ fn test_record() {
             profile_java: None,
         };
 
-        record(&rec).unwrap();
+        record(&rec, &aperf_tmp).unwrap();
         assert!(Path::new(&run_name).exists());
         assert!(Path::new(&(run_name.clone() + ".tar.gz")).exists());
 
@@ -50,7 +55,7 @@ fn test_record() {
 #[test]
 #[serial]
 fn test_report() {
-    run_test(|tempdir| {
+    run_test(|tempdir, aperf_tmp| {
         let run_name = tempdir
             .join("record_data")
             .into_os_string()
@@ -64,7 +69,7 @@ fn test_report() {
             profile_java: None,
         };
 
-        record(&rec).unwrap();
+        record(&rec, &aperf_tmp).unwrap();
 
         let test_report_path = PathBuf::from("test_report");
         let report_loc = tempdir
@@ -77,7 +82,7 @@ fn test_report() {
             run: [run_name.clone()].to_vec(),
             name: Some(report_loc.clone()),
         };
-        report(&rep).unwrap();
+        report(&rep, &aperf_tmp).unwrap();
 
         // Check if the directory has the proper structure
         assert!(report_path.exists());

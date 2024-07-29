@@ -46,7 +46,7 @@ impl Default for ProcessesRaw {
 }
 
 impl CollectData for ProcessesRaw {
-    fn prepare_data_collector(&mut self, _params: CollectorParams) -> Result<()> {
+    fn prepare_data_collector(&mut self, _params: &CollectorParams) -> Result<()> {
         *TICKS_PER_SECOND.lock().unwrap() = procfs::ticks_per_second()? as u64;
         Ok(())
     }
@@ -345,7 +345,7 @@ mod process_test {
     fn test_collect_data() {
         let mut processes = ProcessesRaw::new();
         let params = CollectorParams::new();
-        processes.prepare_data_collector(params.clone()).unwrap();
+        processes.prepare_data_collector(&params).unwrap();
         processes.collect_data(&params).unwrap();
         assert!(!processes.data.is_empty());
     }
@@ -358,12 +358,8 @@ mod process_test {
         let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
         let params = CollectorParams::new();
 
-        processes_zero
-            .prepare_data_collector(params.clone())
-            .unwrap();
-        processes_one
-            .prepare_data_collector(params.clone())
-            .unwrap();
+        processes_zero.prepare_data_collector(&params).unwrap();
+        processes_one.prepare_data_collector(&params).unwrap();
         processes_zero.collect_data(&params).unwrap();
         processes_one.collect_data(&params).unwrap();
 

@@ -38,7 +38,7 @@ impl JavaProfileRaw {
         }
     }
 
-    fn launch_asprof(&self, jids: Vec<String>, params: CollectorParams) -> Result<()> {
+    fn launch_asprof(&self, jids: Vec<String>, params: &CollectorParams) -> Result<()> {
         for jid in &jids {
             match Command::new("asprof")
                 .args([
@@ -137,7 +137,7 @@ impl JavaProfileRaw {
 }
 
 impl CollectData for JavaProfileRaw {
-    fn prepare_data_collector(&mut self, params: CollectorParams) -> Result<()> {
+    fn prepare_data_collector(&mut self, params: &CollectorParams) -> Result<()> {
         let mut jids: Vec<String> = Vec::new();
         let pgrep: Vec<String> = self.launch_pgrep()?;
         for pid in pgrep {
@@ -172,7 +172,7 @@ impl CollectData for JavaProfileRaw {
         }
         jids.sort();
         jids.dedup();
-        self.launch_asprof(jids, params.clone())
+        self.launch_asprof(jids, params)
     }
 
     fn collect_data(&mut self, params: &CollectorParams) -> Result<()> {
@@ -198,10 +198,10 @@ impl CollectData for JavaProfileRaw {
         }
 
         self.update_process_map()?;
-        self.launch_asprof(jids, params.clone())
+        self.launch_asprof(jids, params)
     }
 
-    fn finish_data_collection(&mut self, params: CollectorParams) -> Result<()> {
+    fn finish_data_collection(&mut self, params: &CollectorParams) -> Result<()> {
         for child in ASPROF_CHILDREN.lock().unwrap().iter() {
             signal::kill(Pid::from_raw(child.id() as i32), params.signal)?;
         }
@@ -240,10 +240,6 @@ impl CollectData for JavaProfileRaw {
         )?;
         write!(jps_map, "{}", serde_json::to_string(&self.process_map)?)?;
 
-        Ok(())
-    }
-
-    fn after_data_collection(&mut self, _params: CollectorParams) -> Result<()> {
         Ok(())
     }
 }

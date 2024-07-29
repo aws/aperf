@@ -29,6 +29,7 @@ function getAperfEntry(elem, key, run_data) {
         y: y_print,
         type: 'scatter',
     };
+    let limits = key_limits.get(key);
     var layout = {
         title: `${key}`,
         xaxis: {
@@ -36,6 +37,7 @@ function getAperfEntry(elem, key, run_data) {
         },
         yaxis: {
             title: 'Time (us)',
+            range: [limits.low, limits.high],
         },
     }
     Plotly.newPlot(TESTER, [aperfstat_collect_data, aperfstat_print_data], layout, { frameMargins: 0 });
