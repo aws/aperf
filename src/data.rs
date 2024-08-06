@@ -10,6 +10,9 @@ cfg_if::cfg_if! {
         pub mod intel_perf_events;
         pub mod intel_icelake_perf_events;
         pub mod intel_sapphire_rapids_perf_events;
+        pub mod amd_perf_events;
+        pub mod amd_genoa_perf_events;
+        pub mod amd_milan_perf_events;
     }
 }
 pub mod interrupts;
