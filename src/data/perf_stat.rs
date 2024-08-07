@@ -146,9 +146,9 @@ impl CollectData for PerfStatRaw {
                     perf_list = amd_perf_events::PERF_LIST.to_vec();
 
                     /* Get Model specific events */
-                    platform_specific_counter = match cpu_info.model_name.as_str() {
+                    platform_specific_counter = match cpu_info.model_name.get(..13).unwrap_or_default() {
                         "AMD EPYC 9R14" => GENOA_CTRS.to_vec(),
-                        "AMD EPYC 7R13 Processor" => MILAN_CTRS.to_vec(),
+                        "AMD EPYC 7R13" => MILAN_CTRS.to_vec(),
                         _ => Vec::new(),
                     };
                 } else {

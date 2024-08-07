@@ -1,6 +1,6 @@
 use crate::data::perf_stat::{NamedCtr, NamedTypeCtr, PerfType};
 
-static STALL_BACKEND_PKC: NamedTypeCtr = NamedTypeCtr {
+static STALL_BACKEND: NamedTypeCtr = NamedTypeCtr {
     perf_type: PerfType::RAW,
     name: "Backend-Stalls",
     config: 0x100001ea0,
@@ -15,7 +15,7 @@ lazy_static! {
     pub static ref GENOA_CTRS: Vec<NamedCtr<'static>> = [
         NamedCtr {
             name: "stall_backend_pkc",
-            nrs: vec![STALL_BACKEND_PKC],
+            nrs: vec![STALL_BACKEND],
             drs: vec![CYCLES],
             scale: 167 //~= 1000/6
         },
