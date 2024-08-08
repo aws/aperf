@@ -18,7 +18,7 @@ static CYCLES: NamedTypeCtr = NamedTypeCtr {
 
 lazy_static! {
     pub static ref MILAN_CTRS: Vec<NamedCtr<'static>> = [NamedCtr {
-        name: "stall_backend",
+        name: "stall_backend_pkc",
         nrs: vec![STALL_BACKEND_1, STALL_BACKEND_2],
         drs: vec![CYCLES],
         scale: 1000
