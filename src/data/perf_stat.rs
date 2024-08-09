@@ -17,10 +17,12 @@ use std::sync::Mutex;
 use crate::data::grv_perf_events;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 use {
-    crate::data::amd_genoa_perf_events::GENOA_CTRS, crate::data::amd_milan_perf_events::MILAN_CTRS,
-    crate::data::amd_perf_events, crate::data::intel_icelake_perf_events::ICX_CTRS,
-    crate::data::intel_perf_events, crate::data::intel_sapphire_rapids_perf_events::SPR_CTRS,
-    crate::data::utils::get_cpu_info, indexmap::IndexMap,
+    crate::data::{
+        amd_genoa_perf_events::GENOA_CTRS, amd_milan_perf_events::MILAN_CTRS, amd_perf_events,
+        intel_icelake_perf_events::ICX_CTRS, intel_perf_events,
+        intel_sapphire_rapids_perf_events::SPR_CTRS, utils::get_cpu_info,
+    },
+    indexmap::IndexMap,
 };
 
 pub static PERF_STAT_FILE_NAME: &str = "perf_stat";

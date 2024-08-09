@@ -230,7 +230,7 @@ impl CollectData for JavaProfileRaw {
                 key
             );
 
-            fs::rename(tmp_loc.clone(), html_loc).ok();
+            fs::copy(tmp_loc.clone(), html_loc).ok();
         }
 
         let mut jps_map = File::create(
