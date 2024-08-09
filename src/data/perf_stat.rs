@@ -17,9 +17,10 @@ use std::sync::Mutex;
 use crate::data::grv_perf_events;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 use {
-    crate::data::intel_icelake_perf_events::ICX_CTRS, crate::data::intel_perf_events,
-    crate::data::intel_sapphire_rapids_perf_events::SPR_CTRS, crate::data::utils::get_cpu_info,
-    indexmap::IndexMap,
+    crate::data::amd_genoa_perf_events::GENOA_CTRS, crate::data::amd_milan_perf_events::MILAN_CTRS,
+    crate::data::amd_perf_events, crate::data::intel_icelake_perf_events::ICX_CTRS,
+    crate::data::intel_perf_events, crate::data::intel_sapphire_rapids_perf_events::SPR_CTRS,
+    crate::data::utils::get_cpu_info, indexmap::IndexMap,
 };
 
 pub static PERF_STAT_FILE_NAME: &str = "perf_stat";
@@ -138,6 +139,16 @@ impl CollectData for PerfStatRaw {
                     platform_specific_counter = match cpu_info.model_name.as_str() {
                         "Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz" => ICX_CTRS.to_vec(),
                         "Intel(R) Xeon(R) Platinum 8488C" => SPR_CTRS.to_vec(),
+                        _ => Vec::new(),
+                    };
+                } else if cpu_info.vendor == "AuthenticAMD" {
+                    warn!("Event multiplexing may result in bad PMU data."); //TODO: mitigate bad PMU data on AMD instances
+                    perf_list = amd_perf_events::PERF_LIST.to_vec();
+
+                    /* Get Model specific events */
+                    platform_specific_counter = match cpu_info.model_name.get(..13).unwrap_or_default() {
+                        "AMD EPYC 9R14" => GENOA_CTRS.to_vec(),
+                        "AMD EPYC 7R13" => MILAN_CTRS.to_vec(),
                         _ => Vec::new(),
                     };
                 } else {
