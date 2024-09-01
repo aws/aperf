@@ -107,7 +107,7 @@ To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 
 `-r, --run` run data to be visualized. Can be a directory or a tarball.
 
-`-n, --name` report name (name of the report for origanization purposes, creates directory of the same name, default of aperf_report_<run>
+`-n, --name` report name (name of the report for organization purposes, creates directory of the same name, default of aperf_report_<run>
 
 `-v, --verbose` verbose messages
 
