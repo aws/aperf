@@ -20,6 +20,7 @@ DataTypes.set('top_functions', {name: 'topfunctions', hideClass: '', trueId: '',
 DataTypes.set('processes', {name: 'processes', hideClass: '', trueId: '', callback: processes});
 DataTypes.set('perfstat', {name: 'perfstat', hideClass: '', trueId: '', callback: perfStat});
 DataTypes.set('aperfstat', {name: 'aperfstat', hideClass: '', trueId: '', callback: aperfStat});
+DataTypes.set('aperfrunlog', {name: 'aperfrunlog', hideClass: '', trueId: '', callback: aperfRunlog});
 DataTypes.set('configure', {name: 'configure', hideClass: '', trueId: '', callback: configure});
 
 function openData(evt: Event, elem: HTMLButtonElement) {

@@ -1,3 +1,4 @@
+pub mod aperf_runlog;
 pub mod aperf_stats;
 pub mod constants;
 pub mod cpu_utilization;
@@ -31,6 +32,7 @@ pub mod vmstat;
 use crate::visualizer::{GetData, ReportParams};
 use crate::{InitParams, APERF_FILE_FORMAT};
 use anyhow::Result;
+use aperf_runlog::AperfRunlog;
 use aperf_stats::AperfStat;
 use chrono::prelude::*;
 use cpu_utilization::{CpuUtilization, CpuUtilizationRaw};
@@ -65,6 +67,7 @@ pub struct CollectorParams {
     pub profile: HashMap<String, String>,
     pub tmp_dir: PathBuf,
     pub signal: Signal,
+    pub runlog: PathBuf,
 }
 
 impl CollectorParams {
@@ -78,6 +81,7 @@ impl CollectorParams {
             profile: HashMap::new(),
             tmp_dir: PathBuf::new(),
             signal: signal::SIGTERM,
+            runlog: PathBuf::new(),
         }
     }
 }
@@ -136,6 +140,7 @@ impl DataType {
         self.collector_params.data_dir = PathBuf::from(param.dir_name.clone());
         self.collector_params.profile = param.profile.clone();
         self.collector_params.tmp_dir = param.tmp_dir.clone();
+        self.collector_params.runlog = param.runlog.clone();
 
         self.file_handle = Some(
             OpenOptions::new()
@@ -330,6 +335,7 @@ processed_data!(
     PerfProfile,
     Flamegraph,
     AperfStat,
+    AperfRunlog,
     JavaProfile
 );
 
