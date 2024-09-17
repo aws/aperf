@@ -1,11 +1,17 @@
 use anyhow::Result;
-use aperf_lib::record::{record, Record};
-use aperf_lib::report::{report, Report};
-use aperf_lib::{PDError, APERF_TMP};
+use aperf::record::{record, Record};
+use aperf::report::{report, Report};
+use aperf::{PDError, APERF_RUNLOG, APERF_TMP};
 use clap::{Parser, Subcommand};
-use env_logger::Builder;
 use log::LevelFilter;
-use std::{fs, os::unix::fs::PermissionsExt};
+use log4rs::{
+    append::console::ConsoleAppender,
+    append::file::FileAppender,
+    config::{Appender, Config, Logger, Root},
+    encode::pattern::PatternEncoder,
+    filter::threshold::ThresholdFilter,
+};
+use std::{fs, os::unix::fs::PermissionsExt, path::PathBuf};
 use tempfile::Builder as TempBuilder;
 
 #[derive(Parser)]
@@ -35,14 +41,45 @@ enum Commands {
     Report(Report),
 }
 
-fn init_logger(verbose: u8) -> Result<()> {
+fn init_logger(verbose: u8, runlog: &PathBuf) -> Result<()> {
     let level = match verbose {
         0 => LevelFilter::Info,
         1 => LevelFilter::Debug,
         2 => LevelFilter::Trace,
         _ => return Err(PDError::InvalidVerboseOption.into()),
     };
-    Builder::new().filter_level(level).init();
+    let pattern = "[{d(%Y-%m-%dT%H:%M:%SZ)} {h({l}):5.5} {M}] {m}{n}";
+    let stdout = ConsoleAppender::builder()
+        .encoder(Box::new(PatternEncoder::new(pattern)))
+        .build();
+
+    let fileout = FileAppender::builder()
+        .encoder(Box::new(PatternEncoder::new(pattern)))
+        .build(runlog)?;
+
+    let config = Config::builder()
+        /* This prints only the user selected level to the console. */
+        .appender(
+            Appender::builder()
+                .filter(Box::new(ThresholdFilter::new(level)))
+                .build("stdout", Box::new(stdout)),
+        )
+        .appender(Appender::builder().build("aperflog", Box::new(fileout)))
+        /* This creates a logger for our module at a default Debug level. */
+        .logger(
+            Logger::builder()
+                .appender("aperflog")
+                .appender("stdout")
+                .build(env!("CARGO_CRATE_NAME"), LevelFilter::Debug),
+        )
+        .build(
+            /* Set the Root to Warn. Underlying dependencies also print if set to debug.
+             * See: https://github.com/estk/log4rs/issues/196
+             */
+            Root::builder().build(LevelFilter::Warn),
+        )?;
+
+    log4rs::init_config(config)?;
     Ok(())
 }
 
@@ -54,11 +91,12 @@ fn main() -> Result<()> {
         .tempdir_in(&cli.tmp_dir)?;
     fs::set_permissions(&tmp_dir, fs::Permissions::from_mode(0o1777))?;
     let tmp_dir_path_buf = tmp_dir.path().to_path_buf();
+    let runlog = tmp_dir_path_buf.join(APERF_RUNLOG);
 
-    init_logger(cli.verbose)?;
+    init_logger(cli.verbose, &runlog)?;
 
     match cli.command {
-        Commands::Record(r) => record(&r, &tmp_dir_path_buf),
+        Commands::Record(r) => record(&r, &tmp_dir_path_buf, &runlog),
         Commands::Report(r) => report(&r, &tmp_dir_path_buf),
     }?;
     fs::remove_dir_all(tmp_dir_path_buf)?;

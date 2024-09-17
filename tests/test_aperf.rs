@@ -1,6 +1,7 @@
 use anyhow::Result;
-use aperf_lib::record::{record, Record};
-use aperf_lib::report::{report, Report};
+use aperf::record::{record, Record};
+use aperf::report::{report, Report};
+use aperf::APERF_RUNLOG;
 use flate2::read::GzDecoder;
 use serial_test::serial;
 use std::path::{Path, PathBuf};
@@ -41,8 +42,10 @@ fn test_record() {
             profile: false,
             profile_java: None,
         };
+        let runlog = tempdir.join(APERF_RUNLOG);
+        fs::File::create(&runlog).unwrap();
 
-        record(&rec, &aperf_tmp).unwrap();
+        record(&rec, &aperf_tmp, &runlog).unwrap();
         assert!(Path::new(&run_name).exists());
         assert!(Path::new(&(run_name.clone() + ".tar.gz")).exists());
 
@@ -68,8 +71,10 @@ fn test_report() {
             profile: false,
             profile_java: None,
         };
+        let runlog = tempdir.join(APERF_RUNLOG);
+        fs::File::create(&runlog).unwrap();
 
-        record(&rec, &aperf_tmp).unwrap();
+        record(&rec, &aperf_tmp, &runlog).unwrap();
 
         let test_report_path = PathBuf::from("test_report");
         let report_loc = tempdir
