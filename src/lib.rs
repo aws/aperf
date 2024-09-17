@@ -27,6 +27,7 @@ use timerfd::{SetTimeFlags, TimerFd, TimerState};
 
 pub static APERF_FILE_FORMAT: &str = "bin";
 pub static APERF_TMP: &str = "/tmp";
+pub static APERF_RUNLOG: &str = "aperf_runlog";
 
 #[derive(Error, Debug)]
 pub enum PDError {
@@ -347,6 +348,9 @@ impl PerformanceData {
     }
 
     pub fn end(&mut self) -> Result<()> {
+        let dst_path = PathBuf::from(&self.init_params.dir_name).join(APERF_RUNLOG);
+        fs::copy(&self.init_params.runlog, dst_path)?;
+
         // All activities in the record folder should be complete before this.
         self.create_data_archive()?;
         Ok(())
@@ -531,6 +535,7 @@ pub struct InitParams {
     pub collector_version: String,
     pub commit_sha_short: String,
     pub tmp_dir: PathBuf,
+    pub runlog: PathBuf,
 }
 
 impl InitParams {
@@ -568,6 +573,7 @@ impl InitParams {
             collector_version,
             commit_sha_short,
             tmp_dir: PathBuf::from(APERF_TMP),
+            runlog: PathBuf::new(),
         }
     }
 }
