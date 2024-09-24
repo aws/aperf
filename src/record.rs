@@ -45,7 +45,7 @@ fn collect_static_data() -> Result<()> {
     Ok(())
 }
 
-pub fn record(record: &Record, tmp_dir: &Path) -> Result<()> {
+pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
     let mut run_name = String::new();
     if record.period == 0 {
         error!("Collection period cannot be 0.");
@@ -63,6 +63,7 @@ pub fn record(record: &Record, tmp_dir: &Path) -> Result<()> {
     params.period = record.period;
     params.interval = record.interval;
     params.tmp_dir = tmp_dir.to_path_buf();
+    params.runlog = runlog.to_path_buf();
 
     match &record.profile_java {
         Some(j) => {
