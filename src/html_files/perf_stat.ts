@@ -1,6 +1,7 @@
 let got_perf_stat_data = false;
 
 let perf_cpu_list: Map<string, CPUList> = new Map<string, CPUList>();
+let perf_x_range: Map<string, Array<number>> = new Map<string, [0, 0]>();
 
 function getEvents(run, container_id, keys, run_data) {
     if (keys.length == 0) {
@@ -79,10 +80,12 @@ function getEvent(elem, key, run_data, run) {
         }
     })
     let limits = key_limits.get(key);
+    let x_range = getXRange(run);
     var layout = {
         title: `${key}`,
         xaxis: {
             title: 'Time (s)',
+            range: [x_range[0], x_range[1]],
         },
         yaxis: {
             title: 'Count',
@@ -93,7 +96,7 @@ function getEvent(elem, key, run_data, run) {
 }
 
 function perfStat() {
-    if (got_perf_stat_data && allRunCPUListUnchanged(perf_cpu_list)) {
+    if (got_perf_stat_data && allRunCPUListUnchanged(perf_cpu_list) && allRunXRangeUnchanged(perf_x_range)) {
         return;
     }
     clear_and_create('perfstat');
@@ -101,6 +104,7 @@ function perfStat() {
     for (let i = 0; i < perf_stat_raw_data['runs'].length; i++) {
         let run_name = perf_stat_raw_data['runs'][i]['name'];
         perf_cpu_list.set(run_name, getCPUList(run_name));
+        perf_x_range.set(run_name, getXRange(run_name));
         let elem_id = `${run_name}-perfstat-per-data`;
         let this_run_data = perf_stat_raw_data['runs'][i];
         getEvents(run_name, elem_id, this_run_data['keys'], this_run_data['key_values']);

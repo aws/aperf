@@ -1,5 +1,6 @@
 let got_meminfo_data = false;
 let meminfo_hide_zero_na_graphs = false;
+let meminfo_x_range: Map<string, Array<number>> = new Map<string, [0, 0]>();
 let TB = 1073741824;
 let GB = 1048576;
 
@@ -57,7 +58,7 @@ function get_divisor_unit(key) {
     };
 }
 
-function getMeminfo(elem, key, run_data) {
+function getMeminfo(elem, key, run_data, run) {
     var data = JSON.parse(run_data);
     var x_data = [];
     var y_data = [];
@@ -94,10 +95,12 @@ function getMeminfo(elem, key, run_data) {
     };
     var TESTER = elem;
     let limits = key_limits.get(key);
+    let x_range = getXRange(run);
     var layout = {
         title: key,
         xaxis: {
             title: 'Time (s)',
+            range: [x_range[0], x_range[1]],
         },
         yaxis: {
             title: `${unit}`,
@@ -114,12 +117,12 @@ function getMeminfoKeys(run, container_id, keys, run_data) {
         elem.id = `disk-stat-${run}-${value}`;
         elem.style.float = "none";
         addElemToNode(container_id, elem);
-        emptyOrCallback(keys, meminfo_hide_zero_na_graphs, getMeminfo, elem, value, run_data);
+        emptyOrCallback(keys, meminfo_hide_zero_na_graphs, getMeminfo, elem, value, run_data, run);
     }
 }
 
 function meminfo(hide: boolean) {
-    if (got_meminfo_data && hide == meminfo_hide_zero_na_graphs) {
+    if (got_meminfo_data && hide == meminfo_hide_zero_na_graphs && allRunXRangeUnchanged(meminfo_x_range)) {
         return;
     }
     meminfo_hide_zero_na_graphs = hide;
@@ -130,6 +133,7 @@ function meminfo(hide: boolean) {
         let run_name = meminfo_raw_data['runs'][i]['name'];
         let elem_id = `${run_name}-meminfo-per-data`;
         let this_run_data = meminfo_raw_data['runs'][i];
+        meminfo_x_range.set(run_name, getXRange(run_name));
         getMeminfoKeys(run_name, elem_id, this_run_data['keys'], this_run_data['key_values']);
     }
     got_meminfo_data = true;

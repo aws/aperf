@@ -170,3 +170,12 @@ function allRunCPUListUnchanged(cpu_list) {
     }
     return true;
 }
+
+function allRunXRangeUnchanged(x_range) {
+    for (let i = 0; i < runs_raw.length; i++) {
+        let run_name = runs_raw[i];
+        if (!xLimitsUnchanged(run_name, x_range.get(run_name))) {
+            return false;
+        }
+    }
+}

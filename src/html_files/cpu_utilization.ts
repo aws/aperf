@@ -1,5 +1,6 @@
 let got_cpu_util_data = false;
 let util_cpu_list: Map<string, CPUList> = new Map<string, CPUList>();
+let x_range_list: Map<string, Array<number>> = new Map<string, [0, 0]>();
 
 function getUtilizationType(run, elem, type, run_data) {
     var cpu_type_datas = [];
@@ -28,10 +29,12 @@ function getUtilizationType(run, elem, type, run_data) {
         cpu_type_datas.push(cpu_type_data);
     });
     var TESTER = elem;
+    var x_range = getXRange(run);
     var layout = {
         title: `CPU Utilization - ${type}`,
         xaxis: {
             title: 'Time (s)',
+            range: [x_range[0], x_range[1]],
         },
         yaxis: {
             title: 'CPU Utilization (%)',
@@ -53,7 +56,7 @@ function getUtilizationTypes(run, container_id, keys, run_data) {
         }
     });
 }
-function getCpuUtilization(elem, run, run_data) {
+function getCpuUtilization(run, elem, run_data, range=false) {
     var x_time = [];
     var y_user = [];
     var y_nice = [];
@@ -124,30 +127,36 @@ function getCpuUtilization(elem, run, run_data) {
         type: 'scatter',
     };
     var TESTER = elem;
+    var x_range = getXRange(run);
     var layout = {
         title: 'Aggregate CPU Utilization',
         xaxis: {
             title: 'Time (s)',
+            range: [x_range[0], x_range[1]],
         },
         yaxis: {
             title: 'CPU Utilization (%)',
             range: [0, 100],
         },
     };
+    if (range) {
+        layout['xaxis']['rangeslider'] = {};
+    }
     var data_list = [user, nice, system, irq, softirq, idle, iowait, steal];
     Plotly.newPlot(TESTER, data_list, layout, { frameMargins: 0 });
 }
 function cpuUtilization() {
-    if (got_cpu_util_data && allRunCPUListUnchanged(util_cpu_list)) {
+    if (got_cpu_util_data && allRunCPUListUnchanged(util_cpu_list) && allRunXRangeUnchanged(x_range_list)) {
         return;
     }
     clear_and_create('cpuutilization');
     for (let i = 0; i < cpu_utilization_raw_data['runs'].length; i++) {
         let run_name = cpu_utilization_raw_data['runs'][i]['name'];
         util_cpu_list.set(run_name, getCPUList(run_name));
+        x_range_list.set(run_name, getXRange(run_name));
         let elem_id = `${run_name}-cpuutilization-per-data`;
         let this_run_data = cpu_utilization_raw_data['runs'][i];
-        getCpuUtilization(document.getElementById(elem_id), run_name, this_run_data['key_values']['aggregate']);
+        getCpuUtilization(run_name, document.getElementById(elem_id), this_run_data['key_values']['aggregate']);
         getUtilizationTypes(run_name, elem_id, this_run_data['keys'], this_run_data['key_values']);
     }
     got_cpu_util_data = true;

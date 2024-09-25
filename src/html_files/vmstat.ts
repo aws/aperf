@@ -1,5 +1,6 @@
 let got_vmstat_data = false;
 let vmstat_hide_zero_na_graphs = false;
+let vmstat_x_range: Map<string, Array<number>> = new Map<string, [0, 0]>();
 
 function getEntries(run, container_id, keys, run_data) {
     for (let i = 0; i < all_run_keys.length; i++) {
@@ -8,11 +9,11 @@ function getEntries(run, container_id, keys, run_data) {
         elem.id = `vmstat-${run}-${value}`;
         elem.style.float = "none";
         addElemToNode(container_id, elem);
-        emptyOrCallback(keys, vmstat_hide_zero_na_graphs, getEntry, elem, value, run_data);
+        emptyOrCallback(keys, vmstat_hide_zero_na_graphs, getEntry, elem, value, run_data, run);
     }
 }
 
-function getEntry(elem, key, run_data) {
+function getEntry(elem, key, run_data, run) {
     var data = JSON.parse(run_data);
     var x_time = [];
     var y_data = [];
@@ -27,10 +28,12 @@ function getEntry(elem, key, run_data) {
         type: 'scatter',
     };
     let limits = key_limits.get(key);
+    let x_range = getXRange(run);
     var layout = {
         title: `${key}`,
         xaxis: {
             title: 'Time (s)',
+            range: [x_range[0], x_range[1]],
         },
         yaxis: {
             title: 'Pages',
@@ -41,7 +44,7 @@ function getEntry(elem, key, run_data) {
 }
 
 function vmStat(hide: boolean) {
-    if (got_vmstat_data && hide == vmstat_hide_zero_na_graphs) {
+    if (got_vmstat_data && hide == vmstat_hide_zero_na_graphs && allRunXRangeUnchanged(x_range_list)) {
         return;
     }
     vmstat_hide_zero_na_graphs = hide;
@@ -51,6 +54,7 @@ function vmStat(hide: boolean) {
         let run_name = vmstat_raw_data['runs'][i]['name'];
         let elem_id = `${run_name}-vmstat-per-data`;
         let this_run_data = vmstat_raw_data['runs'][i];
+        vmstat_x_range.set(run_name, getXRange(run_name));
         getEntries(run_name, elem_id, this_run_data['keys'], this_run_data['key_values']);
     }
     got_vmstat_data = true;

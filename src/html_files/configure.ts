@@ -3,6 +3,8 @@ class RunConfig {
     cpu_count: number;
     all_selected: boolean;
     cpu_list: Array<string>;
+    x_range: Array<number>;
+    x_default_range: Array<number>;
 }
 class CPUList {
     all_selected: boolean;
@@ -10,6 +12,15 @@ class CPUList {
 }
 var run_config: Map<string, RunConfig> = new Map<string, RunConfig>();
 var init_done = false;
+
+function getXRange(run_name) {
+    return run_config.get(run_name).x_range.slice();
+}
+
+function xLimitsUnchanged(run_name, curr_range) {
+    let run_range = run_config.get(run_name).x_range;
+    return (curr_range[0] == run_range[0]) && (curr_range[1] == run_range[1]);
+}
 
 function getCPUList(run) {
     let ret = new CPUList();
@@ -33,6 +44,9 @@ function formGlobalConfig() {
         }
         config.all_selected = true;
         run_config.set(run_name, config);
+        var x_end = JSON.parse(this_run_data['key_values']['aggregate']).at(-1).time.TimeDiff;
+        config.x_range = [0, x_end];
+        config.x_default_range = [0, x_end];
     }
 }
 
@@ -132,8 +146,34 @@ function configure() {
         return;
     }
     clear_and_create('configure');
-    runs_raw.forEach(function (value, index, arr) {
-        createCPUConfigure(`${value}-configure-per-data`, value);
-    });
+    for (let i = 0; i < cpu_utilization_raw_data['runs'].length; i++) {
+        let run_name = cpu_utilization_raw_data['runs'][i]['name'];
+        let this_run_data = cpu_utilization_raw_data['runs'][i];
+        let x_selector: any = document.createElement("div");
+        x_selector.id = `${run_name}-x-selector`;
+        x_selector.dataset.run_name = run_name;
+        let per_id = `${run_name}-configure-per-data`;
+        addElemToNode(per_id, x_selector);
+        createCPUConfigure(per_id, run_name);
+        getCpuUtilization(run_name, x_selector, this_run_data['key_values']['aggregate'], true);
+        x_selector.on('plotly_relayout', function(eventdata) {
+            var x_start = 0, x_end = 0;
+            if ('xaxis.autorange' in eventdata) {
+                // Handle double click to reset.
+                var x_range = run_config.get(x_selector.dataset.run_name).x_default_range;
+                x_start = x_range[0];
+                x_end = x_range[1];
+            } else if ('xaxis.range[0]' in eventdata) {
+                // Handle using the big graph to configure the x axis.
+                x_start = eventdata['xaxis.range[0]'];
+                x_end = eventdata['xaxis.range[1]'];
+            } else {
+                // Handle using the rangeslider to configure the x axis.
+                x_start = eventdata['xaxis.range'][0];
+                x_end = eventdata['xaxis.range'][1];
+            }
+            run_config.get(x_selector.dataset.run_name).x_range = [x_start, x_end];
+        });
+    }
     init_done = true;
 }

@@ -1,5 +1,6 @@
 let got_interrupt_data = false;
 let interrupt_cpu_list: Map<string, CPUList> = new Map<string, CPUList>();
+let interrupt_x_range: Map<string, Array<number>> = new Map<string, [0, 0]>();
 
 function getLine(run, elem, key, run_data) {
     var data = JSON.parse(run_data);
@@ -34,10 +35,12 @@ function getLine(run, elem, key, run_data) {
         title = `${key} (${data[0].interrupt_type})`;
     }
     var TESTER = elem;
+    var x_range = getXRange(run);
     var layout = {
         title: title,
         xaxis: {
             title: 'Time (s)',
+            range: [x_range[0], x_range[1]],
         },
         yaxis: {
             title: 'Count',
@@ -67,6 +70,7 @@ function interrupts() {
     for (let i = 0; i < interrupts_raw_data['runs'].length; i++) {
         let run_name = interrupts_raw_data['runs'][i]['name'];
         interrupt_cpu_list.set(run_name, getCPUList(run_name));
+        interrupt_x_range.set(run_name, getXRange(run_name));
         let elem_id = `${run_name}-interrupts-per-data`;
         let this_run_data = interrupts_raw_data['runs'][i];
         getLines(run_name, elem_id, this_run_data['keys'], this_run_data['key_values']);

@@ -1,7 +1,8 @@
 let got_disk_stat_data = false;
 let diskstat_hide_zero_na_graphs = false;
+let diskstat_x_range: Map<string, Array<number>> = new Map<string, [0, 0]>();
 
-function getStatValues(elem, key, run_data) {
+function getStatValues(elem, key, run_data, run) {
     var disk_datas = [];
     var data = JSON.parse(run_data);
     data.data.forEach(function (v, i, a) {
@@ -29,10 +30,12 @@ function getStatValues(elem, key, run_data) {
         unit = 'Count';
     }
     let limits = key_limits.get(key);
+    let x_range = getXRange(run);
     var layout = {
         title: key,
         xaxis: {
             title: 'Time (s)',
+            range: [x_range[0], x_range[1]],
         },
         yaxis: {
             title: unit,
@@ -49,12 +52,12 @@ function getStatKeys(run, container_id, keys, run_data) {
         elem.id = `disk-stat-${run}-${value}`;
         elem.style.float = "none";
         addElemToNode(container_id, elem);
-        emptyOrCallback(keys, diskstat_hide_zero_na_graphs, getStatValues, elem, value, run_data);
+        emptyOrCallback(keys, diskstat_hide_zero_na_graphs, getStatValues, elem, value, run_data, run);
     }
 }
 
 function diskStats(hide: boolean) {
-    if (got_disk_stat_data && hide == diskstat_hide_zero_na_graphs) {
+    if (got_disk_stat_data && hide == diskstat_hide_zero_na_graphs && allRunXRangeUnchanged(diskstat_x_range)) {
         return;
     }
     diskstat_hide_zero_na_graphs = hide;
@@ -64,6 +67,7 @@ function diskStats(hide: boolean) {
         let run_name = disk_stats_raw_data['runs'][i]['name']
         let elem_id = `${run_name}-diskstat-per-data`;
         let this_run_data = disk_stats_raw_data['runs'][i];
+        diskstat_x_range.set(run_name, getXRange(run_name));
         getStatKeys(run_name, elem_id, this_run_data['keys'], this_run_data['key_values']);
     }
     got_disk_stat_data = true;
