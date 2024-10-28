@@ -1,6 +1,7 @@
 extern crate ctor;
 
 use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
+use crate::utils::DataMetrics;
 use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata};
 use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
@@ -416,7 +417,12 @@ impl GetData for MeminfoData {
         Ok(vec!["keys".to_string(), "values".to_string()])
     }
 
-    fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
+    fn get_data(
+        &mut self,
+        buffer: Vec<ProcessedData>,
+        query: String,
+        _metrics: &mut DataMetrics,
+    ) -> Result<String> {
         let mut values = Vec::new();
         for data in buffer {
             match data {
@@ -472,6 +478,7 @@ fn init_meminfo() {
 mod tests {
     use super::{EndMemValues, MeminfoData, MeminfoDataRaw, MeminfoKeys};
     use crate::data::{CollectData, CollectorParams, Data, ProcessedData};
+    use crate::utils::DataMetrics;
     use crate::visualizer::GetData;
     use std::collections::HashMap;
     use strum::IntoEnumIterator;
@@ -527,7 +534,11 @@ mod tests {
                 .unwrap(),
         );
         let json = MeminfoData::new()
-            .get_data(processed_buffer, "run=test&get=keys".to_string())
+            .get_data(
+                processed_buffer,
+                "run=test&get=keys".to_string(),
+                &mut DataMetrics::new(String::new()),
+            )
             .unwrap();
         let values: Vec<String> = serde_json::from_str(&json).unwrap();
         assert!(!values.is_empty());
@@ -552,6 +563,7 @@ mod tests {
             .get_data(
                 processed_buffer,
                 "run=test&get=values&key=Mem Total".to_string(),
+                &mut DataMetrics::new(String::new()),
             )
             .unwrap();
         let memdata: EndMemValues = serde_json::from_str(&json).unwrap();
