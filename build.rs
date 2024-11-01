@@ -1,9 +1,11 @@
 use anyhow::Result;
 use std::env;
 use std::process::Command;
+use vergen_gitcl::{Emitter, GitclBuilder};
 
 fn main() -> Result<()> {
-    let _ = vergen::EmitBuilder::builder().git_sha(true).emit();
+    let gitcl = GitclBuilder::default().sha(true).build()?;
+    Emitter::default().add_instructions(&gitcl)?.emit()?;
 
     println!("cargo:rerun-if-changed=package.json");
     println!("cargo:rerun-if-changed=package-lock.json");
