@@ -1,6 +1,56 @@
 let got_cpu_util_data = false;
 let util_cpu_list: Map<string, CPUList> = new Map<string, CPUList>();
 
+let cpu_utilization_rules = {
+    data_type: "cpu_utilization",
+    pretty_name: "CPU Utilization",
+    rules: [
+        {
+            name: "User",
+            func: function (ruleOpts: RuleOpts) {
+                let system_util = get_data_key(ruleOpts.data_type, "System");
+                let findings = [];
+                let init_key = ruleOpts.runs[0];
+                let init_total_util: number = ruleOpts.per_run_data.get(init_key) + system_util.get(init_key);
+                for (const [key, value] of ruleOpts.per_run_data) {
+                    if (key == init_key) {
+                        continue;
+                    }
+                    let run_total_util: number = value + system_util.get(key);
+                    let cpu_diff = Math.ceil(Math.abs(run_total_util - init_total_util));
+                    findings.push(new Finding(
+                        `Average CPU Utilization difference between ${init_key} and ${key} is ${cpu_diff}%.`,
+                        cpu_diff > 10 ? Status.NotGood : Status.Good,
+                    ));
+                }
+                return findings;
+            },
+            good: "",
+            bad: "",
+        },
+        {
+            name: "idle",
+            func: function (ruleOpts: RuleOpts) {
+                let findings = [];
+                let init_key = ruleOpts.runs[0];
+                for (const [key, value] of ruleOpts.per_run_data) {
+                    if (key == init_key) {
+                        continue;
+                    }
+                    let idle_diff = Math.abs(ruleOpts.per_run_data.get(key) - ruleOpts.per_run_data.get(init_key));
+                    if (idle_diff > 10) {
+                        findings.push(new Finding(
+                            `Difference in Average 'Idle time' between ${key} and ${init_key} is ${idle_diff}.`,
+                        ));
+                    }
+                }
+                return findings;
+            },
+            good: "",
+            bad: "",
+        }
+    ],
+}
 function getUtilizationType(run, elem, type, run_data) {
     var cpu_type_datas = [];
     var type_data;
