@@ -1,6 +1,7 @@
 extern crate ctor;
 
 use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
+use crate::utils::DataMetrics;
 use crate::visualizer::{DataVisualizer, GetData};
 use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
@@ -331,7 +332,12 @@ impl GetData for CpuUtilization {
         Ok(vec!["keys".to_string(), "values".to_string()])
     }
 
-    fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
+    fn get_data(
+        &mut self,
+        buffer: Vec<ProcessedData>,
+        query: String,
+        _metrics: &mut DataMetrics,
+    ) -> Result<String> {
         let mut values = Vec::new();
         for data in buffer {
             match data {
@@ -407,6 +413,7 @@ fn init_cpu_utilization() {
 mod cpu_tests {
     use super::{CpuData, CpuUtilization, CpuUtilizationRaw, UtilData};
     use crate::data::{CollectData, CollectorParams, Data, ProcessedData};
+    use crate::utils::DataMetrics;
     use crate::visualizer::GetData;
 
     #[test]
@@ -438,6 +445,7 @@ mod cpu_tests {
             .get_data(
                 processed_buffer,
                 "run=test&get=values&=aggregate".to_string(),
+                &mut DataMetrics::new(String::new()),
             )
             .unwrap();
         let values: Vec<CpuData> = serde_json::from_str(&json).unwrap();
@@ -447,7 +455,11 @@ mod cpu_tests {
     #[test]
     fn test_get_util_types() {
         let types = CpuUtilization::new()
-            .get_data(Vec::new(), "run=test&get=keys".to_string())
+            .get_data(
+                Vec::new(),
+                "run=test&get=keys".to_string(),
+                &mut DataMetrics::new(String::new()),
+            )
             .unwrap();
         let values: Vec<&str> = serde_json::from_str(&types).unwrap();
         for type_str in values {
@@ -476,7 +488,11 @@ mod cpu_tests {
             processed_buffer.push(CpuUtilization::new().process_raw_data(buf).unwrap());
         }
         let json = CpuUtilization::new()
-            .get_data(processed_buffer, "run=test&get=values&key=user".to_string())
+            .get_data(
+                processed_buffer,
+                "run=test&get=values&key=user".to_string(),
+                &mut DataMetrics::new(String::new()),
+            )
             .unwrap();
         let values: Vec<UtilData> = serde_json::from_str(&json).unwrap();
         assert!(!values.is_empty());

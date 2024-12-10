@@ -132,6 +132,7 @@ dependencies = [
  "sysctl",
  "sysinfo",
  "tar",
+ "tdigest",
  "tempfile",
  "thiserror",
  "timerfd",
@@ -2184,6 +2185,15 @@ dependencies = [
  "filetime",
  "libc",
  "xattr",
+]
+
+[[package]]
+name = "tdigest"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c45d225a08ebccf0e0c7d46db4066ea8ab05b29d3750ecc1a04f1675978bf3c8"
+dependencies = [
+ "ordered-float",
 ]
 
 [[package]]
