@@ -1,7 +1,7 @@
 extern crate ctor;
 
 use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
-use crate::utils::DataMetrics;
+use crate::utils::{DataMetrics, ValueType};
 use crate::visualizer::{DataVisualizer, GetData};
 use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
@@ -9,6 +9,7 @@ use chrono::prelude::*;
 use ctor::ctor;
 use log::{trace, warn};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use sysinfo::{System, SystemExt};
 
 pub static SYSTEMINFO_FILE_NAME: &str = "system_info";
@@ -147,53 +148,101 @@ struct SUTConfigEntry {
     pub value: String,
 }
 
-fn get_values(buffer: SystemInfo) -> Result<String> {
+fn get_values(buffer: SystemInfo, metrics: &mut DataMetrics) -> Result<String> {
     let mut end_values = Vec::new();
+    let mut my_metrics = HashMap::new();
+
     let system_name = SUTConfigEntry {
         name: "System Name".to_string(),
-        value: buffer.system_name,
+        value: buffer.system_name.clone(),
     };
+    my_metrics.insert(
+        "System Name".to_string(),
+        ValueType::String(buffer.system_name),
+    );
     end_values.push(system_name);
+
     let os_version = SUTConfigEntry {
         name: "OS Version".to_string(),
-        value: buffer.os_version,
+        value: buffer.os_version.clone(),
     };
+    my_metrics.insert(
+        "OS Version".to_string(),
+        ValueType::String(buffer.os_version),
+    );
     end_values.push(os_version);
+
     let kernel_version = SUTConfigEntry {
         name: "Kernel Version".to_string(),
-        value: buffer.kernel_version,
+        value: buffer.kernel_version.clone(),
     };
+    my_metrics.insert(
+        "Kernel Version".to_string(),
+        ValueType::String(buffer.kernel_version),
+    );
     end_values.push(kernel_version);
+
     let region = SUTConfigEntry {
         name: "Region".to_string(),
-        value: buffer.instance_metadata.region,
+        value: buffer.instance_metadata.region.clone(),
     };
+    my_metrics.insert(
+        "Region".to_string(),
+        ValueType::String(buffer.instance_metadata.region),
+    );
     end_values.push(region);
+
     let instance_type = SUTConfigEntry {
         name: "Instance Type".to_string(),
-        value: buffer.instance_metadata.instance_type,
+        value: buffer.instance_metadata.instance_type.clone(),
     };
+    my_metrics.insert(
+        "Instance Type".to_string(),
+        ValueType::String(buffer.instance_metadata.instance_type),
+    );
     end_values.push(instance_type);
+
     let total_cpus = SUTConfigEntry {
         name: "Total CPUs".to_string(),
         value: buffer.total_cpus.to_string(),
     };
+    my_metrics.insert(
+        "Total CPUs".to_string(),
+        ValueType::UInt64(buffer.total_cpus as u64),
+    );
     end_values.push(total_cpus);
+
     let instance_id = SUTConfigEntry {
         name: "Instance ID".to_string(),
-        value: buffer.instance_metadata.instance_id,
+        value: buffer.instance_metadata.instance_id.clone(),
     };
+    my_metrics.insert(
+        "Instance ID".to_string(),
+        ValueType::String(buffer.instance_metadata.instance_id),
+    );
     end_values.push(instance_id);
+
     let ami_id = SUTConfigEntry {
         name: "AMI ID".to_string(),
-        value: buffer.instance_metadata.ami_id,
+        value: buffer.instance_metadata.ami_id.clone(),
     };
+    my_metrics.insert(
+        "AMI ID".to_string(),
+        ValueType::String(buffer.instance_metadata.ami_id),
+    );
     end_values.push(ami_id);
+
     let host_name = SUTConfigEntry {
         name: "Host Name".to_string(),
-        value: buffer.host_name,
+        value: buffer.host_name.clone(),
     };
+    my_metrics.insert("Host Name".to_string(), ValueType::String(buffer.host_name));
     end_values.push(host_name);
+
+    metrics
+        .values
+        .insert(SYSTEMINFO_FILE_NAME.to_string(), my_metrics);
+
     Ok(serde_json::to_string(&end_values)?)
 }
 
@@ -215,7 +264,7 @@ impl GetData for SystemInfo {
         &mut self,
         buffer: Vec<ProcessedData>,
         query: String,
-        _metrics: &mut DataMetrics,
+        metrics: &mut DataMetrics,
     ) -> Result<String> {
         let mut values = Vec::new();
         for data in buffer {
@@ -228,7 +277,7 @@ impl GetData for SystemInfo {
         let (_, req_str) = &param[1];
 
         match req_str.as_str() {
-            "values" => get_values(values[0].clone()),
+            "values" => get_values(values[0].clone(), metrics),
             _ => panic!("Unsupported API"),
         }
     }
