@@ -1,6 +1,7 @@
 extern crate ctor;
 
 use crate::data::{CollectData, Data, DataType, ProcessedData, TimeEnum};
+use crate::utils::DataMetrics;
 use crate::visualizer::{DataVisualizer, GetData};
 use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
@@ -204,7 +205,12 @@ impl GetData for KernelConfig {
         Ok(vec!["values".to_string()])
     }
 
-    fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
+    fn get_data(
+        &mut self,
+        buffer: Vec<ProcessedData>,
+        query: String,
+        _metrics: &mut DataMetrics,
+    ) -> Result<String> {
         let mut values = Vec::new();
         for data in buffer {
             match data {
@@ -258,6 +264,7 @@ fn init_kernel_config() {
 mod tests {
     use super::{KernelConfig, KernelConfigEntryGroup};
     use crate::data::{CollectData, CollectorParams, Data, ProcessedData};
+    use crate::utils::DataMetrics;
     use crate::visualizer::GetData;
 
     #[test]
@@ -284,7 +291,11 @@ mod tests {
                 .unwrap(),
         );
         let json = KernelConfig::new()
-            .get_data(processed_buffer, "run=test&get=values".to_string())
+            .get_data(
+                processed_buffer,
+                "run=test&get=values".to_string(),
+                &mut DataMetrics::new(String::new()),
+            )
             .unwrap();
         let values: Vec<KernelConfigEntryGroup> = serde_json::from_str(&json).unwrap();
         assert!(!values.is_empty());

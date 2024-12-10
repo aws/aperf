@@ -1,6 +1,7 @@
 extern crate ctor;
 
 use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
+use crate::utils::DataMetrics;
 use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata};
 use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
@@ -156,7 +157,12 @@ impl GetData for Netstat {
         Ok(vec!["keys".to_string(), "values".to_string()])
     }
 
-    fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
+    fn get_data(
+        &mut self,
+        buffer: Vec<ProcessedData>,
+        query: String,
+        _metrics: &mut DataMetrics,
+    ) -> Result<String> {
         let mut values = Vec::new();
         for data in buffer {
             match data {
@@ -212,6 +218,7 @@ fn init_netstat() {
 mod tests {
     use super::{EndNetData, Netstat, NetstatRaw};
     use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
+    use crate::utils::DataMetrics;
     use crate::visualizer::GetData;
 
     #[test]
@@ -234,7 +241,11 @@ mod tests {
         buffer.push(Data::NetstatRaw(netstat));
         processed_buffer.push(Netstat::new().process_raw_data(buffer[0].clone()).unwrap());
         let json = Netstat::new()
-            .get_data(processed_buffer, "run=test&get=keys".to_string())
+            .get_data(
+                processed_buffer,
+                "run=test&get=keys".to_string(),
+                &mut DataMetrics::new(String::new()),
+            )
             .unwrap();
         let values: Vec<&str> = serde_json::from_str(&json).unwrap();
         assert!(!values.is_empty());
@@ -254,6 +265,7 @@ mod tests {
             .get_data(
                 processed_buffer,
                 "run=test&get=values&key=TcpExt: TCPDSACKRecv".to_string(),
+                &mut DataMetrics::new(String::new()),
             )
             .unwrap();
         let data: EndNetData = serde_json::from_str(&json).unwrap();

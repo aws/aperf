@@ -29,8 +29,9 @@ pub mod systeminfo;
 pub mod utils;
 pub mod vmstat;
 
+use crate::utils::DataMetrics;
 use crate::visualizer::{GetData, ReportParams};
-use crate::{InitParams, APERF_FILE_FORMAT};
+use crate::{noop, InitParams, APERF_FILE_FORMAT};
 use anyhow::Result;
 use aperf_runlog::AperfRunlog;
 use aperf_stats::AperfStat;
@@ -285,10 +286,10 @@ macro_rules! processed_data {
                     )*
                 }
             }
-            pub fn get_data(&mut self, values: Vec<ProcessedData>, query: String) -> Result<String> {
+            pub fn get_data(&mut self, values: Vec<ProcessedData>, query: String, metrics: &mut DataMetrics) -> Result<String> {
                 match self {
                     $(
-                        ProcessedData::$x(ref mut value) => Ok(value.get_data(values, query)?),
+                        ProcessedData::$x(ref mut value) => Ok(value.get_data(values, query, metrics)?),
                     )*
                 }
             }
@@ -338,10 +339,6 @@ processed_data!(
     AperfRunlog,
     JavaProfile
 );
-
-macro_rules! noop {
-    () => {};
-}
 
 pub trait CollectData {
     fn prepare_data_collector(&mut self, _params: &CollectorParams) -> Result<()> {

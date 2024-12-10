@@ -4,6 +4,7 @@ extern crate lazy_static;
 pub mod data;
 pub mod record;
 pub mod report;
+pub mod utils;
 pub mod visualizer;
 use anyhow::Result;
 use chrono::prelude::*;
@@ -24,6 +25,7 @@ use std::sync::Mutex;
 use std::{fs, process, time};
 use thiserror::Error;
 use timerfd::{SetTimeFlags, TimerFd, TimerState};
+use utils::DataMetrics;
 
 pub static APERF_FILE_FORMAT: &str = "bin";
 pub static APERF_TMP: &str = "/tmp";
@@ -102,6 +104,11 @@ pub enum PDError {
 
     #[error("Dependency error: {}", .0)]
     DependencyError(String),
+}
+
+#[macro_export]
+macro_rules! noop {
+    () => {};
 }
 
 lazy_static! {
@@ -412,6 +419,7 @@ pub struct VisualizationData {
     pub visualizers: HashMap<String, visualizer::DataVisualizer>,
     pub js_files: HashMap<String, String>,
     pub run_names: Vec<String>,
+    pub analytics_data: HashMap<String, DataMetrics>,
 }
 
 impl VisualizationData {
@@ -420,6 +428,7 @@ impl VisualizationData {
             visualizers: HashMap::new(),
             js_files: HashMap::new(),
             run_names: Vec::new(),
+            analytics_data: HashMap::new(),
         }
     }
 
@@ -444,6 +453,8 @@ impl VisualizationData {
                 error_count += 1;
             }
         }
+        self.analytics_data
+            .insert(dir_name.clone(), DataMetrics::new(dir_name.clone()));
 
         /* Works if a new type of visualizer is introduced but data not present */
         if error_count == visualizers_len {
@@ -454,7 +465,7 @@ impl VisualizationData {
 
     pub fn add_visualizer(&mut self, name: String, dv: visualizer::DataVisualizer) {
         self.js_files.insert(dv.js_file_name.clone(), dv.js.clone());
-        self.visualizers.insert(name, dv);
+        self.visualizers.insert(name.clone(), dv);
     }
 
     pub fn get_all_js_files(&mut self) -> Result<Vec<(String, String)>> {
@@ -514,12 +525,20 @@ impl VisualizationData {
         let visualizer = self.visualizers.get_mut(visualizer_name).ok_or(
             PDError::VisualizerHashMapEntryError(visualizer_name.to_string()),
         )?;
-        visualizer.get_data(run_name.to_string(), query.clone())
+        visualizer.get_data(
+            run_name.to_string(),
+            query.clone(),
+            self.analytics_data.get_mut(run_name).unwrap(),
+        )
     }
 
     pub fn get_calls(&mut self, name: String) -> Result<Vec<String>> {
         let visualizer = self.visualizers.get_mut(&name).unwrap();
         visualizer.get_calls()
+    }
+
+    pub fn get_analytics(&mut self) -> Result<String> {
+        Ok(serde_json::to_string(&self.analytics_data)?)
     }
 }
 
