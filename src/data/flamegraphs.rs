@@ -1,6 +1,7 @@
 extern crate ctor;
 
 use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData};
+use crate::utils::DataMetrics;
 use crate::visualizer::{DataVisualizer, GetData, ReportParams};
 use crate::{get_file_name, PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
@@ -63,7 +64,7 @@ impl CollectData for FlamegraphRaw {
                 "inject",
                 "-j",
                 "-i",
-                &file_pathbuf.to_str().unwrap(),
+                file_pathbuf.to_str().unwrap(),
                 "-o",
                 perf_jit_loc.to_str().unwrap(),
             ])
@@ -149,7 +150,12 @@ impl GetData for Flamegraph {
         Ok(vec!["values".to_string()])
     }
 
-    fn get_data(&mut self, _buffer: Vec<ProcessedData>, _query: String) -> Result<String> {
+    fn get_data(
+        &mut self,
+        _buffer: Vec<ProcessedData>,
+        _query: String,
+        _metrics: &mut DataMetrics,
+    ) -> Result<String> {
         let values: Vec<&str> = Vec::new();
         Ok(serde_json::to_string(&values)?)
     }

@@ -1,3 +1,4 @@
+use crate::utils::DataMetrics;
 use crate::{data::Data, data::ProcessedData, get_file, PDError};
 use anyhow::Result;
 use log::debug;
@@ -128,7 +129,12 @@ impl DataVisualizer {
         Ok(())
     }
 
-    pub fn get_data(&mut self, name: String, query: String) -> Result<String> {
+    pub fn get_data(
+        &mut self,
+        name: String,
+        query: String,
+        metrics: &mut DataMetrics,
+    ) -> Result<String> {
         if !self.data_available.get(&name).unwrap() {
             debug!("No data available for: {} query: {}", self.api_name, query);
             return Ok("No data collected".to_string());
@@ -144,7 +150,7 @@ impl DataVisualizer {
         if values.is_empty() {
             return Ok("No data collected".to_string());
         }
-        self.data.get_data(values.clone(), query)
+        self.data.get_data(values.clone(), query, metrics)
     }
 
     pub fn get_calls(&mut self) -> Result<Vec<String>> {
@@ -234,7 +240,12 @@ pub trait GetData {
     fn get_calls(&mut self) -> Result<Vec<String>> {
         unimplemented!();
     }
-    fn get_data(&mut self, _values: Vec<ProcessedData>, _query: String) -> Result<String> {
+    fn get_data(
+        &mut self,
+        _values: Vec<ProcessedData>,
+        _query: String,
+        _metrics: &mut DataMetrics,
+    ) -> Result<String> {
         unimplemented!();
     }
     fn process_raw_data(&mut self, _buffer: Data) -> Result<ProcessedData> {
@@ -250,6 +261,7 @@ mod tests {
     use super::DataVisualizer;
     use crate::data::cpu_utilization::{CpuData, CpuUtilization};
     use crate::data::{ProcessedData, TimeEnum};
+    use crate::utils::DataMetrics;
     use std::path::PathBuf;
 
     #[test]
@@ -273,6 +285,7 @@ mod tests {
             .get_data(
                 "test".to_string(),
                 "run=test&get=values&key=aggregate".to_string(),
+                &mut DataMetrics::new(String::new()),
             )
             .unwrap();
         let values: Vec<CpuData> = serde_json::from_str(&ret).unwrap();
