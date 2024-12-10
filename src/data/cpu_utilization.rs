@@ -1,7 +1,7 @@
 extern crate ctor;
 
 use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
-use crate::utils::DataMetrics;
+use crate::utils::{DataMetrics, Metric};
 use crate::visualizer::{DataVisualizer, GetData};
 use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
@@ -10,6 +10,7 @@ use ctor::ctor;
 use log::trace;
 use procfs::{CpuTime, KernelStats};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::ops::Sub;
 
 pub static CPU_UTILIZATION_FILE_NAME: &str = "cpu_utilization";
@@ -240,10 +241,19 @@ fn set_as_percent(value: UtilValues) -> UtilValues {
     new_values
 }
 
-pub fn get_aggregate_data(values: Vec<CpuData>) -> Result<String> {
+pub fn get_aggregate_data(values: Vec<CpuData>, metrics: &mut DataMetrics) -> Result<String> {
     let mut end_values = Vec::new();
     let mut prev_cpu_data = values[0].values;
     let time_zero = values[0].time;
+    let mut metric_map = HashMap::new();
+    let mut user = Metric::new("User".to_string());
+    let mut nice = Metric::new("Nice".to_string());
+    let mut system = Metric::new("System".to_string());
+    let mut irq = Metric::new("Irq".to_string());
+    let mut softirq = Metric::new("SoftIrq".to_string());
+    let mut idle = Metric::new("Idle".to_string());
+    let mut iowait = Metric::new("Iowait".to_string());
+    let mut steal = Metric::new("Steal".to_string());
     for value in values {
         let mut end_value = CpuData::new();
         let current_cpu_data = value.values;
@@ -255,10 +265,29 @@ pub fn get_aggregate_data(values: Vec<CpuData>) -> Result<String> {
         }
         end_value.cpu = value.cpu;
         end_value.values = set_as_percent(current_cpu_data - prev_cpu_data);
+        user.insert_value(end_value.values.user as f64);
+        nice.insert_value(end_value.values.nice as f64);
+        system.insert_value(end_value.values.system as f64);
+        irq.insert_value(end_value.values.irq as f64);
+        softirq.insert_value(end_value.values.softirq as f64);
+        idle.insert_value(end_value.values.idle as f64);
+        iowait.insert_value(end_value.values.iowait as f64);
+        steal.insert_value(end_value.values.steal as f64);
         end_value.set_time(current_time - time_zero);
         end_values.push(end_value);
         prev_cpu_data = current_cpu_data;
     }
+    metric_map.insert("User".to_string(), user.form_stats());
+    metric_map.insert("Nice".to_string(), nice.form_stats());
+    metric_map.insert("System".to_string(), system.form_stats());
+    metric_map.insert("Irq".to_string(), irq.form_stats());
+    metric_map.insert("SoftIrq".to_string(), softirq.form_stats());
+    metric_map.insert("Idle".to_string(), idle.form_stats());
+    metric_map.insert("Iowait".to_string(), iowait.form_stats());
+    metric_map.insert("Steal".to_string(), steal.form_stats());
+    metrics
+        .values
+        .insert(CPU_UTILIZATION_FILE_NAME.to_string(), metric_map);
     Ok(serde_json::to_string(&end_values)?)
 }
 
@@ -336,7 +365,7 @@ impl GetData for CpuUtilization {
         &mut self,
         buffer: Vec<ProcessedData>,
         query: String,
-        _metrics: &mut DataMetrics,
+        metrics: &mut DataMetrics,
     ) -> Result<String> {
         let mut values = Vec::new();
         for data in buffer {
@@ -370,7 +399,7 @@ impl GetData for CpuUtilization {
                     for value in values {
                         temp_values.push(value.total);
                     }
-                    get_aggregate_data(temp_values)
+                    get_aggregate_data(temp_values, metrics)
                 } else {
                     get_type(values[0].per_cpu.len() as u64, values, key)
                 }
