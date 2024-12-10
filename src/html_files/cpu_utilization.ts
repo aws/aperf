@@ -1,6 +1,50 @@
 let got_cpu_util_data = false;
 let util_cpu_list: Map<string, CPUList> = new Map<string, CPUList>();
 
+let cpu_utilization_rules = {
+    data_type: "cpu_utilization",
+    pretty_name: "CPU Utilization",
+    rules: [
+        {
+            name: "User",
+            single_run_rule: function* (opts): Generator<Finding, void, any> {
+                let system_util = get_data_key(opts.data_type, "System");
+                let total_util: number = opts.base_run_data + system_util.get(opts.base_run);
+                if (total_util < 50) {
+                    yield new Finding(
+                        `Average CPU Utilization for '${opts.base_run}' is less than 50%.`,
+                        Status.NotGood,
+                    );
+                }
+            },
+            per_run_rule: function* (opts): Generator<Finding, void, any> {
+                let system_util = get_data_key(opts.data_type, "System");
+                let init_total_util: number = opts.base_run_data + system_util.get(opts.base_run);
+                let run_total_util: number = opts.this_run_data + system_util.get(opts.this_run);
+                let cpu_diff = Math.ceil(Math.abs(run_total_util - init_total_util));
+                yield new Finding(
+                    `Average CPU Utilization difference between '${opts.base_run}' and '${opts.this_run}' is ${cpu_diff}%.`,
+                    cpu_diff > 10 ? Status.NotGood : Status.Good,
+                );
+            },
+        },
+        {
+            name: "Idle",
+            single_run_rule: function* (opts): Generator<Finding, void, any> {
+                if (opts.base_run_data > 50) {
+                    yield new Finding(`Average Idle time for '${opts.base_run}' is greater than 50%.`, Status.NotGood);
+                }
+            },
+            per_run_rule: function* (opts): Generator<Finding, void, any> {
+                let idle_diff = Math.ceil(Math.abs(opts.this_run_data - opts.base_run_data));
+                yield new Finding(
+                    `Average Idle time difference between '${opts.base_run}' and '${opts.this_run}' is ${idle_diff}%.`,
+                    idle_diff > 10 ? Status.NotGood : Status.Good,
+                )
+            },
+        }
+    ]
+}
 function getUtilizationType(run, elem, type, run_data) {
     var cpu_type_datas = [];
     var type_data;

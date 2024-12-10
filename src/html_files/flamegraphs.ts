@@ -34,11 +34,9 @@ function getFlamegraphInfo(run, container_id) {
     addElemToNode(container_id, div);
 }
 
-function flamegraphs(set: boolean|string) {
+function flamegraphs(set) {
     if (set == got_flamegraphs_data) {
         return;
-    } else if (typeof(set) == "boolean") {
-        set = "flamegraphs";
     }
     got_flamegraphs_data = set;
     clear_and_create('flamegraphs');

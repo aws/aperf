@@ -14,7 +14,7 @@ DataTypes.set('meminfo', {name: 'meminfo', hideClass: 'meminfoHide', trueId: 'me
 DataTypes.set('netstat', {name: 'netstat', hideClass: 'netstatHide', trueId: 'netstat_hide_yes', callback: netStat});
 DataTypes.set('interrupts', {name: 'interrupts', hideClass: '', trueId: '', callback: interrupts});
 DataTypes.set('cpu_utilization', {name: 'cpuutilization', hideClass: '', trueId: '', callback: cpuUtilization});
-DataTypes.set('system_info', {name: 'systeminfo', hideClass: '', trueId: '', callback: systemInfo});
+DataTypes.set('system_info', {name: 'systeminfo', hideClass: 'landingChoice', trueId: '', callback: systemInfo});
 DataTypes.set('flamegraphs', {name: 'flamegraphs', hideClass: 'flamegraphsSelection', trueId: '', callback: flamegraphs});
 DataTypes.set('top_functions', {name: 'topfunctions', hideClass: '', trueId: '', callback: topFunctions});
 DataTypes.set('processes', {name: 'processes', hideClass: '', trueId: '', callback: processes});
@@ -44,7 +44,11 @@ function display_tab(name) {
 	if (datatype.hideClass != "") {
 		let queryInput = `input[name="${datatype.hideClass}"]:checked`;
 		let checkedId = document.querySelector(queryInput).id;
-		datatype.callback(checkedId == datatype.trueId);
+		if (datatype.trueId != "") {
+			datatype.callback(checkedId == datatype.trueId);
+		} else {
+			datatype.callback(checkedId);
+		}
 	} else {
 		datatype.callback();
 	}

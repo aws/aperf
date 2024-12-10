@@ -11,7 +11,7 @@
 			<div class="aperf">APerf</div>
 			<button class="tablinks" name="configure"><div class="icon-text">Configure</div><div class="configure"/></button>
 			<!--- Configure should be the first tab. Add any new tabs below this. -->
-			<button class="tablinks" name="system_info" id="default">SUT Config</button>
+			<button class="tablinks" name="system_info" id="default">Report</button>
 			<button class="tablinks" name="cpu_utilization">CPU Utilization</button>
 			<button class="tablinks" name="flamegraphs">Flamegraphs</button>
 			<button class="tablinks" name="top_functions">Top Functions</button>
@@ -30,6 +30,12 @@
 		<div class="content">
 			<div id="header" class="all-runs"></div>
 			<div id="system_info" class="tabcontent extra">
+				<div class="extra">
+					<input type="radio" class="systeminfo-select" name="landingChoice" id="findings" checked>Findings</button>
+					<input type="radio" class="systeminfo-select" name="landingChoice" id="sutconfig">System Info</button>
+					<h3 id="landing-text"></h3>
+				</div>
+				<div id="findings-data"></div>
 				<div id="systeminfo-runs"></div>
 			</div>
 			<div id="cpu_utilization" class="tabcontent">
@@ -131,6 +137,7 @@
 		<script type="text/javascript" src="data/js/aperf_run_stats.js"></script>
 		<script type="text/javascript" src="data/js/aperf_runlog.js"></script>
 		<script type="text/javascript" src="data/js/java_profile.js"></script>
+		<script type="text/javascript" src="data/js/analytics.js"></script>
 		<script type="text/javascript" src="js/utils.js"></script>
 		<script type="text/javascript" src="js/plotly.js" charset="utf-8"></script>
 		<script type="text/javascript" src="js/system_info.js"></script>
@@ -149,6 +156,7 @@
 		<script type="text/javascript" src="js/aperf_run_stats.js"></script>
 		<script type="text/javascript" src="js/aperf_runlog.js"></script>
 		<script type="text/javascript" src="js/configure.js"></script>
+		<script type="text/javascript" src="js/analytics.js"></script>
 		<script type="text/javascript" src="index.js"></script>
 	</body>
 </html>
