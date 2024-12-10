@@ -1,6 +1,7 @@
 extern crate ctor;
 
 use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
+use crate::utils::DataMetrics;
 use crate::visualizer::{DataVisualizer, GetData};
 use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
@@ -289,7 +290,12 @@ impl GetData for InterruptData {
         Ok(vec!["keys".to_string(), "values".to_string()])
     }
 
-    fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
+    fn get_data(
+        &mut self,
+        buffer: Vec<ProcessedData>,
+        query: String,
+        _metrics: &mut DataMetrics,
+    ) -> Result<String> {
         let mut values = Vec::new();
         for data in buffer {
             match data {
@@ -345,6 +351,7 @@ mod tests {
     use super::{InterruptData, InterruptDataRaw, InterruptLine, InterruptLineData};
     use crate::data::{CollectData, CollectorParams, Data, ProcessedData};
     use crate::get_file;
+    use crate::utils::DataMetrics;
     use crate::visualizer::{DataVisualizer, GetData};
 
     #[test]
@@ -412,7 +419,11 @@ mod tests {
             processed_buffer.push(InterruptData::new().process_raw_data(buf).unwrap());
         }
         let json = InterruptData::new()
-            .get_data(processed_buffer, "run=test&get=keys".to_string())
+            .get_data(
+                processed_buffer,
+                "run=test&get=keys".to_string(),
+                &mut DataMetrics::new(String::new()),
+            )
             .unwrap();
         let values: Vec<String> = serde_json::from_str(&json).unwrap();
         assert!(!values.is_empty());
@@ -432,12 +443,20 @@ mod tests {
             processed_buffer.push(InterruptData::new().process_raw_data(buf).unwrap());
         }
         let json = InterruptData::new()
-            .get_data(processed_buffer.clone(), "run=test&get=keys".to_string())
+            .get_data(
+                processed_buffer.clone(),
+                "run=test&get=keys".to_string(),
+                &mut DataMetrics::new(String::new()),
+            )
             .unwrap();
         let values: Vec<String> = serde_json::from_str(&json).unwrap();
         let key_query = format!("run=test&get=values&key={}", values[0]);
         let ld_json = InterruptData::new()
-            .get_data(processed_buffer, key_query)
+            .get_data(
+                processed_buffer,
+                key_query,
+                &mut DataMetrics::new(String::new()),
+            )
             .unwrap();
         let line_data: Vec<InterruptLineData> = serde_json::from_str(&ld_json).unwrap();
         assert!(!line_data.is_empty());

@@ -1,6 +1,7 @@
 extern crate ctor;
 
 use crate::data::{ProcessedData, TimeEnum};
+use crate::utils::DataMetrics;
 use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata, ReportParams};
 use crate::VISUALIZATION_DATA;
 use anyhow::Result;
@@ -103,7 +104,12 @@ impl GetData for AperfStat {
         Ok(vec!["keys".to_string(), "values".to_string()])
     }
 
-    fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
+    fn get_data(
+        &mut self,
+        buffer: Vec<ProcessedData>,
+        query: String,
+        _metrics: &mut DataMetrics,
+    ) -> Result<String> {
         let mut values = Vec::new();
         for data in buffer {
             match data {

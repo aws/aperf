@@ -2,6 +2,7 @@ extern crate ctor;
 
 use crate::data::constants::*;
 use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
+use crate::utils::DataMetrics;
 use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata};
 use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
@@ -308,7 +309,12 @@ impl GetData for Diskstats {
         Ok(vec!["keys".to_string(), "values".to_string()])
     }
 
-    fn get_data(&mut self, buffer: Vec<ProcessedData>, query: String) -> Result<String> {
+    fn get_data(
+        &mut self,
+        buffer: Vec<ProcessedData>,
+        query: String,
+        _metrics: &mut DataMetrics,
+    ) -> Result<String> {
         let mut values = Vec::new();
         for data in buffer {
             match data {
@@ -364,6 +370,7 @@ fn init_diskstats() {
 mod tests {
     use super::{DiskstatKeys, Diskstats, DiskstatsRaw, EndDiskValues};
     use crate::data::{CollectData, CollectorParams, Data, ProcessedData};
+    use crate::utils::DataMetrics;
     use crate::visualizer::GetData;
     use std::collections::HashMap;
     use strum::IntoEnumIterator;
@@ -420,7 +427,11 @@ mod tests {
                 .unwrap(),
         );
         let json = Diskstats::new()
-            .get_data(processed_buffer, "run=test&get=keys".to_string())
+            .get_data(
+                processed_buffer,
+                "run=test&get=keys".to_string(),
+                &mut DataMetrics::new(String::new()),
+            )
             .unwrap();
         let values: Vec<String> = serde_json::from_str(&json).unwrap();
         assert!(!values.is_empty());
@@ -445,6 +456,7 @@ mod tests {
             .get_data(
                 processed_buffer,
                 "run=test&get=values&key=Reads".to_string(),
+                &mut DataMetrics::new(String::new()),
             )
             .unwrap();
         let data: EndDiskValues = serde_json::from_str(&json).unwrap();

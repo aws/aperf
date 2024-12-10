@@ -1,6 +1,7 @@
 extern crate ctor;
 
 use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData};
+use crate::utils::DataMetrics;
 use crate::visualizer::{DataVisualizer, GetData, ReportParams};
 use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
@@ -159,7 +160,12 @@ impl GetData for PerfProfile {
         Ok(vec!["values".to_string()])
     }
 
-    fn get_data(&mut self, buffer: Vec<ProcessedData>, _query: String) -> Result<String> {
+    fn get_data(
+        &mut self,
+        buffer: Vec<ProcessedData>,
+        _query: String,
+        _metrics: &mut DataMetrics,
+    ) -> Result<String> {
         let mut values = Vec::new();
         for data in buffer {
             match data {

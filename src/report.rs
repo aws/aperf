@@ -199,6 +199,7 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
     let index_css = include_str!("html_files/index.css");
     let index_js = include_str!(concat!(env!("JS_DIR"), "/index.js"));
     let utils_js = include_str!(concat!(env!("JS_DIR"), "/utils.js"));
+    let analytics_js = include_str!(concat!(env!("JS_DIR"), "/analytics.js"));
     let plotly_js = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/node_modules/plotly.js/dist/plotly.min.js"
@@ -221,6 +222,7 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
     let mut index_html_file = File::create(report_name.join("index.html"))?;
     let mut index_css_file = File::create(report_name.join("index.css"))?;
     let mut index_js_file = File::create(report_name.join("index.js"))?;
+    let mut analytics_js_file = File::create(report_name.join("js/analytics.js"))?;
     let mut utils_js_file = File::create(report_name.join("js/utils.js"))?;
     let mut plotly_js_file = File::create(report_name.join("js/plotly.js"))?;
     let mut configure_js_file = File::create(report_name.join("js/configure.js"))?;
@@ -229,6 +231,7 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
     write!(index_html_file, "{}", index_html)?;
     write!(index_css_file, "{}", index_css)?;
     write!(index_js_file, "{}", index_js)?;
+    write!(analytics_js_file, "{}", analytics_js)?;
     write!(utils_js_file, "{}", utils_js)?;
     write!(plotly_js_file, "{}", plotly_js)?;
     write!(configure_js_file, "{}", configure_js)?;
@@ -281,7 +284,7 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
                     if keys {
                         for key in &temp_keys {
                             let query = format!("run={}&get=values&key={}", run_name, key);
-                            data = visualizer.get_data(run_name, &api_name, query)?;
+                            data = visualizer.get_data(run_name, &api_name, query.clone())?;
                             run.key_values.insert(key.clone(), data.clone());
                         }
                     } else {
@@ -299,6 +302,11 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
         let str_out_data = format!("{}_raw_data = {}", api.name.clone(), out_data.clone());
         write!(out_file, "{}", str_out_data)?;
     }
+    let out_analytics = report_name.join("data/js/analytics.js");
+    let mut out_file = File::create(out_analytics)?;
+    let stats = visualizer.get_analytics()?;
+    let str_out_stats = format!("raw_analytics = {}", stats);
+    write!(out_file, "{}", str_out_stats)?;
     /* Generate aperf_report.tar.gz */
     info!("Generating {}", report_name_tgz.display());
     let tar_gz = File::create(&report_name_tgz)?;
