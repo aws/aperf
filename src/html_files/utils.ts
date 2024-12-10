@@ -15,7 +15,9 @@ declare let flamegraph_raw_data;
 declare let aperf_run_stats_raw_data;
 declare let java_profile_raw_data;
 declare let aperf_runlog_raw_data;
+declare let raw_analytics;
 
+let comparator = 'mean';
 let all_run_keys: Array<string> = new Array<string>();
 let key_limits: Map<string, Limits> = new Map<string, Limits>();
 
@@ -170,4 +172,38 @@ function allRunCPUListUnchanged(cpu_list) {
         }
     }
     return true;
+}
+
+function get_inside_value(data) {
+    if ('F64' in data) {
+        return data['F64'];
+    } else if ('UInt64' in data) {
+        return data['UInt64'];
+    } else if ('String' in data) {
+        return data['String'];
+    } else if ('Stats' in data) {
+        if (comparator == 'mean') {
+            return data['Stats']['mean'];
+        } else if (comparator == 'p99') {
+            return data['Stats']['p99'];
+        } else if (comparator == 'p90') {
+            return data['Stats']['p90'];
+        } else {
+            return undefined;
+        }
+    } else {
+        return undefined;
+    }
+}
+
+function get_data_key(data_type, key) {
+    let key_value_map = new Map<string, any>();
+    for (let run in raw_analytics) {
+        let run_data = raw_analytics[run].values;
+        if (key in run_data[data_type]) {
+            let v = run_data[data_type][key];
+            key_value_map.set(run, get_inside_value(v));
+        }
+    }
+    return key_value_map;
 }
