@@ -7,10 +7,20 @@ fn main() -> Result<()> {
 
     println!("cargo:rerun-if-changed=package.json");
     println!("cargo:rerun-if-changed=package-lock.json");
-    let status = Command::new("npm").arg("install").spawn()?.wait()?;
-    if !status.success() {
-        std::process::exit(1);
+    match Command::new("npm").arg("install").spawn() {
+        Err(_proc) => {
+            println!("Build requires npm, but it was not found. Please install Node >= 16.16.0.");
+            std::process::exit(1);
+        }
+        Ok(mut child) => {
+            let status = child.wait()?;
+            if !status.success() {
+                println!("Command \"npm install\" failed.");
+                std::process::exit(1);
+            }
+        }
     }
+
     let jsdir = format!("{}/js", env::var("OUT_DIR").unwrap());
     println!("cargo:rustc-env=JS_DIR={}", jsdir);
     println!("cargo:rerun-if-changed=src/html_files/");
@@ -25,6 +35,7 @@ fn main() -> Result<()> {
         .spawn()?
         .wait()?;
     if !status.success() {
+        println!("Failed to compile typescript.");
         std::process::exit(1);
     }
     Ok(())
