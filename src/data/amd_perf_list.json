@@ -1,0 +1,200 @@
+[
+  {
+    "name": "ipc",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Cycles",
+        "config": 118
+      }
+    ],
+    "scale": 1
+  },
+  {
+    "name": "branch-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Branch-Mispredictions",
+        "config": 195
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "data-l1-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "L1-Data-Fills",
+        "config": 65348
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "inst-l1-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "L1-Instruction-Misses",
+        "config": 4192
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "l2-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "L2-Demand-Misses",
+        "config": 2404
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "l3-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "L1-Any-Fills-DRAM",
+        "config": 2116
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "stall_frontend_pkc",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Frontend-Stalls",
+        "config": 169
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Cycles",
+        "config": 118
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "inst-tlb-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instruction-TLB-Misses",
+        "config": 132
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "inst-tlb-tw-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instruction-TLB-TW-Misses",
+        "config": 3973
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "data-tlb-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Data-TLB-Misses",
+        "config": 65349
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "data-tlb-tw-pki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Data-TLB-TW-Misses",
+        "config": 61509
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  }
+]

@@ -1,0 +1,164 @@
+[
+  {
+    "name": "l2-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "L2",
+        "config": 7973
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "inst-tlb-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instruction-TLB",
+        "config": 8209
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "inst-tlb-tw-pki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instruction-TLB-TW",
+        "config": 3601
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "data-rd-tlb-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Data-RD-TLB",
+        "config": 8210
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "data-st-tlb-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Data-ST-TLB",
+        "config": 8211
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "data-rd-tlb-tw-pki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Data-RD-TLB-TW",
+        "config": 3602
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "data-st-tlb-tw-pki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Data-ST-TLB-TW",
+        "config": 3603
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "stall-frontend-pkc",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Frontend-Stalls",
+        "config": 100663708
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Cycles",
+        "config": 60
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "stall-backend-pkc",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Backend-Stalls",
+        "config": 676
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Slots",
+        "config": 420
+      }
+    ],
+    "scale": 1000
+  }
+]

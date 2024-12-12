@@ -1,0 +1,38 @@
+[
+  {
+    "name": "stall-frontend-pkc",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Frontend-Stalls",
+        "config": 83886492
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Cycles",
+        "config": 60
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "stall-backend-pkc",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Backend-Stalls",
+        "config": 676
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Slots",
+        "config": 420
+      }
+    ],
+    "scale": 1000
+  }
+]

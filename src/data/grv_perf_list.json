@@ -1,0 +1,236 @@
+[
+  {
+    "name": "ipc",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 8
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Cycles",
+        "config": 17
+      }
+    ],
+    "scale": 1
+  },
+  {
+    "name": "stall-frontend-pkc",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Frontend-Stalls",
+        "config": 35
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Cycles",
+        "config": 17
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "branch-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Branches",
+        "config": 16
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 8
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "code-sparsity",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Code-Sparsity",
+        "config": 284
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 8
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "inst-tlb-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instruction-TLB",
+        "config": 2
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 8
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "inst-tlb-tw-pki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instruction-TLB-TW",
+        "config": 53
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 8
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "inst-l1-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "L1-Instructions",
+        "config": 1
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 8
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "stall-backend-pkc",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Backend-Stalls",
+        "config": 36
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Cycles",
+        "config": 17
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "l3-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "L3",
+        "config": 55
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 8
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "l2-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "L2",
+        "config": 23
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 8
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "data-tlb-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Data-TLB",
+        "config": 5
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 8
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "data-tlb-tw-pki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Data-TLB-TW",
+        "config": 52
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 8
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "data-l1-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "L1-Data",
+        "config": 3
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 8
+      }
+    ],
+    "scale": 1000
+  }
+]

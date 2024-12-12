@@ -4,18 +4,6 @@ pub mod constants;
 pub mod cpu_utilization;
 pub mod diskstats;
 pub mod flamegraphs;
-cfg_if::cfg_if! {
-    if #[cfg(target_arch = "aarch64")] {
-        pub mod grv_perf_events;
-    } else if #[cfg(any(target_arch = "x86", target_arch = "x86_64"))] {
-        pub mod intel_perf_events;
-        pub mod intel_icelake_perf_events;
-        pub mod intel_sapphire_rapids_perf_events;
-        pub mod amd_perf_events;
-        pub mod amd_genoa_perf_events;
-        pub mod amd_milan_perf_events;
-    }
-}
 pub mod interrupts;
 pub mod java_profile;
 pub mod kernel_config;
