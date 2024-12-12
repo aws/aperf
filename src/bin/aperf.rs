@@ -1,4 +1,5 @@
 use anyhow::Result;
+use aperf::pmu::{custom_pmu, CustomPMU};
 use aperf::record::{record, Record};
 use aperf::report::{report, Report};
 use aperf::{PDError, APERF_RUNLOG, APERF_TMP};
@@ -39,6 +40,9 @@ enum Commands {
 
     /// Generate an HTML report based on the data collected.
     Report(Report),
+
+    /// Create a custom PMU configuration file for use with Aperf record.
+    CustomPMU(CustomPMU),
 }
 
 fn init_logger(verbose: u8, runlog: &PathBuf) -> Result<()> {
@@ -98,6 +102,7 @@ fn main() -> Result<()> {
     match cli.command {
         Commands::Record(r) => record(&r, &tmp_dir_path_buf, &runlog),
         Commands::Report(r) => report(&r, &tmp_dir_path_buf),
+        Commands::CustomPMU(r) => custom_pmu(&r),
     }?;
     fs::remove_dir_all(tmp_dir_path_buf)?;
     Ok(())

@@ -56,6 +56,7 @@ pub struct CollectorParams {
     pub tmp_dir: PathBuf,
     pub signal: Signal,
     pub runlog: PathBuf,
+    pub pmu_config: Option<PathBuf>,
 }
 
 impl CollectorParams {
@@ -70,6 +71,7 @@ impl CollectorParams {
             tmp_dir: PathBuf::new(),
             signal: signal::SIGTERM,
             runlog: PathBuf::new(),
+            pmu_config: Option::None,
         }
     }
 }
@@ -129,6 +131,7 @@ impl DataType {
         self.collector_params.profile = param.profile.clone();
         self.collector_params.tmp_dir = param.tmp_dir.clone();
         self.collector_params.runlog = param.runlog.clone();
+        self.collector_params.pmu_config = param.pmu_config.clone();
 
         self.file_handle = Some(
             OpenOptions::new()

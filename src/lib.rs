@@ -2,6 +2,7 @@
 extern crate lazy_static;
 
 pub mod data;
+pub mod pmu;
 pub mod record;
 pub mod report;
 pub mod visualizer;
@@ -93,6 +94,12 @@ pub enum PDError {
 
     #[error("File not found {}", .0)]
     VisualizerFileNotFound(String),
+
+    #[error("Custom PMU config file not provided.")]
+    PMUCustomFileNotFound,
+
+    #[error("PMU config file is invalid.")]
+    PMUFileInvalid,
 
     #[error("Run data not available")]
     InvalidRunData,
@@ -530,6 +537,7 @@ pub struct InitParams {
     pub dir_name: String,
     pub period: u64,
     pub profile: HashMap<String, String>,
+    pub pmu_config: Option<PathBuf>,
     pub interval: u64,
     pub run_name: String,
     pub collector_version: String,
@@ -568,6 +576,7 @@ impl InitParams {
             dir_name,
             period: 0,
             profile: HashMap::new(),
+            pmu_config: Option::None,
             interval: 0,
             run_name,
             collector_version,
