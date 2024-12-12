@@ -41,6 +41,7 @@ fn test_record() {
             period: 2,
             profile: false,
             profile_java: None,
+            pmu_config: None,
         };
         let runlog = tempdir.join(APERF_RUNLOG);
         fs::File::create(&runlog).unwrap();
@@ -70,6 +71,7 @@ fn test_report() {
             period: 2,
             profile: false,
             profile_java: None,
+            pmu_config: None,
         };
         let runlog = tempdir.join(APERF_RUNLOG);
         fs::File::create(&runlog).unwrap();

@@ -7,11 +7,13 @@ use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
 use chrono::prelude::*;
 use ctor::ctor;
-use log::{trace, warn};
+use log::{error, info, trace, warn};
 use perf_event::events::{Raw, Software};
 use perf_event::{Builder, Counter, Group, ReadFormat};
 use serde::{Deserialize, Serialize};
+use std::fs::File;
 use std::io::{BufRead, BufReader, ErrorKind};
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 #[cfg(target_arch = "aarch64")]
@@ -145,7 +147,7 @@ pub fn to_events(data: &[u8]) -> Result<Vec<NamedCtr>> {
 }
 
 impl CollectData for PerfStatRaw {
-    fn prepare_data_collector(&mut self, _params: &CollectorParams) -> Result<()> {
+    fn prepare_data_collector(&mut self, params: &CollectorParams) -> Result<()> {
         let num_cpus = match unsafe { libc::sysconf(libc::_SC_NPROCESSORS_ONLN as libc::c_int) } {
             -1 => {
                 warn!("Could not get the number of cpus in the system with sysconf.");
@@ -157,7 +159,7 @@ impl CollectData for PerfStatRaw {
 
         cfg_if::cfg_if! {
             if #[cfg(target_arch = "aarch64")] {
-                let perf_list = to_events(arm64::perf_list::GRV_EVENTS)?;
+                let mut perf_list = to_events(arm64_perf_list::GRV_EVENTS)?;
             } else if #[cfg(any(target_arch = "x86", target_arch = "x86_64"))] {
                 let cpu_info = crate::data::utils::get_cpu_info()?;
                 let platform_specific_counter: &[u8];
@@ -187,11 +189,30 @@ impl CollectData for PerfStatRaw {
                     return Err(PDError::CollectorPerfUnsupportedCPU.into());
                 }
 
-                let perf_list = form_events_map(base, platform_specific_counter)?;
+                let mut perf_list = form_events_map(base, platform_specific_counter)?;
             } else {
                 return Err(PDError::CollectorPerfUnsupportedCPU.into());
             }
         }
+        if let Some(custom_file) = &params.pmu_config {
+            let f = File::open(custom_file)?;
+            let user_provided_list: Result<Vec<NamedCtr>, serde_json::Error> =
+                serde_json::from_reader(&f);
+            match user_provided_list {
+                Ok(ul) => {
+                    info!("Using custom PMU configuration provided by user.");
+                    perf_list = ul;
+                }
+                Err(_) => {
+                    error!("User provided PMU configuration is invalid. Aperf exiting...");
+                    std::process::exit(1);
+                }
+            }
+        }
+        /* Write the pmu_config being used to the recorded data */
+        let perf_list_pathbuf = PathBuf::from(&params.data_dir).join("pmu_config.json");
+        let f = File::create(&perf_list_pathbuf)?;
+        serde_json::to_writer_pretty(f, &perf_list)?;
         for cpu in 0..num_cpus {
             for named_ctr in &perf_list {
                 let perf_group = Builder::new(Software::DUMMY)
