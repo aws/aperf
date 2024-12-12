@@ -1,0 +1,254 @@
+[
+  {
+    "name": "ipc",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Cycles",
+        "config": 60
+      }
+    ],
+    "scale": 1
+  },
+  {
+    "name": "stall-frontend-pkc",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Frontend-Stalls",
+        "config": 67109276
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Cycles",
+        "config": 60
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "branch-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Branches",
+        "config": 197
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "inst-tlb-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instruction-TLB",
+        "config": 8325
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "inst-tlb-tw-pki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instruction-TLB-TW",
+        "config": 389
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "inst-l1-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "L1-Instructions",
+        "config": 58404
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "stall-backend-pkc",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Backend-Stalls",
+        "config": 418
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Cycles",
+        "config": 60
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "l3-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "L3",
+        "config": 16686
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "l2-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "L2",
+        "config": 8177
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "data-tlb-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Data-TLB",
+        "config": 8200
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "data-tlb-tw-pki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Data-TLB-TW",
+        "config": 264
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "data-l1-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "L1-Data",
+        "config": 337
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "data-st-tlb-mpki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Data-ST-TLB",
+        "config": 8265
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  },
+  {
+    "name": "data-st-tlb-tw-pki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Data-ST-TLB-TW",
+        "config": 329
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 192
+      }
+    ],
+    "scale": 1000
+  }
+]

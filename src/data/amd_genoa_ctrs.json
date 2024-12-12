@@ -1,0 +1,20 @@
+[
+  {
+    "name": "stall_backend_pkc",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "Backend-Stalls",
+        "config": 4294975136
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Cycles",
+        "config": 118
+      }
+    ],
+    "scale": 167
+  }
+]

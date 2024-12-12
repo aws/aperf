@@ -15,20 +15,25 @@ use std::io::{BufRead, BufReader, ErrorKind};
 use std::sync::Mutex;
 
 #[cfg(target_arch = "aarch64")]
-use crate::data::grv_perf_events;
+pub mod arm64_perf_list {
+    pub static GRV_EVENTS: &[u8] = include_bytes!("grv_perf_list.json");
+}
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-use {
-    crate::data::{
-        amd_genoa_perf_events::GENOA_CTRS, amd_milan_perf_events::MILAN_CTRS, amd_perf_events,
-        intel_icelake_perf_events::ICX_CTRS, intel_perf_events,
-        intel_sapphire_rapids_perf_events::SPR_CTRS, utils::get_cpu_info,
-    },
-    indexmap::IndexMap,
-};
+pub mod x86_perf_list {
+    /// Intel+ events.
+    pub static INTEL_EVENTS: &[u8] = include_bytes!("intel_perf_list.json");
+    pub static ICX_CTRS: &[u8] = include_bytes!("intel_icelake_ctrs.json");
+    pub static SPR_CTRS: &[u8] = include_bytes!("intel_sapphire_rapids_ctrs.json");
+
+    /// AMD+ events.
+    pub static AMD_EVENTS: &[u8] = include_bytes!("amd_perf_list.json");
+    pub static GENOA_CTRS: &[u8] = include_bytes!("amd_genoa_ctrs.json");
+    pub static MILAN_CTRS: &[u8] = include_bytes!("amd_milan_ctrs.json");
+}
 
 pub static PERF_STAT_FILE_NAME: &str = "perf_stat";
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub enum PerfType {
     RAW = 4,
 }
@@ -67,18 +72,18 @@ impl Ctr {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct NamedCtr<'a> {
-    pub name: &'a str,
-    pub nrs: Vec<NamedTypeCtr<'a>>,
-    pub drs: Vec<NamedTypeCtr<'a>>,
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct NamedCtr {
+    pub name: String,
+    pub nrs: Vec<NamedTypeCtr>,
+    pub drs: Vec<NamedTypeCtr>,
     pub scale: u64,
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct NamedTypeCtr<'a> {
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct NamedTypeCtr {
     pub perf_type: PerfType,
-    pub name: &'a str,
+    pub name: String,
     pub config: u64,
 }
 
@@ -115,6 +120,30 @@ impl PerfStatRaw {
     }
 }
 
+pub fn form_events_map(base: &[u8], plat_counters: &[u8]) -> Result<Vec<NamedCtr>> {
+    let mut events_map = indexmap::IndexMap::new();
+    for event in &to_events(base)? {
+        events_map.insert(event.name.clone(), event.clone());
+    }
+
+    if plat_counters != [0; 1] {
+        for event in to_events(plat_counters)? {
+            if let Some(ctr) = events_map.get_mut(&event.name) {
+                ctr.nrs = event.nrs;
+                ctr.drs = event.drs;
+                ctr.scale = event.scale;
+            } else {
+                events_map.insert(event.name.clone(), event);
+            }
+        }
+    }
+    Ok(events_map.into_values().collect())
+}
+
+pub fn to_events(data: &[u8]) -> Result<Vec<NamedCtr>> {
+    Ok(serde_json::from_slice(data)?)
+}
+
 impl CollectData for PerfStatRaw {
     fn prepare_data_collector(&mut self, _params: &CollectorParams) -> Result<()> {
         let num_cpus = match unsafe { libc::sysconf(libc::_SC_NPROCESSORS_ONLN as libc::c_int) } {
@@ -128,51 +157,37 @@ impl CollectData for PerfStatRaw {
 
         cfg_if::cfg_if! {
             if #[cfg(target_arch = "aarch64")] {
-                let perf_list = grv_perf_events::PERF_LIST.to_vec();
+                let perf_list = to_events(arm64::perf_list::GRV_EVENTS)?;
             } else if #[cfg(any(target_arch = "x86", target_arch = "x86_64"))] {
-                let platform_specific_counter;
-                let cpu_info = get_cpu_info()?;
-                let mut perf_list;
+                let cpu_info = crate::data::utils::get_cpu_info()?;
+                let platform_specific_counter: &[u8];
+                let base: &[u8];
 
                 /* Get Vendor Specific Perf events */
                 if cpu_info.vendor == "GenuineIntel" {
-                    perf_list = intel_perf_events::PERF_LIST.to_vec();
+                    base = x86_perf_list::INTEL_EVENTS;
 
                     /* Get Model specific events */
                     platform_specific_counter = match cpu_info.model_name.as_str() {
-                        "Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz" => ICX_CTRS.to_vec(),
-                        "Intel(R) Xeon(R) Platinum 8488C" => SPR_CTRS.to_vec(),
-                        _ => Vec::new(),
+                        "Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz" => x86_perf_list::ICX_CTRS,
+                        "Intel(R) Xeon(R) Platinum 8488C" => x86_perf_list::SPR_CTRS,
+                        _ => &[0; 1],
                     };
                 } else if cpu_info.vendor == "AuthenticAMD" {
                     warn!("Event multiplexing may result in bad PMU data."); //TODO: mitigate bad PMU data on AMD instances
-                    perf_list = amd_perf_events::PERF_LIST.to_vec();
+                    base = x86_perf_list::AMD_EVENTS;
 
                     /* Get Model specific events */
                     platform_specific_counter = match cpu_info.model_name.get(..13).unwrap_or_default() {
-                        "AMD EPYC 9R14" => GENOA_CTRS.to_vec(),
-                        "AMD EPYC 7R13" => MILAN_CTRS.to_vec(),
-                        _ => Vec::new(),
+                        "AMD EPYC 9R14" => x86_perf_list::GENOA_CTRS,
+                        "AMD EPYC 7R13" => x86_perf_list::MILAN_CTRS,
+                        _ => &[0; 1],
                     };
                 } else {
                     return Err(PDError::CollectorPerfUnsupportedCPU.into());
                 }
 
-                let mut events_map = IndexMap::new();
-                for event in &perf_list {
-                    events_map.insert(event.name, event.clone());
-                }
-
-                for event in platform_specific_counter {
-                    if let Some(ctr) = events_map.get_mut(event.name) {
-                        ctr.nrs = event.nrs;
-                        ctr.drs = event.drs;
-                        ctr.scale = event.scale;
-                    } else {
-                        events_map.insert(event.name, event);
-                    }
-                }
-                perf_list = events_map.into_values().collect();
+                let perf_list = form_events_map(base, platform_specific_counter)?;
             } else {
                 return Err(PDError::CollectorPerfUnsupportedCPU.into());
             }
