@@ -1,6 +1,59 @@
 let got_cpu_util_data = false;
 let util_cpu_list: Map<string, CPUList> = new Map<string, CPUList>();
 
+let cpu_utilization_rules = {
+    data_type: "cpu_utilization",
+    pretty_name: "CPU Utilization",
+    single_run_rules: [
+        {
+            name: "User",
+            func: function (opts) {
+                let system_util = get_data_key(opts.data_type, "System");
+                let total_util: number = opts.base_run_data + system_util.get(opts.base_run);
+                if (total_util < 50) {
+                    return new Finding(
+                        `Average CPU Utilization is less than 50%.`,
+                        Status.NotGood,
+                    );
+                }
+            },
+        },
+        {
+            name: "Idle",
+            func: function (opts) {
+                if (opts.base_run_data > 50) {
+                    return new Finding(`'Idle time' is greater than 50%.`, Status.NotGood);
+                }
+            },
+        }
+    ],
+    per_run_rules: [
+        {
+            name: "User",
+            func: function (key, run_data, base_run_key, base_run_data, opts) {
+                let system_util = get_data_key(opts.data_type, "System");
+                let init_total_util: number = base_run_data + system_util.get(base_run_key);
+                let run_total_util: number = run_data + system_util.get(key);
+                let cpu_diff = Math.ceil(Math.abs(run_total_util - init_total_util));
+                return new Finding(
+                    `Average CPU Utilization difference between ${base_run_key} and ${key} is ${cpu_diff}%.`,
+                    cpu_diff > 10 ? Status.NotGood : Status.Good,
+                );
+            },
+        },
+        {
+            name: "Idle",
+            func: function (key, run_data, base_run_key, base_run_data, opts) {
+                let idle_diff = Math.ceil(Math.abs(run_data - base_run_data));
+                return new Finding(
+                    `Average Idle time difference between ${base_run_key} and ${key} is ${idle_diff}%.`,
+                    idle_diff > 10 ? Status.NotGood : Status.Good,
+                )
+            },
+        }
+    ],
+    all_run_rules: [],
+}
 function getUtilizationType(run, elem, type, run_data) {
     var cpu_type_datas = [];
     var type_data;
