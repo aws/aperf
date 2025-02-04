@@ -1,6 +1,6 @@
 # APerf
 ## What is APerf?
-A CLI tool to gather many pieces of performance data in one go. APerf includes a recorder and a reporter sub tool. The recorder gathers performance metrics, stores them in a set of local files that can then be analyzed via the reporter sub tool.
+A CLI tool to gather many pieces of performance data in one go. APerf includes a recorder, reporter and custom-pmu sub tools. The recorder gathers performance metrics, stores them in a set of local files that can then be analyzed via the reporter sub tool. The custom-pmu sub-tool can be used to create custom PMU configs which can configure the events an aperf recorder collects.
 
 ## Why does APerf exist?
 Performance issues in applications are investigated by recreating them locally and collecting data/metrics using monitoring tools like sysstat, perf, sysctl, ebpf, etc... or by running these tools remotely. Installing and executing various performance monitoring tools is a manual process and prone to errors. Even with the [Graviton Performance Runbook](https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/README.md), understanding the output of these tools requires deep domain specific knowledge.
@@ -44,7 +44,7 @@ cargo test
 ```
 
 ## Usage
-`aperf record` records performance data and stores them in a series of files. A report is then generated with `aperf report` and can be viewed in any system with a web browser.
+`aperf record` records performance data and stores them in a series of files. A report is then generated with `aperf report` and can be viewed in any system with a web browser. `aperf custom-pmu` can be used to generate a PMU config file which customizes which events are collected by aperf. The generated PMU config can be used with the `--pmu-config` flag with `aperf record`.
 
 **KNOWN LIMITATION**
 
@@ -74,6 +74,12 @@ To compare the results of two different performance runs, use the following comm
 ./aperf report -r <COLLECTOR_DIRECTORY_1> -r <COLLECTOR_DIRECTORY_2> -n <REPORT_NAME>
 ```
 
+**aperf custom-pmu**
+1. Download the `aperf` binary.
+2. Start `aperf custom-pmu`:
+```
+./aperf custom-pmu
+```
 ### Example
 To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 
@@ -90,6 +96,8 @@ To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 `-p, --period` period (how long you want the data collection to run, default is 10s)
 
 `-r, --run-name` run name (name of the run for organization purposes, creates directory of the same name, default of aperf_[timestamp])
+
+`--pmu-config` Custom PMU config file to use
 
 `-v, --verbose` verbose messages
 
@@ -114,6 +122,16 @@ To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 `-vv, --verbose --verbose` more verbose messages
 
 `./aperf report -h`
+
+**Custom-PMU Flags:**
+
+`-V, --version` version of Aperf
+
+`-p, --pmu-file` Name of the file for the custom PMU configuration
+
+`--verify` Verify the supplied PMU file
+
+`./aperf custom-pmu -h`
 
 ## APerf Issues?
 Below are some prerequisites for profiling with APerf:
