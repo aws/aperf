@@ -55,17 +55,17 @@ impl Run {
 
 pub fn form_and_copy_archive(loc: PathBuf, report_name: &Path, tmp_dir: &Path) -> Result<()> {
     if loc.is_dir() {
-        let dir_stem = loc.file_stem().unwrap().to_str().unwrap().to_string();
+        let dir_name = loc.file_name().unwrap().to_str().unwrap().to_string();
 
         /* Create a temp archive */
-        let archive_name = format!("{}.tar.gz", &dir_stem);
+        let archive_name = format!("{}.tar.gz", &dir_name);
         let archive_path = tmp_dir.join(&archive_name);
         let archive_dst = report_name.join(format!("data/archive/{}", archive_name));
         {
             let tar_gz = fs::File::create(&archive_path)?;
             let enc = GzEncoder::new(tar_gz, Compression::default());
             let mut tar = tar::Builder::new(enc);
-            tar.append_dir_all(&dir_stem, &loc)?;
+            tar.append_dir_all(&dir_name, &loc)?;
         }
 
         /* Copy archive to aperf_report */
@@ -135,7 +135,7 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
     let mut pathbuf_dirs: Vec<PathBuf> = Vec::new();
     let mut data_dirs: Vec<PathBuf> = Vec::new();
     let mut dir_paths: Vec<String> = Vec::new();
-    let mut dir_stems: Vec<String> = Vec::new();
+    let mut dir_names: Vec<String> = Vec::new();
 
     /* Form PathBuf from dirs */
     for dir in &dirs {
@@ -159,38 +159,35 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
         }
     }
 
-    /* Get dir paths, stems */
+    /* Get dir paths, names */
     for dir in &data_dirs {
         let path = get_dir(dir.to_path_buf(), tmp_dir)?;
-        if dir_stems.contains(&path.file_stem().unwrap().to_str().unwrap().to_string()) {
+        let dir_name = crate::data::utils::notargz_file_name(path.clone())?;
+        if dir_names.contains(&dir_name) {
             error!("Cannot process two runs with the same name");
             return Ok(());
         }
-        dir_stems.push(path.file_stem().unwrap().to_str().unwrap().to_string());
+        dir_names.push(dir_name);
         dir_paths.push(path.to_str().unwrap().to_string());
     }
 
     let mut report_name = PathBuf::new();
     match &report.name {
-        Some(n) => report_name.push(n),
+        Some(n) => report_name.push(crate::data::utils::notargz_string_name(n.to_string())?),
         None => {
             /* Generate report name */
             let mut file_name = "aperf_report".to_string();
-            for stem in &dir_stems {
-                let name = if stem.ends_with(".tar.gz") {
-                    stem.strip_suffix(".tar.gz").unwrap().to_string()
-                } else {
-                    stem.to_string()
-                };
-                file_name = format!("{}_{}", file_name, name);
+            for dir_name in &dir_names {
+                file_name = format!("{}_{}", file_name, dir_name);
             }
             report_name.push(file_name);
             info!("Report name not given. Using '{}'", report_name.display());
         }
     }
     let mut report_name_tgz = PathBuf::new();
-    report_name_tgz.set_file_name(&report_name);
-    report_name_tgz.set_extension("tar.gz");
+    // If a user provided run name has a '.' in it, setting the extension as '.tar.gz'
+    // here will overwrite the run name after the '.'. To prevent that set the filename.
+    report_name_tgz.set_file_name(report_name.to_str().unwrap().to_owned() + ".tar.gz");
 
     info!("Creating APerf report...");
     let ico = include_bytes!("html_files/favicon.ico");
@@ -205,7 +202,7 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
         "/node_modules/plotly.js/dist/plotly.min.js"
     ));
     let configure_js = include_str!(concat!(env!("JS_DIR"), "/configure.js"));
-    let run_names = dir_stems.clone();
+    let run_names = dir_names.clone();
 
     fs::create_dir_all(report_name.join("images"))?;
     fs::create_dir_all(report_name.join("js"))?;
@@ -313,7 +310,7 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
     let enc = GzEncoder::new(tar_gz, Compression::default());
     let mut tar = tar::Builder::new(enc);
     let report_stem = report_name
-        .file_stem()
+        .file_name()
         .unwrap()
         .to_str()
         .unwrap()

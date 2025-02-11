@@ -1,6 +1,7 @@
 use anyhow::Result;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
 pub struct CpuInfo {
@@ -39,4 +40,18 @@ pub fn get_cpu_info() -> Result<CpuInfo> {
         }
     }
     Ok(cpu_info)
+}
+
+pub fn notargz_file_name(pbuf: PathBuf) -> Result<String> {
+    if pbuf.file_name().is_none() {
+        return Ok(String::new());
+    }
+    notargz_string_name(pbuf.file_name().unwrap().to_str().unwrap().to_string())
+}
+
+pub fn notargz_string_name(s: String) -> Result<String> {
+    if s.ends_with(".tar.gz") {
+        return Ok(s.strip_suffix(".tar.gz").unwrap().to_string());
+    }
+    Ok(s)
 }
