@@ -371,7 +371,7 @@ impl PerformanceData {
     }
 
     pub fn create_data_archive(&mut self) -> Result<()> {
-        let dir_name = Path::new(&self.init_params.dir_name).file_stem().unwrap();
+        let dir_name = Path::new(&self.init_params.dir_name).file_name().unwrap();
         let archive_path = format!("{}.tar.gz", self.init_params.dir_name);
         let tar_gz = fs::File::create(&archive_path)?;
         let enc = GzEncoder::new(tar_gz, Compression::default());
@@ -446,7 +446,7 @@ impl VisualizationData {
         fin_dir: &Path,
     ) -> Result<String> {
         let dir_path = Path::new(&dir);
-        let dir_name = dir_path.file_stem().unwrap().to_str().unwrap().to_string();
+        let dir_name = crate::data::utils::notargz_file_name(dir_path.to_path_buf())?;
         self.run_names.push(dir_name.clone());
         let visualizers_len = self.visualizers.len();
         let mut error_count = 0;
