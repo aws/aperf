@@ -2,6 +2,21 @@ let got_perf_stat_data = false;
 
 let perf_cpu_list: Map<string, CPUList> = new Map<string, CPUList>();
 
+let perf_stat_rules = {
+    data_type: "perf_stat",
+    pretty_name: "Perf PMU",
+    rules: [
+        {
+            name: "ipc",
+            per_run_rule: function* (ruleOpts: RuleOpts) : Generator<Finding, void, any> {
+                let diff = percent_difference(ruleOpts.base_run_data, ruleOpts.this_run_data);
+                if (diff > 10) {
+                    yield new Finding(`IPC difference between '${ruleOpts.base_run}' and '${ruleOpts.this_run}' is '${diff}'%.`, Status.NotGood);
+                }
+            }
+        }
+    ]
+}
 function getEvents(run, container_id, keys, run_data) {
     if (keys.length == 0) {
         var no_data_div = document.createElement('div');
