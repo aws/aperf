@@ -29,6 +29,25 @@ function createEntries(container_id, values, level, run) {
     });
 }
 
+function form_entries_keys(entries, run) {
+    entries.forEach(function(value) {
+        for (var prop in value) {
+            if ('value' in value[prop]) {
+                let run_entry = kernel_config_runs.get(run);
+                let title = value[prop].name;
+                let title_value = value[prop].value;
+                run_entry.entries.set(title, title_value);
+                run_entry.keys.push(title);
+                if (kernel_config_common_keys.indexOf(value[prop].name) != -1) {
+                    kernel_config_common_keys.push(value[prop].name);
+                }
+            } else if ('entries' in value[prop]) {
+                form_entries_keys(value[prop].entries, run);
+            }
+        }
+    });
+}
+
 function form_kernel_data(run, run_data) {
     kernel_config_run_names.push(run);
     var run_entry = new RunEntry();
@@ -40,17 +59,7 @@ function form_kernel_data(run, run_data) {
     kernel_config_runs.set(run, run_entry);
     let data = JSON.parse(run_entry.raw_entries['key_values']['values']);
     data.forEach(function (value, index, arr) {
-        value.entries?.forEach(function(value, index, arr) {
-            for (var prop in value) {
-                if ('value' in value[prop]) {
-                    let run_entry = kernel_config_runs.get(run);
-                    let title = value[prop].name;
-                    let title_value = value[prop].value;
-                    run_entry.entries.set(title, title_value);
-                    run_entry.keys.push(title);
-                }
-            }
-        });
+        form_entries_keys(value.entries, run);
     });
 }
 

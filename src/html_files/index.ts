@@ -3,25 +3,34 @@ class DataType {
 	trueId: string;
 	hideClass: string;
 	callback;
+	onSingleRun: string = '';
+
+	constructor(name='', hideClass='', trueId='', callback=(boolean) => {}, onSingleRun='') {
+		this.name = name;
+		this.hideClass = hideClass;
+		this.trueId = trueId;
+		this.callback = callback;
+		this.onSingleRun = onSingleRun;
+	}
 }
 
 var DataTypes: Map<string, DataType> = new Map<string, DataType>();
-DataTypes.set('kernel_config', {name: 'kernel', hideClass: 'kernelDiff', trueId: 'kernel_diff_yes', callback: kernelConfig});
-DataTypes.set('sysctl', {name: 'sysctl', hideClass: 'sysctlDiff', trueId: 'sysctl_diff_yes', callback: sysctl});
-DataTypes.set('vmstat', {name: 'vmstat', hideClass: 'vmstatHide', trueId: 'vmstat_hide_yes', callback: vmStat});
-DataTypes.set('disk_stats', {name: 'diskstat', hideClass: 'diskstatHide', trueId: 'diskstat_hide_yes', callback: diskStats});
-DataTypes.set('meminfo', {name: 'meminfo', hideClass: 'meminfoHide', trueId: 'meminfo_hide_yes', callback: meminfo});
-DataTypes.set('netstat', {name: 'netstat', hideClass: 'netstatHide', trueId: 'netstat_hide_yes', callback: netStat});
-DataTypes.set('interrupts', {name: 'interrupts', hideClass: '', trueId: '', callback: interrupts});
-DataTypes.set('cpu_utilization', {name: 'cpuutilization', hideClass: '', trueId: '', callback: cpuUtilization});
-DataTypes.set('system_info', {name: 'systeminfo', hideClass: 'landingChoice', trueId: '', callback: systemInfo});
-DataTypes.set('flamegraphs', {name: 'flamegraphs', hideClass: 'flamegraphsSelection', trueId: '', callback: flamegraphs});
-DataTypes.set('top_functions', {name: 'topfunctions', hideClass: '', trueId: '', callback: topFunctions});
-DataTypes.set('processes', {name: 'processes', hideClass: '', trueId: '', callback: processes});
-DataTypes.set('perfstat', {name: 'perfstat', hideClass: '', trueId: '', callback: perfStat});
-DataTypes.set('aperfstat', {name: 'aperfstat', hideClass: '', trueId: '', callback: aperfStat});
-DataTypes.set('aperfrunlog', {name: 'aperfrunlog', hideClass: '', trueId: '', callback: aperfRunlog});
-DataTypes.set('configure', {name: 'configure', hideClass: '', trueId: '', callback: configure});
+DataTypes.set('kernel_config', new DataType('kernel', 'kernelDiff', 'kernel_diff_yes', kernelConfig, 'no'));
+DataTypes.set('sysctl', new DataType('sysctl', 'sysctlDiff', 'sysctl_diff_yes', sysctl, 'no'));
+DataTypes.set('vmstat', new DataType('vmstat', 'vmstatHide', 'vmstat_hide_yes', vmStat, ''));
+DataTypes.set('disk_stats', new DataType('diskstat', 'diskstatHide', 'diskstat_hide_yes', diskStats, ''));
+DataTypes.set('meminfo', new DataType('meminfo', 'meminfoHide', 'meminfo_hide_yes', meminfo, ''));
+DataTypes.set('netstat', new DataType('netstat', 'netstatHide', 'netstat_hide_yes', netStat, ''));
+DataTypes.set('interrupts', new DataType('interrupts', '', '', interrupts, ''));
+DataTypes.set('cpu_utilization', new DataType('cpuutilization', '', '', cpuUtilization, ''));
+DataTypes.set('system_info', new DataType('systeminfo', 'landingChoice', '', systemInfo, ''));
+DataTypes.set('flamegraphs', new DataType('flamegraphs', 'flamegraphsSelection', '', flamegraphs, ''));
+DataTypes.set('top_functions', new DataType('topfunctions', '', '', topFunctions, ''));
+DataTypes.set('processes', new DataType('processes', '', '', processes, ''));
+DataTypes.set('perfstat', new DataType('perfstat', '', '', perfStat, ''));
+DataTypes.set('aperfstat', new DataType('aperfstat', '', '', aperfStat, ''));
+DataTypes.set('aperfrunlog', new DataType('aperfrunlog', '', '', aperfRunlog, ''));
+DataTypes.set('configure', new DataType('configure', '', '', configure, ''));
 
 function openData(evt: Event, elem: HTMLButtonElement) {
 	var tabName: string = elem.name;
@@ -81,6 +90,11 @@ DataTypes.forEach((datatype: DataType, key: string) => {
 		select_elems[j].addEventListener("click", function (evn: Event) {
 			datatype.callback(this.id)
 		})
+	}
+	if (runs_raw.length == 1) {
+		if (datatype.onSingleRun != '') {
+			(document.getElementById(`${datatype.name}-button-${datatype.onSingleRun}`) as HTMLInputElement).checked = true;
+		}
 	}
 });
 
