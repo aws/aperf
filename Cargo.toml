@@ -7,6 +7,11 @@ publish = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[profile.release]
+lto = true          # Enable link-time optimization. Does not adversely affect speed.
+codegen-units = 1   # Reduce number of codegen units to increase optimizations. Does not adeversely affect speed.
+strip = "debuginfo" # Strip debuginfo only. Stack traces still work. Won't work with debuggers.
+
 [build-dependencies]
 anyhow = "1.0"
 vergen = { version = "8.3", features = ["build", "git", "gitcl"] }
