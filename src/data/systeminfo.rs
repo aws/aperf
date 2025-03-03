@@ -88,7 +88,7 @@ impl EC2Metadata {
     async fn get_instance_metadata() -> Result<EC2Metadata, BoxError> {
         use aws_config::imds;
 
-        let imds_client = imds::Client::builder().build().await?;
+        let imds_client = imds::Client::builder().build();
 
         let ami_id = imds_client.get("/latest/meta-data/ami-id").await?;
         let instance_id = imds_client.get("/latest/meta-data/instance-id").await?;
@@ -99,11 +99,11 @@ impl EC2Metadata {
             .await?;
 
         Ok(EC2Metadata {
-            instance_id,
-            local_hostname,
-            ami_id,
-            region,
-            instance_type,
+            instance_id: instance_id.into(),
+            local_hostname: local_hostname.into(),
+            ami_id: ami_id.into(),
+            region: region.into(),
+            instance_type: instance_type.into(),
         })
     }
 }
