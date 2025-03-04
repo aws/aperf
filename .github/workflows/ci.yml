@@ -19,7 +19,7 @@ jobs:
       - ${{matrix.image}}
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895 # v2.6.1
+        uses: step-security/harden-runner@446798f8213ac2e75931c1b0769676d927801858 # v2.10.3
         with:
           egress-policy: audit
       - name: Checkout repository
