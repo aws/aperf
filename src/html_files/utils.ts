@@ -199,3 +199,7 @@ function get_data_key(data_type, key) {
     }
     return key_value_map;
 }
+
+function percent_difference(v1, v2) {
+    return Math.ceil((Math.abs(v1 - v2)/((v1 + v2)/2)) * 100);
+}
