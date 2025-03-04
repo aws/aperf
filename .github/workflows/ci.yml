@@ -5,6 +5,7 @@ on:
     branches:
       - "**"
   workflow_call: # Needed to make this a reusable workflow for releasing artifacts https://docs.github.com/en/actions/using-workflows/reusing-workflows
+  workflow_dispatch: # To allow starting the workflow manually in the web ui
 
 permissions:
   contents: read
@@ -13,71 +14,59 @@ jobs:
   CI:
     strategy:
       matrix:
-        architecture: [X64, ARM64]
-        distribution: [Ubuntu]
+        image: [ubuntu-24.04, ubuntu-24.04-arm]
     runs-on:
-      - self-hosted
-      - Linux
-      - ${{matrix.architecture}}
-      - ${{matrix.distribution}}
+      - ${{matrix.image}}
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895 # v2.6.1
         with:
           egress-policy: audit
-
       - name: Checkout repository
         uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      # Prepare build dependencies
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@2080da66123fcc7ec821c7597e9bc40af40d8af6 # 1.73.0
         with:
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@81d053bdb0871dcd3f10763c8cc60d0adc41762b # v1
-      - name: Install gcc on Ubuntu
-        if: ${{ matrix.distribution == 'Ubuntu' }}
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 16.16.0
+      - name: Apt update
+        run: sudo apt update
+      - name: Install gcc
         run: sudo apt install -y build-essential
-      - name: Install gcc on AL2
-        if: ${{ matrix.distribution == 'AL2' }}
-        run: sudo yum install -y "@Development Tools"
-      - name: Install NodeJs
-        run: |
-          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash \
-          && source  ~/.nvm/nvm.sh && nvm install v16.16.0
-      - name: Install musl on Ubuntu
-        if: ${{ matrix.distribution == 'Ubuntu' }}
-        run: sudo apt-get install -y musl-tools
-      - name: Build & install musl on AL2
-        if: ${{ matrix.distribution == 'AL2' }}
-        run: |
-          wget https://git.musl-libc.org/cgit/musl/snapshot/musl-1.2.3.tar.gz \
-          && tar xvf musl-1.2.3.tar.gz && cd musl-1.2.3 \
-          && ./configure && sudo make install && cd .. && sudo rm -rf musl-1.2.3
-      - name: Symlink musl-gcc on ARM64 & Ubuntu
-        if: ${{ matrix.architecture == 'ARM64' && matrix.distribution == 'Ubuntu' }}
-        run: sudo ln -snf /usr/bin/musl-gcc /usr/bin/aarch64-linux-musl-gcc
-      - name: Symlink musl-gcc on AL2 & ARM64
-        if: ${{ matrix.architecture == 'ARM64' && matrix.distribution == 'AL2' }}
-        run: sudo ln -snf /usr/local/musl/bin/musl-gcc /usr/bin/aarch64-linux-musl-gcc
-      - name: Symlink musl-gcc on AL2 & X64
-        if: ${{ matrix.architecture == 'X64' && matrix.distribution == 'AL2' }}
-        run: sudo ln -snf /usr/local/musl/bin/musl-gcc /usr/bin/musl-gcc
-      - name: Build for X64
-        if: ${{ matrix.architecture == 'X64' }}
-        run: |
-          rustup target add x86_64-unknown-linux-musl \
-          && source  ~/.nvm/nvm.sh \
-          && cargo build --release --target x86_64-unknown-linux-musl
-      - name: Build for ARM64
-        if: ${{ matrix.architecture == 'ARM64' }}
-        run: |
-          rustup target add aarch64-unknown-linux-musl \
-          && source  ~/.nvm/nvm.sh \
-          && cargo build --release --target aarch64-unknown-linux-musl
+      - name: Install musl
+        run: sudo apt install -y musl-tools
+
+      # Tests and static analysis
       - name: Set perf_event_paranoid to 0
         run: echo 0 | sudo tee /proc/sys/kernel/perf_event_paranoid
       - name: Run tests
-        run: source ~/.nvm/nvm.sh && cargo test --verbose -- --nocapture --color always
+        run: cargo test --verbose -- --nocapture --color always
       - name: Run clippy
-        run: source ~/.nvm/nvm.sh && cargo clippy --all-targets --all-features
+        run: cargo clippy --all-targets --all-features
       - name: Run rustfmt
-        run: source ~/.nvm/nvm.sh && cargo fmt --all -- --check
+        run: cargo fmt --all -- --check
+
+      # Build and upload release artifacts
+      - name: Build release artifacts
+        run: |
+          rustup target add $(arch)-unknown-linux-musl
+          cargo build --release --target $(arch)-unknown-linux-musl
+      - name: Archive release artifacts
+        run: tar -zcvf artifacts.tar.gz -C target/$(arch)-unknown-linux-musl/release aperf
+      - name: Upload x86_64 release artifacts
+        uses: actions/upload-artifact@v4
+        if: ${{ matrix.image == 'ubuntu-24.04' }}
+        with:
+          name: x86_64-release-artifacts
+          path: artifacts.tar.gz
+      - name: Upload aarch64 release artifacts
+        uses: actions/upload-artifact@v4
+        if: ${{ matrix.image == 'ubuntu-24.04-arm' }}
+        with:
+          name: aarch64-release-artifacts
+          path: artifacts.tar.gz

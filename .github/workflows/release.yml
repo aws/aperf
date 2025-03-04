@@ -1,9 +1,8 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - '*'
+  release:
+    types: [published]
 
 permissions: read-all
 
@@ -11,14 +10,8 @@ jobs:
   Build:
     uses: ./.github/workflows/ci.yml
   Release:
-    strategy:
-      matrix:
-        architecture: [X64, ARM64]
-        distribution: [Ubuntu]
     runs-on:
-      - self-hosted
-      - Linux
-      - ${{matrix.architecture}}
+      - ubuntu-24.04
     permissions:
       contents: write
     needs:
@@ -29,33 +22,33 @@ jobs:
         with:
           egress-policy: audit
 
-      - name: Tar X64 artifacts # Below workaround will allow files to be extracted to a directory e.g. aperf-v0.1-x86_64/
-        if: ${{ matrix.architecture == 'X64' }}
-        run: sudo mkdir -p aperf-${{ github.ref_name }}-x86_64 && sudo cp ./target/x86_64-unknown-linux-musl/release/aperf ./aperf-${{ github.ref_name }}-x86_64 && sudo tar -cvzf aperf-${{ github.ref_name }}-x86_64.tar.gz aperf-${{ github.ref_name }}-x86_64/ && sudo rm -rf aperf-${{ github.ref_name }}-x86_64
-      - name: Tar ARM64 artifacts
-        if: ${{ matrix.architecture == 'ARM64' }}
-        run: sudo mkdir -p aperf-${{ github.ref_name }}-aarch64 && sudo cp ./target/aarch64-unknown-linux-musl/release/aperf ./aperf-${{ github.ref_name }}-aarch64 && sudo tar -cvzf aperf-${{ github.ref_name }}-aarch64.tar.gz aperf-${{ github.ref_name }}-aarch64/ && sudo rm -rf aperf-${{ github.ref_name }}-aarch64
-      - name: Create Release
-        if: github.run_number == 1
-        id: create_release
-        uses: actions/create-release@0cb9c9b65d5d1901c1f53e5e66eaf4afd303e70e # v1.1.4
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: APerf-${{ github.ref }}
-          draft: false
-          prerelease: false
-      - name: Upload X64 artifacts.
-        if: ${{ matrix.architecture == 'X64' }}
+      # Download and unpack all release artifacts
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+
+      # Create release tarballs
+      - name: Tar x86_64 artifacts
+        run: |
+          name=aperf-${{ github.ref_name }}-x86_64
+          mkdir "$name"
+          tar -zxvf x86_64-release-artifacts/artifacts.tar.gz -C "$name"
+          tar -zcvf "$name".tar.gz "$name"
+      - name: Tar aarch64 artifacts
+        run: |
+          name=aperf-${{ github.ref_name }}-aarch64
+          mkdir "$name"
+          tar -zxvf aarch64-release-artifacts/artifacts.tar.gz -C "$name"
+          tar -zcvf "$name".tar.gz "$name"
+
+      # Attach them to the release
+      - name: Upload x86_64 artifacts.
         uses: svenstaro/upload-release-action@1beeb572c19a9242f4361f4cee78f8e0d9aec5df # v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: ./aperf-${{ github.ref_name }}-x86_64.tar.gz
           tag: ${{ github.ref }}
           asset_name: aperf-${{ github.ref_name }}-x86_64.tar.gz
-      - name: Upload ARM64 artifacts
-        if: ${{ matrix.architecture == 'ARM64' }}
+      - name: Upload aarch64 artifacts
         uses: svenstaro/upload-release-action@1beeb572c19a9242f4361f4cee78f8e0d9aec5df # v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
