@@ -71,4 +71,9 @@ let all_rules: Rules[] = [
     system_info_rules,
     cpu_utilization_rules,
     perf_stat_rules,
+    aperfstats_rules,
+    diskstats_rules,
+    meminfo_rules,
+    netstat_rules,
+    vmstat_rules,
 ];

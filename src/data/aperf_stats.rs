@@ -1,7 +1,7 @@
 extern crate ctor;
 
 use crate::data::{ProcessedData, TimeEnum};
-use crate::utils::DataMetrics;
+use crate::utils::{add_metrics, DataMetrics, Metric};
 use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata, ReportParams};
 use crate::VISUALIZATION_DATA;
 use anyhow::Result;
@@ -44,7 +44,8 @@ pub struct DataPoint {
     pub time_taken: u64,
 }
 
-fn get_key_data(values: Vec<AperfStat>, key: String) -> Result<String> {
+fn get_key_data(values: Vec<AperfStat>, key: String, metrics: &mut DataMetrics) -> Result<String> {
+    let mut metric = Metric::new(key.clone());
     let mut end_value = PerDataTypeStat {
         name: key.clone(),
         collect: Vec::new(),
@@ -63,6 +64,7 @@ fn get_key_data(values: Vec<AperfStat>, key: String) -> Result<String> {
                 time: time_now,
                 time_taken: *v,
             };
+            metric.insert_value(*v as f64);
             end_value.metadata.update_limits(GraphLimitType::UInt64(*v));
             if k.contains(&key) {
                 if k.contains("print") {
@@ -73,6 +75,12 @@ fn get_key_data(values: Vec<AperfStat>, key: String) -> Result<String> {
             }
         }
     }
+    add_metrics(
+        key,
+        &mut metric,
+        metrics,
+        APERF_RUN_STATS_FILE_NAME.to_string(),
+    )?;
 
     Ok(serde_json::to_string(&end_value)?)
 }
@@ -108,7 +116,7 @@ impl GetData for AperfStat {
         &mut self,
         buffer: Vec<ProcessedData>,
         query: String,
-        _metrics: &mut DataMetrics,
+        metrics: &mut DataMetrics,
     ) -> Result<String> {
         let mut values = Vec::new();
         for data in buffer {
@@ -136,7 +144,7 @@ impl GetData for AperfStat {
             }
             "values" => {
                 let (_, key) = &param[2];
-                get_key_data(values, key.to_string())
+                get_key_data(values, key.to_string(), metrics)
             }
             _ => panic!("Unsupported API"),
         }

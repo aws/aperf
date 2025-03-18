@@ -3,6 +3,12 @@ let meminfo_hide_zero_na_graphs = false;
 let TB = 1073741824;
 let GB = 1048576;
 
+let meminfo_rules = {
+    data_type: "meminfo",
+    pretty_name: "Meminfo",
+    rules: []
+}
+
 let meminfo_average: Map<string, number> = new Map<string, number>();
 function form_meminfo_averages() {
     runs_raw.forEach(function (value, index, arr) {

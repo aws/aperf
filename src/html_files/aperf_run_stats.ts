@@ -1,5 +1,11 @@
 let got_aperfstat_data = false;
 
+let aperfstats_rules = {
+    data_type: "aperf_run_stats",
+    pretty_name: "Aperf Stats",
+    rules: []
+}
+
 function getAperfEntry(elem, key, run_data) {
     var value = JSON.parse(run_data);
     let collect = value.collect;

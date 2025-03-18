@@ -1,7 +1,7 @@
 extern crate ctor;
 
 use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
-use crate::utils::DataMetrics;
+use crate::utils::{add_metrics, DataMetrics, Metric};
 use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata};
 use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
@@ -176,8 +176,9 @@ struct EndMemValues {
     pub metadata: GraphMetadata,
 }
 
-fn get_values(values: Vec<MeminfoData>, key: String) -> Result<String> {
+fn get_values(values: Vec<MeminfoData>, key: String, metrics: &mut DataMetrics) -> Result<String> {
     let time_zero = values[0].time;
+    let mut metric = Metric::new(key.clone());
     let mut metadata = GraphMetadata::new();
     let mut end_value = MemData {
         name: key.clone(),
@@ -193,6 +194,7 @@ fn get_values(values: Vec<MeminfoData>, key: String) -> Result<String> {
             time: v.time - time_zero,
             value: *value / 1024,
         };
+        metric.insert_value(mementry.value as f64);
         metadata.update_limits(GraphLimitType::UInt64(mementry.value));
         end_value.values.push(mementry);
     }
@@ -200,6 +202,7 @@ fn get_values(values: Vec<MeminfoData>, key: String) -> Result<String> {
         data: end_value,
         metadata,
     };
+    add_metrics(key, &mut metric, metrics, MEMINFO_FILE_NAME.to_string())?;
     Ok(serde_json::to_string(&end_values)?)
 }
 
@@ -421,7 +424,7 @@ impl GetData for MeminfoData {
         &mut self,
         buffer: Vec<ProcessedData>,
         query: String,
-        _metrics: &mut DataMetrics,
+        metrics: &mut DataMetrics,
     ) -> Result<String> {
         let mut values = Vec::new();
         for data in buffer {
@@ -437,7 +440,7 @@ impl GetData for MeminfoData {
             "keys" => get_keys(),
             "values" => {
                 let (_, key) = &param[2];
-                get_values(values, key.to_string())
+                get_values(values, key.to_string(), metrics)
             }
             _ => panic!("Unsupported API"),
         }

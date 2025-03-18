@@ -1,7 +1,7 @@
 extern crate ctor;
 
 use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
-use crate::utils::{DataMetrics, Metric};
+use crate::utils::{add_metrics, DataMetrics, Metric};
 use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata};
 use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
@@ -11,7 +11,6 @@ use log::{error, info, trace, warn};
 use perf_event::events::{Raw, Software};
 use perf_event::{Builder, Counter, Group, ReadFormat};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, ErrorKind};
 use std::path::PathBuf;
@@ -472,15 +471,7 @@ fn get_values(values: Vec<PerfStat>, key: String, metrics: &mut DataMetrics) -> 
         end_stats.cpus = end_cpu_stats;
         end_values.push(end_stats);
     }
-    if let Some(m) = metrics.values.get_mut(PERF_STAT_FILE_NAME) {
-        m.insert(key, metric.form_stats());
-    } else {
-        let mut metric_map = HashMap::new();
-        metric_map.insert(key, metric.form_stats());
-        metrics
-            .values
-            .insert(PERF_STAT_FILE_NAME.to_string(), metric_map);
-    }
+    add_metrics(key, &mut metric, metrics, PERF_STAT_FILE_NAME.to_string())?;
     let perf_data = EndPerfData {
         data: end_values,
         metadata,
