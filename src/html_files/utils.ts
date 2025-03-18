@@ -192,7 +192,7 @@ function get_data_key(data_type, key) {
     let key_value_map = new Map<string, any>();
     for (let run in raw_analytics) {
         let run_data = raw_analytics[run].values;
-        if (key in run_data[data_type]) {
+        if (run_data[data_type] && key in run_data[data_type]) {
             let v = run_data[data_type][key];
             key_value_map.set(run, get_inside_value(v));
         }

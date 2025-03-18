@@ -15,12 +15,12 @@ class DataType {
 }
 
 var DataTypes: Map<string, DataType> = new Map<string, DataType>();
-DataTypes.set('kernel_config', new DataType('kernel', 'kernelDiff', 'kernel_diff_yes', kernelConfig, 'no'));
-DataTypes.set('sysctl', new DataType('sysctl', 'sysctlDiff', 'sysctl_diff_yes', sysctl, 'no'));
-DataTypes.set('vmstat', new DataType('vmstat', 'vmstatHide', 'vmstat_hide_yes', vmStat, ''));
-DataTypes.set('disk_stats', new DataType('diskstat', 'diskstatHide', 'diskstat_hide_yes', diskStats, ''));
-DataTypes.set('meminfo', new DataType('meminfo', 'meminfoHide', 'meminfo_hide_yes', meminfo, ''));
-DataTypes.set('netstat', new DataType('netstat', 'netstatHide', 'netstat_hide_yes', netStat, ''));
+DataTypes.set('kernel_config', new DataType('kernel', 'kernelDiff', 'kernel-button-yes', kernelConfig, 'no'));
+DataTypes.set('sysctl', new DataType('sysctl', 'sysctlDiff', 'sysctl-button-yes', sysctl, 'no'));
+DataTypes.set('vmstat', new DataType('vmstat', 'vmstatHide', 'vmstat-button-yes', vmStat, ''));
+DataTypes.set('disk_stats', new DataType('diskstat', 'diskstatHide', 'diskstat-button-yes', diskStats, ''));
+DataTypes.set('meminfo', new DataType('meminfo', 'meminfoHide', 'meminfo-button-yes', meminfo, ''));
+DataTypes.set('netstat', new DataType('netstat', 'netstatHide', 'netstat-button-yes', netStat, ''));
 DataTypes.set('interrupts', new DataType('interrupts', '', '', interrupts, ''));
 DataTypes.set('cpu_utilization', new DataType('cpuutilization', '', '', cpuUtilization, ''));
 DataTypes.set('system_info', new DataType('systeminfo', 'landingChoice', '', systemInfo, ''));
