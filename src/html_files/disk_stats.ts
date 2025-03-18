@@ -1,6 +1,12 @@
 let got_disk_stat_data = false;
 let diskstat_hide_zero_na_graphs = false;
 
+let diskstats_rules = {
+    data_type: "disk_stats",
+    pretty_name: "Disk Stats",
+    rules: []
+}
+
 function getStatValues(elem, key, run_data) {
     var disk_datas = [];
     var data = JSON.parse(run_data);
