@@ -1,7 +1,7 @@
 extern crate ctor;
 
 use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
-use crate::utils::DataMetrics;
+use crate::utils::{add_metrics, DataMetrics, Metric};
 use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata};
 use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
@@ -74,8 +74,9 @@ struct VmstatEntry {
     pub value: i64,
 }
 
-fn get_entry(values: Vec<Vmstat>, key: String) -> Result<String> {
+fn get_entry(values: Vec<Vmstat>, key: String, metrics: &mut DataMetrics) -> Result<String> {
     let mut end_values = Vec::new();
+    let mut metric = Metric::new(key.clone());
     let mut metadata = GraphMetadata::new();
     let time_zero = values[0].time;
     let mut prev_vmstat = values[0].clone();
@@ -101,6 +102,7 @@ fn get_entry(values: Vec<Vmstat>, key: String) -> Result<String> {
             time: (current_time - time_zero),
             value: v,
         };
+        metric.insert_value(v as f64);
         end_values.push(vmstat_entry);
         prev_vmstat = value.clone();
     }
@@ -108,6 +110,7 @@ fn get_entry(values: Vec<Vmstat>, key: String) -> Result<String> {
         data: end_values,
         metadata,
     };
+    add_metrics(key, &mut metric, metrics, VMSTAT_FILE_NAME.to_string())?;
     Ok(serde_json::to_string(&vmstat_data)?)
 }
 
@@ -147,7 +150,7 @@ impl GetData for Vmstat {
         &mut self,
         buffer: Vec<ProcessedData>,
         query: String,
-        _metrics: &mut DataMetrics,
+        metrics: &mut DataMetrics,
     ) -> Result<String> {
         let mut values = Vec::new();
         for data in buffer {
@@ -163,7 +166,7 @@ impl GetData for Vmstat {
             "keys" => get_entries(values[0].clone()),
             "values" => {
                 let (_, key) = &param[2];
-                get_entry(values, key.to_string())
+                get_entry(values, key.to_string(), metrics)
             }
             _ => panic!("Unsupported API"),
         }

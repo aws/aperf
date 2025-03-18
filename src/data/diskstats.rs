@@ -2,7 +2,7 @@ extern crate ctor;
 
 use crate::data::constants::*;
 use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
-use crate::utils::DataMetrics;
+use crate::utils::{add_metrics, DataMetrics, Metric};
 use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata};
 use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
@@ -237,8 +237,9 @@ pub struct EndDiskValues {
     pub metadata: GraphMetadata,
 }
 
-fn get_values(values: Vec<Diskstats>, key: String) -> Result<String> {
+fn get_values(values: Vec<Diskstats>, key: String, metrics: &mut DataMetrics) -> Result<String> {
     let mut ev: BTreeMap<String, DiskValues> = BTreeMap::new();
+    let mut metric = Metric::new(key.clone());
     let disk_names = get_disk_names(values[0].clone());
     let mut metadata = GraphMetadata::new();
     let mut factor = FACTOR_OF_ONE;
@@ -280,6 +281,7 @@ fn get_values(values: Vec<Diskstats>, key: String) -> Result<String> {
                 value: stat_value,
             };
             metadata.update_limits(GraphLimitType::F64(stat_value));
+            metric.insert_value(stat_value);
             let dvs = ev.get_mut(&disk.name).unwrap();
             dvs.values.push(dv);
         }
@@ -289,6 +291,7 @@ fn get_values(values: Vec<Diskstats>, key: String) -> Result<String> {
         data: ev.into_values().collect(),
         metadata,
     };
+    add_metrics(key, &mut metric, metrics, DISKSTATS_FILE_NAME.to_string())?;
     Ok(serde_json::to_string(&end_values)?)
 }
 
@@ -313,7 +316,7 @@ impl GetData for Diskstats {
         &mut self,
         buffer: Vec<ProcessedData>,
         query: String,
-        _metrics: &mut DataMetrics,
+        metrics: &mut DataMetrics,
     ) -> Result<String> {
         let mut values = Vec::new();
         for data in buffer {
@@ -329,7 +332,7 @@ impl GetData for Diskstats {
             "keys" => get_keys(),
             "values" => {
                 let (_, key) = &param[2];
-                get_values(values, key.to_string())
+                get_values(values, key.to_string(), metrics)
             }
             _ => panic!("Unsupported API"),
         }

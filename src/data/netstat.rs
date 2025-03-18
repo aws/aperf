@@ -1,7 +1,7 @@
 extern crate ctor;
 
 use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
-use crate::utils::DataMetrics;
+use crate::utils::{add_metrics, DataMetrics, Metric};
 use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata};
 use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
 use anyhow::Result;
@@ -74,8 +74,9 @@ struct EndNetData {
     pub metadata: GraphMetadata,
 }
 
-fn get_entry(values: Vec<Netstat>, key: String) -> Result<String> {
+fn get_entry(values: Vec<Netstat>, key: String, metrics: &mut DataMetrics) -> Result<String> {
     let mut end_values = Vec::new();
+    let mut metric = Metric::new(key.clone());
     let mut metadata = GraphMetadata::new();
     let time_zero = values[0].time;
     let mut prev_netstat = values[0].clone();
@@ -96,6 +97,7 @@ fn get_entry(values: Vec<Netstat>, key: String) -> Result<String> {
             time: (current_time - time_zero),
             value: *curr_value - *prev_value,
         };
+        metric.insert_value(netstat_entry.value as f64);
         metadata.update_limits(GraphLimitType::UInt64(netstat_entry.value));
         end_values.push(netstat_entry);
         prev_netstat = value.clone();
@@ -104,6 +106,7 @@ fn get_entry(values: Vec<Netstat>, key: String) -> Result<String> {
         data: end_values,
         metadata,
     };
+    add_metrics(key, &mut metric, metrics, NETSTAT_FILE_NAME.to_string())?;
     Ok(serde_json::to_string(&netdata)?)
 }
 
@@ -161,7 +164,7 @@ impl GetData for Netstat {
         &mut self,
         buffer: Vec<ProcessedData>,
         query: String,
-        _metrics: &mut DataMetrics,
+        metrics: &mut DataMetrics,
     ) -> Result<String> {
         let mut values = Vec::new();
         for data in buffer {
@@ -177,7 +180,7 @@ impl GetData for Netstat {
             "keys" => get_entries(values[0].clone()),
             "values" => {
                 let (_, key) = &param[2];
-                get_entry(values, key.to_string())
+                get_entry(values, key.to_string(), metrics)
             }
             _ => panic!("Unsupported API"),
         }

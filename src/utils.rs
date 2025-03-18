@@ -1,3 +1,4 @@
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tdigest::TDigest;
@@ -71,4 +72,20 @@ impl Metric {
         self.stats.mean = t.mean();
         ValueType::Stats(self.stats.clone())
     }
+}
+
+pub fn add_metrics(
+    key: String,
+    metric: &mut Metric,
+    metrics: &mut DataMetrics,
+    file: String,
+) -> Result<()> {
+    if let Some(m) = metrics.values.get_mut(&file) {
+        m.insert(key, metric.form_stats());
+    } else {
+        let mut metric_map = HashMap::new();
+        metric_map.insert(key, metric.form_stats());
+        metrics.values.insert(file, metric_map);
+    }
+    Ok(())
 }
