@@ -1,6 +1,12 @@
 let got_netstat_data = false;
 let netstat_hide_zero_na_graphs = false;
 
+let netstat_rules = {
+    data_type: "netstat",
+    pretty_name: "Netstat",
+    rules: []
+}
+
 function getNetstatEntries(run, container_id, keys, run_data) {
     for (let i = 0; i < all_run_keys.length; i++) {
         let value = all_run_keys[i];

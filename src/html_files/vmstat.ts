@@ -1,6 +1,12 @@
 let got_vmstat_data = false;
 let vmstat_hide_zero_na_graphs = false;
 
+let vmstat_rules = {
+    data_type: "vmstat",
+    pretty_name: "Vmstat",
+    rules: []
+}
+
 function getEntries(run, container_id, keys, run_data) {
     for (let i = 0; i < all_run_keys.length; i++) {
         let value = all_run_keys[i];
