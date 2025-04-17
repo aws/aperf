@@ -1,6 +1,9 @@
 let got_flamegraphs_data: boolean|string = "none";
 
 function getJavaFlamegraphInfo(run, container_id, run_data){
+    if (add_no_data_div(container_id, run_data)) {
+        return;
+    }
     let data = JSON.parse(run_data['values']);
     let sorted = Object.keys(data).sort(function(x,y){
         return data[y][1] - data[x][1];
@@ -26,7 +29,10 @@ function getJavaFlamegraphInfo(run, container_id, run_data){
     }
 }
 
-function getFlamegraphInfo(run, container_id) {
+function getFlamegraphInfo(run, container_id, run_data) {
+    if (add_no_data_div(container_id, run_data)) {
+        return;
+    }
     var div = document.createElement('iframe');
     div.src = `data/js/${run}-flamegraph.svg`;
     div.style.width = `100%`;
@@ -47,7 +53,7 @@ function flamegraphs(set) {
         setTimeout(() => {
             switch(set){
                 case 'flamegraphs':
-                    getFlamegraphInfo(run_name, elem_id);
+                    getFlamegraphInfo(run_name, elem_id, raw_data['runs'][i]['key_values']);
                     break;
                 case 'javaprofile':
                     getJavaFlamegraphInfo(run_name, elem_id, raw_data['runs'][i]['key_values']);

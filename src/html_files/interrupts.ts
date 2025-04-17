@@ -47,6 +47,9 @@ function getLine(run, elem, key, run_data) {
 }
 
 function getLines(run, container_id, keys, run_data) {
+    if (add_no_data_div(container_id, run_data)) {
+        return;
+    }
     var data = keys;
     data.forEach(function (value, index, arr) {
         var elem = document.createElement('div');

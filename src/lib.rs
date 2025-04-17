@@ -24,6 +24,7 @@ use std::os::unix::io::AsFd;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::{fs, process, time};
+use strum::VariantNames;
 use thiserror::Error;
 use timerfd::{SetTimeFlags, TimerFd, TimerState};
 use utils::DataMetrics;
@@ -209,6 +210,18 @@ impl PerformanceData {
                 .expect("Could not create aperf-stats file"),
         );
 
+        if let Some(collect_list) = &self.init_params.collect_only {
+            self.collectors.retain(|k, _| {
+                collect_list.contains(k)
+                    || data::MandatoryData::VARIANTS.to_vec().contains(&k.as_str())
+            });
+            info!("User selection: Collect only - {:?}. Static data and CPU Utilization will always be collected.", collect_list);
+        } else if let Some(skip_list) = &self.init_params.skip_only {
+            info!("User selection: Skip only - {:?}. Static data and CPU Utilization will always be collected.", skip_list);
+            for datatype in skip_list {
+                self.collectors.remove(datatype);
+            }
+        }
         for (_name, datatype) in self.collectors.iter_mut() {
             datatype.init_data_type(&self.init_params)?;
         }
@@ -544,6 +557,11 @@ impl VisualizationData {
         visualizer.get_calls()
     }
 
+    pub fn has_data(&mut self, visualizer_name: String, run_name: String) -> Result<bool> {
+        let visualizer = self.visualizers.get_mut(&visualizer_name).unwrap();
+        visualizer.has_data(run_name)
+    }
+
     pub fn get_analytics(&mut self) -> Result<String> {
         Ok(serde_json::to_string(&self.analytics_data)?)
     }
@@ -559,6 +577,8 @@ pub struct InitParams {
     pub pmu_config: Option<PathBuf>,
     pub interval: u64,
     pub run_name: String,
+    pub collect_only: Option<Vec<String>>,
+    pub skip_only: Option<Vec<String>>,
     pub collector_version: String,
     pub commit_sha_short: String,
     pub tmp_dir: PathBuf,
@@ -598,6 +618,8 @@ impl InitParams {
             pmu_config: Option::None,
             interval: 0,
             run_name,
+            collect_only: Option::None,
+            skip_only: Option::None,
             collector_version,
             commit_sha_short,
             tmp_dir: PathBuf::from(APERF_TMP),

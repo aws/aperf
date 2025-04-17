@@ -1,11 +1,7 @@
 let got_process_data = false;
 
 function getProcesses(run, container_id, run_data) {
-    if (run_data.values == "No data collected") {
-        var no_data_div = document.createElement('div');
-        no_data_div.id = `processes-${run}-no-data`;
-        no_data_div.innerHTML = "No data collected";
-        addElemToNode(container_id, no_data_div);
+    if (add_no_data_div(container_id, run_data)) {
         return;
     }
     var data = JSON.parse(run_data.values);

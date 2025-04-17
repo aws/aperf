@@ -3,6 +3,7 @@ use anyhow::Result;
 use clap::Args;
 use log::{debug, error, info};
 use std::path::{Path, PathBuf};
+use strum::VariantNames;
 
 #[derive(Args, Debug)]
 pub struct Record {
@@ -29,6 +30,14 @@ pub struct Record {
     /// Custom PMU config file to use.
     #[clap(long, value_parser)]
     pub pmu_config: Option<String>,
+
+    /// Collect only these data types. All static data and CPU Utilization will always be collected.
+    #[clap(short, long, value_parser = data::OptionalData::VARIANTS.to_vec(), conflicts_with = "skip_only")]
+    pub collect_only: Option<Vec<String>>,
+
+    /// Skip only these data types. All static data and CPU Utilization will always be collected.
+    #[clap(short, long, value_parser = data::OptionalData::VARIANTS.to_vec(), conflicts_with = "collect_only")]
+    pub skip_only: Option<Vec<String>>,
 }
 
 fn prepare_data_collectors() -> Result<()> {
@@ -68,6 +77,8 @@ pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
     params.interval = record.interval;
     params.tmp_dir = tmp_dir.to_path_buf();
     params.runlog = runlog.to_path_buf();
+    params.collect_only = record.collect_only.clone();
+    params.skip_only = record.skip_only.clone();
     if let Some(p) = &record.pmu_config {
         params.pmu_config = Some(PathBuf::from(p));
     }
