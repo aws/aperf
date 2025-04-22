@@ -14,6 +14,22 @@ let perf_stat_rules = {
                     yield new Finding(`IPC difference between '${ruleOpts.base_run}' and '${ruleOpts.this_run}' is '${diff}'%.`, Status.NotGood);
                 }
             }
+        },
+        {
+            name: "branch-mpki",
+            per_run_rule: function* (ruleOpts: RuleOpts) : Generator<Finding, void, any> {
+                let diff = percent_difference(ruleOpts.base_run_data, ruleOpts.this_run_data);
+                // Branch MPKI increases are generally bad for performance
+                // A 20% threshold is suggested as branch prediction changes can be sensitive
+                if (diff > 20) {
+                    yield new Finding(
+                        `Branch Misprediction is ${diff}% different between '${ruleOpts.base_run}' and '${ruleOpts.this_run}'. ` +
+                        `This can significantly impact performance since every time the CPU predicts incorrectly it has to flush ` +
+                        `the current set of instructions it was working on and start over by fetching new instructions from the correct place.`,
+                        Status.NotGood
+                    );
+                }
+            }
         }
     ]
 }
