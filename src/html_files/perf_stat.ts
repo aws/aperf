@@ -14,6 +14,60 @@ let perf_stat_rules = {
                     yield new Finding(`IPC difference between '${ruleOpts.base_run}' and '${ruleOpts.this_run}' is '${diff}'%.`, Status.NotGood);
                 }
             }
+        },
+        {
+            name: "data-l1-mpki",
+            single_run_rule: function* (opts): Generator<Finding, void, any> {
+                let l1_mpki = opts.this_run_data;
+                let thresh = 20.;
+                if (l1_mpki < thresh) {
+                    yield new Finding(
+                        `L1 MPKI for '${opts.base_run}' is less than ${thresh}`,
+                        Status.Good,
+                    );
+                } else {
+                    yield new Finding(
+                        `L1 MPKI for '${opts.base_run}' is greater than ${thresh}`,
+                        Status.NotGood,
+                    );
+                }
+            },
+        },
+        {
+            name: "l2-mpki",
+            single_run_rule: function* (opts): Generator<Finding, void, any> {
+                let l2_mpki = opts.this_run_data;
+                let thresh = 10.;
+                if (l2_mpki < thresh) {
+                    yield new Finding(
+                        `L2 MPKI for '${opts.base_run}' is less than ${thresh}`,
+                        Status.Good,
+                    );
+                } else {
+                    yield new Finding(
+                        `L2 MPKI for '${opts.base_run}' is greater than ${thresh}`,
+                        Status.NotGood,
+                    );
+                }
+            },
+        },
+        {
+            name: "l3-mpki",
+            single_run_rule: function* (opts): Generator<Finding, void, any> {
+                let l3_mpki = opts.this_run_data;
+                let thresh = 2.;
+                if (l3_mpki < thresh) {
+                    yield new Finding(
+                        `L3 MPKI for '${opts.base_run}' is less than ${thresh}`,
+                        Status.Good,
+                    );
+                } else {
+                    yield new Finding(
+                        `L3 MPKI for '${opts.base_run}' is greater than ${thresh}`,
+                        Status.NotGood,
+                    );
+                }
+            },
         }
     ]
 }
