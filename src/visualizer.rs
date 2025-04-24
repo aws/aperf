@@ -84,7 +84,10 @@ impl DataVisualizer {
         self.report_params.data_file_path = fs::read_link(full_path).unwrap();
         self.file_handle = Some(file);
         self.run_values.insert(name.clone(), Vec::new());
-        self.data_available.insert(name, true);
+        self.data_available.insert(name.clone(), false);
+        if fs::metadata(self.report_params.data_file_path.clone())?.len() != 0 {
+            self.data_available.insert(name, true);
+        }
         Ok(())
     }
 
@@ -155,6 +158,10 @@ impl DataVisualizer {
 
     pub fn get_calls(&mut self) -> Result<Vec<String>> {
         self.data.get_calls()
+    }
+
+    pub fn has_data(&mut self, name: String) -> Result<bool> {
+        Ok(*self.data_available.get(&name).unwrap())
     }
 }
 

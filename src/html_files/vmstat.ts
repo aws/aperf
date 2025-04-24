@@ -8,6 +8,9 @@ let vmstat_rules = {
 }
 
 function getEntries(run, container_id, keys, run_data) {
+    if (add_no_data_div(container_id, run_data)) {
+        return;
+    }
     for (let i = 0; i < all_run_keys.length; i++) {
         let value = all_run_keys[i];
         var elem = document.createElement('div');

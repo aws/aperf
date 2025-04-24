@@ -263,30 +263,38 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
         let calls = visualizer.get_calls(api_name.clone())?;
         let mut api = Api::new(name.clone());
         for run_name in &run_names {
-            let mut temp_keys: Vec<String> = Vec::<String>::new();
             let mut run = Run::new(run_name.clone());
-            let mut keys = false;
+            if !visualizer.has_data(api_name.clone(), run_name.to_string())? {
+                run.key_values
+                    .insert("nodata".to_string(), "No data collected".to_string());
+                api.runs.push(run);
+                continue;
+            }
             for call in &calls {
-                let query = format!("run={}&get={}", run_name, call);
-                let mut data;
                 if call == "keys" {
-                    data = visualizer.get_data(run_name, &api_name, query)?;
-                    if data != "No data collected" {
-                        temp_keys = serde_json::from_str(&data)?;
-                    }
-                    run.keys = temp_keys.clone();
-                    keys = true;
+                    let data = visualizer.get_data(
+                        run_name,
+                        &api_name,
+                        format!("run={}&get={}", run_name, call),
+                    )?;
+                    run.keys = serde_json::from_str::<Vec<String>>(&data)?.clone();
                 }
                 if call == "values" {
-                    if keys {
-                        for key in &temp_keys {
-                            let query = format!("run={}&get=values&key={}", run_name, key);
-                            data = visualizer.get_data(run_name, &api_name, query.clone())?;
+                    if !run.keys.is_empty() {
+                        for key in &run.keys {
+                            let data = visualizer.get_data(
+                                run_name,
+                                &api_name,
+                                format!("run={}&get=values&key={}", run_name, key),
+                            )?;
                             run.key_values.insert(key.clone(), data.clone());
                         }
                     } else {
-                        let query = format!("run={}&get=values", run_name);
-                        data = visualizer.get_data(run_name, &api_name, query)?;
+                        let data = visualizer.get_data(
+                            run_name,
+                            &api_name,
+                            format!("run={}&get=values", run_name),
+                        )?;
                         run.key_values.insert(call.clone(), data.clone());
                     }
                 }
