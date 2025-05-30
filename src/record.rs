@@ -1,4 +1,5 @@
 use crate::{data, InitParams, PERFORMANCE_DATA};
+use anyhow::anyhow;
 use anyhow::Result;
 use clap::Args;
 use log::{debug, error, info};
@@ -53,11 +54,17 @@ pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
     let mut run_name = String::new();
     if record.period == 0 {
         error!("Collection period cannot be 0.");
-        return Ok(());
+        return Err(anyhow!("Cannot start recording with the given parameters."));
     }
     if record.interval == 0 {
         error!("Collection interval cannot be 0.");
-        return Ok(());
+        return Err(anyhow!("Cannot start recording with the given parameters."));
+    }
+    // Check if interval > period , if so give error user and exit.
+    if record.interval >= record.period {
+        error!("The overall recording period of {period} seconds needs to be longer than the interval of {interval} seconds.\
+                Please increase the overall recording period or decrease the interval.", interval = record.interval, period =record.period);
+        return Err(anyhow!("Cannot start recording with the given parameters."));
     }
     match &record.run_name {
         Some(r) => run_name = r.clone(),
