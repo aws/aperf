@@ -1,11 +1,14 @@
 use anyhow::Result;
+use aperf::data::{MandatoryData, OptionalData};
 use aperf::record::{record, Record};
 use aperf::report::{report, Report};
 use aperf::APERF_RUNLOG;
 use flate2::read::GzDecoder;
+use rusty_fork::rusty_fork_test;
 use serial_test::serial;
 use std::path::{Path, PathBuf};
 use std::{fs, panic};
+use strum::VariantNames;
 use tar::Archive;
 use tempfile::TempDir;
 
@@ -26,34 +29,13 @@ where
     }
 }
 
-#[test]
-#[serial]
-fn test_record() {
-    run_test(|tempdir, aperf_tmp| {
-        let run_name = record_with_name("test_record".to_string(), &tempdir, &aperf_tmp).unwrap();
-
-        assert!(Path::new(&run_name).exists());
-        assert!(Path::new(&(run_name.clone() + ".tar.gz")).exists());
-
-        fs::remove_dir_all(&run_name).unwrap();
-        fs::remove_file(run_name + ".tar.gz").unwrap();
-        Ok(())
-    })
-}
-
-#[test]
-#[serial]
-fn test_report() {
-    run_test(|tempdir, aperf_tmp| report_with_name("record_data".to_string(), tempdir, aperf_tmp))
-}
-
-#[test]
-#[serial]
-fn test_report_dot_in_run_name() {
-    run_test(|tempdir, aperf_tmp| report_with_name("record.data".to_string(), tempdir, aperf_tmp))
-}
-
-fn record_with_name(run: String, tempdir: &Path, aperf_tmp: &Path) -> Result<String> {
+fn record_with_name(
+    run: String,
+    tempdir: &Path,
+    aperf_tmp: &Path,
+    collect: Option<Vec<String>>,
+    skip: Option<Vec<String>>,
+) -> Result<String> {
     let run_name = tempdir.join(run).into_os_string().into_string().unwrap();
     let rec = Record {
         run_name: Some(run_name.clone()),
@@ -62,6 +44,8 @@ fn record_with_name(run: String, tempdir: &Path, aperf_tmp: &Path) -> Result<Str
         profile: false,
         profile_java: None,
         pmu_config: None,
+        collect_only: collect,
+        skip_only: skip,
     };
     let runlog = tempdir.join(APERF_RUNLOG);
     fs::File::create(&runlog).unwrap();
@@ -72,7 +56,7 @@ fn record_with_name(run: String, tempdir: &Path, aperf_tmp: &Path) -> Result<Str
 }
 
 fn report_with_name(run: String, tempdir: PathBuf, aperf_tmp: PathBuf) -> Result<()> {
-    let run_name = record_with_name(run, &tempdir, &aperf_tmp).unwrap();
+    let run_name = record_with_name(run, &tempdir, &aperf_tmp, None, None).unwrap();
 
     let test_report_path = PathBuf::from("test_report");
     let report_loc = tempdir
@@ -119,4 +103,100 @@ fn report_with_name(run: String, tempdir: PathBuf, aperf_tmp: PathBuf) -> Result
     fs::remove_file(run_name.clone() + ".tar.gz").unwrap();
     fs::remove_file(report_loc.clone() + ".tar.gz").unwrap();
     Ok(())
+}
+
+rusty_fork_test! {
+    #[test]
+    #[serial]
+    fn test_record() {
+        run_test(|tempdir, aperf_tmp| {
+            let run_name = record_with_name("test_record".to_string(), &tempdir, &aperf_tmp, None, None).unwrap();
+
+            assert!(Path::new(&run_name).exists());
+            assert!(Path::new(&(run_name.clone() + ".tar.gz")).exists());
+
+            fs::remove_dir_all(&run_name).unwrap();
+            fs::remove_file(run_name + ".tar.gz").unwrap();
+            Ok(())
+        })
+    }
+
+    #[test]
+    #[serial]
+    fn test_record_collect_vmstat_only() {
+        run_test(|tempdir, aperf_tmp| {
+            let run_name = record_with_name(
+                "test_vmstat_only".to_string(),
+                &tempdir,
+                &aperf_tmp,
+                Option::Some(vec!["vmstat".to_string()]),
+                Option::None
+            ).unwrap();
+
+            assert!(Path::new(&run_name).exists());
+            for dt in OptionalData::VARIANTS {
+                let base = PathBuf::from(&run_name);
+                let base_path = base.into_os_string().into_string().unwrap();
+                if aperf::get_file(base_path, dt.to_string()).is_ok() && *dt != "vmstat" {
+                    panic!("Found other Optional data types when vmstat should only be collected.");
+                }
+            }
+            for dt in MandatoryData::VARIANTS {
+                let base = PathBuf::from(&run_name);
+                let base_path = base.into_os_string().into_string().unwrap();
+                if aperf::get_file(base_path, dt.to_string()).is_err() {
+                    panic!("All mandatory data not collected. Datatype not found: {:#?}", dt);
+                }
+            }
+            fs::remove_dir_all(&run_name).unwrap();
+            fs::remove_file(run_name.clone() + ".tar.gz").unwrap();
+            Ok(())
+        })
+    }
+
+    #[test]
+    #[serial]
+    fn test_record_skip_vmstat_only() {
+        run_test(|tempdir, aperf_tmp| {
+            let run_name = record_with_name(
+                "test_skip_only".to_string(),
+                &tempdir,
+                &aperf_tmp,
+                Option::None,
+                Option::Some(vec!["vmstat".to_string()])
+            ).unwrap();
+
+            assert!(Path::new(&run_name).exists());
+            for entry in fs::read_dir(PathBuf::from(&run_name)).unwrap() {
+                println!("{:#?}", entry);
+            }
+            for dt in OptionalData::VARIANTS {
+                let base = PathBuf::from(&run_name);
+                let base_path = base.into_os_string().into_string().unwrap();
+                if aperf::get_file(base_path, dt.to_string()).is_ok() && *dt == "vmstat" {
+                    panic!( "Found vmstat when it should be skipped.");
+                }
+            }
+            for dt in MandatoryData::VARIANTS {
+                let base = PathBuf::from(&run_name);
+                let base_path = base.into_os_string().into_string().unwrap();
+                if aperf::get_file(base_path, dt.to_string()).is_err() {
+                    panic!("All mandatory data not collected. Datatype not found: {:#?}", dt);
+                }
+            }
+            Ok(())
+        })
+    }
+
+    #[test]
+    #[serial]
+    fn test_report() {
+        run_test(|tempdir, aperf_tmp| report_with_name("record_data".to_string(), tempdir, aperf_tmp))
+    }
+
+    #[test]
+    #[serial]
+    fn test_report_dot_in_run_name() {
+        run_test(|tempdir, aperf_tmp| report_with_name("record.data".to_string(), tempdir, aperf_tmp))
+    }
 }

@@ -107,6 +107,10 @@ To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 
 `--profile-java` profile JVMs by PID or name using async-profiler (default profiles all JVMs)
 
+`--collect-only` collect only these data types
+
+`--skip-only` skip only these data types
+
 `./aperf record -h`
 
 **Reporter Flags:**

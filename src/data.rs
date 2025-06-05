@@ -295,6 +295,42 @@ macro_rules! processed_data {
     };
 }
 
+#[derive(Clone, Debug, strum_macros::EnumString, strum_macros::EnumVariantNames)]
+#[strum(serialize_all = "snake_case")]
+pub enum MandatoryData {
+    SystemInfo,
+    CpuUtilization,
+    KernelConfig,
+    Sysctl,
+}
+/*
+ * This will be used in aperf record to allow the user to select which data types to collect.
+ * Must be the same as the name used to register with PERFORMANCE_DATA.
+ * This is using snake_case, all `_` in the data type name requires a capitalization.
+ * Do not add:
+ * - static data collectors
+ * - absolutely important to collect data types (ex. CPU Utilization)
+ */
+#[derive(Clone, Debug, strum_macros::EnumString, strum_macros::EnumVariantNames)]
+#[strum(serialize_all = "snake_case")]
+pub enum OptionalData {
+    Vmstat,
+    DiskStats,
+    Interrupts,
+    PerfStat,
+    Processes,
+    Meminfo,
+    Netstat,
+    PerfProfile,
+    Flamegraph,
+    JavaProfile,
+}
+
+/*
+ * !!! Note:
+ * Please add the data type to the MandatoryData or OptionalData enum. Otherwise,
+ * the user may not be able to choose if they want to exclusively collect/skip that data type.
+ */
 data!(
     CpuUtilizationRaw,
     VmstatRaw,
