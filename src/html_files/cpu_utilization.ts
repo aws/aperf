@@ -117,6 +117,7 @@ function getCpuUtilization(elem, run, run_data) {
         y_irq.push(value.values.irq);
         y_softirq.push(value.values.softirq);
         y_idle.push(value.values.idle);
+	y_iowait.push(value.values.iowait);
         y_steal.push(value.values.steal);
     });
     var user: Partial<Plotly.PlotData> = {
