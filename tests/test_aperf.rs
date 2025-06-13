@@ -60,6 +60,7 @@ fn record_with_name(run: String, tempdir: &Path, aperf_tmp: &Path) -> Result<Str
         interval: 1,
         period: 2,
         profile: false,
+        perf_frequency: 99,
         profile_java: None,
         pmu_config: None,
     };

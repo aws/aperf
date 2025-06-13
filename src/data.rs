@@ -58,6 +58,7 @@ pub struct CollectorParams {
     pub signal: Signal,
     pub runlog: PathBuf,
     pub pmu_config: Option<PathBuf>,
+    pub perf_frequency: u32,
 }
 
 impl CollectorParams {
@@ -73,6 +74,7 @@ impl CollectorParams {
             signal: signal::SIGTERM,
             runlog: PathBuf::new(),
             pmu_config: Option::None,
+            perf_frequency: 99,
         }
     }
 }
