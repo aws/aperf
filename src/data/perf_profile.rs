@@ -48,7 +48,7 @@ impl CollectData for PerfProfileRaw {
                 "-k",
                 "1",
                 "-F",
-                "99",
+                &params.perf_frequency.to_string(),
                 "-e",
                 "cpu-clock:pppH",
                 "-o",

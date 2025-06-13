@@ -105,6 +105,8 @@ To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 
 `--profile` gather profiling data using the 'perf' binary
 
+`-F, --perf-frequency` frequency for perf profiling in Hz (default 99)
+
 `--profile-java` profile JVMs by PID or name using async-profiler (default profiles all JVMs)
 
 `./aperf record -h`

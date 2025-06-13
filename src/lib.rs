@@ -563,6 +563,7 @@ pub struct InitParams {
     pub commit_sha_short: String,
     pub tmp_dir: PathBuf,
     pub runlog: PathBuf,
+    pub perf_frequency: u32,
 }
 
 impl InitParams {
@@ -602,6 +603,7 @@ impl InitParams {
             commit_sha_short,
             tmp_dir: PathBuf::from(APERF_TMP),
             runlog: PathBuf::new(),
+            perf_frequency: 99,
         }
     }
 }

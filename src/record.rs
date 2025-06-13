@@ -23,6 +23,10 @@ pub struct Record {
     #[clap(long, value_parser)]
     pub profile: bool,
 
+    /// Frequency for perf profiling (Hz).
+    #[clap(short = 'F', long, value_parser, default_value_t = 99)]
+    pub perf_frequency: u32,
+
     /// Profile JVMs using async-profiler. Specify args using comma separated values. Profiles all JVMs if no args are provided.
     #[clap(long, value_parser, default_missing_value = Some("jps"), value_names = &["PID/Name>,<PID/Name>,...,<PID/Name"], num_args = 0..=1)]
     pub profile_java: Option<String>,
@@ -97,6 +101,7 @@ pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
             String::from(data::flamegraphs::FLAMEGRAPHS_FILE_NAME),
             String::new(),
         );
+        params.perf_frequency = record.perf_frequency;
     }
 
     PERFORMANCE_DATA.lock().unwrap().set_params(params);
