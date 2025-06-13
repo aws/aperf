@@ -21,11 +21,24 @@ let comparator = 'mean';
 let all_run_keys: Array<string> = new Array<string>();
 let key_limits: Map<string, Limits> = new Map<string, Limits>();
 
+function add_no_data_div(container_id, run_data) {
+    if ('nodata' in run_data)
+    {
+        let no_data_div = document.createElement("div");
+        no_data_div.innerHTML = 'No data collected';
+        addElemToNode(container_id, no_data_div);
+        return true;
+    }
+    return false;
+}
 function form_graph_limits(data) {
     key_limits.clear();
     all_run_keys.length = 0;
     for (let i = 0; i < data.runs.length; i++) {
         let key_values = data.runs[i]['key_values'];
+        if ('nodata' in key_values) {
+            continue;
+        }
         for (let key in key_values) {
             let metadata = JSON.parse(key_values[key])['metadata'];
             let limits = metadata.limits;
