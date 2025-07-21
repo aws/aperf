@@ -37,6 +37,7 @@ RUN source /root/.bashrc && \
 # Install aperf with architecture detection
 RUN source /root/.bashrc && \
     export APERF_VERSION="$(curl -s https://api.github.com/repos/aws/aperf/releases/latest | jq -r $ARGS.name)" && \
+    echo https://github.com/aws/aperf/releases/download/$APERF_VERSION/aperf-$APERF_VERSION-$ARCH.tar.gz && \
     curl -s -L -o /opt/aperf.tar.gz https://github.com/aws/aperf/releases/download/$APERF_VERSION/aperf-$APERF_VERSION-$ARCH.tar.gz && \
     tar zxf /opt/aperf.tar.gz -C /opt/ --strip-components=1 && \
     rm /opt/aperf.tar.gz && \
