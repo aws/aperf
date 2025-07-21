@@ -70,7 +70,7 @@ docker build -t ${APERF_ECRREPO}:latest -f ./Dockerfile .
 docker push ${APERF_ECRREPO}:latest
 ```
 
-Your APerf contenarized image should now be available on the ECR registry.
+Your APerf containerized image should now be available on the ECR registry.
 
 
 ### Step 3: Run APerf on EKS
@@ -96,7 +96,7 @@ bash ./eks-aperf.sh \
   --node="ip-10-0-120-104.us-west-2.compute.internal" 
 ```
 
-#### Script Parameters
+##### Script Parameters
 
 - `--aperf_image`: ECR image URL for the APerf container
 - `--node`: Target Kubernetes node name
@@ -107,7 +107,7 @@ bash ./eks-aperf.sh \
 - `--cpu-limit`: CPU limit for the pod (optional, default: `4.0`)
 - `--memory-limit`: Memory limit for the pod (optional, default: `4Gi`)
 
-#### Example with Custom Options
+##### Example with Custom Options
 
 ```bash
 # Run APerf for 60 seconds with profiling enabled
@@ -133,7 +133,7 @@ bash ./eks-aperf.sh \
 
 #### 3c. Collect Results
 
-The `eks-aperf.sh` script will automatically:
+The `eks-aperf.sh` script will automatically run the following steps:
 
 1. **Pod Deployment**: Deploy a privileged pod on the specified node
 2. **APerf Record**: Runs APerf record inside the pod with the specified options

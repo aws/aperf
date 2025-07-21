@@ -1,4 +1,5 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
 set -e
 set -o pipefail
 
@@ -27,80 +28,34 @@ NC="\033[0m" # No Color
 
 # Parse command line arguments
 while [ $# -gt 0 ]; do
-  case "$1" in
-    --node=*)
-      NODE_NAME="${1#*=}"
-      shift
-      ;;
-    --node)
-      NODE_NAME="$2"
-      shift 2
-      ;;
-    --namespace=*)
-      NAMESPACE="${1#*=}"
-      shift
-      ;;
-    --namespace)
-      NAMESPACE="$2"
-      shift 2
-      ;;
-    --aperf_options=*)
-      APERF_OPTIONS="${1#*=}"
-      shift
-      ;;
-    --aperf_options)
-      APERF_OPTIONS="$2"
-      shift 2
-      ;;
-    --aperf_image=*)
-      APERF_IMAGE="${1#*=}"
-      shift
-      ;;
-    --aperf_image)
-      APERF_IMAGE="$2"
-      shift 2
-      ;;
-    --cpu-request=*)
-      CPU_REQUEST="${1#*=}"
-      shift
-      ;;
-    --cpu-request)
-      CPU_REQUEST="$2"
-      shift 2
-      ;;
-    --memory-request=*)
-      MEMORY_REQUEST="${1#*=}"
-      shift
-      ;;
-    --memory-request)
-      MEMORY_REQUEST="$2"
-      shift 2
-      ;;
-    --cpu-limit=*)
-      CPU_LIMIT="${1#*=}"
-      shift
-      ;;
-    --cpu-limit)
-      CPU_LIMIT="$2"
-      shift 2
-      ;;
-    --memory-limit=*)
-      MEMORY_LIMIT="${1#*=}"
-      shift
-      ;;
-    --memory-limit)
-      MEMORY_LIMIT="$2"
-      shift 2
-      ;;
+  dest=""
+  case "${1%=*}" in
+    --node) dest="NODE_NAME";;
+    --namespace) dest="NAMESPACE";;
+    --aperf_options) dest="APERF_OPTIONS";;
+    --aperf_image) dest="APERF_IMAGE";;
+    --cpu-request) dest="CPU_REQUEST";;
+    --memory-request) dest="MEMORY_REQUEST";;
+    --cpu-limit) dest="CPU_LIMIT";;
+    --memory-limit) dest="MEMORY_LIMIT";;
     --help)
       SHOW_HELP=true
       shift
+      continue
       ;;
     *)
       echo "Unknown parameter: $1"
       exit 1
       ;;
   esac
+  
+  if [[ "$1" = *=* ]]; then
+    eval ${dest}='"${1#*=}"'
+  else
+    eval ${dest}='"$2"'
+    shift
+  fi
+  shift
 done
 
 # Show help if requested
@@ -224,7 +179,7 @@ kubectl top pods --all-namespaces > /tmp/allpods.out  && \
 head -n 1 /tmp/allpods.out  &&  \
 grep "$(kubectl get pods --all-namespaces --field-selector spec.nodeName=${NODE_NAME} -o jsonpath='{range .items[*]}{.metadata.name}{" "}{end}' | sed 's/[[:space:]]*$//' | sed 's/[[:space:]]/\\|/g')" /tmp/allpods.out --color=never
 
-# Crate APerf pod
+# Create APerf pod
 echo -e "\n${BOLD}Created pod configuration for node:${NC} ${NODE_NAME}${NC}"
 
 # Apply the pod directly from variable
@@ -243,6 +198,9 @@ if ! kubectl wait --for=condition=ready pod/${POD_NAME} -n ${NAMESPACE} --timeou
   exit 1
 fi
 
+# Start recording time
+POD_STARTTIME=$(date +%Y%m%d-%H%M%S)
+
 # Start logs in background and save PID
 echo -e "${BOLD}Starting program logs...${NC} ${YELLOW}"
 kubectl logs -f ${POD_NAME} -n ${NAMESPACE} --tail=100 &
@@ -257,7 +215,7 @@ done
 kill $LOGS_PID 2>/dev/null || true
 
 # Copy files from pod to local directory
-LOCAL_FILE="aperf_report_$(date +%Y%m%d-%H%M%S).tar.gz"
+LOCAL_FILE="aperf_report_${POD_STARTTIME}.tar.gz"
 echo -e "${NC}${BOLD}Aperf completed. Copying files from pod ${POD_NAME}...${NC}"
 kubectl cp ${NAMESPACE}/${POD_NAME}:aperf_report.tar.gz ${LOCAL_FILE}
 
