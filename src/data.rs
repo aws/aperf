@@ -4,6 +4,7 @@ pub mod constants;
 pub mod cpu_utilization;
 pub mod diskstats;
 pub mod flamegraphs;
+pub mod hotline;
 pub mod interrupts;
 pub mod java_profile;
 pub mod kernel_config;
@@ -27,6 +28,7 @@ use chrono::prelude::*;
 use cpu_utilization::{CpuUtilization, CpuUtilizationRaw};
 use diskstats::{Diskstats, DiskstatsRaw};
 use flamegraphs::{Flamegraph, FlamegraphRaw};
+use hotline::{Hotline, HotlineRaw};
 use interrupts::{InterruptData, InterruptDataRaw};
 use java_profile::{JavaProfile, JavaProfileRaw};
 use kernel_config::KernelConfig;
@@ -59,6 +61,9 @@ pub struct CollectorParams {
     pub runlog: PathBuf,
     pub pmu_config: Option<PathBuf>,
     pub perf_frequency: u32,
+    pub hotline_frequency: u32,
+    pub interval: u64,
+    pub num_to_report: u32,
 }
 
 impl CollectorParams {
@@ -75,6 +80,9 @@ impl CollectorParams {
             runlog: PathBuf::new(),
             pmu_config: Option::None,
             perf_frequency: 99,
+            hotline_frequency: 1000,
+            interval: 1,
+            num_to_report: 5000,
         }
     }
 }
@@ -135,6 +143,9 @@ impl DataType {
         self.collector_params.tmp_dir = param.tmp_dir.clone();
         self.collector_params.runlog = param.runlog.clone();
         self.collector_params.pmu_config = param.pmu_config.clone();
+        self.collector_params.interval = param.interval;
+        self.collector_params.hotline_frequency = param.hotline_frequency;
+        self.collector_params.num_to_report = param.num_to_report;
 
         self.file_handle = Some(
             OpenOptions::new()
@@ -311,7 +322,8 @@ data!(
     NetstatRaw,
     PerfProfileRaw,
     FlamegraphRaw,
-    JavaProfileRaw
+    JavaProfileRaw,
+    HotlineRaw
 );
 
 processed_data!(
@@ -327,6 +339,7 @@ processed_data!(
     MeminfoData,
     Netstat,
     PerfProfile,
+    Hotline,
     Flamegraph,
     AperfStat,
     AperfRunlog,

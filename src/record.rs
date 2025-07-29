@@ -34,6 +34,14 @@ pub struct Record {
     /// Custom PMU config file to use.
     #[clap(long, value_parser)]
     pub pmu_config: Option<String>,
+
+    /// SPE sampling frequency, defaulted to 1kHz on Grv4.
+    #[clap(long, value_parser, default_value_t = 1000)]
+    pub hotline_frequency: u32,
+
+    /// Maximum number of report entries to process for Hotline tables
+    #[clap(long, value_parser, default_value_t = 5000)]
+    pub num_to_report: u32,
 }
 
 fn prepare_data_collectors() -> Result<()> {
@@ -55,6 +63,8 @@ fn collect_static_data() -> Result<()> {
 }
 
 pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
+    println!("runlog: {:?}", runlog);
+
     let mut run_name = String::new();
     if record.period == 0 {
         error!("Collection period cannot be 0.");
@@ -82,6 +92,9 @@ pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
     if let Some(p) = &record.pmu_config {
         params.pmu_config = Some(PathBuf::from(p));
     }
+
+    params.hotline_frequency = record.hotline_frequency;
+    params.num_to_report = record.num_to_report;
 
     match &record.profile_java {
         Some(j) => {

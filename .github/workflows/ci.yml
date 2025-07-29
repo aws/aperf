@@ -27,7 +27,7 @@ jobs:
 
       # Prepare build dependencies
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@2080da66123fcc7ec821c7597e9bc40af40d8af6 # 1.73.0
+        uses: dtolnay/rust-toolchain@47f4dd75f027bd6cfe06f3dc15ddfcb07acc7e4e # 1.74.0
         with:
           components: rustfmt, clippy
       - name: Install Node
@@ -40,6 +40,16 @@ jobs:
         run: sudo apt install -y build-essential
       - name: Install musl
         run: sudo apt install -y musl-tools
+      - name: Install Hotline dependencies
+        run: |
+          sudo apt-get install \
+            libdw-dev \
+            libelf-dev \
+            libcapstone-dev \
+            zlib1g-dev \
+            liblzma-dev \
+            libbz2-dev \
+            libzstd-dev
 
       # Tests and static analysis
       - name: Set perf_event_paranoid to 0
@@ -47,7 +57,7 @@ jobs:
       - name: Run tests
         run: cargo test --verbose -- --nocapture --color always
       - name: Run clippy
-        run: cargo clippy --all-targets --all-features
+        run: cargo clippy --all-targets
       - name: Run rustfmt
         run: cargo fmt --all -- --check
 
@@ -56,6 +66,21 @@ jobs:
         run: |
           rustup target add $(arch)-unknown-linux-musl
           cargo build --release --target $(arch)-unknown-linux-musl
+
+      # Is not published, but ensures that Hotline can be built
+      # [hotline] tests will fail since it is not Graviton metal,
+      # but they are graceful and the test suite should pass
+      - name: Build and test dynamically linked artifacts
+        run: |
+          if [ $(arch) = "aarch64" ]; then
+            cargo clippy --all-targets --features hotline
+            cargo test --features hotline --verbose -- --nocapture --color always
+          fi
+
+          
+      - name: Ensure no runtime dependencies
+        run: |
+          ldd target/$(arch)-unknown-linux-musl/release/aperf 2>&1 | grep -E "not a dynamic executable|statically linked"
       - name: Archive release artifacts
         run: tar -zcvf artifacts.tar.gz -C target/$(arch)-unknown-linux-musl/release aperf
       - name: Upload x86_64 release artifacts
