@@ -24,6 +24,7 @@ APerf collects the following performance data:
 - Meminfo
 - Profile data (if enabled with `--profile` and `perf` binary present)
 - JVM profile data with [async-profiler](https://github.com/async-profiler/async-profiler/tree/master) binary
+- Memory and branch predictor hot spot detection (metal instance only)
 
 ## Requirements
 * [Rust toolchain (v1.61.0+)](https://www.rust-lang.org/tools/install)
@@ -36,11 +37,53 @@ Download the binary from the [Releases](https://github.com/aws/APerf/releases) p
 
 ### Building from source
 1. Download the source code from the [Releases](https://github.com/aws/APerf/releases) page.
-2. Run the following commands:
 
+2. Install the Rust toolchain, node, and build tools
+    - `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+    - `curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash`
+    - `source ~/.bashrc`  # or `source ~/.zshrc` if using zsh
+    - `nvm install 16.16.0`
+    - `nvm use 16.16.0`
+    - `sudo apt install -y build-essential` for Ubuntu and `sudo yum install kernel-devel` for Amazon Linux
+
+3. Run the following commands:
 ```
 cargo build
 cargo test
+```
+
+4. The memory and branch predictor hot spot analysis tool (hotline) is not enabled by default and requires having appropriate permissions set and necessary dependencies installed. The following demonstrates how to do it on Ubuntu and Amazon Linux.
+
+On Ubuntu 22.04:
+
+   - `sudo apt-get update`
+   - `sudo apt install -y build-essential`
+   - `sudo apt install linux-modules-extra-$(uname -r)`
+   - `sudo nano /etc/default/grub` and add/modify `GRUB_CMDLINE_LINUX_DEFAULT="kpti=off"`
+   - `sudo update-grub`
+   - `sudo reboot`
+   - `sudo modprobe arm_spe_pmu`
+   - `sudo sh -c 'echo 0 > /proc/sys/kernel/kptr_restrict'`
+   - `sudo sh -c 'echo -1 > /proc/sys/kernel/perf_event_paranoid'`
+   - `sudo chmod +r /proc/kallsyms`
+   - `sudo apt-get install libdw-dev  libelf-dev  libcapstone-dev  zlib1g-dev  liblzma-dev  libbz2-dev  libzstd-dev`
+
+On Amazon Linux 2 / Amazon Linux 2023:
+
+   - `sudo yum install kernel-devel`
+   - `sudo nano /etc/default/grub` and add/modify `GRUB_CMDLINE_LINUX_DEFAULT="kpti=off"`
+   - `sudo grub2-mkconfig -o /boot/grub2/grub.cfg`
+   - `sudo reboot`
+   - `sudo sysctl -w kernel.perf_event_paranoid=-1`
+   - `sudo sysctl -w kernel.kptr_restrict=0`
+   - `sudo sysctl --system`
+   - `sudo chmod +r /proc/kallsyms`
+   - `sudo yum groupinstall "Development Tools" -y && sudo yum install -y elfutils-devel elfutils-libelf-devel capstone-devel zlib-devel xz-devel bzip2-devel libzstd-devel`
+
+4. To build with Hotline, run
+```
+cargo build --release --features hotline
+cargo test --features hotline
 ```
 
 ## Usage
@@ -59,6 +102,8 @@ echo 100 | sudo tee /sys/devices/*/perf_event_mux_interval_ms
 2. Start `aperf record`:
 ```
 ./aperf record -r <RUN_NAME> -i <INTERVAL_NUMBER> -p <COLLECTION_PERIOD>
+            [--hotline-frequency <HOTLINE_FREQUENCY>]  # Optional: if Hotline is enabled
+            [--num-to-report <HOTLINE_TABLE_SIZE>]     # Optional: if Hotline is enabled
 ```
 
 **aperf report**
@@ -80,6 +125,7 @@ To compare the results of two different performance runs, use the following comm
 ```
 ./aperf custom-pmu
 ```
+
 ### Example
 To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 
@@ -108,6 +154,8 @@ To see a step-by-step example, please see our example [here](./EXAMPLE.md)
 `-F, --perf-frequency` frequency for perf profiling in Hz (default 99)
 
 `--profile-java` profile JVMs by PID or name using async-profiler (default profiles all JVMs)
+
+`--hotline-sample-frequency` Hotline sampling period (Hz) **[hotline tool]** (default is 1Khz)
 
 `./aperf record -h`
 
