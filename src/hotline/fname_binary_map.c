@@ -6,6 +6,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <stdlib.h>
 
 #include "log.h"
 
@@ -178,6 +179,32 @@ binary_info_t *get_fname_binary_map_entry(char *filename) {
   }
 }
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+char* __cxa_demangle(const char* mangled_name, char* output_buffer,
+                     size_t* length, int* status);
+#ifdef __cplusplus
+}
+#endif
+
+/// @brief Demangles function names decoded from ELF file
+/// @param mangled Mangled function name
+/// @return Returns demangled name on success, mangled on failure
+char* demangle(const char* mangled) {
+    if (!mangled) return NULL;
+    
+    int status = 0;
+    char* demangled = __cxa_demangle(mangled, NULL, NULL, &status);
+    
+    if (status == 0 && demangled) {
+        return demangled;
+    } else {
+        if (demangled) free(demangled);
+        return strdup(mangled);
+    }
+}
+
 /// @brief Returns the function associated with the addr
 /// @param info Binary info structure for file
 /// @param addr Offset into file
@@ -191,7 +218,12 @@ char *get_function_name(binary_info_t *info, uint64_t addr) {
           addr < info->symtab[i].st_value + info->symtab[i].st_size) {
         char *name = strdup(info->strtab + info->symtab[i].st_name);
         ASSERT(name != NULL, "Function name should not be null.");
-        return name;
+        char *demangled = demangle(name);
+        char *quoted_function = malloc(strlen(demangled) + 3);
+
+        sprintf(quoted_function, "\"%s\"", demangled);
+        free(demangled);
+        return quoted_function;
       }
     }
   }
@@ -402,7 +434,7 @@ debug_info_t *get_debug_info(char *filename, uint64_t offset) {
     if (function) {
       dinfo->function = function;
     } else {
-      dinfo->function = strdup("(null)");
+      dinfo->function = strdup("\"(null)\"");
     }
 
     char *assembly = get_assembly(info, offset);
