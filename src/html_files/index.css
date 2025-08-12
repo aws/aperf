@@ -133,3 +133,18 @@ tr:hover {
     line-height: 1.5;
     font-size: 0.9em;
 }
+
+.hotline-table-container {
+  display: flex;
+  justify-content: space-between;
+}
+
+.hotline-run-section {
+  padding: 0 10px;
+}
+
+.hotline-iframe {
+  width: 100%;
+  height: 500px;
+  display: none;
+}
