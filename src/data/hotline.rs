@@ -16,6 +16,7 @@ use {
     ctor::ctor,
     libc::{_exit, fork, geteuid, killpg, setpgid, waitpid, SIGTERM},
     log::{info, warn},
+    std::path::Path,
     std::{
         env,
         ffi::CString,
@@ -100,12 +101,12 @@ pub mod hotline_reports {
     use std::io::Write;
     use std::path::Path;
 
-    struct ReportConfig<'a> {
-        table_id: &'a str,
-        filename: &'a str,
+    pub struct ReportConfig<'a> {
+        pub table_id: &'a str,
+        pub filename: &'a str,
     }
 
-    const REPORT_CONFIGS: [ReportConfig; 5] = [
+    pub const REPORT_CONFIGS: [ReportConfig; 5] = [
         ReportConfig {
             table_id: "completion_node",
             filename: "hotline_lat_map_completion_report.csv",
@@ -157,7 +158,7 @@ pub mod hotline_reports {
             let output_path = Path::new(&params.report_dir)
                 .join("data")
                 .join("js")
-                .join(format!("{}.html", config.table_id));
+                .join(format!("{}_{}.html", params.run_name, config.table_id));
             let mut file = File::create(output_path)?;
             file.write_all(full_html.as_bytes())?;
         }
@@ -317,36 +318,66 @@ impl CollectData for HotlineRaw {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Hotline {}
+pub struct Hotline {
+    pub generated_files: Vec<String>,
+}
 
 impl Hotline {
     pub fn new() -> Self {
-        Hotline {}
+        Hotline {
+            generated_files: vec![],
+        }
     }
 }
 
 impl GetData for Hotline {
     #[cfg(feature = "hotline")]
     fn custom_raw_data_parser(&mut self, params: ReportParams) -> Result<Vec<ProcessedData>> {
+        use crate::data::hotline::hotline_reports::REPORT_CONFIGS;
+
         match hotline_reports::generate_html_files(&params) {
             Ok(_) => (),
             Err(e) => eprintln!("Warning: Failed to generate HTML tables: {}", e),
         }
 
-        Ok(vec![])
+        let mut hotline_data = Hotline::new();
+        hotline_data.generated_files = Vec::new();
+
+        for config in REPORT_CONFIGS.iter() {
+            let file_path = format!("{}/{}", params.data_dir.display(), config.filename);
+            let path = Path::new(&file_path);
+            if path.exists() && path.is_file() {
+                hotline_data
+                    .generated_files
+                    .push(config.table_id.to_string());
+            }
+        }
+
+        let data = ProcessedData::Hotline(hotline_data.clone());
+        Ok(vec![data])
     }
 
     fn get_calls(&mut self) -> Result<Vec<String>> {
-        Ok(vec![])
+        Ok(vec!["values".to_string()])
     }
 
     fn get_data(
         &mut self,
-        _: Vec<ProcessedData>,
+        buffer: Vec<ProcessedData>,
         _query: String,
         _metrics: &mut DataMetrics,
     ) -> Result<String> {
-        Ok("".to_string())
+        let mut values = Vec::new();
+        for data in buffer {
+            match data {
+                ProcessedData::Hotline(ref value) => {
+                    values.extend(value.generated_files.clone());
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        Ok(serde_json::to_string(&values)?)
     }
 }
 

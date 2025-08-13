@@ -31,6 +31,7 @@ DataTypes.set('perfstat', new DataType('perfstat', '', '', perfStat, ''));
 DataTypes.set('aperfstat', new DataType('aperfstat', '', '', aperfStat, ''));
 DataTypes.set('aperfrunlog', new DataType('aperfrunlog', '', '', aperfRunlog, ''));
 DataTypes.set('configure', new DataType('configure', '', '', configure, ''));
+DataTypes.set('hotline', new DataType('hotline', '', '', hotline, ''));
 
 function openData(evt: Event, elem: HTMLButtonElement) {
 	var tabName: string = elem.name;
