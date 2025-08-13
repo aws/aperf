@@ -42,16 +42,6 @@ jobs:
               console.log('Closed pull request', prNumber)
             }
 
-            console.log('Closing any existing pull requests')
-            const { data: existingPulls } = await github.rest.pulls.list({ owner, repo, head, base })
-            if (existingPulls.length) {
-              console.log('Found existing pull requests', existingPulls.map(pull => pull.number))
-              for (const pull of existingPulls) {
-                await closePullRequest(pull.number)
-              }
-              console.log('Closed existing pull requests')
-            }
-
             try {
               const { data } = await github.rest.repos.compareCommits({
                 owner,
