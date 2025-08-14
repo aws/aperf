@@ -81,6 +81,7 @@ fn main() -> Result<()> {
         println!("cargo:rustc-link-lib=dylib=lzma");
         println!("cargo:rustc-link-lib=dylib=bz2");
         println!("cargo:rustc-link-lib=dylib=zstd");
+        println!("cargo:rustc-link-lib=dylib=stdc++");
 
         println!("Building with Hotline support.");
     }
