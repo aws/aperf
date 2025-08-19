@@ -1,19 +1,13 @@
-extern crate ctor;
-
-use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
-use crate::utils::{DataMetrics, Metric};
-use crate::visualizer::{DataVisualizer, GetData};
-use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
+use crate::utils::{get_data_name_from_type, DataMetrics, Metric};
+use crate::visualizer::GetData;
 use anyhow::Result;
 use chrono::prelude::*;
-use ctor::ctor;
 use log::trace;
 use procfs::{CpuTime, KernelStats};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::ops::Sub;
-
-pub static CPU_UTILIZATION_FILE_NAME: &str = "cpu_utilization";
 
 /// Gather CPU Utilization raw data.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -287,7 +281,7 @@ pub fn get_aggregate_data(values: Vec<CpuData>, metrics: &mut DataMetrics) -> Re
     metric_map.insert("Steal".to_string(), steal.form_stats());
     metrics
         .values
-        .insert(CPU_UTILIZATION_FILE_NAME.to_string(), metric_map);
+        .insert(get_data_name_from_type::<CpuData>().to_string(), metric_map);
     Ok(serde_json::to_string(&end_values)?)
 }
 
@@ -409,35 +403,6 @@ impl GetData for CpuUtilization {
     }
 }
 
-#[ctor]
-fn init_cpu_utilization() {
-    let cpu_utilization_raw = CpuUtilizationRaw::new();
-    let file_name = CPU_UTILIZATION_FILE_NAME.to_string();
-    let dt = DataType::new(
-        Data::CpuUtilizationRaw(cpu_utilization_raw.clone()),
-        file_name.clone(),
-        false,
-    );
-    let js_file_name = file_name.clone() + ".js";
-    let cpu_utilization = CpuUtilization::new();
-    let dv = DataVisualizer::new(
-        ProcessedData::CpuUtilization(cpu_utilization),
-        file_name.clone(),
-        js_file_name,
-        include_str!(concat!(env!("JS_DIR"), "/cpu_utilization.js")).to_string(),
-        file_name.clone(),
-    );
-
-    PERFORMANCE_DATA
-        .lock()
-        .unwrap()
-        .add_datatype(file_name.clone(), dt);
-
-    VISUALIZATION_DATA
-        .lock()
-        .unwrap()
-        .add_visualizer(file_name.clone(), dv);
-}
 #[cfg(test)]
 mod cpu_tests {
     use super::{CpuData, CpuUtilization, CpuUtilizationRaw, UtilData};

@@ -52,9 +52,9 @@ function getAperfEntry(elem, key, run_data) {
 function getAperfEntries(run, container_id, keys, run_data) {
     for (let i = 0; i < all_run_keys.length; i++) {
         let value = all_run_keys[i];
-	    var elem = document.createElement('div');
-	    elem.id = `aperfstat-${run}-${value}`;
-	    elem.style.float = "none";
+        var elem = document.createElement('div');
+        elem.id = `aperfstat-${run}-${value}`;
+        elem.style.float = "none";
         if (keys.length == 0) {
             elem.innerHTML = "No data collected";
             addElemToNode(container_id, elem);
@@ -70,11 +70,11 @@ function aperfStat() {
         return;
     }
     clear_and_create('aperfstat');
-    form_graph_limits(aperf_run_stats_raw_data);
-    for (let i = 0; i < aperf_run_stats_raw_data['runs'].length; i++) {
-        let run_name = aperf_run_stats_raw_data['runs'][i]['name'];
+    form_graph_limits(aperf_stats_raw_data);
+    for (let i = 0; i < aperf_stats_raw_data['runs'].length; i++) {
+        let run_name = aperf_stats_raw_data['runs'][i]['name'];
         let elem_id = `${run_name}-aperfstat-per-data`;
-        let this_run_data = aperf_run_stats_raw_data['runs'][i];
+        let this_run_data = aperf_stats_raw_data['runs'][i];
         getAperfEntries(run_name, elem_id, this_run_data['keys'], this_run_data['key_values']);
     }
     got_aperfstat_data = true;

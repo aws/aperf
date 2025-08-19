@@ -1,18 +1,13 @@
-extern crate ctor;
-
-use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
-use crate::utils::{add_metrics, DataMetrics, Metric};
-use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata};
-use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
+use crate::utils::{add_metrics, get_data_name_from_type, DataMetrics, Metric};
+use crate::visualizer::{GetData, GraphLimitType, GraphMetadata};
+use crate::PDError;
 use anyhow::Result;
 use chrono::prelude::*;
-use ctor::ctor;
 use log::trace;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
-
-pub static NETSTAT_FILE_NAME: &str = "netstat";
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NetstatRaw {
@@ -21,7 +16,7 @@ pub struct NetstatRaw {
 }
 
 impl NetstatRaw {
-    fn new() -> Self {
+    pub fn new() -> Self {
         NetstatRaw {
             time: TimeEnum::DateTime(Utc::now()),
             data: String::new(),
@@ -46,7 +41,7 @@ pub struct Netstat {
 }
 
 impl Netstat {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Netstat {
             time: TimeEnum::DateTime(Utc::now()),
             netstat_data: HashMap::new(),
@@ -106,7 +101,12 @@ fn get_entry(values: Vec<Netstat>, key: String, metrics: &mut DataMetrics) -> Re
         data: end_values,
         metadata,
     };
-    add_metrics(key, &mut metric, metrics, NETSTAT_FILE_NAME.to_string())?;
+    add_metrics(
+        key,
+        &mut metric,
+        metrics,
+        get_data_name_from_type::<Netstat>().to_string(),
+    )?;
     Ok(serde_json::to_string(&netdata)?)
 }
 
@@ -187,36 +187,6 @@ impl GetData for Netstat {
     }
 }
 
-#[ctor]
-fn init_netstat() {
-    let netstat_raw = NetstatRaw::new();
-    let file_name = NETSTAT_FILE_NAME.to_string();
-    let dt = DataType::new(
-        Data::NetstatRaw(netstat_raw.clone()),
-        file_name.clone(),
-        false,
-    );
-    let js_file_name = file_name.clone() + ".js";
-    let netstat = Netstat::new();
-    let dv = DataVisualizer::new(
-        ProcessedData::Netstat(netstat.clone()),
-        file_name.clone(),
-        js_file_name,
-        include_str!(concat!(env!("JS_DIR"), "/netstat.js")).to_string(),
-        file_name.clone(),
-    );
-
-    PERFORMANCE_DATA
-        .lock()
-        .unwrap()
-        .add_datatype(file_name.clone(), dt);
-
-    VISUALIZATION_DATA
-        .lock()
-        .unwrap()
-        .add_visualizer(file_name.clone(), dv);
-}
-
 #[cfg(test)]
 mod tests {
     use super::{EndNetData, Netstat, NetstatRaw};
@@ -274,7 +244,7 @@ mod tests {
         let data: EndNetData = serde_json::from_str(&json).unwrap();
         assert!(!data.data.is_empty());
         match data.data[0].time {
-            TimeEnum::TimeDiff(value) => assert!(value == 0),
+            TimeEnum::TimeDiff(value) => assert_eq!(value, 0),
             _ => unreachable!(),
         }
     }

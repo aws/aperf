@@ -24,7 +24,15 @@ function topFunctions() {
         let elem_id = `${run_name}-topfunctions-per-data`;
         let this_run_data = perf_profile_raw_data['runs'][i];
         setTimeout(() => {
-            getTopFunctionsInfo(run_name, elem_id, this_run_data['key_values']['values']);
+            try {
+                getTopFunctionsInfo(run_name, elem_id, this_run_data['key_values']['values']);
+            } catch (_) {
+                // TODO: temporary temporary solution for when data is not collected - implement
+                //      cleaner unified solution for all type of uncollected data
+                let no_data_div = document.createElement('div');
+                no_data_div.innerText = "No data collected.";
+                addElemToNode(elem_id, no_data_div);
+            }
         }, 0);
     }
     got_top_functions_data = true;

@@ -1,12 +1,9 @@
-extern crate ctor;
-
-use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
-use crate::utils::{add_metrics, DataMetrics, Metric};
-use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata};
-use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
+use crate::utils::{add_metrics, get_data_name_from_type, DataMetrics, Metric};
+use crate::visualizer::{GetData, GraphLimitType, GraphMetadata};
+use crate::PDError;
 use anyhow::Result;
 use chrono::prelude::*;
-use ctor::ctor;
 use log::trace;
 use procfs::Meminfo;
 use serde::{Deserialize, Serialize};
@@ -14,8 +11,6 @@ use std::collections::HashMap;
 use std::io::BufReader;
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter, EnumString};
-
-pub static MEMINFO_FILE_NAME: &str = "meminfo";
 
 /// Gather Meminfo raw data.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -202,7 +197,12 @@ fn get_values(values: Vec<MeminfoData>, key: String, metrics: &mut DataMetrics) 
         data: end_value,
         metadata,
     };
-    add_metrics(key, &mut metric, metrics, MEMINFO_FILE_NAME.to_string())?;
+    add_metrics(
+        key,
+        &mut metric,
+        metrics,
+        get_data_name_from_type::<MeminfoData>().to_string(),
+    )?;
     Ok(serde_json::to_string(&end_values)?)
 }
 
@@ -213,7 +213,7 @@ pub struct MeminfoData {
 }
 
 impl MeminfoData {
-    fn new() -> Self {
+    pub fn new() -> Self {
         MeminfoData {
             time: TimeEnum::DateTime(Utc::now()),
             data: HashMap::new(),
@@ -445,36 +445,6 @@ impl GetData for MeminfoData {
             _ => panic!("Unsupported API"),
         }
     }
-}
-
-#[ctor]
-fn init_meminfo() {
-    let meminfo_data_raw = MeminfoDataRaw::new();
-    let file_name = MEMINFO_FILE_NAME.to_string();
-    let dt = DataType::new(
-        Data::MeminfoDataRaw(meminfo_data_raw.clone()),
-        file_name.clone(),
-        false,
-    );
-    let js_file_name = file_name.clone() + ".js";
-    let meminfo_data = MeminfoData::new();
-    let dv = DataVisualizer::new(
-        ProcessedData::MeminfoData(meminfo_data),
-        file_name.clone(),
-        js_file_name,
-        include_str!(concat!(env!("JS_DIR"), "/meminfo.js")).to_string(),
-        file_name.clone(),
-    );
-
-    PERFORMANCE_DATA
-        .lock()
-        .unwrap()
-        .add_datatype(file_name.clone(), dt);
-
-    VISUALIZATION_DATA
-        .lock()
-        .unwrap()
-        .add_visualizer(file_name.clone(), dv);
 }
 
 #[cfg(test)]

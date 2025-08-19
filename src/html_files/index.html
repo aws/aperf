@@ -11,7 +11,7 @@
 			<div class="aperf">APerf</div>
 			<button class="tablinks" name="configure"><div class="icon-text">Configure</div><div class="configure"/></button>
 			<!--- Configure should be the first tab. Add any new tabs below this. -->
-			<button class="tablinks" name="system_info" id="default">Report</button>
+			<button class="tablinks" name="systeminfo" id="default">Report</button>
 			<button class="tablinks" name="cpu_utilization">CPU Utilization</button>
 			<button class="tablinks" name="flamegraphs">Flamegraphs</button>
 			<button class="tablinks" name="top_functions">Top Functions</button>
@@ -23,14 +23,14 @@
 			<button class="tablinks" name="sysctl">Sysctl Data</button>
 			<button class="tablinks" name="vmstat">VM Stat</button>
 			<button class="tablinks" name="interrupts">Interrupt Data</button>
-			<button class="tablinks" name="disk_stats">Disk Stats</button>
+			<button class="tablinks" name="diskstats">Disk Stats</button>
 			<button class="tablinks" name="netstat">Net Stats</button>
 			<button class="tablinks" name="aperfrunlog">Aperf Runlog</button>
 			<button class="tablinks" name="aperfstat">Aperf Stats</button>
 		</div>
 		<div class="content">
 			<div id="header" class="all-runs"></div>
-			<div id="system_info" class="tabcontent extra">
+			<div id="systeminfo" class="tabcontent extra">
 				<div class="extra">
 					<input type="radio" class="systeminfo-select" name="landingChoice" id="findings" checked>Findings</button>
 					<input type="radio" class="systeminfo-select" name="landingChoice" id="sutconfig">System Info</button>
@@ -93,13 +93,13 @@
 			<div id="interrupts" class="tabcontent">
 				<div id="interrupts-runs"></div>
 			</div>
-			<div id="disk_stats" class="tabcontent">
+			<div id="diskstats" class="tabcontent">
 				<div class=extra>
 					<h3>Hide N/A and all-zero graphs:</h3>
-					<input type="radio" class="diskstat-button" id="diskstat-button-yes" name="diskstatHide" checked>Yes</button>
-					<input type="radio" class="diskstat-button" id="diskstat-button-no" name="diskstatHide">No</button>
+					<input type="radio" class="diskstats-button" id="diskstats-button-yes" name="diskstatsHide" checked>Yes</button>
+					<input type="radio" class="diskstats-button" id="diskstats-button-no" name="diskstatsHide">No</button>
 				</div>
-				<div id="diskstat-runs"></div>
+				<div id="diskstats-runs"></div>
 			</div>
 			<div id="netstat" class="tabcontent">
 				<div class=extra>
@@ -137,7 +137,7 @@
 
 		</div>
 		<script type="text/javascript" src="data/js/runs.js"></script>
-		<script type="text/javascript" src="data/js/system_info.js"></script>
+		<script type="text/javascript" src="data/js/systeminfo.js"></script>
 		<script type="text/javascript" src="data/js/sysctl.js"></script>
 		<script type="text/javascript" src="data/js/cpu_utilization.js"></script>
 		<script type="text/javascript" src="data/js/processes.js"></script>
@@ -145,33 +145,33 @@
 		<script type="text/javascript" src="data/js/vmstat.js"></script>
 		<script type="text/javascript" src="data/js/kernel_config.js"></script>
 		<script type="text/javascript" src="data/js/interrupts.js"></script>
-		<script type="text/javascript" src="data/js/disk_stats.js"></script>
+		<script type="text/javascript" src="data/js/diskstats.js"></script>
 		<script type="text/javascript" src="data/js/perf_stat.js"></script>
 		<script type="text/javascript" src="data/js/netstat.js"></script>
 		<script type="text/javascript" src="data/js/perf_profile.js"></script>
-		<script type="text/javascript" src="data/js/flamegraph.js"></script>
-		<script type="text/javascript" src="data/js/aperf_run_stats.js"></script>
+		<script type="text/javascript" src="data/js/flamegraphs.js"></script>
+		<script type="text/javascript" src="data/js/aperf_stats.js"></script>
 		<script type="text/javascript" src="data/js/aperf_runlog.js"></script>
 		<script type="text/javascript" src="data/js/java_profile.js"></script>
 		<script type="text/javascript" src="data/js/analytics.js"></script>
-		<script type="text/javascript" src="data/js/hotline_profile.js"></script>
+		<script type="text/javascript" src="data/js/hotline.js"></script>
 		<script type="text/javascript" src="js/utils.js"></script>
-		<script type="text/javascript" src="js/hotline_profile.js"></script>
+		<script type="text/javascript" src="js/hotline.js"></script>
 		<script type="text/javascript" src="js/plotly.js" charset="utf-8"></script>
-		<script type="text/javascript" src="js/system_info.js"></script>
+		<script type="text/javascript" src="js/systeminfo.js"></script>
 		<script type="text/javascript" src="js/cpu_utilization.js"></script>
 		<script type="text/javascript" src="js/perf_profile.js"></script>
-		<script type="text/javascript" src="js/flamegraph.js"></script>
+		<script type="text/javascript" src="js/flamegraphs.js"></script>
 		<script type="text/javascript" src="js/processes.js"></script>
 		<script type="text/javascript" src="js/meminfo.js"></script>
 		<script type="text/javascript" src="js/vmstat.js"></script>
 		<script type="text/javascript" src="js/kernel_config.js"></script>
 		<script type="text/javascript" src="js/sysctl.js"></script>
 		<script type="text/javascript" src="js/interrupts.js"></script>
-		<script type="text/javascript" src="js/disk_stats.js"></script>
+		<script type="text/javascript" src="js/diskstats.js"></script>
 		<script type="text/javascript" src="js/perf_stat.js"></script>
 		<script type="text/javascript" src="js/netstat.js"></script>
-		<script type="text/javascript" src="js/aperf_run_stats.js"></script>
+		<script type="text/javascript" src="js/aperf_stats.js"></script>
 		<script type="text/javascript" src="js/aperf_runlog.js"></script>
 		<script type="text/javascript" src="js/configure.js"></script>
 		<script type="text/javascript" src="js/analytics.js"></script>

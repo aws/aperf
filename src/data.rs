@@ -8,19 +8,19 @@ pub mod hotline;
 pub mod interrupts;
 pub mod java_profile;
 pub mod kernel_config;
-pub mod meminfodata;
+pub mod meminfo;
 pub mod netstat;
 pub mod perf_profile;
 pub mod perf_stat;
 pub mod processes;
-pub mod sysctldata;
+pub mod sysctl;
 pub mod systeminfo;
 pub mod utils;
 pub mod vmstat;
 
-use crate::utils::DataMetrics;
-use crate::visualizer::{GetData, ReportParams};
-use crate::{noop, InitParams, APERF_FILE_FORMAT};
+use crate::utils::{get_data_name_from_type, DataMetrics};
+use crate::visualizer::{DataVisualizer, GetData, ReportParams};
+use crate::{noop, InitParams, PerformanceData, VisualizationData, APERF_FILE_FORMAT};
 use anyhow::Result;
 use aperf_runlog::AperfRunlog;
 use aperf_stats::AperfStat;
@@ -33,7 +33,7 @@ use interrupts::{InterruptData, InterruptDataRaw};
 use java_profile::{JavaProfile, JavaProfileRaw};
 use kernel_config::KernelConfig;
 use log::trace;
-use meminfodata::{MeminfoData, MeminfoDataRaw};
+use meminfo::{MeminfoData, MeminfoDataRaw};
 use netstat::{Netstat, NetstatRaw};
 use nix::sys::{signal, signal::Signal};
 use perf_profile::{PerfProfile, PerfProfileRaw};
@@ -41,10 +41,10 @@ use perf_stat::{PerfStat, PerfStatRaw};
 use processes::{Processes, ProcessesRaw};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
+use std::fs::{read_to_string, File, OpenOptions};
 use std::ops::Sub;
 use std::path::PathBuf;
-use sysctldata::SysctlData;
+use sysctl::SysctlData;
 use systeminfo::SystemInfo;
 use vmstat::{Vmstat, VmstatRaw};
 
@@ -99,7 +99,7 @@ pub struct DataType {
 }
 
 impl DataType {
-    pub fn new(data: Data, file_name: String, is_static: bool) -> Self {
+    pub fn new(data: Data, file_name: String, is_static: bool, is_profile_option: bool) -> Self {
         DataType {
             data,
             file_handle: None,
@@ -107,17 +107,13 @@ impl DataType {
             full_path: String::new(),
             dir_name: String::new(),
             is_static,
-            is_profile_option: false,
+            is_profile_option,
             collector_params: CollectorParams::new(),
         }
     }
 
     pub fn set_file_handle(&mut self, handle: Option<File>) {
         self.file_handle = handle;
-    }
-
-    pub fn is_profile_option(&mut self) {
-        self.is_profile_option = true;
     }
 
     pub fn set_signal(&mut self, signal: Signal) {
@@ -215,15 +211,18 @@ impl Sub for TimeEnum {
     }
 }
 
-/// Create a Data Enum
-///
-/// Each enum type will have a collect_data implemented for it.
+/// This macro expands to:
+/// 1. define the Data Enum to hold all record data structs for collection
+/// 2. define the function that instantiates all data structs and adds them
+///    to the PerformanceData object.
+/// The main record function (aperf::record::record(&Record, &Path, &Path) -> Result<()>
+/// creates the PerformanceData object and invokes the function.
 macro_rules! data {
-    ( $( $x:ident ),* ) => {
+    ( $( $data:ident ),* ) => {
         #[derive(Clone, Debug, Deserialize, Serialize)]
         pub enum Data {
             $(
-                $x($x),
+                $data($data),
             )*
         }
 
@@ -231,7 +230,7 @@ macro_rules! data {
             fn collect_data(&mut self, params: &CollectorParams) -> Result<()> {
                 match self {
                     $(
-                        Data::$x(ref mut value) => value.collect_data(&params)?,
+                        Data::$data(ref mut value) => value.collect_data(&params)?,
                     )*
                 }
                 Ok(())
@@ -240,7 +239,7 @@ macro_rules! data {
             fn prepare_data_collector(&mut self, params: &CollectorParams) -> Result<()> {
                 match self {
                     $(
-                        Data::$x(ref mut value) => value.prepare_data_collector(params)?,
+                        Data::$data(ref mut value) => value.prepare_data_collector(params)?,
                     )*
                 }
                 Ok(())
@@ -249,29 +248,65 @@ macro_rules! data {
             fn finish_data_collection(&mut self, params: &CollectorParams) -> Result<()> {
                 match self {
                     $(
-                        Data::$x(ref mut value) => value.finish_data_collection(params)?,
+                        Data::$data(ref mut value) => value.finish_data_collection(params)?,
                     )*
                 }
                 Ok(())
             }
+
             fn after_data_collection(&mut self, params: &CollectorParams) -> Result<()> {
                 match self {
                     $(
-                        Data::$x(ref mut value) => value.after_data_collection(params)?,
+                        Data::$data(ref mut value) => value.after_data_collection(params)?,
                     )*
                 }
                 Ok(())
             }
         }
-    };
+
+        fn add_performance_data(performance_data: &mut PerformanceData, data_name: &str, data: Data, is_static: bool, is_profile_option: bool) {
+            let data_type = DataType::new(
+                data,
+                data_name.to_string(),
+                is_static,
+                is_profile_option
+            );
+
+            performance_data.add_datatype(data_name.to_string(), data_type);
+        }
+
+        pub fn add_all_performance_data(performance_data: &mut PerformanceData, profile_enabled: bool, java_profile_enabled: bool) {
+            $(
+                let data_name = get_data_name_from_type::<$data>();
+
+                if $data::is_profile() {
+                    if profile_enabled {
+                        add_performance_data(performance_data, data_name, Data::$data($data::new()), $data::is_static(), true);
+                    }
+                } else if $data::is_java_profile() {
+                    if java_profile_enabled {
+                        add_performance_data(performance_data, data_name, Data::$data($data::new()), $data::is_static(), true);
+                    }
+                } else {
+                    add_performance_data(performance_data, data_name, Data::$data($data::new()), $data::is_static(), false);
+                }
+            )*
+        }
+    }
 }
 
+/// This macro expands to:
+/// 1. define the ProcessedData Enum to hold all report data structs for visualization
+/// 2. define the function that instantiates all data structs and adds them
+///    to the VisualizationData object.
+/// The main report function (aperf::report::report(&Report, &PathBuf) -> Result<()>
+/// creates the VisualizationData object and invokes the function.
 macro_rules! processed_data {
-    ( $( $x:ident ),* ) => {
+    ( $( $processed_data:ident ),* ) => {
         #[derive(Clone, Debug, Deserialize, Serialize)]
         pub enum ProcessedData {
             $(
-                $x($x),
+                $processed_data($processed_data),
             )*
         }
 
@@ -279,31 +314,61 @@ macro_rules! processed_data {
             pub fn process_raw_data(&mut self, buffer: Data) -> Result<ProcessedData> {
                 match self {
                     $(
-                        ProcessedData::$x(ref mut value) => Ok(value.process_raw_data(buffer)?),
+                        ProcessedData::$processed_data(ref mut value) => Ok(value.process_raw_data(buffer)?),
                     )*
                 }
             }
+
             pub fn custom_raw_data_parser(&mut self, parser_params: ReportParams) -> Result<Vec<ProcessedData>> {
                 match self {
                     $(
-                        ProcessedData::$x(ref mut value) => Ok(value.custom_raw_data_parser(parser_params)?),
+                        ProcessedData::$processed_data(ref mut value) => Ok(value.custom_raw_data_parser(parser_params)?),
                     )*
                 }
             }
+
             pub fn get_data(&mut self, values: Vec<ProcessedData>, query: String, metrics: &mut DataMetrics) -> Result<String> {
                 match self {
                     $(
-                        ProcessedData::$x(ref mut value) => Ok(value.get_data(values, query, metrics)?),
+                        ProcessedData::$processed_data(ref mut value) => Ok(value.get_data(values, query, metrics)?),
                     )*
                 }
             }
+
             pub fn get_calls(&mut self) -> Result<Vec<String>> {
                 match self {
                     $(
-                        ProcessedData::$x(ref mut value) => Ok(value.get_calls()?),
+                        ProcessedData::$processed_data(ref mut value) => Ok(value.get_calls()?),
                     )*
                 }
             }
+        }
+
+        fn add_visualization_data(visualization_data: &mut VisualizationData, data_name: &str, processed_data: ProcessedData, has_custom_raw_data_parser: bool) {
+            let mut js_file_name = format!("{data_name}.js");
+            let js_file_path = format!("{}/{}", env!("JS_DIR"), js_file_name.clone());
+            let js_content = read_to_string(&js_file_path).unwrap_or_else(|err| {
+                trace!("Cannot read the js content from {}: {}", js_file_path, err);
+                js_file_name = String::new();
+                String::new()
+            });
+
+            let data_visualizer = DataVisualizer::new(
+                processed_data,
+                data_name.to_string(),
+                js_file_name,
+                js_content,
+                has_custom_raw_data_parser,
+            );
+
+            visualization_data.add_visualizer(data_name.to_string(), data_visualizer);
+        }
+
+        pub fn add_all_visualization_data(visualization_data: &mut VisualizationData) {
+            $(
+                let data_name = get_data_name_from_type::<$processed_data>();
+                add_visualization_data(visualization_data, data_name, ProcessedData::$processed_data($processed_data::new()), $processed_data::has_custom_raw_data_parser());
+            )*
         }
     };
 }
@@ -351,17 +416,32 @@ pub trait CollectData {
         noop!();
         Ok(())
     }
+
     fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
         noop!();
         Ok(())
     }
+
     fn finish_data_collection(&mut self, _params: &CollectorParams) -> Result<()> {
         noop!();
         Ok(())
     }
+
     fn after_data_collection(&mut self, _params: &CollectorParams) -> Result<()> {
         noop!();
         Ok(())
+    }
+
+    fn is_static() -> bool {
+        false
+    }
+
+    fn is_profile() -> bool {
+        false
+    }
+
+    fn is_java_profile() -> bool {
+        false
     }
 }
 

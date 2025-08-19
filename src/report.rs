@@ -1,4 +1,4 @@
-use crate::{PDError, VISUALIZATION_DATA};
+use crate::{data, PDError, VisualizationData};
 use anyhow::Result;
 use clap::Args;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
@@ -233,16 +233,18 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
     write!(plotly_js_file, "{}", plotly_js)?;
     write!(configure_js_file, "{}", configure_js)?;
 
-    let mut visualizer = VISUALIZATION_DATA.lock().unwrap();
+    let mut visualization_data = VisualizationData::new();
+
+    data::add_all_visualization_data(&mut visualization_data);
 
     /* Init visualizers */
     for dir in dir_paths {
-        let name = visualizer.init_visualizers(dir.to_owned(), tmp_dir, &report_name)?;
-        visualizer.unpack_data(name)?;
+        let name = visualization_data.init_visualizers(dir.to_owned(), tmp_dir, &report_name)?;
+        visualization_data.unpack_data(name)?;
     }
 
     /* Generate visualizer JS files */
-    for (name, file) in visualizer.get_all_js_files()? {
+    for (name, file) in visualization_data.get_all_js_files()? {
         let mut created_file = File::create(report_name.join(format!("js/{}", name)))?;
         write!(created_file, "{}", file)?;
     }
@@ -255,12 +257,12 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
         "runs_raw = {}",
         serde_json::to_string(&run_names)?
     )?;
-    let visualizer_names = visualizer.get_visualizer_names()?;
+    let visualizer_names = visualization_data.get_visualizer_names()?;
 
     /* Get visualizer data */
     for name in visualizer_names {
-        let api_name = visualizer.get_api(name.clone())?;
-        let calls = visualizer.get_calls(api_name.clone())?;
+        let api_name = visualization_data.get_api(name.clone())?;
+        let calls = visualization_data.get_calls(api_name.clone())?;
         let mut api = Api::new(name.clone());
         for run_name in &run_names {
             let mut temp_keys: Vec<String> = Vec::<String>::new();
@@ -270,7 +272,7 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
                 let query = format!("run={}&get={}", run_name, call);
                 let mut data;
                 if call == "keys" {
-                    data = visualizer.get_data(run_name, &api_name, query)?;
+                    data = visualization_data.get_data(run_name, &api_name, query)?;
                     if data != "No data collected" {
                         temp_keys = serde_json::from_str(&data)?;
                     }
@@ -281,12 +283,13 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
                     if keys {
                         for key in &temp_keys {
                             let query = format!("run={}&get=values&key={}", run_name, key);
-                            data = visualizer.get_data(run_name, &api_name, query.clone())?;
+                            data =
+                                visualization_data.get_data(run_name, &api_name, query.clone())?;
                             run.key_values.insert(key.clone(), data.clone());
                         }
                     } else {
                         let query = format!("run={}&get=values", run_name);
-                        data = visualizer.get_data(run_name, &api_name, query)?;
+                        data = visualization_data.get_data(run_name, &api_name, query)?;
                         run.key_values.insert(call.clone(), data.clone());
                     }
                 }
@@ -299,11 +302,13 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
         let str_out_data = format!("{}_raw_data = {}", api.name.clone(), out_data.clone());
         write!(out_file, "{}", str_out_data)?;
     }
+
     let out_analytics = report_name.join("data/js/analytics.js");
     let mut out_file = File::create(out_analytics)?;
-    let stats = visualizer.get_analytics()?;
+    let stats = visualization_data.get_analytics()?;
     let str_out_stats = format!("raw_analytics = {}", stats);
     write!(out_file, "{}", str_out_stats)?;
+
     /* Generate aperf_report.tar.gz */
     info!("Generating {}", report_name_tgz.display());
     let tar_gz = File::create(&report_name_tgz)?;
@@ -316,5 +321,6 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
         .unwrap()
         .to_string();
     tar.append_dir_all(&report_stem, &report_name)?;
+
     Ok(())
 }

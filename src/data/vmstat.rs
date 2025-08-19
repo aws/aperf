@@ -1,18 +1,13 @@
-extern crate ctor;
-
-use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
-use crate::utils::{add_metrics, DataMetrics, Metric};
-use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata};
-use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
+use crate::utils::{add_metrics, get_data_name_from_type, DataMetrics, Metric};
+use crate::visualizer::{GetData, GraphLimitType, GraphMetadata};
+use crate::PDError;
 use anyhow::Result;
 use chrono::prelude::*;
-use ctor::ctor;
 use log::trace;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
-
-pub static VMSTAT_FILE_NAME: &str = "vmstat";
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct VmstatRaw {
@@ -21,7 +16,7 @@ pub struct VmstatRaw {
 }
 
 impl VmstatRaw {
-    fn new() -> Self {
+    pub fn new() -> Self {
         VmstatRaw {
             time: TimeEnum::DateTime(Utc::now()),
             data: String::new(),
@@ -46,7 +41,7 @@ pub struct Vmstat {
 }
 
 impl Vmstat {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Vmstat {
             time: TimeEnum::DateTime(Utc::now()),
             vmstat_data: HashMap::new(),
@@ -110,7 +105,12 @@ fn get_entry(values: Vec<Vmstat>, key: String, metrics: &mut DataMetrics) -> Res
         data: end_values,
         metadata,
     };
-    add_metrics(key, &mut metric, metrics, VMSTAT_FILE_NAME.to_string())?;
+    add_metrics(
+        key,
+        &mut metric,
+        metrics,
+        get_data_name_from_type::<Vmstat>().to_string(),
+    )?;
     Ok(serde_json::to_string(&vmstat_data)?)
 }
 
@@ -171,36 +171,6 @@ impl GetData for Vmstat {
             _ => panic!("Unsupported API"),
         }
     }
-}
-
-#[ctor]
-fn init_vmstat() {
-    let vmstat_raw = VmstatRaw::new();
-    let file_name = VMSTAT_FILE_NAME.to_string();
-    let dt = DataType::new(
-        Data::VmstatRaw(vmstat_raw.clone()),
-        file_name.clone(),
-        false,
-    );
-    let js_file_name = file_name.clone() + ".js";
-    let vmstat = Vmstat::new();
-    let dv = DataVisualizer::new(
-        ProcessedData::Vmstat(vmstat.clone()),
-        file_name.clone(),
-        js_file_name,
-        include_str!(concat!(env!("JS_DIR"), "/vmstat.js")).to_string(),
-        file_name.clone(),
-    );
-
-    PERFORMANCE_DATA
-        .lock()
-        .unwrap()
-        .add_datatype(file_name.clone(), dt);
-
-    VISUALIZATION_DATA
-        .lock()
-        .unwrap()
-        .add_visualizer(file_name.clone(), dv);
 }
 
 #[cfg(test)]

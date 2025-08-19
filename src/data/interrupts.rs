@@ -1,18 +1,13 @@
-extern crate ctor;
-
-use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
+use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
 use crate::utils::DataMetrics;
-use crate::visualizer::{DataVisualizer, GetData};
-use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::visualizer::GetData;
+use crate::PDError;
 use anyhow::Result;
 use chrono::prelude::*;
-use ctor::ctor;
 use log::{error, trace};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
-
-pub static INTERRUPTS_FILE_NAME: &str = "interrupts";
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct InterruptDataRaw {
@@ -21,7 +16,7 @@ pub struct InterruptDataRaw {
 }
 
 impl InterruptDataRaw {
-    fn new() -> Self {
+    pub fn new() -> Self {
         InterruptDataRaw {
             time: TimeEnum::DateTime(Utc::now()),
             data: String::new(),
@@ -105,7 +100,7 @@ pub struct InterruptData {
 }
 
 impl InterruptData {
-    fn new() -> Self {
+    pub fn new() -> Self {
         InterruptData {
             interrupt_data: Vec::<InterruptLineData>::new(),
         }
@@ -317,35 +312,6 @@ impl GetData for InterruptData {
     }
 }
 
-#[ctor]
-fn init_interrupts() {
-    let interrupt_data_raw = InterruptDataRaw::new();
-    let file_name = INTERRUPTS_FILE_NAME.to_string();
-    let dt = DataType::new(
-        Data::InterruptDataRaw(interrupt_data_raw.clone()),
-        file_name.clone(),
-        false,
-    );
-    let interrupt_data = InterruptData::new();
-    let js_file_name = file_name.clone() + ".js";
-    let dv = DataVisualizer::new(
-        ProcessedData::InterruptData(interrupt_data),
-        file_name.clone(),
-        js_file_name,
-        include_str!(concat!(env!("JS_DIR"), "/interrupts.js")).to_string(),
-        file_name.clone(),
-    );
-    PERFORMANCE_DATA
-        .lock()
-        .unwrap()
-        .add_datatype(file_name.clone(), dt);
-
-    VISUALIZATION_DATA
-        .lock()
-        .unwrap()
-        .add_visualizer(file_name.clone(), dv);
-}
-
 #[cfg(test)]
 mod tests {
     use super::{InterruptData, InterruptDataRaw, InterruptLine, InterruptLineData};
@@ -483,7 +449,7 @@ mod tests {
             String::new(),
             String::new(),
             String::new(),
-            String::new(),
+            false,
         );
         let processed_data = dv.data.process_raw_data(raw_data[0].clone()).unwrap();
         match processed_data {
