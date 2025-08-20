@@ -95,7 +95,7 @@ fn main() -> Result<()> {
         .tempdir_in(&cli.tmp_dir)?;
     fs::set_permissions(&tmp_dir, fs::Permissions::from_mode(0o1777))?;
     let tmp_dir_path_buf = tmp_dir.path().to_path_buf();
-    let runlog = tmp_dir_path_buf.join(APERF_RUNLOG);
+    let runlog = tmp_dir_path_buf.join(*APERF_RUNLOG);
 
     init_logger(cli.verbose, &runlog)?;
 

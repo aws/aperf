@@ -1,12 +1,9 @@
-extern crate ctor;
-
-use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
-use crate::utils::{add_metrics, DataMetrics, Metric};
-use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata};
-use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
+use crate::utils::{add_metrics, get_data_name_from_type, DataMetrics, Metric};
+use crate::visualizer::{GetData, GraphLimitType, GraphMetadata};
+use crate::PDError;
 use anyhow::Result;
 use chrono::prelude::*;
-use ctor::ctor;
 use log::{error, info, trace, warn};
 use perf_event::events::{Raw, Software};
 use perf_event::{Builder, Counter, Group, ReadFormat};
@@ -32,8 +29,6 @@ pub mod x86_perf_list {
     pub static GENOA_CTRS: &[u8] = include_bytes!("amd_genoa_ctrs.json");
     pub static MILAN_CTRS: &[u8] = include_bytes!("amd_milan_ctrs.json");
 }
-
-pub static PERF_STAT_FILE_NAME: &str = "perf_stat";
 
 #[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub enum PerfType {
@@ -114,7 +109,7 @@ pub struct PerfStatRaw {
 }
 
 impl PerfStatRaw {
-    fn new() -> Self {
+    pub fn new() -> Self {
         PerfStatRaw {
             time: TimeEnum::DateTime(Utc::now()),
             data: String::new(),
@@ -348,7 +343,7 @@ pub struct PerfStat {
 }
 
 impl PerfStat {
-    fn new() -> Self {
+    pub fn new() -> Self {
         PerfStat {
             perf_stats: Vec::new(),
         }
@@ -471,7 +466,12 @@ fn get_values(values: Vec<PerfStat>, key: String, metrics: &mut DataMetrics) -> 
         end_stats.cpus = end_cpu_stats;
         end_values.push(end_stats);
     }
-    add_metrics(key, &mut metric, metrics, PERF_STAT_FILE_NAME.to_string())?;
+    add_metrics(
+        key,
+        &mut metric,
+        metrics,
+        get_data_name_from_type::<PerfStat>().to_string(),
+    )?;
     let perf_data = EndPerfData {
         data: end_values,
         metadata,
@@ -567,36 +567,6 @@ impl GetData for PerfStat {
             _ => panic!("Unsupported API"),
         }
     }
-}
-
-#[ctor]
-fn init_perf_stat_raw() {
-    let perf_stat_raw = PerfStatRaw::new();
-    let file_name = PERF_STAT_FILE_NAME.to_string();
-    let dt = DataType::new(
-        Data::PerfStatRaw(perf_stat_raw.clone()),
-        file_name.clone(),
-        false,
-    );
-    let js_file_name = file_name.clone() + ".js";
-    let perf_stat = PerfStat::new();
-    let dv = DataVisualizer::new(
-        ProcessedData::PerfStat(perf_stat.clone()),
-        file_name.clone(),
-        js_file_name,
-        include_str!(concat!(env!("JS_DIR"), "/perf_stat.js")).to_string(),
-        file_name.clone(),
-    );
-
-    PERFORMANCE_DATA
-        .lock()
-        .unwrap()
-        .add_datatype(file_name.clone(), dt);
-
-    VISUALIZATION_DATA
-        .lock()
-        .unwrap()
-        .add_visualizer(file_name.clone(), dv);
 }
 
 #[cfg(test)]

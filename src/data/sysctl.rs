@@ -1,18 +1,12 @@
-extern crate ctor;
-
-use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
+use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
 use crate::utils::DataMetrics;
-use crate::visualizer::{DataVisualizer, GetData};
-use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::visualizer::GetData;
 use anyhow::Result;
 use chrono::prelude::*;
-use ctor::ctor;
 use log::trace;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use sysctl::Sysctl;
-
-pub static SYSCTL_FILE_NAME: &str = "sysctl";
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SysctlData {
@@ -21,7 +15,7 @@ pub struct SysctlData {
 }
 
 impl SysctlData {
-    fn new() -> Self {
+    pub fn new() -> Self {
         SysctlData {
             time: TimeEnum::DateTime(Utc::now()),
             sysctl_data: BTreeMap::new(),
@@ -67,6 +61,10 @@ impl CollectData for SysctlData {
         trace!("{:#?}", self.sysctl_data);
         Ok(())
     }
+
+    fn is_static() -> bool {
+        true
+    }
 }
 
 fn get_sysctl_data(value: SysctlData) -> Result<String> {
@@ -111,35 +109,6 @@ impl GetData for SysctlData {
             _ => panic!("Unsupported API"),
         }
     }
-}
-
-#[ctor]
-fn init_sysctl() {
-    let sysctl_data = SysctlData::new();
-    let file_name = SYSCTL_FILE_NAME.to_string();
-    let dt = DataType::new(
-        Data::SysctlData(sysctl_data.clone()),
-        file_name.clone(),
-        true,
-    );
-    let js_file_name = file_name.clone() + ".js";
-    let dv = DataVisualizer::new(
-        ProcessedData::SysctlData(sysctl_data),
-        file_name.clone(),
-        js_file_name,
-        include_str!(concat!(env!("JS_DIR"), "/sysctl.js")).to_string(),
-        file_name.clone(),
-    );
-
-    PERFORMANCE_DATA
-        .lock()
-        .unwrap()
-        .add_datatype(file_name.clone(), dt);
-
-    VISUALIZATION_DATA
-        .lock()
-        .unwrap()
-        .add_visualizer(file_name.clone(), dv);
 }
 
 #[cfg(test)]

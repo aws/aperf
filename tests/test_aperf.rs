@@ -71,6 +71,8 @@ fn test_report_dot_in_run_name() {
 
 fn record_with_name(run: String, tempdir: &Path, aperf_tmp: &Path) -> Result<String> {
     let run_name = tempdir.join(run).into_os_string().into_string().unwrap();
+
+    #[cfg(feature = "hotline")]
     let rec = Record {
         run_name: Some(run_name.clone()),
         interval: 1,
@@ -82,7 +84,19 @@ fn record_with_name(run: String, tempdir: &Path, aperf_tmp: &Path) -> Result<Str
         hotline_frequency: 1000,
         num_to_report: 5000,
     };
-    let runlog = tempdir.join(APERF_RUNLOG);
+
+    #[cfg(not(feature = "hotline"))]
+    let rec = Record {
+        run_name: Some(run_name.clone()),
+        interval: 1,
+        period: 2,
+        profile: false,
+        perf_frequency: 99,
+        profile_java: None,
+        pmu_config: None,
+    };
+
+    let runlog = tempdir.join(*APERF_RUNLOG);
     fs::File::create(&runlog).unwrap();
 
     record(&rec, aperf_tmp, &runlog).unwrap();

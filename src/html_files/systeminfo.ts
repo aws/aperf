@@ -1,6 +1,6 @@
-let got_system_info_data = "none";
-let system_info_rules = {
-    data_type: "system_info",
+let got_systeminfo_data = "none";
+let systeminfo_rules = {
+    data_type: "systeminfo",
     pretty_name: "System Info",
     rules: [
         {
@@ -159,10 +159,10 @@ function analytics() {
 }
 
 function sutconfig() {
-    for (let i = 0; i < system_info_raw_data['runs'].length; i++) {
-        let run_name = system_info_raw_data['runs'][i]['name'];
+    for (let i = 0; i < systeminfo_raw_data['runs'].length; i++) {
+        let run_name = systeminfo_raw_data['runs'][i]['name'];
         let elem_id = `${run_name}-systeminfo-per-data`;
-        let this_run_data = system_info_raw_data['runs'][i];
+        let this_run_data = systeminfo_raw_data['runs'][i];
         setTimeout(() => {
             getSystemInfo(run_name, elem_id, this_run_data['key_values']['values']);
         }, 0);
@@ -170,12 +170,12 @@ function sutconfig() {
 }
 
 function systemInfo(set) {
-    if (set == got_system_info_data) {
+    if (set == got_systeminfo_data) {
         return;
     }
     clear_and_create('systeminfo');
     clearElements("findings-data");
-    got_system_info_data = set;
+    got_systeminfo_data = set;
     switch (set) {
         case 'findings':
             document.getElementById('landing-text').innerHTML = 'Findings';

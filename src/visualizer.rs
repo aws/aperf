@@ -33,7 +33,6 @@ pub struct DataVisualizer {
     pub data: ProcessedData,
     pub file_handle: Option<File>,
     pub run_values: HashMap<String, Vec<ProcessedData>>,
-    pub file_name: String,
     pub js_file_name: String,
     pub js: String,
     pub api_name: String,
@@ -45,27 +44,22 @@ pub struct DataVisualizer {
 impl DataVisualizer {
     pub fn new(
         data: ProcessedData,
-        file_name: String,
+        api_name: String,
         js_file_name: String,
         js: String,
-        api_name: String,
+        has_custom_raw_data_parser: bool,
     ) -> Self {
         DataVisualizer {
             data,
             file_handle: None,
             run_values: HashMap::new(),
-            file_name,
             js_file_name,
             js,
             api_name,
-            has_custom_raw_data_parser: false,
+            has_custom_raw_data_parser,
             data_available: HashMap::new(),
             report_params: ReportParams::new(),
         }
-    }
-
-    pub fn has_custom_raw_data_parser(&mut self) {
-        self.has_custom_raw_data_parser = true;
     }
 
     pub fn init_visualizer(
@@ -75,7 +69,7 @@ impl DataVisualizer {
         tmp_dir: &Path,
         fin_dir: &Path,
     ) -> Result<()> {
-        let file = get_file(dir.clone(), self.file_name.clone())?;
+        let file = get_file(dir.clone(), self.api_name.clone())?;
         let full_path = Path::new("/proc/self/fd").join(file.as_raw_fd().to_string());
         self.report_params.data_dir = PathBuf::from(dir.clone());
         self.report_params.tmp_dir = tmp_dir.to_path_buf();
@@ -116,7 +110,12 @@ impl DataVisualizer {
                     bincode::ErrorKind::Io(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
                         break
                     }
-                    e => panic!("Error when Deserializing {} data {}", self.api_name, e),
+                    e => panic!(
+                        "Error when Deserializing {} data at {} : {}",
+                        self.api_name,
+                        self.report_params.data_file_path.display().to_string(),
+                        e
+                    ),
                 },
             };
         }
@@ -240,6 +239,7 @@ pub trait GetData {
     fn get_calls(&mut self) -> Result<Vec<String>> {
         unimplemented!();
     }
+
     fn get_data(
         &mut self,
         _values: Vec<ProcessedData>,
@@ -248,11 +248,17 @@ pub trait GetData {
     ) -> Result<String> {
         unimplemented!();
     }
+
     fn process_raw_data(&mut self, _buffer: Data) -> Result<ProcessedData> {
         unimplemented!();
     }
+
     fn custom_raw_data_parser(&mut self, _params: ReportParams) -> Result<Vec<ProcessedData>> {
         unimplemented!();
+    }
+
+    fn has_custom_raw_data_parser() -> bool {
+        false
     }
 }
 
@@ -271,7 +277,7 @@ mod tests {
             "cpu_utilization".to_string(),
             String::new(),
             String::new(),
-            "cpu_utilization".to_string(),
+            false,
         );
         dv.init_visualizer(
             "tests/test-data/aperf_2023-07-26_18_37_43/".to_string(),

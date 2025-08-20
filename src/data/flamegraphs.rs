@@ -1,11 +1,8 @@
-extern crate ctor;
-
-use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData};
+use crate::data::{CollectData, CollectorParams, ProcessedData};
 use crate::utils::DataMetrics;
-use crate::visualizer::{DataVisualizer, GetData, ReportParams};
-use crate::{get_file_name, PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::visualizer::{GetData, ReportParams};
+use crate::{get_file_name, PDError};
 use anyhow::Result;
-use ctor::ctor;
 use inferno::collapse::perf::Folder;
 use inferno::collapse::Collapse;
 use inferno::flamegraph::{self, Options};
@@ -15,8 +12,6 @@ use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
-
-pub static FLAMEGRAPHS_FILE_NAME: &str = "flamegraph";
 
 fn write_msg_to_svg(mut file: File, msg: String) -> Result<()> {
     write!(
@@ -33,7 +28,7 @@ pub struct FlamegraphRaw {
 }
 
 impl FlamegraphRaw {
-    fn new() -> Self {
+    pub fn new() -> Self {
         FlamegraphRaw {
             data: String::new(),
         }
@@ -107,6 +102,10 @@ impl CollectData for FlamegraphRaw {
         }
         Ok(())
     }
+
+    fn is_profile() -> bool {
+        true
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -115,7 +114,7 @@ pub struct Flamegraph {
 }
 
 impl Flamegraph {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Flamegraph {
             data: String::new(),
         }
@@ -159,36 +158,8 @@ impl GetData for Flamegraph {
         let values: Vec<&str> = Vec::new();
         Ok(serde_json::to_string(&values)?)
     }
-}
 
-#[ctor]
-fn init_flamegraph() {
-    let flamegraph_raw = FlamegraphRaw::new();
-    let file_name = FLAMEGRAPHS_FILE_NAME.to_string();
-    let mut dt = DataType::new(
-        Data::FlamegraphRaw(flamegraph_raw.clone()),
-        file_name.clone(),
-        false,
-    );
-    dt.is_profile_option();
-    let flamegraph = Flamegraph::new();
-    let js_file_name = file_name.clone() + ".js";
-    let mut dv = DataVisualizer::new(
-        ProcessedData::Flamegraph(flamegraph.clone()),
-        file_name.clone(),
-        js_file_name,
-        include_str!(concat!(env!("JS_DIR"), "/flamegraphs.js")).to_string(),
-        file_name.clone(),
-    );
-    dv.has_custom_raw_data_parser();
-
-    PERFORMANCE_DATA
-        .lock()
-        .unwrap()
-        .add_datatype(file_name.clone(), dt);
-
-    VISUALIZATION_DATA
-        .lock()
-        .unwrap()
-        .add_visualizer(file_name, dv);
+    fn has_custom_raw_data_parser() -> bool {
+        true
+    }
 }

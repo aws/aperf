@@ -1,11 +1,8 @@
-extern crate ctor;
-
-use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData};
-use crate::utils::DataMetrics;
-use crate::visualizer::{DataVisualizer, GetData};
-use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::data::{CollectData, CollectorParams, ProcessedData};
+use crate::utils::{get_data_name_from_type, DataMetrics};
+use crate::visualizer::GetData;
+use crate::PDError;
 use anyhow::Result;
-use ctor::ctor;
 use log::{debug, error, trace};
 use nix::{sys::signal, unistd::Pid};
 use serde::{Deserialize, Serialize};
@@ -14,8 +11,6 @@ use std::io::Write;
 use std::process::{Child, Command};
 use std::sync::Mutex;
 use std::{fs, fs::File};
-
-pub static JAVA_PROFILE_FILE_NAME: &str = "java_profile";
 
 lazy_static! {
     pub static ref ASPROF_CHILDREN: Mutex<Vec<Child>> = Mutex::new(Vec::new());
@@ -47,7 +42,7 @@ impl JavaProfileRaw {
                     &(params.collection_time - params.elapsed_time).to_string(),
                     "-f",
                     format!(
-                        "{}/{}-java-flamegraph-{}.html",
+                        "{}/{}-java-profile-{}.html",
                         params.tmp_dir.display(),
                         params.run_name,
                         jid
@@ -152,7 +147,7 @@ impl CollectData for JavaProfileRaw {
         let jps_str = self.update_process_map()?;
         let jps: Vec<&str> = jps_str.split_whitespace().collect();
 
-        let jprofile_value = params.profile.get(JAVA_PROFILE_FILE_NAME);
+        let jprofile_value = params.profile.get(get_data_name_from_type::<Self>());
         if let Some(value) = jprofile_value {
             match value.as_str() {
                 "jps" => {
@@ -177,7 +172,11 @@ impl CollectData for JavaProfileRaw {
     }
 
     fn collect_data(&mut self, params: &CollectorParams) -> Result<()> {
-        let jprofile = params.profile.get(JAVA_PROFILE_FILE_NAME).unwrap().as_str();
+        let jprofile = params
+            .profile
+            .get(get_data_name_from_type::<Self>())
+            .unwrap()
+            .as_str();
         if jprofile != "jps" {
             return Ok(());
         }
@@ -221,11 +220,11 @@ impl CollectData for JavaProfileRaw {
         let data_dir = params.data_dir.clone();
         for key in self.process_map.keys() {
             let mut html_path = data_dir.clone();
-            html_path.push(format!("{}-java-flamegraph-{}.html", params.run_name, key));
+            html_path.push(format!("{}-java-profile-{}.html", params.run_name, key));
 
             let html_loc = html_path.to_str().unwrap();
             let tmp_loc = format!(
-                "{}/{}-java-flamegraph-{}.html",
+                "{}/{}-java-profile-{}.html",
                 params.tmp_dir.display(),
                 params.run_name,
                 key
@@ -242,6 +241,10 @@ impl CollectData for JavaProfileRaw {
         write!(jps_map, "{}", serde_json::to_string(&self.process_map)?)?;
 
         Ok(())
+    }
+
+    fn is_java_profile() -> bool {
+        true
     }
 }
 
@@ -281,14 +284,11 @@ impl GetData for JavaProfile {
         for process in process_list {
             let mut fg_loc = params.report_dir.clone();
             fg_loc.push(format!(
-                "data/js/{}-java-flamegraph-{}.html",
+                "data/js/{}-java-profile-{}.html",
                 params.run_name, process
             ));
             let mut html_loc = params.data_dir.clone();
-            html_loc.push(format!(
-                "{}-java-flamegraph-{}.html",
-                params.run_name, process
-            ));
+            html_loc.push(format!("{}-java-profile-{}.html", params.run_name, process));
             let html = fs::read_to_string(html_loc.to_str().unwrap())
                 .unwrap_or(String::from("No data collected."));
             let mut fg_file = File::create(fg_loc.clone())?;
@@ -330,36 +330,8 @@ impl GetData for JavaProfile {
             _ => panic!("Unsupported API"),
         }
     }
-}
 
-#[ctor]
-fn init_java_profile() {
-    let java_profile_raw: JavaProfileRaw = JavaProfileRaw::new();
-    let file_name = JAVA_PROFILE_FILE_NAME.to_string();
-    let mut dt = DataType::new(
-        Data::JavaProfileRaw(java_profile_raw.clone()),
-        file_name.clone(),
-        false,
-    );
-    dt.is_profile_option();
-
-    let java_profile = JavaProfile::new();
-    let mut dv = DataVisualizer::new(
-        ProcessedData::JavaProfile(java_profile),
-        file_name.clone(),
-        String::new(),
-        String::new(),
-        file_name.clone(),
-    );
-    dv.has_custom_raw_data_parser();
-
-    PERFORMANCE_DATA
-        .lock()
-        .unwrap()
-        .add_datatype(file_name.clone(), dt);
-
-    VISUALIZATION_DATA
-        .lock()
-        .unwrap()
-        .add_visualizer(file_name.clone(), dv);
+    fn has_custom_raw_data_parser() -> bool {
+        true
+    }
 }

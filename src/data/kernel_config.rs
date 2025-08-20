@@ -1,12 +1,9 @@
-extern crate ctor;
-
-use crate::data::{CollectData, Data, DataType, ProcessedData, TimeEnum};
+use crate::data::{CollectData, Data, ProcessedData, TimeEnum};
 use crate::utils::DataMetrics;
-use crate::visualizer::{DataVisualizer, GetData};
-use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::visualizer::GetData;
+use crate::PDError;
 use anyhow::Result;
 use chrono::prelude::*;
-use ctor::ctor;
 use log::{debug, trace};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -15,8 +12,6 @@ use std::io::{self, BufRead, BufReader};
 use std::path::Path;
 
 use super::CollectorParams;
-
-pub static KERNEL_CONFIG_FILE_NAME: &str = "kernel_config";
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Entry {
@@ -56,7 +51,7 @@ pub struct KernelConfig {
 }
 
 impl KernelConfig {
-    fn new() -> Self {
+    pub fn new() -> Self {
         KernelConfig {
             time: TimeEnum::DateTime(Utc::now()),
             kernel_config_data: Vec::new(),
@@ -185,6 +180,10 @@ impl CollectData for KernelConfig {
         trace!("KernelConfig data: {:#?}", self);
         Ok(())
     }
+
+    fn is_static() -> bool {
+        true
+    }
 }
 
 fn get_kernel_config(value: KernelConfig) -> Result<String> {
@@ -229,35 +228,6 @@ impl GetData for KernelConfig {
             _ => panic!("Unsupported API"),
         }
     }
-}
-
-#[ctor]
-fn init_kernel_config() {
-    let kernel_config = KernelConfig::new();
-    let file_name = KERNEL_CONFIG_FILE_NAME.to_string();
-    let dt = DataType::new(
-        Data::KernelConfig(kernel_config.clone()),
-        file_name.clone(),
-        true,
-    );
-    let js_file_name = file_name.clone() + ".js";
-    let dv = DataVisualizer::new(
-        ProcessedData::KernelConfig(kernel_config),
-        file_name.clone(),
-        js_file_name,
-        include_str!(concat!(env!("JS_DIR"), "/kernel_config.js")).to_string(),
-        file_name.clone(),
-    );
-
-    PERFORMANCE_DATA
-        .lock()
-        .unwrap()
-        .add_datatype(file_name.clone(), dt);
-
-    VISUALIZATION_DATA
-        .lock()
-        .unwrap()
-        .add_visualizer(file_name.clone(), dv);
 }
 
 #[cfg(test)]

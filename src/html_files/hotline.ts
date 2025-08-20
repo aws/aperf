@@ -133,15 +133,15 @@ function loadTables(config) {
   `;
 
   let no_data_div = `
-    <div class="hotline-run-section" style="width: ${100 / hotline_profile_raw_data.runs.length}%;">
+    <div class="hotline-run-section" style="width: ${100 / hotline_raw_data.runs.length}%;">
       <div>No data collected</div>
     </div>
   `;
 
-  if (!hotline_profile_raw_data || !hotline_profile_raw_data.runs || !hotline_profile_raw_data.runs.length) {
+  if (!hotline_raw_data || !hotline_raw_data.runs || !hotline_raw_data.runs.length) {
     console.warn("No data collected");
   } else {
-    hotline_profile_raw_data.runs.forEach((run, index) => {
+    hotline_raw_data.runs.forEach((run, index) => {
       if (run.key_values.values === "No data collected") {
         contentWrapper += no_data_div;
       } else {
@@ -155,7 +155,7 @@ function loadTables(config) {
         }
         
         contentWrapper += `
-          <div class="hotline-run-section" style="width: ${100 / hotline_profile_raw_data.runs.length}%;">
+          <div class="hotline-run-section" style="width: ${100 / hotline_raw_data.runs.length}%;">
             <h3>${run.name}</h3>
             ${values.includes(config.id) 
               ? `<iframe 

@@ -1,10 +1,7 @@
-extern crate ctor;
-
+use crate::data::ProcessedData;
 use crate::utils::DataMetrics;
-use crate::visualizer::{DataVisualizer, GetData, ReportParams};
-use crate::{data::ProcessedData, APERF_RUNLOG, VISUALIZATION_DATA};
+use crate::visualizer::{GetData, ReportParams};
 use anyhow::Result;
-use ctor::ctor;
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
@@ -17,7 +14,7 @@ pub struct AperfRunlog {
 }
 
 impl AperfRunlog {
-    fn new() -> Self {
+    pub fn new() -> Self {
         AperfRunlog { data: Vec::new() }
     }
 }
@@ -63,24 +60,8 @@ impl GetData for AperfRunlog {
         }
         Ok(serde_json::to_string(&values)?)
     }
-}
 
-#[ctor]
-fn init_aperf_runlog() {
-    let file_name = APERF_RUNLOG.to_string();
-    let js_file_name = file_name.clone() + ".js";
-    let aperf_runlog = AperfRunlog::new();
-    let mut dv = DataVisualizer::new(
-        ProcessedData::AperfRunlog(aperf_runlog.clone()),
-        file_name.clone(),
-        js_file_name,
-        include_str!(concat!(env!("JS_DIR"), "/aperf_runlog.js")).to_string(),
-        file_name.clone(),
-    );
-    dv.has_custom_raw_data_parser();
-
-    VISUALIZATION_DATA
-        .lock()
-        .unwrap()
-        .add_visualizer(file_name, dv);
+    fn has_custom_raw_data_parser() -> bool {
+        true
+    }
 }
