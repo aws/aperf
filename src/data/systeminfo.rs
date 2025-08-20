@@ -1,18 +1,12 @@
-extern crate ctor;
-
-use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
-use crate::utils::{DataMetrics, ValueType};
-use crate::visualizer::{DataVisualizer, GetData};
-use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
+use crate::utils::{get_data_name_from_type, DataMetrics, ValueType};
+use crate::visualizer::GetData;
 use anyhow::Result;
 use chrono::prelude::*;
-use ctor::ctor;
 use log::{trace, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use sysinfo::{System, SystemExt};
-
-pub static SYSTEMINFO_FILE_NAME: &str = "system_info";
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SystemInfo {
@@ -26,7 +20,7 @@ pub struct SystemInfo {
 }
 
 impl SystemInfo {
-    fn new() -> Self {
+    pub fn new() -> Self {
         SystemInfo {
             time: TimeEnum::DateTime(Utc::now()),
             system_name: String::new(),
@@ -140,6 +134,10 @@ impl CollectData for SystemInfo {
 
         Ok(())
     }
+
+    fn is_static() -> bool {
+        true
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -239,9 +237,10 @@ fn get_values(buffer: SystemInfo, metrics: &mut DataMetrics) -> Result<String> {
     my_metrics.insert("Host Name".to_string(), ValueType::String(buffer.host_name));
     end_values.push(host_name);
 
-    metrics
-        .values
-        .insert(SYSTEMINFO_FILE_NAME.to_string(), my_metrics);
+    metrics.values.insert(
+        get_data_name_from_type::<SystemInfo>().to_string(),
+        my_metrics,
+    );
 
     Ok(serde_json::to_string(&end_values)?)
 }
@@ -281,34 +280,6 @@ impl GetData for SystemInfo {
             _ => panic!("Unsupported API"),
         }
     }
-}
-
-#[ctor]
-fn init_systeminfo() {
-    let system_info = SystemInfo::new();
-    let file_name = SYSTEMINFO_FILE_NAME.to_string();
-    let dt = DataType::new(
-        Data::SystemInfo(system_info.clone()),
-        file_name.clone(),
-        true,
-    );
-    let js_file_name = file_name.clone() + ".js";
-    let dv = DataVisualizer::new(
-        ProcessedData::SystemInfo(system_info.clone()),
-        file_name.clone(),
-        js_file_name,
-        include_str!(concat!(env!("JS_DIR"), "/system_info.js")).to_string(),
-        file_name.clone(),
-    );
-
-    PERFORMANCE_DATA
-        .lock()
-        .unwrap()
-        .add_datatype(file_name.clone(), dt);
-    VISUALIZATION_DATA
-        .lock()
-        .unwrap()
-        .add_visualizer(file_name.clone(), dv);
 }
 
 #[cfg(test)]

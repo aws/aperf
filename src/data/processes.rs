@@ -1,13 +1,10 @@
-extern crate ctor;
 extern crate lazy_static;
 
-use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
+use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
 use crate::utils::DataMetrics;
-use crate::visualizer::{DataVisualizer, GetData};
-use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::visualizer::GetData;
 use anyhow::Result;
 use chrono::prelude::*;
-use ctor::ctor;
 use log::trace;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -15,9 +12,8 @@ use std::fs;
 use std::io::{BufRead, BufReader};
 use std::sync::Mutex;
 
-pub static PROCESS_FILE_NAME: &str = "processes";
-pub static PROC_PID_STAT_USERSPACE_TIME_POS: usize = 11;
-pub static PROC_PID_STAT_KERNELSPACE_TIME_POS: usize = 12;
+pub const PROC_PID_STAT_USERSPACE_TIME_POS: usize = 11;
+pub const PROC_PID_STAT_KERNELSPACE_TIME_POS: usize = 12;
 
 lazy_static! {
     pub static ref TICKS_PER_SECOND: Mutex<u64> = Mutex::new(0);
@@ -87,7 +83,7 @@ pub struct Processes {
 }
 
 impl Processes {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Processes {
             time: TimeEnum::DateTime(Utc::now()),
             entries: Vec::new(),
@@ -309,36 +305,6 @@ impl GetData for Processes {
             _ => panic!("Unsupported API"),
         }
     }
-}
-
-#[ctor]
-fn init_system_processes() {
-    let processes_raw = ProcessesRaw::new();
-    let file_name = PROCESS_FILE_NAME.to_string();
-    let dt = DataType::new(
-        Data::ProcessesRaw(processes_raw.clone()),
-        file_name.clone(),
-        false,
-    );
-    let js_file_name = file_name.clone() + ".js";
-    let processes = Processes::new();
-    let dv = DataVisualizer::new(
-        ProcessedData::Processes(processes),
-        file_name.clone(),
-        js_file_name,
-        include_str!(concat!(env!("JS_DIR"), "/processes.js")).to_string(),
-        file_name.clone(),
-    );
-
-    PERFORMANCE_DATA
-        .lock()
-        .unwrap()
-        .add_datatype(file_name.clone(), dt);
-
-    VISUALIZATION_DATA
-        .lock()
-        .unwrap()
-        .add_visualizer(file_name.clone(), dv);
 }
 
 #[cfg(test)]

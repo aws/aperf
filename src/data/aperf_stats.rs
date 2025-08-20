@@ -1,17 +1,11 @@
-extern crate ctor;
-
 use crate::data::{ProcessedData, TimeEnum};
-use crate::utils::{add_metrics, DataMetrics, Metric};
-use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata, ReportParams};
-use crate::VISUALIZATION_DATA;
+use crate::utils::{add_metrics, get_data_name_from_type, DataMetrics, Metric};
+use crate::visualizer::{GetData, GraphLimitType, GraphMetadata, ReportParams};
 use anyhow::Result;
 use chrono::prelude::*;
-use ctor::ctor;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs;
-
-pub static APERF_RUN_STATS_FILE_NAME: &str = "aperf_run_stats";
+use std::{fs, time};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AperfStat {
@@ -21,12 +15,23 @@ pub struct AperfStat {
 }
 
 impl AperfStat {
-    fn new() -> Self {
+    pub fn new() -> Self {
         AperfStat {
             time: TimeEnum::DateTime(Utc::now()),
             name: String::new(),
             data: HashMap::new(),
         }
+    }
+
+    pub fn measure<F>(&mut self, name: String, mut func: F) -> Result<()>
+    where
+        F: FnMut() -> Result<()>,
+    {
+        let start_time = time::Instant::now();
+        func()?;
+        let func_time: u64 = (time::Instant::now() - start_time).as_micros() as u64;
+        self.data.insert(name, func_time);
+        Ok(())
     }
 }
 
@@ -79,7 +84,7 @@ fn get_key_data(values: Vec<AperfStat>, key: String, metrics: &mut DataMetrics) 
         key,
         &mut metric,
         metrics,
-        APERF_RUN_STATS_FILE_NAME.to_string(),
+        get_data_name_from_type::<AperfStat>().to_string(),
     )?;
 
     Ok(serde_json::to_string(&end_value)?)
@@ -149,24 +154,8 @@ impl GetData for AperfStat {
             _ => panic!("Unsupported API"),
         }
     }
-}
 
-#[ctor]
-fn init_aperf_stats() {
-    let file_name = APERF_RUN_STATS_FILE_NAME.to_string();
-    let js_file_name = file_name.clone() + ".js";
-    let aperf_stat = AperfStat::new();
-    let mut dv = DataVisualizer::new(
-        ProcessedData::AperfStat(aperf_stat.clone()),
-        file_name.clone(),
-        js_file_name,
-        include_str!(concat!(env!("JS_DIR"), "/aperf_run_stats.js")).to_string(),
-        file_name.clone(),
-    );
-    dv.has_custom_raw_data_parser();
-
-    VISUALIZATION_DATA
-        .lock()
-        .unwrap()
-        .add_visualizer(file_name.clone(), dv);
+    fn has_custom_raw_data_parser() -> bool {
+        true
+    }
 }

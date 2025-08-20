@@ -1,4 +1,6 @@
-use crate::{data, InitParams, PERFORMANCE_DATA};
+use crate::data::java_profile::JavaProfile;
+use crate::utils::get_data_name_from_type;
+use crate::{data, InitParams, PerformanceData};
 use anyhow::anyhow;
 use anyhow::Result;
 use clap::Args;
@@ -35,36 +37,18 @@ pub struct Record {
     #[clap(long, value_parser)]
     pub pmu_config: Option<String>,
 
+    #[cfg(feature = "hotline")]
     /// SPE sampling frequency, defaulted to 1kHz on Grv4.
     #[clap(long, value_parser, default_value_t = 1000)]
     pub hotline_frequency: u32,
 
+    #[cfg(feature = "hotline")]
     /// Maximum number of report entries to process for Hotline tables
     #[clap(long, value_parser, default_value_t = 5000)]
     pub num_to_report: u32,
 }
 
-fn prepare_data_collectors() -> Result<()> {
-    info!("Preparing data collectors...");
-    PERFORMANCE_DATA.lock().unwrap().prepare_data_collectors()?;
-    Ok(())
-}
-
-fn start_collection_serial() -> Result<()> {
-    info!("Collecting data...");
-    PERFORMANCE_DATA.lock().unwrap().collect_data_serial()?;
-    Ok(())
-}
-
-fn collect_static_data() -> Result<()> {
-    debug!("Collecting static data...");
-    PERFORMANCE_DATA.lock().unwrap().collect_static_data()?;
-    Ok(())
-}
-
 pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
-    println!("runlog: {:?}", runlog);
-
     let mut run_name = String::new();
     if record.period == 0 {
         error!("Collection period cannot be 0.");
@@ -93,38 +77,48 @@ pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
         params.pmu_config = Some(PathBuf::from(p));
     }
 
-    params.hotline_frequency = record.hotline_frequency;
-    params.num_to_report = record.num_to_report;
+    #[cfg(feature = "hotline")]
+    {
+        params.hotline_frequency = record.hotline_frequency;
+        params.num_to_report = record.num_to_report;
+    }
 
     match &record.profile_java {
         Some(j) => {
             params.profile.insert(
-                String::from(data::java_profile::JAVA_PROFILE_FILE_NAME),
+                String::from(get_data_name_from_type::<JavaProfile>()),
                 j.clone(),
             );
         }
         None => {}
     }
     if record.profile {
-        params.profile.insert(
-            String::from(data::perf_profile::PERF_PROFILE_FILE_NAME),
-            String::new(),
-        );
-        params.profile.insert(
-            String::from(data::flamegraphs::FLAMEGRAPHS_FILE_NAME),
-            String::new(),
-        );
         params.perf_frequency = record.perf_frequency;
     }
 
-    PERFORMANCE_DATA.lock().unwrap().set_params(params);
-    PERFORMANCE_DATA.lock().unwrap().init_collectors()?;
+    let mut performance_data = PerformanceData::new(params);
+
+    data::add_all_performance_data(
+        &mut performance_data,
+        record.profile,
+        record
+            .profile_java
+            .as_ref()
+            .map_or(false, |j| !j.is_empty()),
+    );
+
+    performance_data.init_collectors()?;
     info!("Starting Data collection...");
-    prepare_data_collectors()?;
-    collect_static_data()?;
-    start_collection_serial()?;
+
+    info!("Preparing data collectors...");
+    performance_data.prepare_data_collectors()?;
+    debug!("Collecting static data...");
+    performance_data.collect_static_data()?;
+    info!("Collecting data...");
+    performance_data.collect_data_serial()?;
+
     info!("Data collection complete.");
-    PERFORMANCE_DATA.lock().unwrap().end()?;
+    performance_data.end()?;
 
     Ok(())
 }

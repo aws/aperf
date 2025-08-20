@@ -1,8 +1,8 @@
-let got_disk_stat_data = false;
-let diskstat_hide_zero_na_graphs = false;
+let got_diskstats_data = false;
+let diskstats_hide_zero_na_graphs = false;
 
 let diskstats_rules = {
-    data_type: "disk_stats",
+    data_type: "diskstats",
     pretty_name: "Disk Stats",
     rules: []
 }
@@ -52,25 +52,25 @@ function getStatKeys(run, container_id, keys, run_data) {
     for (let i = 0; i < all_run_keys.length; i++) {
         let value = all_run_keys[i];
         var elem = document.createElement('div');
-        elem.id = `disk-stat-${run}-${value}`;
+        elem.id = `diskstats-${run}-${value}`;
         elem.style.float = "none";
         addElemToNode(container_id, elem);
-        emptyOrCallback(keys, diskstat_hide_zero_na_graphs, getStatValues, elem, value, run_data);
+        emptyOrCallback(keys, diskstats_hide_zero_na_graphs, getStatValues, elem, value, run_data);
     }
 }
 
 function diskStats(hide: boolean) {
-    if (got_disk_stat_data && hide == diskstat_hide_zero_na_graphs) {
+    if (got_diskstats_data && hide == diskstats_hide_zero_na_graphs) {
         return;
     }
-    diskstat_hide_zero_na_graphs = hide;
-    clear_and_create('diskstat');
-    form_graph_limits(disk_stats_raw_data);
-    for (let i = 0; i < disk_stats_raw_data['runs'].length; i++) {
-        let run_name = disk_stats_raw_data['runs'][i]['name']
-        let elem_id = `${run_name}-diskstat-per-data`;
-        let this_run_data = disk_stats_raw_data['runs'][i];
+    diskstats_hide_zero_na_graphs = hide;
+    clear_and_create('diskstats');
+    form_graph_limits(diskstats_raw_data);
+    for (let i = 0; i < diskstats_raw_data['runs'].length; i++) {
+        let run_name = diskstats_raw_data['runs'][i]['name']
+        let elem_id = `${run_name}-diskstats-per-data`;
+        let this_run_data = diskstats_raw_data['runs'][i];
         getStatKeys(run_name, elem_id, this_run_data['keys'], this_run_data['key_values']);
     }
-    got_disk_stat_data = true;
+    got_diskstats_data = true;
 }

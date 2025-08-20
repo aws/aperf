@@ -1,22 +1,22 @@
 declare let runs_raw;
-declare let system_info_raw_data;
+declare let systeminfo_raw_data;
 declare let cpu_utilization_raw_data;
 declare let vmstat_raw_data;
 declare let kernel_config_raw_data;
 declare let sysctl_raw_data;
 declare let interrupts_raw_data;
-declare let disk_stats_raw_data;
+declare let diskstats_raw_data;
 declare let perf_stat_raw_data;
 declare let processes_raw_data;
 declare let meminfo_raw_data;
 declare let netstat_raw_data;
 declare let perf_profile_raw_data;
-declare let flamegraph_raw_data;
-declare let aperf_run_stats_raw_data;
+declare let flamegraphs_raw_data;
+declare let aperf_stats_raw_data;
 declare let java_profile_raw_data;
 declare let aperf_runlog_raw_data;
 declare let raw_analytics;
-declare let hotline_profile_raw_data;
+declare let hotline_raw_data;
 
 let comparator = 'mean';
 let all_run_keys: Array<string> = new Array<string>();

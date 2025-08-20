@@ -3,15 +3,14 @@ extern crate ctor;
 use crate::data::{CollectData, CollectorParams, ProcessedData};
 use crate::utils::DataMetrics;
 use crate::visualizer::GetData;
+use crate::visualizer::ReportParams;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "hotline")]
 use {
-    crate::visualizer::ReportParams,
     crate::{
         data::{Data, DataType},
         visualizer::DataVisualizer,
-        PERFORMANCE_DATA, VISUALIZATION_DATA,
     },
     ctor::ctor,
     libc::{_exit, fork, geteuid, killpg, setpgid, waitpid, SIGTERM},
@@ -31,8 +30,6 @@ extern "C" {
     fn hotline(argc: c_int, argv: *const *const i8) -> c_int;
     fn deserialize_maps(argc: c_int, argv: *const *const i8) -> c_int;
 }
-
-pub static HOTLINE_FILE_NAME: &str = "hotline_profile";
 
 #[cfg(feature = "hotline")]
 pub fn check_preconditions() -> Result<bool> {
@@ -174,7 +171,7 @@ pub struct HotlineRaw {
 }
 
 impl HotlineRaw {
-    fn new() -> Self {
+    pub fn new() -> Self {
         HotlineRaw {
             pid: 0,
             launched: false,
@@ -357,6 +354,11 @@ impl GetData for Hotline {
         Ok(vec![data])
     }
 
+    #[cfg(not(feature = "hotline"))]
+    fn custom_raw_data_parser(&mut self, _params: ReportParams) -> Result<Vec<ProcessedData>> {
+        Ok(vec![])
+    }
+
     fn get_calls(&mut self) -> Result<Vec<String>> {
         Ok(vec!["values".to_string()])
     }
@@ -379,36 +381,8 @@ impl GetData for Hotline {
 
         Ok(serde_json::to_string(&values)?)
     }
-}
 
-#[ctor]
-#[cfg(feature = "hotline")]
-fn init_hotline_profile() {
-    let hotline_raw = HotlineRaw::new();
-    let file_name = HOTLINE_FILE_NAME.to_string();
-    let dt = DataType::new(
-        Data::HotlineRaw(hotline_raw.clone()),
-        file_name.clone(),
-        false,
-    );
-    let hotline_profile = Hotline::new();
-    let js_file_name = file_name.clone() + ".js";
-    let mut dv = DataVisualizer::new(
-        ProcessedData::Hotline(hotline_profile.clone()),
-        file_name.clone(),
-        js_file_name,
-        include_str!(concat!(env!("JS_DIR"), "/hotline.js")).to_string(),
-        file_name.clone(),
-    );
-    dv.has_custom_raw_data_parser();
-
-    PERFORMANCE_DATA
-        .lock()
-        .unwrap()
-        .add_datatype(file_name.clone(), dt);
-
-    VISUALIZATION_DATA
-        .lock()
-        .unwrap()
-        .add_visualizer(file_name.clone(), dv);
+    fn has_custom_raw_data_parser() -> bool {
+        true
+    }
 }

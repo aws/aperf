@@ -1,21 +1,15 @@
-extern crate ctor;
-
 use crate::data::constants::*;
-use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData, TimeEnum};
-use crate::utils::{add_metrics, DataMetrics, Metric};
-use crate::visualizer::{DataVisualizer, GetData, GraphLimitType, GraphMetadata};
-use crate::{PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
+use crate::utils::{add_metrics, get_data_name_from_type, DataMetrics, Metric};
+use crate::visualizer::{GetData, GraphLimitType, GraphMetadata};
 use anyhow::Result;
 use chrono::prelude::*;
-use ctor::ctor;
 use log::trace;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::io::{BufRead, BufReader};
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter, EnumString};
-
-pub static DISKSTATS_FILE_NAME: &str = "disk_stats";
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DiskstatsRaw {
@@ -24,7 +18,7 @@ pub struct DiskstatsRaw {
 }
 
 impl DiskstatsRaw {
-    fn new() -> Self {
+    pub fn new() -> Self {
         DiskstatsRaw {
             time: TimeEnum::DateTime(Utc::now()),
             data: String::new(),
@@ -68,7 +62,7 @@ pub struct Diskstats {
 }
 
 impl Diskstats {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Diskstats {
             time: TimeEnum::DateTime(Utc::now()),
             disk_stats: Vec::new(),
@@ -291,7 +285,12 @@ fn get_values(values: Vec<Diskstats>, key: String, metrics: &mut DataMetrics) ->
         data: ev.into_values().collect(),
         metadata,
     };
-    add_metrics(key, &mut metric, metrics, DISKSTATS_FILE_NAME.to_string())?;
+    add_metrics(
+        key,
+        &mut metric,
+        metrics,
+        get_data_name_from_type::<Diskstats>().to_string(),
+    )?;
     Ok(serde_json::to_string(&end_values)?)
 }
 
@@ -337,36 +336,6 @@ impl GetData for Diskstats {
             _ => panic!("Unsupported API"),
         }
     }
-}
-
-#[ctor]
-fn init_diskstats() {
-    let diskstats_raw = DiskstatsRaw::new();
-    let file_name = DISKSTATS_FILE_NAME.to_string();
-    let dt = DataType::new(
-        Data::DiskstatsRaw(diskstats_raw.clone()),
-        file_name.clone(),
-        false,
-    );
-    let js_file_name = file_name.clone() + ".js";
-    let diskstats = Diskstats::new();
-    let dv = DataVisualizer::new(
-        ProcessedData::Diskstats(diskstats),
-        file_name.clone(),
-        js_file_name,
-        include_str!(concat!(env!("JS_DIR"), "/disk_stats.js")).to_string(),
-        file_name.clone(),
-    );
-
-    PERFORMANCE_DATA
-        .lock()
-        .unwrap()
-        .add_datatype(file_name.clone(), dt);
-
-    VISUALIZATION_DATA
-        .lock()
-        .unwrap()
-        .add_visualizer(file_name.clone(), dv);
 }
 
 #[cfg(test)]

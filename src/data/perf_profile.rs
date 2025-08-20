@@ -1,11 +1,8 @@
-extern crate ctor;
-
-use crate::data::{CollectData, CollectorParams, Data, DataType, ProcessedData};
+use crate::data::{CollectData, CollectorParams, ProcessedData};
 use crate::utils::DataMetrics;
-use crate::visualizer::{DataVisualizer, GetData, ReportParams};
-use crate::{PDError, PERFORMANCE_DATA, VISUALIZATION_DATA};
+use crate::visualizer::{GetData, ReportParams};
+use crate::PDError;
 use anyhow::Result;
-use ctor::ctor;
 use log::{error, trace};
 use nix::{sys::signal, unistd::Pid};
 use serde::{Deserialize, Serialize};
@@ -16,8 +13,7 @@ use std::{
     sync::Mutex,
 };
 
-pub static PERF_PROFILE_FILE_NAME: &str = "perf_profile";
-pub static PERF_TOP_FUNCTIONS_FILE_NAME: &str = "top_functions";
+pub const PERF_TOP_FUNCTIONS_FILE_NAME: &str = "top_functions";
 
 lazy_static! {
     pub static ref PERF_CHILD: Mutex<Option<Child>> = Mutex::new(None);
@@ -29,7 +25,7 @@ pub struct PerfProfileRaw {
 }
 
 impl PerfProfileRaw {
-    fn new() -> Self {
+    pub fn new() -> Self {
         PerfProfileRaw {
             data: String::new(),
         }
@@ -126,6 +122,10 @@ impl CollectData for PerfProfileRaw {
         }
         Ok(())
     }
+
+    fn is_profile() -> bool {
+        true
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -134,7 +134,7 @@ pub struct PerfProfile {
 }
 
 impl PerfProfile {
-    fn new() -> Self {
+    pub fn new() -> Self {
         PerfProfile { data: Vec::new() }
     }
 }
@@ -175,36 +175,8 @@ impl GetData for PerfProfile {
         }
         Ok(serde_json::to_string(&values)?)
     }
-}
 
-#[ctor]
-fn init_perf_profile() {
-    let perf_profile_raw = PerfProfileRaw::new();
-    let file_name = PERF_PROFILE_FILE_NAME.to_string();
-    let mut dt = DataType::new(
-        Data::PerfProfileRaw(perf_profile_raw.clone()),
-        file_name.clone(),
-        false,
-    );
-    dt.is_profile_option();
-    let perf_profile = PerfProfile::new();
-    let js_file_name = file_name.clone() + ".js";
-    let mut dv = DataVisualizer::new(
-        ProcessedData::PerfProfile(perf_profile.clone()),
-        file_name.clone(),
-        js_file_name,
-        include_str!(concat!(env!("JS_DIR"), "/perf_profile.js")).to_string(),
-        file_name.clone(),
-    );
-    dv.has_custom_raw_data_parser();
-
-    PERFORMANCE_DATA
-        .lock()
-        .unwrap()
-        .add_datatype(file_name.clone(), dt);
-
-    VISUALIZATION_DATA
-        .lock()
-        .unwrap()
-        .add_visualizer(file_name.clone(), dv);
+    fn has_custom_raw_data_parser() -> bool {
+        true
+    }
 }

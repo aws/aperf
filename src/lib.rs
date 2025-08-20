@@ -7,6 +7,9 @@ pub mod record;
 pub mod report;
 pub mod utils;
 pub mod visualizer;
+use crate::data::aperf_runlog::AperfRunlog;
+use crate::data::aperf_stats::AperfStat;
+use crate::utils::get_data_name_from_type;
 use anyhow::Result;
 use chrono::prelude::*;
 use data::TimeEnum;
@@ -22,15 +25,16 @@ use serde_json::{self};
 use std::collections::HashMap;
 use std::os::unix::io::AsFd;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::{fs, process, time};
 use thiserror::Error;
 use timerfd::{SetTimeFlags, TimerFd, TimerState};
 use utils::DataMetrics;
 
-pub static APERF_FILE_FORMAT: &str = "bin";
-pub static APERF_TMP: &str = "/tmp";
-pub static APERF_RUNLOG: &str = "aperf_runlog";
+pub const APERF_FILE_FORMAT: &str = "bin";
+pub const APERF_TMP: &str = "/tmp";
+lazy_static! {
+    pub static ref APERF_RUNLOG: &'static str = get_data_name_from_type::<AperfRunlog>();
+}
 
 #[derive(Error, Debug)]
 pub enum PDError {
@@ -118,38 +122,6 @@ macro_rules! noop {
     () => {};
 }
 
-lazy_static! {
-    pub static ref PERFORMANCE_DATA: Mutex<PerformanceData> = Mutex::new(PerformanceData::new());
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct AperfStat {
-    pub time: TimeEnum,
-    pub name: String,
-    pub data: HashMap<String, u64>,
-}
-
-impl AperfStat {
-    fn new(name: String) -> Self {
-        AperfStat {
-            time: TimeEnum::DateTime(Utc::now()),
-            name,
-            data: HashMap::new(),
-        }
-    }
-
-    fn measure<F>(&mut self, name: String, mut func: F) -> Result<()>
-    where
-        F: FnMut() -> Result<()>,
-    {
-        let start_time = time::Instant::now();
-        func()?;
-        let func_time: u64 = (time::Instant::now() - start_time).as_micros() as u64;
-        self.data.insert(name, func_time);
-        Ok(())
-    }
-}
-
 #[allow(missing_docs)]
 pub struct PerformanceData {
     pub collectors: HashMap<String, data::DataType>,
@@ -159,20 +131,13 @@ pub struct PerformanceData {
 }
 
 impl PerformanceData {
-    pub fn new() -> Self {
-        let collectors = HashMap::new();
-        let init_params = InitParams::new("".to_string());
-
+    pub fn new(init_params: InitParams) -> Self {
         PerformanceData {
-            collectors,
+            collectors: HashMap::new(),
             init_params,
             aperf_stats_path: PathBuf::new(),
             aperf_stats_handle: None,
         }
-    }
-
-    pub fn set_params(&mut self, params: InitParams) {
-        self.init_params = params;
     }
 
     pub fn add_datatype(&mut self, name: String, dt: data::DataType) {
@@ -199,8 +164,11 @@ impl PerformanceData {
 
         bincode::serialize_into(meta_data_handle, &self.init_params)?;
 
-        self.aperf_stats_path = PathBuf::from(self.init_params.dir_name.clone())
-            .join(format!("aperf_run_stats.{}", APERF_FILE_FORMAT));
+        self.aperf_stats_path = PathBuf::from(self.init_params.dir_name.clone()).join(format!(
+            "{}.{}",
+            get_data_name_from_type::<AperfStat>(),
+            APERF_FILE_FORMAT
+        ));
         self.aperf_stats_handle = Some(
             fs::OpenOptions::new()
                 .create(true)
@@ -221,12 +189,8 @@ impl PerformanceData {
         for (name, datatype) in self.collectors.iter_mut() {
             if datatype.is_static {
                 continue;
-            } else if datatype.is_profile_option
-                && !self.init_params.profile.contains_key(name.as_str())
-            {
-                remove_entries.push(name.clone());
-                continue;
             }
+
             match datatype.prepare_data_collector() {
                 Err(e) => {
                     if datatype.is_profile_option {
@@ -244,9 +208,11 @@ impl PerformanceData {
                 _ => continue,
             }
         }
+
         for key in remove_entries {
             self.collectors.remove_entry(&key);
         }
+
         Ok(())
     }
 
@@ -264,7 +230,7 @@ impl PerformanceData {
 
     pub fn collect_data_serial(&mut self) -> Result<()> {
         let start = time::Instant::now();
-        let mut aperf_collect_data = AperfStat::new("aperf-collect-data".to_string());
+        let mut aperf_collect_data = AperfStat::new();
         let mut current = time::Instant::now();
         let end = current + time::Duration::from_secs(self.init_params.period);
 
@@ -362,7 +328,7 @@ impl PerformanceData {
     }
 
     pub fn end(&mut self) -> Result<()> {
-        let dst_path = PathBuf::from(&self.init_params.dir_name).join(APERF_RUNLOG);
+        let dst_path = PathBuf::from(&self.init_params.dir_name).join(*APERF_RUNLOG);
         fs::copy(&self.init_params.runlog, dst_path)?;
 
         // All activities in the record folder should be complete before this.
@@ -387,14 +353,14 @@ impl PerformanceData {
 
 impl Default for PerformanceData {
     fn default() -> Self {
-        Self::new()
+        Self::new(Default::default())
     }
 }
 
 pub fn get_file(dir: String, name: String) -> Result<fs::File> {
     for path in fs::read_dir(dir.clone())? {
         let mut file_name = path?.file_name().into_string().unwrap();
-        if file_name.contains(&name) {
+        if file_name.starts_with(&name) {
             let file_path = Path::new(&dir).join(file_name.clone());
             file_name = file_path.to_str().unwrap().to_string();
             return Ok(fs::OpenOptions::new()
@@ -414,11 +380,6 @@ pub fn get_file_name(dir: String, name: String) -> Result<String> {
         }
     }
     Err(PDError::VisualizerFileNotFound(name).into())
-}
-
-lazy_static! {
-    pub static ref VISUALIZATION_DATA: Mutex<VisualizationData> =
-        Mutex::new(VisualizationData::new());
 }
 
 #[derive(Default)]
@@ -626,14 +587,14 @@ mod tests {
 
     #[test]
     fn test_performance_data_new() {
-        let pd = PerformanceData::new();
+        let pd: PerformanceData = Default::default();
 
         let dir_name = format!(
             "./aperf_{}",
             pd.init_params.time_now.format("%Y-%m-%d_%H_%M_%S")
         );
         assert!(pd.collectors.is_empty());
-        assert!(pd.init_params.dir_name == dir_name);
+        assert_eq!(pd.init_params.dir_name, dir_name);
     }
 
     #[test]
@@ -641,8 +602,7 @@ mod tests {
         let mut params = InitParams::new("".to_string());
         params.dir_name = format!("./performance_data_dir_creation_{}", params.time_str);
 
-        let mut pd = PerformanceData::new();
-        pd.set_params(params.clone());
+        let mut pd = PerformanceData::new(params.clone());
         pd.init_collectors().unwrap();
         assert!(Path::new(&pd.init_params.dir_name).exists());
         let full_path = format!(

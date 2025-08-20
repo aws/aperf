@@ -89,3 +89,22 @@ pub fn add_metrics(
     }
     Ok(())
 }
+
+pub fn get_data_name_from_type<T>() -> &'static str {
+    let full_data_module_path = std::any::type_name::<T>();
+
+    let mut data_identifier_found = false;
+    let mut data_name: Option<&str> = None;
+    for data_module_part in full_data_module_path.split("::") {
+        if data_identifier_found {
+            data_name = Some(data_module_part);
+            break;
+        }
+        data_identifier_found = data_module_part == "data";
+    }
+
+    match data_name {
+        Some(value) => value,
+        None => panic!("Could not get data name"),
+    }
+}
