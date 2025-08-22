@@ -68,6 +68,16 @@ function form_graph_limits(data) {
     }
 }
 
+function handleNoData(container_id, run_data) {
+    if (Object.keys(run_data).length === 0) {
+        let no_data_div = document.createElement("div");
+        no_data_div.innerText = "No data collected";
+        addElemToNode(container_id, no_data_div);
+        return true;
+    }
+    return false;
+}
+
 function canHide(hide, keys, key) {
     let limits = key_limits.get(key);
     if (limits.low == 0 && limits.high == 0 && hide) {
@@ -75,6 +85,7 @@ function canHide(hide, keys, key) {
     }
     return false;
 }
+
 function emptyOrCallback(keys, hide, callback, elem, key, run_data, run="") {
     if (canHide(hide, keys, key)) {
         return;
@@ -89,6 +100,7 @@ function emptyOrCallback(keys, hide, callback, elem, key, run_data, run="") {
         }, 0);
     }
 }
+
 function emptyGraph(elem, key) {
     var layout = {
         title: `${key} (N/A)`,

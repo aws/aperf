@@ -15,11 +15,11 @@ use std::path::PathBuf;
 #[derive(Args, Debug)]
 pub struct CustomPMU {
     /// Name of the file for the custom PMU configuration.
-    #[clap(short, long, value_parser)]
+    #[clap(help_heading = "PMU Options", short, long, value_parser)]
     pub pmu_file: Option<String>,
 
     /// Verify the supplied pmu file.
-    #[clap(long, value_parser)]
+    #[clap(help_heading = "PMU Options", long, value_parser)]
     pub verify: bool,
 }
 

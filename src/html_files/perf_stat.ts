@@ -72,6 +72,8 @@ let perf_stat_rules = {
     ]
 }
 function getEvents(run, container_id, keys, run_data) {
+    if (handleNoData(container_id, run_data)) return;
+
     if (keys.length == 0) {
         var no_data_div = document.createElement('div');
         no_data_div.id = `perfstat-${run}-nodata`;

@@ -1,4 +1,5 @@
 use anyhow::Result;
+use aperf::data::DEFAULT_DATA_NAMES;
 use aperf::record::{record, Record};
 use aperf::report::{report, Report};
 use aperf::APERF_RUNLOG;
@@ -46,10 +47,126 @@ fn test_hotline() {
 #[serial]
 fn test_record() {
     run_test(|tempdir, aperf_tmp| {
-        let run_name = record_with_name("test_record".to_string(), &tempdir, &aperf_tmp).unwrap();
+        let run_name =
+            record_with_name("test_record".to_string(), &tempdir, &aperf_tmp, None, None).unwrap();
 
         assert!(Path::new(&run_name).exists());
         assert!(Path::new(&(run_name.clone() + ".tar.gz")).exists());
+
+        let all_data_files = fs::read_dir(&run_name).unwrap();
+        assert_eq!(
+            all_data_files.count(),
+            // Aside from the default data, Aperf still produces 4 more files:
+            // aperf runlog, aperf stats, metadata, and pmu_config (since we are collecting perf_stat)
+            DEFAULT_DATA_NAMES.len() + 4,
+            "The data files should only include those not skipped, plus aperf runlog, aperf stats, metadata, and pmu_config."
+        );
+
+        fs::remove_dir_all(&run_name).unwrap();
+        fs::remove_file(run_name + ".tar.gz").unwrap();
+        Ok(())
+    })
+}
+
+#[test]
+#[serial]
+fn test_record_dont_collect_some_data() {
+    run_test(|tempdir, aperf_tmp| {
+        let dont_collect_data_names = vec![
+            String::from("netstat"),
+            String::from("processes"),
+            String::from("cpu_utilization"),
+            String::from("meminfo"),
+        ];
+
+        let run_name = record_with_name(
+            "test_record_skip_some_data".to_string(),
+            &tempdir,
+            &aperf_tmp,
+            Some(dont_collect_data_names.clone()),
+            None,
+        )
+        .unwrap();
+
+        assert!(Path::new(&run_name).exists());
+        assert!(Path::new(&(run_name.clone() + ".tar.gz")).exists());
+
+        let all_data_files = fs::read_dir(&run_name).unwrap();
+        let mut num_data_files: usize = 0;
+        for data_file in all_data_files {
+            num_data_files += 1;
+            let file_name = data_file.unwrap().file_name().into_string().unwrap();
+            for dont_collect_data_name in &dont_collect_data_names {
+                assert!(
+                    !file_name.starts_with(dont_collect_data_name),
+                    "{file_name} should not exist since it is included in dont_collect"
+                );
+            }
+        }
+        assert_eq!(
+            num_data_files,
+            // Aside from the data not included in dont_collect, Aperf still produces 4 more files:
+            // aperf runlog, aperf stats, metadata, and pmu_config (since we are collecting perf_stat)
+            DEFAULT_DATA_NAMES.len() - dont_collect_data_names.len() + 4,
+            "The data files should only include those not skipped, plus aperf runlog, aperf stats, metadata, and pmu_config."
+        );
+
+        fs::remove_dir_all(&run_name).unwrap();
+        fs::remove_file(run_name + ".tar.gz").unwrap();
+        Ok(())
+    })
+}
+
+#[test]
+#[serial]
+fn test_record_collect_only_some_data() {
+    run_test(|tempdir, aperf_tmp| {
+        let collect_only_data_names = vec![
+            String::from("netstat"),
+            String::from("vmstat"),
+            String::from("systeminfo"),
+            String::from("sysctl"),
+            String::from("kernel_config"),
+        ];
+
+        let run_name = record_with_name(
+            "test_record_skip_some_data".to_string(),
+            &tempdir,
+            &aperf_tmp,
+            None,
+            Some(collect_only_data_names.clone()),
+        )
+        .unwrap();
+
+        assert!(Path::new(&run_name).exists());
+        assert!(Path::new(&(run_name.clone() + ".tar.gz")).exists());
+
+        let all_data_files = fs::read_dir(&run_name).unwrap();
+        let mut num_data_files: usize = 0;
+        for data_file in all_data_files {
+            num_data_files += 1;
+            let file_name = data_file.unwrap().file_name().into_string().unwrap();
+            for &data_name in DEFAULT_DATA_NAMES.iter() {
+                if collect_only_data_names
+                    .iter()
+                    .any(|collect_only_data_name| collect_only_data_name == data_name)
+                {
+                    continue;
+                }
+                assert!(
+                    !file_name.starts_with(data_name),
+                    "{file_name} should not exist since it is not included in collect_only"
+                );
+            }
+        }
+        assert_eq!(
+            num_data_files,
+            // Aperf should only collect the data specified in the collect_only flag and produce
+            // the corresponding binary files, plus 3 more:
+            // aperf runlog, aperf stats, and metadata
+            collect_only_data_names.len() + 3,
+            "The data files should only include those not skipped, plus aperf runlog, aperf stats, and metadata."
+        );
 
         fs::remove_dir_all(&run_name).unwrap();
         fs::remove_file(run_name + ".tar.gz").unwrap();
@@ -60,16 +177,30 @@ fn test_record() {
 #[test]
 #[serial]
 fn test_report() {
-    run_test(|tempdir, aperf_tmp| report_with_name("record_data".to_string(), tempdir, aperf_tmp))
+    run_test(|tempdir, aperf_tmp| {
+        let run_dir =
+            record_with_name("record_data".to_string(), &tempdir, &aperf_tmp, None, None)?;
+        report_with_name(run_dir, tempdir, aperf_tmp)
+    })
 }
 
 #[test]
 #[serial]
 fn test_report_dot_in_run_name() {
-    run_test(|tempdir, aperf_tmp| report_with_name("record.data".to_string(), tempdir, aperf_tmp))
+    run_test(|tempdir, aperf_tmp| {
+        let run_dir =
+            record_with_name("record.data".to_string(), &tempdir, &aperf_tmp, None, None)?;
+        report_with_name(run_dir, tempdir, aperf_tmp)
+    })
 }
 
-fn record_with_name(run: String, tempdir: &Path, aperf_tmp: &Path) -> Result<String> {
+fn record_with_name(
+    run: String,
+    tempdir: &Path,
+    aperf_tmp: &Path,
+    dont_collect: Option<Vec<String>>,
+    collect_only: Option<Vec<String>>,
+) -> Result<String> {
     let run_name = tempdir.join(run).into_os_string().into_string().unwrap();
 
     #[cfg(feature = "hotline")]
@@ -77,6 +208,8 @@ fn record_with_name(run: String, tempdir: &Path, aperf_tmp: &Path) -> Result<Str
         run_name: Some(run_name.clone()),
         interval: 1,
         period: 2,
+        dont_collect,
+        collect_only,
         profile: false,
         perf_frequency: 99,
         profile_java: None,
@@ -90,6 +223,8 @@ fn record_with_name(run: String, tempdir: &Path, aperf_tmp: &Path) -> Result<Str
         run_name: Some(run_name.clone()),
         interval: 1,
         period: 2,
+        dont_collect,
+        collect_only,
         profile: false,
         perf_frequency: 99,
         profile_java: None,
@@ -104,9 +239,7 @@ fn record_with_name(run: String, tempdir: &Path, aperf_tmp: &Path) -> Result<Str
     Ok(run_name)
 }
 
-fn report_with_name(run: String, tempdir: PathBuf, aperf_tmp: PathBuf) -> Result<()> {
-    let run_name = record_with_name(run, &tempdir, &aperf_tmp).unwrap();
-
+fn report_with_name(run_dir: String, tempdir: PathBuf, aperf_tmp: PathBuf) -> Result<()> {
     let test_report_path = PathBuf::from("test_report");
     let report_loc = tempdir
         .join("test_report")
@@ -115,7 +248,7 @@ fn report_with_name(run: String, tempdir: PathBuf, aperf_tmp: PathBuf) -> Result
         .unwrap();
     let report_path = tempdir.join("test_report");
     let rep = Report {
-        run: [run_name.clone()].to_vec(),
+        run: [run_dir.clone()].to_vec(),
         name: Some(report_loc.clone()),
     };
     report(&rep, &aperf_tmp).unwrap();
@@ -147,9 +280,9 @@ fn report_with_name(run: String, tempdir: PathBuf, aperf_tmp: PathBuf) -> Result
     assert!(paths.contains(&test_report_path.join("index.js")));
     assert!(paths.contains(&test_report_path.join("data/archive")));
 
-    fs::remove_dir_all(&run_name).unwrap();
+    fs::remove_dir_all(&run_dir).unwrap();
     fs::remove_dir_all(&report_loc).unwrap();
-    fs::remove_file(run_name.clone() + ".tar.gz").unwrap();
+    fs::remove_file(run_dir.clone() + ".tar.gz").unwrap();
     fs::remove_file(report_loc.clone() + ".tar.gz").unwrap();
     Ok(())
 }

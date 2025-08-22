@@ -9,31 +9,33 @@ The aim of APerf is to enable anyone to collect performance data in their enviro
 
 ## What data does APerf collect?
 APerf collects the following metadata:
-- System Info
-- When run on EC2 instances this includes basic EC2 metadata
-- Kernel Configuration (/boot/config)
-- Sysctl variable configuration settings
+- `systeminfo`: System information and EC2 metadata if running on EC2 instances
+- `kernel_config`: Kernel Configuration (/boot/config)
+- `sysctl`: Sysctl variable configuration settings
 
 APerf collects the following performance data:
-- CPU Utilization, both per CPU and aggregate CPU utilization
-- Virtual Memory Utilization
-- Disk Utilization per Disk
-- Interrupt Data per Interrupt Line per CPU
-- CPU Performance Counters
-- Network stats
-- Meminfo
-- Profile data (if enabled with `--profile` and `perf` binary present)
-- JVM profile data with [async-profiler](https://github.com/async-profiler/async-profiler/tree/master) binary
-- Memory and branch predictor hot spot detection (metal instance only)
+- `cpu_utilization`: CPU Utilization, both per CPU and aggregate CPU utilization
+- `vmstat`: Virtual Memory Utilization
+- `diskstats`: Disk Utilization per Disk
+- `interrupts`: Interrupt Data per Interrupt Line per CPU
+- `perf_stat`: CPU Performance Counters
+- `processes`: CPU utilization of running processes
+- `netstat`: Network stats
+- `meminfo`: Memory usage information
+- `perf_profile`: Performance profile data (enabled through the `--profile` option and the `perf` binary)
+- `java_profile`: JVM profile data (enabled through the `--profile-java` option and the [async-profiler](https://github.com/async-profiler/async-profiler/tree/master) binary)
+- `hotline`: Memory and branch predictor hot spot detection (needs to be built with the Hotline feature and run on metal instance only)
+
+Aperf collects the following data about its own process:
+- `aperf_runlog`: the log messages
+- `aperf_stats`: Execution time of each collection interval (including the total time and every data's collection time) 
 
 ## Requirements
 * [Rust toolchain (v1.61.0+)](https://www.rust-lang.org/tools/install)
 * [Node.js (v16.16.0+)](https://nodejs.org/en/download/)
 
 ## Installation
-Download the binary from the [Releases](https://github.com/aws/APerf/releases) page.
-
-`aperf` only supports running on Linux.
+Download the binary from the [Releases](https://github.com/aws/APerf/releases) page. Only Linux platforms are supported.
 
 ### Building from source
 1. Download the source code from the [Releases](https://github.com/aws/APerf/releases) page.
@@ -47,14 +49,14 @@ Download the binary from the [Releases](https://github.com/aws/APerf/releases) p
     - `sudo apt install -y build-essential` for Ubuntu and `sudo yum install kernel-devel` for Amazon Linux
 
 3. Run the following commands:
-```
-cargo build
-cargo test
-```
+   ```
+   cargo build
+   cargo test
+   ```
 
 4. The memory and branch predictor hot spot analysis tool (hotline) is not enabled by default and requires having appropriate permissions set and necessary dependencies installed. The following demonstrates how to do it on Ubuntu and Amazon Linux.
 
-On Ubuntu 22.04:
+   On Ubuntu 22.04:
 
    - `sudo apt-get update`
    - `sudo apt install -y build-essential`
@@ -68,7 +70,7 @@ On Ubuntu 22.04:
    - `sudo chmod +r /proc/kallsyms`
    - `sudo apt-get install libdw-dev  libelf-dev  libcapstone-dev  zlib1g-dev  liblzma-dev  libbz2-dev  libzstd-dev`
 
-On Amazon Linux 2 / Amazon Linux 2023:
+   On Amazon Linux 2 / Amazon Linux 2023:
 
    - `sudo yum install kernel-devel`
    - `sudo nano /etc/default/grub` and add/modify `GRUB_CMDLINE_LINUX_DEFAULT="kpti=off"`
@@ -80,108 +82,144 @@ On Amazon Linux 2 / Amazon Linux 2023:
    - `sudo chmod +r /proc/kallsyms`
    - `sudo yum groupinstall "Development Tools" -y && sudo yum install -y elfutils-devel elfutils-libelf-devel capstone-devel zlib-devel xz-devel bzip2-devel libzstd-devel`
 
-4. To build with Hotline, run
-```
-cargo build --release --features hotline
-cargo test --features hotline
-```
+   After completing the above steps, build the hotline-enabled binary:
+   ```
+   cargo build --release --features hotline
+   cargo test --features hotline
+   ```
 
-## Usage
+## Usages
 `aperf record` records performance data and stores them in a series of files. A report is then generated with `aperf report` and can be viewed in any system with a web browser. `aperf custom-pmu` can be used to generate a PMU config file which customizes which events are collected by aperf. The generated PMU config can be used with the `--pmu-config` flag with `aperf record`.
 
-**KNOWN LIMITATION**
+> [!WARNING]
+> **KNOWN LIMITATION** :
+> The default configuration of 10ms for `perf_event_mux_interval_ms` is known to cause serious performance overhead for systems with large core counts. We recommend setting this value to 100ms by doing the following: `echo 100 | sudo tee /sys/devices/*/perf_event_mux_interval_ms`
 
-The default configuration of 10ms for `perf_event_mux_interval_ms` is known to cause serious performance overhead for systems with large core counts. We recommend setting this value to 100ms by doing the following:
+### Basic Usages
+
+#### Record
+
+Run the following command to start an Aperf record run. Aperf will run for `<PERIOD>` seconds. During the recording period, once every `<INTERVAL>` seconds, it collects performance data from the system and writes them to binary files. At the end of the record, all collected data will be available in the `<RUN_NAME>` directory and also archived in `<RUN_NAME>.tar.gz`.
 
 ```
-echo 100 | sudo tee /sys/devices/*/perf_event_mux_interval_ms
-```
-
-**aperf record**
-1. Download the `aperf` binary.
-2. Start `aperf record`:
-```
-./aperf record -r <RUN_NAME> -i <INTERVAL_NUMBER> -p <COLLECTION_PERIOD>
-            [--hotline-frequency <HOTLINE_FREQUENCY>]  # Optional: if Hotline is enabled
-            [--num-to-report <HOTLINE_TABLE_SIZE>]     # Optional: if Hotline is enabled
+aperf record -r <RUN_NAME> -i <INTERVAL> -p <PERIOD>
 ```
 
-**aperf report**
-1. Download the `aperf` binary.
-2. Download the directory created by `aperf record`.
-3. Start `aperf report`:
+#### Report
+
+Run the following command to generate an Aperf report for previously collected data. The data will be read from path `<RUN>`, which can be either the directory or archive produced by the previous `aperf record` command. The report will be generated in the `<REPORT_NAME>` directory and also archived in `<REPORT_NAME>.tar.gz`. To access the report, open the `index.html` file in browser.
+
 ```
-./aperf report -r <COLLECTOR_DIRECTORY> -n <REPORT_NAME>
+aperf report -r <RUN> -n <REPORT_NAME>
 ```
 
-To compare the results of two different performance runs, use the following command:
+You can compare the results of multiple performance record runs:
 ```
-./aperf report -r <COLLECTOR_DIRECTORY_1> -r <COLLECTOR_DIRECTORY_2> -n <REPORT_NAME>
+aperf report -r <RUN1> <RUN2> ... -n <REPORT_NAME>
 ```
 
-**aperf custom-pmu**
-1. Download the `aperf` binary.
-2. Start `aperf custom-pmu`:
+#### Custom PMU
+
+Run the following command to create a custom PMU configuration through command-line prompts. The generated configuration can then be used for `perf_stat` data collections through `aperf record --pmu-config`.
+
 ```
-./aperf custom-pmu
+aperf custom-pmu
 ```
 
 ### Example
-To see a step-by-step example, please see our example [here](./EXAMPLE.md)
+To see a step-by-step example, please see our example [here](./EXAMPLE.md).
 
-### Configuration
+### Available Options
 
-`aperf record` has the following flags available for use:
+For every subcommand below, you can supply these options:
 
-**Recorder Flags:**
+`-h, --help`
 
-`-V, --version` version of APerf
+Print help menu.
 
-`-i, --interval` interval collection rate (default 1)
+`-V, --version`
 
-`-p, --period` period (how long you want the data collection to run, default is 10s)
+Print version.
 
-`-r, --run-name` run name (name of the run for organization purposes, creates directory of the same name, default of aperf_[timestamp])
+`-v, --verbose`
 
-`--pmu-config` Custom PMU config file to use
+Show debug messages. Use `-vv` for more verbose messages.
 
-`-v, --verbose` verbose messages
+`-t, --tmp-dir <TMP_DIR>` [default: /tmp]
 
-`-vv, --verbose --verbose` more verbose messages
+Temporary directory for intermediate files.
 
-`--profile` gather profiling data using the 'perf' binary
+-----
 
-`-F, --perf-frequency` frequency for perf profiling in Hz (default 99)
+#### Record
 
-`--profile-java` profile JVMs by PID or name using async-profiler (default profiles all JVMs)
+`-r, --run-name <RUN_NAME>` [default: aperf_\<timestamp\>]
 
-`--hotline-sample-frequency` Hotline sampling period (Hz) **[hotline tool]** (default is 1Khz)
+Name of the run, which defines the directory and archive name of the recorded data.
 
-`./aperf record -h`
+`-i, --interval <INTERVAL>` [default: 1]
 
-**Reporter Flags:**
+Interval (in seconds) at which performance data is to be collected.
 
-`-V, --version` version of APerf visualizer
+`-p, --period <PERIOD>` [default: 10]
 
-`-r, --run` run data to be visualized. Can be a directory or a tarball.
+Time (in seconds) for which the performance data is to be collected.
 
-`-n, --name` report name (name of the report for origanization purposes, creates directory of the same name, default of aperf_report_<run>
+`--dont-collect <Data Name>,<Data Name>...`
 
-`-v, --verbose` verbose messages
+The list of performance data to skip collection. Cannot be used with `--collect_only`.
 
-`-vv, --verbose --verbose` more verbose messages
+`--collect-only <Data Name>,<Data Name>...`
 
-`./aperf report -h`
+The list of performance data to be collected - the others will not be collected. Cannot be used with `--dont_collect`. Please note that we recommend to always collect as much data as possible for performance debugging, unless you are sure some data can be excluded.
 
-**Custom-PMU Flags:**
+`--profile` 
 
-`-V, --version` version of Aperf
+Gather profiling data using the 'perf' binary.
 
-`-p, --pmu-file` Name of the file for the custom PMU configuration
+`-F, --perf-frequency` [default: 99] 
 
-`--verify` Verify the supplied PMU file
+Frequency for perf profiling in Hz.
 
-`./aperf custom-pmu -h`
+`--profile-java [<PID/Name>,<PID/Name>,...,<PID/Name>]` [default: profiles all JVMs]
+
+Profile JVMs using async-profiler.
+
+`--pmu-config <PMU_CONFIG>` 
+
+Custom PMU config file to use.
+
+`--hotline-sample-frequency <FREQUENCY>` (For Hotline-enabled binary) [default: 1000]
+
+Hotline sampling period in Hz.
+
+`--num-to-report <NUM_TO_REPORT>` [default: 5000]
+
+Maximum number of report entries to process for Hotline tables.
+
+-----
+
+#### Report
+
+`-r, --run <RUN> <RUN> ...` 
+
+The paths to the directories or archives of the recorded data to be included in the report.
+
+`-n, --name <NAME>` [default: aperf_report_<run>] 
+
+The directory and archive name of the report.
+
+-----
+
+#### Custom PMU
+
+`-p, --pmu-file <PMU_FILE>` 
+
+Name of the file for an existing custom PMU configuration.
+
+`--verify` 
+
+Verify the supplied PMU file.
 
 ## APerf Issues?
 Below are some prerequisites for profiling with APerf:
@@ -191,11 +229,6 @@ Below are some prerequisites for profiling with APerf:
 4. APerf needs access to `/proc/kallsyms`, so we need to relax `kptr_restrict` by setting it to `0` (on Ubuntu OS).
 5. To enable function-level profiling, install the `perf` binary on your instances.
 6. Download to the instance the right [APerf binary](https://github.com/aws/aperf/releases), based on the instance type (x86/Intel/AMD or aarch64/Graviton).
-
-## Logging
-* `env_logger` is used to log information about the tool run to stdout.
-* To see it, use `./aperf <command> -v`.
-* To see more detail, use `./aperf <command> -vv`.
 
 ## Security
 

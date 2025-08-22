@@ -50,16 +50,13 @@ function getAperfEntry(elem, key, run_data) {
 }
 
 function getAperfEntries(run, container_id, keys, run_data) {
+    if (handleNoData(container_id, run_data)) return;
+
     for (let i = 0; i < all_run_keys.length; i++) {
         let value = all_run_keys[i];
         var elem = document.createElement('div');
         elem.id = `aperfstat-${run}-${value}`;
         elem.style.float = "none";
-        if (keys.length == 0) {
-            elem.innerHTML = "No data collected";
-            addElemToNode(container_id, elem);
-            return;
-        }
         addElemToNode(container_id, elem);
         emptyOrCallback(keys, false, getAperfEntry, elem, value, run_data);
     }

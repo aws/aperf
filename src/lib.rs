@@ -59,6 +59,9 @@ pub enum PDError {
     #[error("Error getting Netstat value for {}", .0)]
     VisualizerNetstatValueGetError(String),
 
+    #[error("{} data is not available for run {}", .0, .1)]
+    DataUnavailableError(String, String),
+
     #[error("Error getting Line Name Error")]
     CollectorLineNameError,
 
@@ -417,7 +420,6 @@ impl VisualizationData {
                 visualizer.init_visualizer(dir.clone(), dir_name.clone(), tmp_dir, fin_dir)
             {
                 debug!("{:#?}", e);
-                visualizer.data_not_available(dir_name.clone())?;
                 error_count += 1;
             }
         }
@@ -482,6 +484,17 @@ impl VisualizationData {
 
     pub fn get_run_names(&mut self) -> Result<String> {
         Ok(serde_json::to_string(&self.run_names)?)
+    }
+
+    pub fn is_data_available(&self, run_name: &String, visualizer_name: &str) -> bool {
+        self.visualizers
+            .get(visualizer_name)
+            .is_some_and(|visualizer| {
+                visualizer
+                    .data_available
+                    .get(run_name)
+                    .is_some_and(|&value| value)
+            })
     }
 
     pub fn get_data(
