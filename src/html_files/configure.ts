@@ -24,13 +24,19 @@ function formGlobalConfig() {
         let run_name = this_run_data['name'];
         var config = new RunConfig();
 
-        /* Elemet 0 is aggregate. Don't use that. */
-        let key = this_run_data['keys'][1];
-        config.cpu_count = JSON.parse(this_run_data['key_values'][key]).length;
-        config.cpu_list = new Array<string>();
-        for (let i = 0; i < config.cpu_count; i++) {
-            config.cpu_list.push(i.toString());
+        if (this_run_data['keys'].length > 1) {
+            /* Elemet 0 is aggregate. Don't use that. */
+            let key = this_run_data['keys'][1];
+            config.cpu_count = JSON.parse(this_run_data['key_values'][key]).length;
+            config.cpu_list = new Array<string>();
+            for (let i = 0; i < config.cpu_count; i++) {
+                config.cpu_list.push(i.toString());
+            }
+        } else {
+            config.cpu_count = 0;
+            config.cpu_list = new Array<string>();
         }
+
         config.all_selected = true;
         run_config.set(run_name, config);
     }

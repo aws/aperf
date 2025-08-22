@@ -142,7 +142,7 @@ function loadTables(config) {
     console.warn("No data collected");
   } else {
     hotline_raw_data.runs.forEach((run, index) => {
-      if (run.key_values.values === "No data collected") {
+      if (Object.keys(run.key_values).length == 0) {
         contentWrapper += no_data_div;
       } else {
         let values;

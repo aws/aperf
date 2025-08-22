@@ -116,9 +116,22 @@ function kernelConfig(diff: boolean) {
         return;
     }
     current_kernel_diff_status = diff;
+    clear_and_create('kernel');
+
+    let no_data_run_names = new Set();
+    for (let run of kernel_config_raw_data['runs']) {
+        let run_name = run["name"];
+        let elem_id = `${run_name}-kernel-per-data`;
+        if (handleNoData(elem_id, run["key_values"])) {
+            no_data_run_names.add(run_name);
+        }
+    }
+
     var data = runs_raw;
     if (!got_kernel_config_data) {
         data.forEach(function (value, index, arr) {
+            if (no_data_run_names.has(value)) return;
+
             let this_run_data;
             for (let i = 0; i < kernel_config_raw_data['runs'].length; i++) {
                 if (kernel_config_raw_data['runs'][i]['name'] == value) {
@@ -129,8 +142,10 @@ function kernelConfig(diff: boolean) {
         })
         split_keys(kernel_config_runs, kernel_config_common_keys);
     }
-    clear_and_create('kernel');
+
     data.forEach(function (value, index, arr) {
+        if (no_data_run_names.has(value)) return;
+
         let elem_id = `${value}-kernel-per-data`;
         if (current_kernel_diff_status) {
             kernelConfigDiff(value, elem_id);

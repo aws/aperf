@@ -1,6 +1,6 @@
 use anyhow::Result;
 use aperf::pmu::{custom_pmu, CustomPMU};
-use aperf::record::{record, Record};
+use aperf::record::{record, Record, RECORD_DATA_RECOMMENDATION};
 use aperf::report::{report, Report};
 use aperf::{PDError, APERF_RUNLOG, APERF_TMP};
 use clap::{Parser, Subcommand};
@@ -25,17 +25,18 @@ struct Cli {
     command: Commands,
 
     /// Show debug messages. Use -vv for more verbose messages.
-    #[clap(short, long, global = true, action = clap::ArgAction::Count)]
+    #[clap(help_heading = "Basic Options", short, long, global = true, action = clap::ArgAction::Count)]
     verbose: u8,
 
     /// Temporary directory for intermediate files.
-    #[clap(short, long, value_parser, default_value_t = APERF_TMP.to_string(), global = true)]
+    #[clap(help_heading = "Basic Options", short, long, value_parser, default_value_t = APERF_TMP.to_string(), global = true)]
     tmp_dir: String,
 }
 
 #[derive(Subcommand)]
 enum Commands {
     /// Collect performance data.
+    #[command(after_help = RECORD_DATA_RECOMMENDATION.to_ascii_uppercase())]
     Record(Record),
 
     /// Generate an HTML report based on the data collected.

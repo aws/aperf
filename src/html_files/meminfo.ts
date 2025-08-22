@@ -114,6 +114,8 @@ function getMeminfo(elem, key, run_data) {
 }
 
 function getMeminfoKeys(run, container_id, keys, run_data) {
+    if (handleNoData(container_id, run_data)) return;
+
     for (let i = 0; i < all_run_keys.length; i++) {
         let value = all_run_keys[i];
         var elem = document.createElement('div');

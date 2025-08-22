@@ -40,7 +40,7 @@ use perf_profile::{PerfProfile, PerfProfileRaw};
 use perf_stat::{PerfStat, PerfStatRaw};
 use processes::{Processes, ProcessesRaw};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::{read_to_string, File, OpenOptions};
 use std::ops::Sub;
 use std::path::PathBuf;
@@ -78,7 +78,7 @@ impl CollectorParams {
             tmp_dir: PathBuf::new(),
             signal: signal::SIGTERM,
             runlog: PathBuf::new(),
-            pmu_config: Option::None,
+            pmu_config: None,
             perf_frequency: 99,
             hotline_frequency: 1000,
             interval: 1,
@@ -215,10 +215,32 @@ impl Sub for TimeEnum {
 /// 1. define the Data Enum to hold all record data structs for collection
 /// 2. define the function that instantiates all data structs and adds them
 ///    to the PerformanceData object.
+/// 3. collect the names of data to be collected by default.
 /// The main record function (aperf::record::record(&Record, &Path, &Path) -> Result<()>
 /// creates the PerformanceData object and invokes the function.
 macro_rules! data {
     ( $( $data:ident ),* ) => {
+
+        lazy_static! {
+            pub static ref DEFAULT_DATA_NAMES: Vec<&'static str> = get_default_data_names();
+        }
+
+        fn get_default_data_names() -> Vec<&'static str> {
+            let mut default_data_names: Vec<&'static str> = Vec::new();
+            $(
+                if !($data::is_profile() || $data::is_java_profile()) {
+                    default_data_names.push(get_data_name_from_type::<$data>());
+                }
+            )*
+
+            #[cfg(not(feature = "hotline"))]
+            default_data_names.retain(
+                |&data_name| data_name != get_data_name_from_type::<Hotline>()
+            );
+
+            default_data_names
+        }
+
         #[derive(Clone, Debug, Deserialize, Serialize)]
         pub enum Data {
             $(
@@ -271,11 +293,10 @@ macro_rules! data {
                 is_static,
                 is_profile_option
             );
-
             performance_data.add_datatype(data_name.to_string(), data_type);
         }
 
-        pub fn add_all_performance_data(performance_data: &mut PerformanceData, profile_enabled: bool, java_profile_enabled: bool) {
+        pub fn add_all_performance_data(performance_data: &mut PerformanceData, data_names_to_collect: HashSet<String>, profile_enabled: bool, java_profile_enabled: bool) {
             $(
                 let data_name = get_data_name_from_type::<$data>();
 
@@ -288,7 +309,9 @@ macro_rules! data {
                         add_performance_data(performance_data, data_name, Data::$data($data::new()), $data::is_static(), true);
                     }
                 } else {
-                    add_performance_data(performance_data, data_name, Data::$data($data::new()), $data::is_static(), false);
+                    if data_names_to_collect.contains(data_name) {
+                        add_performance_data(performance_data, data_name, Data::$data($data::new()), $data::is_static(), false);
+                    }
                 }
             )*
         }

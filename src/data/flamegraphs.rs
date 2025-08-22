@@ -123,25 +123,21 @@ impl Flamegraph {
 
 impl GetData for Flamegraph {
     fn custom_raw_data_parser(&mut self, params: ReportParams) -> Result<Vec<ProcessedData>> {
-        let processed_data = vec![ProcessedData::Flamegraph(Flamegraph::new())];
+        let mut processed_data = Vec::new();
 
         let file_name = format!("{}-flamegraph.svg", params.run_name);
         let fg_loc = params.data_dir.join(&file_name);
-        let fg_out = params.report_dir.join("data/js/".to_owned() + &file_name);
+        let fg_out_relative = format!("data/js/{file_name}");
+        let fg_out = params.report_dir.join(&fg_out_relative);
 
         /* Copy the flamegraph to the report dir */
         if fg_loc.exists() {
-            std::fs::copy(fg_loc, fg_out)?;
-        } else {
-            write_msg_to_svg(
-                std::fs::OpenOptions::new()
-                    .create_new(true)
-                    .read(true)
-                    .write(true)
-                    .open(fg_out)?,
-                "No data collected".to_string(),
-            )?;
+            std::fs::copy(&fg_loc, &fg_out)?;
+            let mut flamegraph = Flamegraph::new();
+            flamegraph.data = fg_out_relative;
+            processed_data.push(ProcessedData::Flamegraph(flamegraph));
         }
+
         Ok(processed_data)
     }
 
@@ -151,12 +147,18 @@ impl GetData for Flamegraph {
 
     fn get_data(
         &mut self,
-        _buffer: Vec<ProcessedData>,
+        buffer: Vec<ProcessedData>,
         _query: String,
         _metrics: &mut DataMetrics,
     ) -> Result<String> {
-        let values: Vec<&str> = Vec::new();
-        Ok(serde_json::to_string(&values)?)
+        if buffer.is_empty() {
+            return Ok(String::new());
+        }
+
+        match buffer[0] {
+            ProcessedData::Flamegraph(ref value) => Ok(value.data.clone()),
+            _ => unreachable!(),
+        }
     }
 
     fn has_custom_raw_data_parser() -> bool {

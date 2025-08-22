@@ -69,9 +69,22 @@ function sysctl(diff: boolean) {
         return;
     }
     current_sysctl_diff_status = diff;
+    clear_and_create('sysctl');
+
+    let no_data_run_names = new Set();
+    for (let run of sysctl_raw_data['runs']) {
+        let run_name = run["name"];
+        let elem_id = `${run_name}-sysctl-per-data`;
+        if (handleNoData(elem_id, run["key_values"])) {
+            no_data_run_names.add(run_name);
+        }
+    }
+
     var data = runs_raw;
     if (!got_sysctl_data) {
         data.forEach(function (value, index, arr) {
+            if (no_data_run_names.has(value)) return;
+
             let this_run_data;
             for (let i = 0; i < sysctl_raw_data['runs'].length; i++) {
                 if (sysctl_raw_data['runs'][i]['name'] == value) {
@@ -83,8 +96,9 @@ function sysctl(diff: boolean) {
         split_keys(sysctl_runs, sysctl_common_keys);
     }
 
-    clear_and_create('sysctl');
     data.forEach(function (value, index, arr) {
+        if (no_data_run_names.has(value)) return;
+
         if (current_sysctl_diff_status) {
             sysctlDiff(value, `${value}-sysctl-per-data`);
         } else {

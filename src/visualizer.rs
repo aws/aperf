@@ -69,7 +69,10 @@ impl DataVisualizer {
         tmp_dir: &Path,
         fin_dir: &Path,
     ) -> Result<()> {
-        let file = get_file(dir.clone(), self.api_name.clone())?;
+        let file = get_file(dir.clone(), self.api_name.clone()).map_err(|e| {
+            self.data_available.insert(name.clone(), false);
+            e
+        })?;
         let full_path = Path::new("/proc/self/fd").join(file.as_raw_fd().to_string());
         self.report_params.data_dir = PathBuf::from(dir.clone());
         self.report_params.tmp_dir = tmp_dir.to_path_buf();
@@ -79,11 +82,6 @@ impl DataVisualizer {
         self.file_handle = Some(file);
         self.run_values.insert(name.clone(), Vec::new());
         self.data_available.insert(name, true);
-        Ok(())
-    }
-
-    pub fn data_not_available(&mut self, name: String) -> Result<()> {
-        self.data_available.insert(name, false);
         Ok(())
     }
 
@@ -124,6 +122,15 @@ impl DataVisualizer {
             let processed_data = self.data.process_raw_data(value)?;
             data.push(processed_data);
         }
+
+        if data.is_empty() {
+            debug!(
+                "No processed data available for {} at run {}. Marking the run as unavailable.",
+                self.api_name, name
+            );
+            self.data_available.insert(name.clone(), false);
+        }
+
         self.run_values.insert(name.clone(), data);
         Ok(())
     }
@@ -135,9 +142,12 @@ impl DataVisualizer {
         metrics: &mut DataMetrics,
     ) -> Result<String> {
         if !self.data_available.get(&name).unwrap() {
-            debug!("No data available for: {} query: {}", self.api_name, query);
-            return Ok("No data collected".to_string());
+            return Err(PDError::DataUnavailableError(
+                self.api_name.clone(),
+                name.clone(),
+            ))?;
         }
+
         /* Get run name from Query */
         let param: Vec<(String, String)> = serde_urlencoded::from_str(&query)?;
         let (_, run) = param[0].clone();
@@ -146,9 +156,7 @@ impl DataVisualizer {
             .run_values
             .get_mut(&run)
             .ok_or(PDError::VisualizerRunValueGetError(run.to_string()))?;
-        if values.is_empty() {
-            return Ok("No data collected".to_string());
-        }
+
         self.data.get_data(values.clone(), query, metrics)
     }
 

@@ -1,14 +1,9 @@
 let got_flamegraphs_data: boolean|string = "none";
 
 function getJavaFlamegraphInfo(run, container_id, run_data){
-    let data;
-    // TODO: temporary solution for when data is not collected - implement
-    //      a cleaner unified solution for all type of uncollected data
-    try {
-        data = JSON.parse(run_data['values']);
-    } catch (_) {
-        data = []
-    }
+    if (handleNoData(container_id, run_data)) return;
+
+    let data = JSON.parse(run_data['values']);
 
     let sorted = Object.keys(data).sort(function(x,y){
         return data[y][1] - data[x][1];
@@ -35,16 +30,10 @@ function getJavaFlamegraphInfo(run, container_id, run_data){
 }
 
 function getFlamegraphInfo(run, container_id, run_data) {
-    // TODO: temporary solution for when data is not collected - implement
-    //      a cleaner unified solution for all type of uncollected data
-    if (run_data['values'] == 'No data collected') {
-        var h3 = document.createElement('h3');
-        h3.innerText = `No data collected.`;
-        addElemToNode(container_id, h3);
-        return;
-    }
+    if (handleNoData(container_id, run_data)) return;
+
     var div = document.createElement('iframe');
-    div.src = `data/js/${run}-flamegraph.svg`;
+    div.src = run_data['values'];
     div.style.width = `100%`;
     div.style.height = `100vh`;
     addElemToNode(container_id, div);
