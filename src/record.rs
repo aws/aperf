@@ -3,48 +3,106 @@ use crate::utils::get_data_name_from_type;
 use crate::{data, InitParams, PerformanceData};
 use anyhow::anyhow;
 use anyhow::Result;
-use clap::Args;
+use clap::{builder::PossibleValuesParser, ArgGroup, Args};
 use log::{debug, error, info};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 #[derive(Args, Debug)]
+#[clap(group(ArgGroup::new("customized-collection").args(&["dont_collect", "collect_only"])))]
 pub struct Record {
     /// Name of the run.
-    #[clap(short, long, value_parser)]
+    #[clap(help_heading = "Basic Options", short, long, value_parser)]
     pub run_name: Option<String>,
 
     /// Interval (in seconds) at which performance data is to be collected.
-    #[clap(short, long, value_parser, default_value_t = 1)]
+    #[clap(
+        help_heading = "Basic Options",
+        short,
+        long,
+        value_parser,
+        default_value_t = 1
+    )]
     pub interval: u64,
 
     /// Time (in seconds) for which the performance data is to be collected.
-    #[clap(short, long, value_parser, default_value_t = 10)]
+    #[clap(
+        help_heading = "Basic Options",
+        short,
+        long,
+        value_parser,
+        default_value_t = 10
+    )]
     pub period: u64,
 
+    /// The list of performance data to skip collection. Cannot be used with --collect_only.
+    #[clap(
+        help_heading = "Data Selection",
+        long,
+        value_parser = PossibleValuesParser::new(data::DEFAULT_DATA_NAMES.as_slice()),
+        value_names = &["Data Name>,<Data Name"],
+        num_args = 1..,
+        value_delimiter = ','
+    )]
+    pub dont_collect: Option<Vec<String>>,
+
+    /// The list of performance data to be collected - the others will not be collected. Cannot be used with --dont_collect.
+    #[clap(
+        help_heading = "Data Selection",
+        long,
+        value_parser = PossibleValuesParser::new(data::DEFAULT_DATA_NAMES.as_slice()),
+        value_names = &["Data Name>,<Data Name"],
+        num_args = 1..,
+        value_delimiter = ','
+    )]
+    pub collect_only: Option<Vec<String>>,
+
     /// Gather profiling data using 'perf' binary.
-    #[clap(long, value_parser)]
+    #[clap(help_heading = "Perf Profiling", long, value_parser)]
     pub profile: bool,
 
     /// Frequency for perf profiling (Hz).
-    #[clap(short = 'F', long, value_parser, default_value_t = 99)]
+    #[clap(
+        help_heading = "Perf Profiling",
+        short = 'F',
+        long,
+        value_parser,
+        default_value_t = 99
+    )]
     pub perf_frequency: u32,
 
     /// Profile JVMs using async-profiler. Specify args using comma separated values. Profiles all JVMs if no args are provided.
-    #[clap(long, value_parser, default_missing_value = Some("jps"), value_names = &["PID/Name>,<PID/Name>,...,<PID/Name"], num_args = 0..=1)]
+    #[clap(
+        help_heading = "Java Profiling",
+        long, value_parser,
+        default_missing_value = Some("jps"),
+        value_names = &["PID/Name>,<PID/Name>,...,<PID/Name"],
+        num_args = 0..=1
+    )]
     pub profile_java: Option<String>,
 
     /// Custom PMU config file to use.
-    #[clap(long, value_parser)]
+    #[clap(help_heading = "PMU Options", long, value_parser)]
     pub pmu_config: Option<String>,
 
     #[cfg(feature = "hotline")]
     /// SPE sampling frequency, defaulted to 1kHz on Grv4.
-    #[clap(long, value_parser, default_value_t = 1000)]
+    #[clap(
+        help_heading = "Hotline Options",
+        long,
+        value_parser,
+        default_value_t = 1000
+    )]
     pub hotline_frequency: u32,
 
     #[cfg(feature = "hotline")]
     /// Maximum number of report entries to process for Hotline tables
-    #[clap(long, value_parser, default_value_t = 5000)]
+    #[clap(
+        help_heading = "Hotline Options",
+        long,
+        value_parser,
+        default_value_t = 5000
+    )]
     pub num_to_report: u32,
 }
 
@@ -100,6 +158,7 @@ pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
 
     data::add_all_performance_data(
         &mut performance_data,
+        get_data_names_to_collect(&record.collect_only, &record.dont_collect),
         record.profile,
         record
             .profile_java
@@ -121,4 +180,38 @@ pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
     performance_data.end()?;
 
     Ok(())
+}
+
+pub const RECORD_DATA_RECOMMENDATION: &str = "we recommend to always collect as much data as possible for performance debugging, unless you are sure some data can be excluded.";
+
+/// Compute the set of data names to be collected, based on the args collect_only and dont_collect.
+/// Although not implemented here, the clap ArgGroup defined up makes sure that at most one of the
+/// args is used.
+fn get_data_names_to_collect(
+    collect_only_arg: &Option<Vec<String>>,
+    dont_collect_arg: &Option<Vec<String>>,
+) -> HashSet<String> {
+    if let Some(collect_only_data_names) = collect_only_arg {
+        info!(
+            "Since you used the --collect-only flag, please note that {}",
+            RECORD_DATA_RECOMMENDATION
+        );
+        return collect_only_data_names
+            .iter()
+            .map(|data_name| data_name.clone())
+            .collect();
+    }
+
+    let mut all_default_data_names_set: HashSet<String> = data::DEFAULT_DATA_NAMES
+        .iter()
+        .map(|&data_name| data_name.to_string())
+        .collect();
+
+    if let Some(dont_collect_data_names) = dont_collect_arg {
+        for data_name in dont_collect_data_names {
+            all_default_data_names_set.remove(data_name);
+        }
+    };
+
+    all_default_data_names_set
 }

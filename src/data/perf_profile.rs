@@ -148,8 +148,6 @@ impl GetData for PerfProfile {
                 .split('\n')
                 .map(|x| x.to_string())
                 .collect();
-        } else {
-            profile.data = vec!["No data collected".to_string()];
         }
 
         let processed_data = vec![ProcessedData::PerfProfile(profile)];

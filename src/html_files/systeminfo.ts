@@ -46,7 +46,9 @@ let systeminfo_rules = {
 }
 
 function getSystemInfo(run, container_id, run_data) {
-    var data = JSON.parse(run_data);
+    if (handleNoData(container_id, run_data)) return;
+
+    var data = JSON.parse(run_data['values']);
     data.forEach(function (value, index, arr) {
         var div = document.createElement('div');
         div.id = `${run}-${value.name}-container`;
@@ -164,7 +166,7 @@ function sutconfig() {
         let elem_id = `${run_name}-systeminfo-per-data`;
         let this_run_data = systeminfo_raw_data['runs'][i];
         setTimeout(() => {
-            getSystemInfo(run_name, elem_id, this_run_data['key_values']['values']);
+            getSystemInfo(run_name, elem_id, this_run_data['key_values']);
         }, 0);
     }
 }

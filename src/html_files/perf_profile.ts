@@ -1,7 +1,9 @@
 let got_top_functions_data = false;
 
 function getTopFunctionsInfo(run, container_id, run_data) {
-    let data = JSON.parse(run_data);
+    if (handleNoData(container_id, run_data)) return;
+
+    let data = JSON.parse(run_data['values']);
     var div = document.createElement('div');
     div.id = `${run}-top-functions-container`;
     addElemToNode(container_id, div);
@@ -24,15 +26,7 @@ function topFunctions() {
         let elem_id = `${run_name}-topfunctions-per-data`;
         let this_run_data = perf_profile_raw_data['runs'][i];
         setTimeout(() => {
-            try {
-                getTopFunctionsInfo(run_name, elem_id, this_run_data['key_values']['values']);
-            } catch (_) {
-                // TODO: temporary temporary solution for when data is not collected - implement
-                //      cleaner unified solution for all type of uncollected data
-                let no_data_div = document.createElement('div');
-                no_data_div.innerText = "No data collected.";
-                addElemToNode(elem_id, no_data_div);
-            }
+            getTopFunctionsInfo(run_name, elem_id, this_run_data['key_values']);
         }, 0);
     }
     got_top_functions_data = true;

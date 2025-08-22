@@ -12,12 +12,12 @@ use std::path::{Path, PathBuf};
 
 #[derive(Clone, Args, Debug)]
 pub struct Report {
-    /// Run data to be visualized. Can be a directory or a tarball.
-    #[clap(short, long, value_parser, required = true, num_args = 1..)]
+    /// The paths to the directories or archives of the recorded data to be included in the report.
+    #[clap(help_heading = "Basic Options", short, long, value_parser, required = true, value_names = &["RUN_NAME> <RUN_NAME"], num_args = 1..)]
     pub run: Vec<String>,
 
-    /// Report name.
-    #[clap(short, long, value_parser)]
+    /// The directory and archive name of the report.
+    #[clap(help_heading = "Basic Options", short, long, value_parser)]
     pub name: Option<String>,
 }
 
@@ -265,17 +265,21 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
         let calls = visualization_data.get_calls(api_name.clone())?;
         let mut api = Api::new(name.clone());
         for run_name in &run_names {
-            let mut temp_keys: Vec<String> = Vec::<String>::new();
             let mut run = Run::new(run_name.clone());
+
+            if !visualization_data.is_data_available(run_name, &name) {
+                api.runs.push(run);
+                continue;
+            }
+
+            let mut temp_keys: Vec<String> = Vec::<String>::new();
             let mut keys = false;
             for call in &calls {
                 let query = format!("run={}&get={}", run_name, call);
                 let mut data;
                 if call == "keys" {
                     data = visualization_data.get_data(run_name, &api_name, query)?;
-                    if data != "No data collected" {
-                        temp_keys = serde_json::from_str(&data)?;
-                    }
+                    temp_keys = serde_json::from_str(&data)?;
                     run.keys = temp_keys.clone();
                     keys = true;
                 }

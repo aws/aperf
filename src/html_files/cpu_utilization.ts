@@ -192,6 +192,9 @@ function cpuUtilization() {
         util_cpu_list.set(run_name, getCPUList(run_name));
         let elem_id = `${run_name}-cpuutilization-per-data`;
         let this_run_data = cpu_utilization_raw_data['runs'][i];
+
+        if (handleNoData(elem_id, this_run_data['key_values'])) continue;
+
         getCpuUtilization(document.getElementById(elem_id), run_name, this_run_data['key_values']['aggregate']);
         getUtilizationTypes(run_name, elem_id, this_run_data['keys'], this_run_data['key_values']);
     }
