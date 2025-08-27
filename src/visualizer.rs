@@ -91,36 +91,38 @@ impl DataVisualizer {
             return Ok(());
         }
         debug!("Processing raw data for: {}", self.api_name);
+        let mut data: Vec<ProcessedData>;
+
         if self.has_custom_raw_data_parser {
-            self.run_values.insert(
-                name.clone(),
-                self.data
-                    .custom_raw_data_parser(self.report_params.clone())?,
-            );
-            return Ok(());
-        }
-        let mut raw_data = Vec::new();
-        loop {
-            match bincode::deserialize_from::<_, Data>(self.file_handle.as_ref().unwrap()) {
-                Ok(v) => raw_data.push(v),
-                Err(e) => match *e {
-                    // EOF
-                    bincode::ErrorKind::Io(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-                        break
-                    }
-                    e => panic!(
-                        "Error when Deserializing {} data at {} : {}",
-                        self.api_name,
-                        self.report_params.data_file_path.display().to_string(),
-                        e
-                    ),
-                },
-            };
-        }
-        let mut data = Vec::new();
-        for value in raw_data {
-            let processed_data = self.data.process_raw_data(value)?;
-            data.push(processed_data);
+            data = self
+                .data
+                .custom_raw_data_parser(self.report_params.clone())?;
+        } else {
+            data = Vec::new();
+            let mut raw_data = Vec::new();
+            loop {
+                match bincode::deserialize_from::<_, Data>(self.file_handle.as_ref().unwrap()) {
+                    Ok(v) => raw_data.push(v),
+                    Err(e) => match *e {
+                        // EOF
+                        bincode::ErrorKind::Io(e)
+                            if e.kind() == std::io::ErrorKind::UnexpectedEof =>
+                        {
+                            break
+                        }
+                        e => panic!(
+                            "Error when Deserializing {} data at {} : {}",
+                            self.api_name,
+                            self.report_params.data_file_path.display().to_string(),
+                            e
+                        ),
+                    },
+                };
+            }
+            for value in raw_data {
+                let processed_data = self.data.process_raw_data(value)?;
+                data.push(processed_data);
+            }
         }
 
         if data.is_empty() {

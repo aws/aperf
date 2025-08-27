@@ -1,3 +1,4 @@
+use crate::data::JS_DIR;
 use crate::{data, PDError, VisualizationData};
 use anyhow::Result;
 use clap::Args;
@@ -194,14 +195,18 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
     let configure = include_bytes!("html_files/configure.png");
     let index_html = include_str!("html_files/index.html");
     let index_css = include_str!("html_files/index.css");
-    let index_js = include_str!(concat!(env!("JS_DIR"), "/index.js"));
-    let utils_js = include_str!(concat!(env!("JS_DIR"), "/utils.js"));
-    let analytics_js = include_str!(concat!(env!("JS_DIR"), "/analytics.js"));
+    let index_js_bytes = JS_DIR.get_file("index.js").unwrap();
+    let index_js = index_js_bytes.contents_utf8().unwrap();
+    let utils_js_bytes = JS_DIR.get_file("utils.js").unwrap();
+    let utils_js = utils_js_bytes.contents_utf8().unwrap();
+    let analytics_js_bytes = JS_DIR.get_file("analytics.js").unwrap();
+    let analytics_js = analytics_js_bytes.contents_utf8().unwrap();
+    let configure_js_bytes = JS_DIR.get_file("configure.js").unwrap();
+    let configure_js = configure_js_bytes.contents_utf8().unwrap();
     let plotly_js = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/node_modules/plotly.js/dist/plotly.min.js"
     ));
-    let configure_js = include_str!(concat!(env!("JS_DIR"), "/configure.js"));
     let run_names = dir_names.clone();
 
     fs::create_dir_all(report_name.join("images"))?;
