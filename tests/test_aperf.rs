@@ -3,6 +3,7 @@ use aperf::data::DEFAULT_DATA_NAMES;
 use aperf::record::{record, Record};
 use aperf::report::{report, Report};
 use aperf::APERF_RUNLOG;
+use chrono::Utc;
 use flate2::read::GzDecoder;
 #[cfg(feature = "hotline")]
 use libc::c_int;
@@ -191,6 +192,32 @@ fn test_report_dot_in_run_name() {
         let run_dir =
             record_with_name("record.data".to_string(), &tempdir, &aperf_tmp, None, None)?;
         report_with_name(run_dir, tempdir, aperf_tmp)
+    })
+}
+
+#[test]
+#[serial]
+fn test_report_with_empty_data_bin() {
+    run_test(|tempdir, aperf_tmp| {
+        let run_dir_name = "empty_data_bin";
+        let run_dir = tempdir.join(run_dir_name);
+        fs::create_dir(&run_dir).unwrap();
+        fs::File::create(tempdir.join(format!("{run_dir_name}.tar.gz"))).unwrap();
+
+        let time_str = Utc::now().format("%Y-%m-%d_%H_%M_%S").to_string();
+        for data_name in DEFAULT_DATA_NAMES.iter() {
+            let binary_file_path = run_dir.join(format!("{data_name}_{time_str}.bin"));
+            fs::File::create(&binary_file_path).unwrap();
+        }
+        fs::File::create(run_dir.join("aperf_runlog")).unwrap();
+        fs::File::create(run_dir.join("aperf_stats.bin")).unwrap();
+        fs::File::create(run_dir.join("meta_data.bin")).unwrap();
+
+        report_with_name(
+            run_dir.into_os_string().into_string().unwrap(),
+            tempdir,
+            aperf_tmp,
+        )
     })
 }
 

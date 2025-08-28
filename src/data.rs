@@ -29,6 +29,7 @@ use cpu_utilization::{CpuUtilization, CpuUtilizationRaw};
 use diskstats::{Diskstats, DiskstatsRaw};
 use flamegraphs::{Flamegraph, FlamegraphRaw};
 use hotline::{Hotline, HotlineRaw};
+use include_directory::{include_directory, Dir};
 use interrupts::{InterruptData, InterruptDataRaw};
 use java_profile::{JavaProfile, JavaProfileRaw};
 use kernel_config::KernelConfig;
@@ -41,7 +42,7 @@ use perf_stat::{PerfStat, PerfStatRaw};
 use processes::{Processes, ProcessesRaw};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::fs::{read_to_string, File, OpenOptions};
+use std::fs::{File, OpenOptions};
 use std::ops::Sub;
 use std::path::PathBuf;
 use sysctl::SysctlData;
@@ -326,6 +327,8 @@ macro_rules! data {
 /// creates the VisualizationData object and invokes the function.
 macro_rules! processed_data {
     ( $( $processed_data:ident ),* ) => {
+        pub static JS_DIR: Dir<'_> = include_directory!("$JS_DIR");
+
         #[derive(Clone, Debug, Deserialize, Serialize)]
         pub enum ProcessedData {
             $(
@@ -368,19 +371,22 @@ macro_rules! processed_data {
         }
 
         fn add_visualization_data(visualization_data: &mut VisualizationData, data_name: &str, processed_data: ProcessedData, has_custom_raw_data_parser: bool) {
-            let mut js_file_name = format!("{data_name}.js");
-            let js_file_path = format!("{}/{}", env!("JS_DIR"), js_file_name.clone());
-            let js_content = read_to_string(&js_file_path).unwrap_or_else(|err| {
-                trace!("Cannot read the js content from {}: {}", js_file_path, err);
+            let mut js_file_name = format!("{}.js", data_name);
+            let mut js_content: &str = "";
+
+            if !JS_DIR.contains(&js_file_name) {
+                trace!("Skip reading {} since it does not exist", js_file_name);
                 js_file_name = String::new();
-                String::new()
-            });
+            } else {
+                let js_file_bytes = JS_DIR.get_file(&js_file_name).unwrap();
+                js_content = js_file_bytes.contents_utf8().unwrap();
+            }
 
             let data_visualizer = DataVisualizer::new(
                 processed_data,
                 data_name.to_string(),
                 js_file_name,
-                js_content,
+                js_content.to_string(),
                 has_custom_raw_data_parser,
             );
 
