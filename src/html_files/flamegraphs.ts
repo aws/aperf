@@ -37,6 +37,27 @@ function getFlamegraphInfo(run, container_id, run_data) {
     div.style.width = `100%`;
     div.style.height = `100vh`;
     addElemToNode(container_id, div);
+
+    // Check for reverse flamegraph
+    let reverse_path = run_data['values'].replace('-flamegraph.svg', '-reverse-flamegraph.svg');
+    
+    // Create a test image to check if reverse flamegraph exists
+    let testImg = new Image();
+    testImg.onload = function() {
+        var h3 = document.createElement('h3');
+        h3.innerText = 'Reverse Flamegraph';
+        h3.style.textAlign = 'center';
+        addElemToNode(container_id, h3);
+        var reverse_div = document.createElement('iframe');
+        reverse_div.src = reverse_path;
+        reverse_div.style.width = `100%`;
+        reverse_div.style.height = `100vh`;
+        addElemToNode(container_id, reverse_div);
+    };
+    testImg.onerror = function() {
+        console.log('Reverse flamegraph not found:', reverse_path);
+    };
+    testImg.src = reverse_path;
 }
 
 function flamegraphs(set) {
