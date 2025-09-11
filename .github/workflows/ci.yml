@@ -14,9 +14,9 @@ jobs:
   CI:
     strategy:
       matrix:
-        image: [ubuntu-24.04, ubuntu-24.04-arm]
+        platform: [ARM, X86]
     runs-on:
-      - ${{matrix.image}}
+      - codebuild-${{ github.event.repository.name }}-${{ matrix.platform }}-Runner-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@446798f8213ac2e75931c1b0769676d927801858 # v2.10.3
@@ -27,29 +27,47 @@ jobs:
 
       # Prepare build dependencies
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@47f4dd75f027bd6cfe06f3dc15ddfcb07acc7e4e # 1.74.0
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
       - name: Install Node
         uses: actions/setup-node@v4
         with:
           node-version: 16.16.0
-      - name: Apt update
-        run: sudo apt update
+      - name: Yum Update
+        run: sudo yum update -y
       - name: Install gcc
-        run: sudo apt install -y build-essential
+        run: sudo yum install -y "@Development Tools"
       - name: Install musl
-        run: sudo apt install -y musl-tools
-      - name: Install Hotline dependencies
+        env:
+          MUSL_VERSION: musl-1.2.5
         run: |
-          sudo apt-get install \
-            libdw-dev \
-            libelf-dev \
-            libcapstone-dev \
-            zlib1g-dev \
-            liblzma-dev \
-            libbz2-dev \
-            libzstd-dev
+          curl https://musl.libc.org/releases/$MUSL_VERSION.tar.gz -o $MUSL_VERSION.tar.gz
+          curl https://musl.libc.org/releases/$MUSL_VERSION.tar.gz.asc -o $MUSL_VERSION.tar.gz.asc
+          curl https://musl.libc.org/musl.pub -o musl.pub
+          sudo yum install -y gnupg
+          gpg --import musl.pub || true
+          gpg --verify $MUSL_VERSION.tar.gz.asc $MUSL_VERSION.tar.gz
+          tar -xvf $MUSL_VERSION.tar.gz
+          cd $MUSL_VERSION
+          ./configure --prefix=/opt/musl
+          sudo make install
+          cd .. && sudo rm -rf $MUSL_VERSION*
+          if [ $(arch) = "aarch64" ]; then
+            sudo ln -snf /opt/musl/bin/musl-gcc /usr/bin/aarch64-linux-musl-gcc
+          else
+            sudo ln -snf /opt/musl/bin/musl-gcc /usr/bin/musl-gcc
+          fi
+      - name: Install Hotline Dependencies
+        run: |
+          sudo yum install -y \
+            elfutils-devel \
+            elfutils-libelf-devel \
+            capstone-devel \
+            zlib-devel \
+            xz-devel \
+            bzip2-devel \
+            libzstd-devel
 
       # Tests and static analysis
       - name: Set perf_event_paranoid to 0
@@ -77,7 +95,7 @@ jobs:
             cargo test --features hotline --verbose -- --nocapture --color always
           fi
 
-          
+      # Archive and upload artifacts
       - name: Ensure no runtime dependencies
         run: |
           ldd target/$(arch)-unknown-linux-musl/release/aperf 2>&1 | grep -E "not a dynamic executable|statically linked"
@@ -85,13 +103,13 @@ jobs:
         run: tar -zcvf artifacts.tar.gz -C target/$(arch)-unknown-linux-musl/release aperf
       - name: Upload x86_64 release artifacts
         uses: actions/upload-artifact@v4
-        if: ${{ matrix.image == 'ubuntu-24.04' }}
+        if: ${{ matrix.platform == 'X86' }}
         with:
           name: x86_64-release-artifacts
           path: artifacts.tar.gz
       - name: Upload aarch64 release artifacts
         uses: actions/upload-artifact@v4
-        if: ${{ matrix.image == 'ubuntu-24.04-arm' }}
+        if: ${{ matrix.platform == 'ARM' }}
         with:
           name: aarch64-release-artifacts
           path: artifacts.tar.gz
