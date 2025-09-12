@@ -27,6 +27,15 @@ function getLine(run, elem, key, run_data) {
         }
         interrupt_type_datas.push(interrupt_cpu_data);
     }
+    // Calculate aggregate stats across all CPUs
+    var aggregateData = [];
+    for (let timeIndex = 0; timeIndex < data.length; timeIndex++) {
+        let totalCount = 0;
+        data[timeIndex].per_cpu.forEach(cpu => totalCount += cpu.count);
+        aggregateData.push(totalCount / data[timeIndex].per_cpu.length);
+    }
+    const statsText = calculateStats(aggregateData);
+    
     var title;
     if (data[0].interrupt_device != "") {
         title = `Interrupt #${key} (${data[0].interrupt_device} ${data[0].interrupt_type})`;
@@ -35,7 +44,7 @@ function getLine(run, elem, key, run_data) {
     }
     var TESTER = elem;
     var layout = {
-        title: title,
+        title: createTitleWithStats(title, statsText),
         xaxis: {
             title: 'Time (s)',
         },

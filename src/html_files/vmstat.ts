@@ -28,6 +28,7 @@ function getEntry(elem, key, run_data) {
         x_time.push(value.time.TimeDiff);
         y_data.push(value.value);
     });
+    const statsText = calculateStats(y_data);
     var TESTER = elem;
     var vmstat_data: Partial<Plotly.PlotData> = {
         x: x_time,
@@ -36,7 +37,7 @@ function getEntry(elem, key, run_data) {
     };
     let limits = key_limits.get(key);
     var layout = {
-        title: `${key}`,
+        title: createTitleWithStats(key, statsText),
         xaxis: {
             title: 'Time (s)',
         },

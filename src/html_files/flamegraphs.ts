@@ -37,6 +37,18 @@ function getFlamegraphInfo(run, container_id, run_data) {
     div.style.width = `100%`;
     div.style.height = `100vh`;
     addElemToNode(container_id, div);
+
+    // Reverse flamegraph
+    let reverse_path = run_data['values'].replace('-flamegraph.svg', '-reverse-flamegraph.svg');
+    var h3 = document.createElement('h3');
+    h3.innerText = 'Reverse Flamegraph';
+    h3.style.textAlign = 'center';
+    addElemToNode(container_id, h3);
+    var reverse_div = document.createElement('iframe');
+    reverse_div.src = reverse_path;
+    reverse_div.style.width = `100%`;
+    reverse_div.style.height = `100vh`;
+    addElemToNode(container_id, reverse_div);
 }
 
 function flamegraphs(set) {

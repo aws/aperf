@@ -149,9 +149,16 @@ function getEvent(elem, key, run_data, run) {
             end_datas.push(perfstat_line);
         }
     })
+    // Calculate stats for aggregate data (CPU -1)
+    let aggregateData = perfstat_datas.find(d => d.cpu === -1);
+    let statsText = '';
+    if (aggregateData && aggregateData.y_data.length > 0) {
+        statsText = calculateStats(aggregateData.y_data);
+    }
+    
     let limits = key_limits.get(key);
     var layout = {
-        title: `${key}`,
+        title: statsText ? createTitleWithStats(key, statsText) : `${key}`,
         xaxis: {
             title: 'Time (s)',
         },

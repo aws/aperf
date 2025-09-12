@@ -216,3 +216,30 @@ function get_data_key(data_type, key) {
 function percent_difference(v1, v2) {
     return Math.ceil((Math.abs(v1 - v2)/((v1 + v2)/2)) * 100);
 }
+
+function formatNumber(num) {
+    if (num >= 1e9) return (num / 1e9).toFixed(1) + 'G';
+    if (num >= 1e6) return (num / 1e6).toFixed(1) + 'M';
+    if (num >= 1e3) return (num / 1e3).toFixed(1) + 'K';
+    return num.toFixed(1);
+}
+
+function calculateStats(y_data) {
+    const sorted = [...y_data].sort((a, b) => a - b);
+    const avg = y_data.reduce((a, b) => a + b, 0) / y_data.length;
+    const stddev = Math.sqrt(y_data.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / y_data.length);
+    const min = sorted[0];
+    const max = sorted[sorted.length - 1];
+    const p50 = sorted[Math.floor(sorted.length * 0.5)];
+    const p90 = sorted[Math.floor(sorted.length * 0.9)];
+    const p99 = sorted[Math.floor(sorted.length * 0.99)];
+    const p999 = sorted[Math.floor(sorted.length * 0.999)];
+    
+    return `Avg: ${formatNumber(avg)} | StdDev: ${formatNumber(stddev)} | Min: ${formatNumber(min)} | Max: ${formatNumber(max)} | P50: ${formatNumber(p50)} | P90: ${formatNumber(p90)} | P99: ${formatNumber(p99)} | P99.9: ${formatNumber(p999)}`;
+}
+
+function createTitleWithStats(key, statsText) {
+    return {
+        text: `${key}<br><span style="font-size: 12px;">${statsText}</span>`,
+    };
+}
