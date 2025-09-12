@@ -66,6 +66,8 @@ impl CollectData for FlamegraphRaw {
             .status();
 
         let fg_out = File::create(data_dir.join(format!("{}-flamegraph.svg", params.run_name)))?;
+        let reverse_fg_out =
+            File::create(data_dir.join(format!("{}-reverse-flamegraph.svg", params.run_name)))?;
 
         match out_jit {
             Err(e) => {
@@ -95,6 +97,15 @@ impl CollectData for FlamegraphRaw {
                             &mut Options::default(),
                             &[collapse_loc.to_path_buf()],
                             fg_out,
+                        )?;
+
+                        // Generate reverse flamegraph
+                        let mut reverse_options = Options::default();
+                        reverse_options.reverse_stack_order = true;
+                        flamegraph::from_files(
+                            &mut reverse_options,
+                            &[collapse_loc.to_path_buf()],
+                            reverse_fg_out,
                         )?;
                     }
                 }
@@ -136,6 +147,16 @@ impl GetData for Flamegraph {
             let mut flamegraph = Flamegraph::new();
             flamegraph.data = fg_out_relative;
             processed_data.push(ProcessedData::Flamegraph(flamegraph));
+        }
+
+        /* Copy the reverse flamegraph to the report dir */
+        let reverse_file_name = format!("{}-reverse-flamegraph.svg", params.run_name);
+        let reverse_fg_loc = params.data_dir.join(&reverse_file_name);
+        let reverse_fg_out = params
+            .report_dir
+            .join(format!("data/js/{reverse_file_name}"));
+        if reverse_fg_loc.exists() {
+            std::fs::copy(&reverse_fg_loc, &reverse_fg_out)?;
         }
 
         Ok(processed_data)
