@@ -23,8 +23,9 @@ function getProcesses(run, container_id, run_data) {
         elem.style.float = "none";
         addElemToNode(container_id, elem);
         var TESTER = elem;
+        const statsText = calculateStats(y_data);
         var layout = {
-            title: value.name,
+            title: createTitleWithStats(value.name, statsText),
             xaxis: {
                 title: 'Time(s)',
                 range: [0, data.collection_time.TimeDiff],

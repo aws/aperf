@@ -90,6 +90,7 @@ function getMeminfo(elem, key, run_data) {
         divisor = 1;
         unit = 'Count';
     }
+    const originalStats = calculateStats(y_data);
     for (i = 0; i < y_data.length; i++) {
         y_data[i] /= divisor;
     }
@@ -101,7 +102,7 @@ function getMeminfo(elem, key, run_data) {
     var TESTER = elem;
     let limits = key_limits.get(key);
     var layout = {
-        title: key,
+        title: createTitleWithStats(key, originalStats),
         xaxis: {
             title: 'Time (s)',
         },
