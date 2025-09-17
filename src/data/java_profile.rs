@@ -12,6 +12,8 @@ use std::process::{Child, Command};
 use std::sync::Mutex;
 use std::{fs, fs::File};
 
+const PROFILE_METRICS: &[&str] = &["cpu", "alloc", "wall"];
+
 lazy_static! {
     pub static ref ASPROF_CHILDREN: Mutex<Vec<Child>> = Mutex::new(Vec::new());
 }
@@ -40,14 +42,23 @@ impl JavaProfileRaw {
                 .args([
                     "-d",
                     &(params.collection_time - params.elapsed_time).to_string(),
+                    "-o",
+                    "jfr",
+                    "-e",
+                    "cpu",
+                    "--alloc",
+                    "2m",
+                    "--wall",
+                    "100ms",
+                    "--cstack",
+                    "vm",
+                    "-F",
+                    "vtable",
                     "-f",
-                    format!(
-                        "{}/{}-java-profile-{}.html",
-                        params.tmp_dir.display(),
-                        params.run_name,
-                        jid
-                    )
-                    .as_str(),
+                    &params
+                        .tmp_dir
+                        .join(format!("{}-java-profile-{}.jfr", params.run_name, jid))
+                        .to_string_lossy(),
                     jid.as_str(),
                 ])
                 .spawn()
@@ -219,18 +230,56 @@ impl CollectData for JavaProfileRaw {
 
         let data_dir = params.data_dir.clone();
         for key in self.process_map.keys() {
-            let mut html_path = data_dir.clone();
-            html_path.push(format!("{}-java-profile-{}.html", params.run_name, key));
+            let jfr_path = params
+                .tmp_dir
+                .join(format!("{}-java-profile-{}.jfr", params.run_name, key));
 
-            let html_loc = html_path.to_str().unwrap();
-            let tmp_loc = format!(
-                "{}/{}-java-profile-{}.html",
-                params.tmp_dir.display(),
-                params.run_name,
-                key
-            );
+            if fs::exists(&jfr_path).expect("Can't check existence of jfr file") {
+                for metric in PROFILE_METRICS {
+                    let html_path = data_dir.join(format!(
+                        "{}-java-profile-{}-{}.html",
+                        params.run_name, key, metric
+                    ));
 
-            fs::copy(tmp_loc.clone(), html_loc).ok();
+                    match Command::new("jfrconv")
+                        .args([
+                            &format!("--{metric}"),
+                            "-o",
+                            "heatmap",
+                            &jfr_path.to_string_lossy(),
+                            html_path.to_str().unwrap(),
+                        ])
+                        .output()
+                    {
+                        Err(e) => {
+                            error!(
+                                "'jfrconv' command failed for {} with metric {}: {}",
+                                key, metric, e
+                            );
+                        }
+                        Ok(output) => {
+                            if !output.status.success() {
+                                error!(
+                                    "'jfrconv' failed for {} with metric {}: {}",
+                                    key,
+                                    metric,
+                                    String::from_utf8_lossy(&output.stderr)
+                                );
+                            } else {
+                                trace!(
+                                    "Successfully converted JFR to {} heatmap for {}",
+                                    metric,
+                                    key
+                                );
+                            }
+                        }
+                    }
+                }
+
+                let jfr_dest =
+                    data_dir.join(format!("{}-java-profile-{}.jfr", params.run_name, key));
+                fs::copy(&jfr_path, jfr_dest).ok();
+            }
         }
 
         let mut jps_map = File::create(
@@ -282,21 +331,27 @@ impl GetData for JavaProfile {
         let process_list: Vec<String> = process_map.clone().into_keys().collect();
 
         for process in process_list {
-            let mut fg_loc = params.report_dir.clone();
-            fg_loc.push(format!(
-                "data/js/{}-java-profile-{}.html",
-                params.run_name, process
-            ));
-            let mut html_loc = params.data_dir.clone();
-            html_loc.push(format!("{}-java-profile-{}.html", params.run_name, process));
-            let html = fs::read_to_string(html_loc.to_str().unwrap())
-                .unwrap_or(String::from("No data collected."));
-            let mut fg_file = File::create(fg_loc.clone())?;
-            write!(fg_file, "{}", html)?;
+            for metric in PROFILE_METRICS {
+                let mut hm_path = params.data_dir.clone();
+                hm_path.push(format!(
+                    "{}-java-profile-{}-{}.html",
+                    params.run_name, process, metric
+                ));
+                let html = fs::read_to_string(hm_path.to_str().unwrap())
+                    .unwrap_or(String::from("No data collected."));
 
-            process_map
-                .entry(process)
-                .and_modify(|v| v.push(html.len().to_string()));
+                let mut hm_dest = params.report_dir.clone();
+                hm_dest.push(format!(
+                    "data/js/{}-java-profile-{}-{}.html",
+                    params.run_name, process, metric
+                ));
+                let mut hm_file = File::create(hm_dest.clone())?;
+                write!(hm_file, "{html}")?;
+
+                process_map
+                    .entry(process.clone())
+                    .and_modify(|v| v.push(html.len().to_string()));
+            }
         }
 
         let mut java_profile_data = JavaProfile::new();

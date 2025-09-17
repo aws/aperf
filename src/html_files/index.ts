@@ -89,7 +89,19 @@ DataTypes.forEach((datatype: DataType, key: string) => {
 
 	for (var j = 0; j < select_elems.length; j++) {
 		select_elems[j].addEventListener("click", function (evn: Event) {
-			datatype.callback(this.id)
+			if (key === 'flamegraphs') {
+				const javaprofileOptions = document.getElementById('javaprofile-options');
+				if (this.id === 'javaprofile') {
+					javaprofileOptions.style.display = 'block';
+					(document.getElementById('javaprofile-cpu') as HTMLInputElement).checked = true;
+					datatype.callback('javaprofile-cpu');
+				} else {
+					javaprofileOptions.style.display = 'none';
+					datatype.callback(this.id);
+				}
+			} else {
+				datatype.callback(this.id);
+			}
 		})
 	}
 	if (runs_raw.length == 1) {
@@ -98,6 +110,13 @@ DataTypes.forEach((datatype: DataType, key: string) => {
 		}
 	}
 });
+
+var javaprofile_elems = document.getElementsByClassName('javaprofile-select');
+for (var j = 0; j < javaprofile_elems.length; j++) {
+	javaprofile_elems[j].addEventListener("click", function (evn: Event) {
+		flamegraphs(this.id);
+	});
+}
 
 var run_width = 100;
 var float_style = "none";
