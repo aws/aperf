@@ -1,11 +1,11 @@
 let got_flamegraphs_data: boolean|string = "none";
 
-function getJavaFlamegraphInfo(run, container_id, run_data){
+function getJavaFlamegraphInfo(run, container_id, run_data, metric){
     if (handleNoData(container_id, run_data)) return;
 
     let data = JSON.parse(run_data['values']);
 
-    let sorted = Object.keys(data).sort(function(x,y){
+    let sorted = Object.keys(data).filter(key => !key.includes('-')).sort(function(x,y){
         return data[y][1] - data[x][1];
     });
 
@@ -19,10 +19,10 @@ function getJavaFlamegraphInfo(run, container_id, run_data){
         let value = data[key][0];
         var h3 = document.createElement('h3');
         h3.style.textAlign = "center";
-        h3.innerText = `JVM: ${value}, PID: ${key}`;
+        h3.innerText = `JVM: ${value}, PID: ${key} (${metric.toUpperCase()})`;
         addElemToNode(container_id, h3);
         var div = document.createElement('iframe');
-        div.src = `data/js/${run}-java-profile-${key}.html`;
+        div.src = `data/js/${run}-java-profile-${key}-${metric}.html`;
         div.style.width = `100%`;
         div.style.height = `100vh`;
         addElemToNode(container_id, div);
@@ -66,8 +66,14 @@ function flamegraphs(set) {
                 case 'flamegraphs':
                     getFlamegraphInfo(run_name, elem_id, raw_data['runs'][i]['key_values']);
                     break;
-                case 'javaprofile':
-                    getJavaFlamegraphInfo(run_name, elem_id, raw_data['runs'][i]['key_values']);
+                case 'javaprofile-cpu':
+                    getJavaFlamegraphInfo(run_name, elem_id, raw_data['runs'][i]['key_values'], 'cpu');
+                    break;
+                case 'javaprofile-alloc':
+                    getJavaFlamegraphInfo(run_name, elem_id, raw_data['runs'][i]['key_values'], 'alloc');
+                    break;
+                case 'javaprofile-wall':
+                    getJavaFlamegraphInfo(run_name, elem_id, raw_data['runs'][i]['key_values'], 'wall');
                     break;
                 default:
                     return;
