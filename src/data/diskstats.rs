@@ -303,6 +303,10 @@ fn get_keys() -> Result<String> {
 }
 
 impl GetData for Diskstats {
+    fn compatible_filenames(&self) -> Vec<&str> {
+        vec!["disk_stats"]
+    }
+
     fn process_raw_data(&mut self, buffer: Data) -> Result<ProcessedData> {
         process_collected_raw_data(buffer)
     }

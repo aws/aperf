@@ -3,11 +3,10 @@ let got_flamegraphs_data: boolean|string = "none";
 function getJavaFlamegraphInfo(run, container_id, run_data, metric){
     if (handleNoData(container_id, run_data)) return;
 
-    let data = JSON.parse(run_data['values']);
+    let values = JSON.parse(run_data['values']);
+    let data = values.find((d) => d['data_type'] == metric);
 
-    let sorted = Object.keys(data).filter(key => !key.includes('-')).sort(function(x,y){
-        return data[y][1] - data[x][1];
-    });
+    let sorted = data['graphs'].filter((graph) => !graph["graph_name"].includes('-')).toSorted((x, y) => y["graph_size"] - x["graph_size"]);
 
     if(sorted.length == 0){
         var h3 = document.createElement('h3');
@@ -15,14 +14,15 @@ function getJavaFlamegraphInfo(run, container_id, run_data, metric){
         addElemToNode(container_id, h3);
     }
 
-    for(let key of sorted){
-        let value = data[key][0];
+    for(let graph of sorted){
         var h3 = document.createElement('h3');
         h3.style.textAlign = "center";
-        h3.innerText = `JVM: ${value}, PID: ${key} (${metric.toUpperCase()})`;
+        h3.innerText = graph["graph_name"];
+
         addElemToNode(container_id, h3);
+
         var div = document.createElement('iframe');
-        div.src = `data/js/${run}-java-profile-${key}-${metric}.html`;
+        div.src = graph["graph_path"];
         div.style.width = `100%`;
         div.style.height = `100vh`;
         addElemToNode(container_id, div);
@@ -74,6 +74,9 @@ function flamegraphs(set) {
                     break;
                 case 'javaprofile-wall':
                     getJavaFlamegraphInfo(run_name, elem_id, raw_data['runs'][i]['key_values'], 'wall');
+                    break;
+                case 'javaprofile-legacy':
+                    getJavaFlamegraphInfo(run_name, elem_id, raw_data['runs'][i]['key_values'], 'legacy');
                     break;
                 default:
                     return;

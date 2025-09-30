@@ -222,13 +222,23 @@ Name of the file for an existing custom PMU configuration.
 Verify the supplied PMU file.
 
 ## APerf Issues?
-Below are some prerequisites for profiling with APerf:
-1. Select the [appropriate instance size](https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/debug_hw_perf.md) if you need PMU stats.
-2. For collecting PMU counter metrics w/o `root` or `sudo` permissions, set the `perf_event_paranoid` to `0`.
-3. To collect PMU counter metrics, APerf needs to open up to 50 file descriptors per vCPU. So, increase `ulimit` settings accordingly.
-4. APerf needs access to `/proc/kallsyms`, so we need to relax `kptr_restrict` by setting it to `0` (on Ubuntu OS).
-5. To enable function-level profiling, install the `perf` binary on your instances.
-6. Download to the instance the right [APerf binary](https://github.com/aws/aperf/releases), based on the instance type (x86/Intel/AMD or aarch64/Graviton).
+#### PMU Counters:
+* PMU counters are only available on [certain instance sizes](https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/debug_hw_perf.md#how-to-collect-pmu-counters) and families. Select the appropriate instance size if you need PMU stats.
+* For collecting PMU counter metrics w/o `root` or `sudo` permissions, set the `perf_event_paranoid` to `0`.
+```
+sudo sysctl -w kernel.perf_event_paranoid=0
+```
+* To collect PMU counter metrics, APerf needs to open up to 50 file descriptors per vCPU. So, increase `ulimit` settings accordingly.
+* APerf preparation for PMU counter metrics may take significant time on larger instances, delaying the start of the recording period. Use `--dont-collect perf_stat` if startup time is a concern and/or PMU metrics are not necessary.
+---
+#### Other:
+* APerf needs access to `/proc/kallsyms`, so we need to relax `kptr_restrict` by setting it to `0` (on Ubuntu OS).
+```
+sudo sysctl -w kernel.kptr_restrict=0
+```
+* To enable function-level profiling, install the `perf` binary on your instances.
+* Download the right [APerf binary](https://github.com/aws/aperf/releases) based on the instance type (x86/Intel/AMD or aarch64/Graviton).
+* For JVM profiling ensure the [async-profiler](https://github.com/async-profiler/async-profiler/tree/master) binary is installed and the `jps` command is available (part of Java Development Kit).
 
 ## Security
 

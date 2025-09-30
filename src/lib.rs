@@ -407,7 +407,7 @@ impl VisualizationData {
         &mut self,
         dir: String,
         tmp_dir: &Path,
-        fin_dir: &Path,
+        report_dir: &Path,
     ) -> Result<String> {
         let dir_path = Path::new(&dir);
         let dir_name = crate::data::utils::notargz_file_name(dir_path.to_path_buf())?;
@@ -417,7 +417,7 @@ impl VisualizationData {
 
         for (_name, visualizer) in self.visualizers.iter_mut() {
             if let Err(e) =
-                visualizer.init_visualizer(dir.clone(), dir_name.clone(), tmp_dir, fin_dir)
+                visualizer.init_visualizer(dir.clone(), dir_name.clone(), tmp_dir, report_dir)
             {
                 debug!("{:#?}", e);
                 error_count += 1;

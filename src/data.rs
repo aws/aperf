@@ -2,6 +2,7 @@ pub mod aperf_runlog;
 pub mod aperf_stats;
 pub mod constants;
 pub mod cpu_utilization;
+mod data_formats;
 pub mod diskstats;
 pub mod flamegraphs;
 pub mod hotline;
@@ -337,6 +338,14 @@ macro_rules! processed_data {
         }
 
         impl ProcessedData {
+            pub fn compatible_filenames(&self) -> Vec<&str> {
+                 match self {
+                    $(
+                        ProcessedData::$processed_data(ref value) => value.compatible_filenames(),
+                    )*
+                }
+            }
+
             pub fn process_raw_data(&mut self, buffer: Data) -> Result<ProcessedData> {
                 match self {
                     $(

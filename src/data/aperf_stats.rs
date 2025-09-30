@@ -91,6 +91,10 @@ fn get_key_data(values: Vec<AperfStat>, key: String, metrics: &mut DataMetrics) 
 }
 
 impl GetData for AperfStat {
+    fn compatible_filenames(&self) -> Vec<&str> {
+        vec!["aperf_run_stats"]
+    }
+
     fn custom_raw_data_parser(&mut self, params: ReportParams) -> Result<Vec<ProcessedData>> {
         let mut raw_data: Vec<ProcessedData> = Vec::new();
 
