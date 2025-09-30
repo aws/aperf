@@ -133,6 +133,10 @@ impl Flamegraph {
 }
 
 impl GetData for Flamegraph {
+    fn compatible_filenames(&self) -> Vec<&str> {
+        vec!["flamegraph"]
+    }
+
     fn custom_raw_data_parser(&mut self, params: ReportParams) -> Result<Vec<ProcessedData>> {
         let mut processed_data = Vec::new();
 

@@ -1,3 +1,4 @@
+use crate::data::data_formats::{HtmlData, HtmlDataGraph};
 use crate::data::{CollectData, CollectorParams, ProcessedData};
 use crate::utils::{get_data_name_from_type, DataMetrics};
 use crate::visualizer::GetData;
@@ -8,6 +9,7 @@ use nix::{sys::signal, unistd::Pid};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Write;
+use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::sync::Mutex;
 use std::{fs, fs::File};
@@ -297,22 +299,14 @@ impl CollectData for JavaProfileRaw {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct JavaProfile {
-    pub data: String,
+    pub data: Vec<HtmlData>,
 }
 
 impl JavaProfile {
     pub fn new() -> Self {
-        JavaProfile {
-            data: String::new(),
-        }
-    }
-}
-
-impl Default for JavaProfile {
-    fn default() -> Self {
-        Self::new()
+        Self::default()
     }
 }
 
@@ -326,37 +320,52 @@ impl GetData for JavaProfile {
             .join(format!("{}-jps-map.json", params.run_name));
         let processes_json =
             fs::read_to_string(processes_loc.to_str().unwrap()).unwrap_or_default();
-        let mut process_map: HashMap<String, Vec<String>> =
+        let process_map: HashMap<String, Vec<String>> =
             serde_json::from_str(&processes_json).unwrap_or(HashMap::new());
-        let process_list: Vec<String> = process_map.clone().into_keys().collect();
 
-        for process in process_list {
-            for metric in PROFILE_METRICS {
-                let mut hm_path = params.data_dir.clone();
-                hm_path.push(format!(
-                    "{}-java-profile-{}-{}.html",
-                    params.run_name, process, metric
-                ));
-                let html = fs::read_to_string(hm_path.to_str().unwrap())
-                    .unwrap_or(String::from("No data collected."));
+        let mut java_profile = JavaProfile::default();
 
-                let mut hm_dest = params.report_dir.clone();
-                hm_dest.push(format!(
-                    "data/js/{}-java-profile-{}-{}.html",
-                    params.run_name, process, metric
-                ));
-                let mut hm_file = File::create(hm_dest.clone())?;
-                write!(hm_file, "{html}")?;
+        let mut profile_metrics = Vec::from(PROFILE_METRICS);
+        profile_metrics.push("legacy");
+        for metric in profile_metrics {
+            let mut java_profile_data = HtmlData::default();
+            java_profile_data.data_type = String::from(metric);
 
-                process_map
-                    .entry(process.clone())
-                    .and_modify(|v| v.push(html.len().to_string()));
+            for (process, process_names) in &process_map {
+                let filename = if metric == "legacy" {
+                    // backward compatibility - to support previous versions where java profile
+                    // generates a single flamegraph
+                    format!("{}-java-flamegraph-{}.html", params.run_name, process)
+                } else {
+                    format!(
+                        "{}-java-profile-{}-{}.html",
+                        params.run_name, process, metric
+                    )
+                };
+
+                let relative_path = "data/js";
+                if let Some(file_size) = copy_file_to_report_data(
+                    &filename,
+                    &params.data_dir,
+                    &params.report_dir.join(relative_path),
+                ) {
+                    java_profile_data.graphs.push(HtmlDataGraph::new(
+                        format!(
+                            "JVM: {}, PID: {} ({})",
+                            process_names.first().map_or("unknown", |s| s.as_str()),
+                            process,
+                            metric
+                        ),
+                        format!("{}/{}", relative_path, filename),
+                        Some(file_size),
+                    ));
+                }
             }
+
+            java_profile.data.push(java_profile_data);
         }
 
-        let mut java_profile_data = JavaProfile::new();
-        java_profile_data.data = serde_json::to_string(&process_map)?;
-        let processed_data = vec![ProcessedData::JavaProfile(java_profile_data)];
+        let processed_data = vec![ProcessedData::JavaProfile(java_profile)];
         Ok(processed_data)
     }
 
@@ -381,7 +390,7 @@ impl GetData for JavaProfile {
         let (_, req_str) = &param[1];
 
         match req_str.as_str() {
-            "values" => Ok(values[0].data.to_string()),
+            "values" => Ok(serde_json::to_string(&values[0].data)?),
             _ => panic!("Unsupported API"),
         }
     }
@@ -389,4 +398,19 @@ impl GetData for JavaProfile {
     fn has_custom_raw_data_parser() -> bool {
         true
     }
+}
+
+fn copy_file_to_report_data(
+    filename: &String,
+    src_dir: &PathBuf,
+    dest_dir: &PathBuf,
+) -> Option<u64> {
+    let src_path = src_dir.join(filename);
+    let file_metadata = fs::metadata(&src_path).ok()?;
+    let file_size = file_metadata.len();
+    let dest_path = dest_dir.join(filename);
+
+    fs::copy(&src_path, &dest_path).ok()?;
+
+    Some(file_size)
 }

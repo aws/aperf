@@ -218,6 +218,7 @@ function percent_difference(v1, v2) {
 }
 
 function formatNumber(num) {
+    if (num === null) return NaN;
     if (num >= 1e9) return (num / 1e9).toFixed(1) + 'G';
     if (num >= 1e6) return (num / 1e6).toFixed(1) + 'M';
     if (num >= 1e3) return (num / 1e3).toFixed(1) + 'K';
@@ -225,7 +226,7 @@ function formatNumber(num) {
 }
 
 function calculateStats(y_data) {
-    const sorted = [...y_data].sort((a, b) => a - b);
+    const sorted = [...y_data].filter((d) => d != null).sort((a, b) => a - b);
     const avg = y_data.reduce((a, b) => a + b, 0) / y_data.length;
     const stddev = Math.sqrt(y_data.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / y_data.length);
     const min = sorted[0];

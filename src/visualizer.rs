@@ -67,16 +67,30 @@ impl DataVisualizer {
         dir: String,
         name: String,
         tmp_dir: &Path,
-        fin_dir: &Path,
+        report_dir: &Path,
     ) -> Result<()> {
-        let file = get_file(dir.clone(), self.api_name.clone()).map_err(|e| {
+        let file = get_file(dir.clone(), self.api_name.clone()).or_else(|e| {
+            // Backward compatibility: if file is not found using the data's name,
+            // see if files with compatible names exist
+            for compatible_name in self.data.compatible_filenames() {
+                match get_file(dir.clone(), String::from(compatible_name)) {
+                    Ok(compatible_file) => {
+                        debug!(
+                            "Data file {} not found, use compatible file name {}",
+                            self.api_name, compatible_name
+                        );
+                        return Ok(compatible_file);
+                    }
+                    Err(_) => {}
+                }
+            }
             self.data_available.insert(name.clone(), false);
-            e
+            Err(e)
         })?;
         let full_path = Path::new("/proc/self/fd").join(file.as_raw_fd().to_string());
         self.report_params.data_dir = PathBuf::from(dir.clone());
         self.report_params.tmp_dir = tmp_dir.to_path_buf();
-        self.report_params.report_dir = fin_dir.to_path_buf();
+        self.report_params.report_dir = report_dir.to_path_buf();
         self.report_params.run_name = name.clone();
         self.report_params.data_file_path = fs::read_link(full_path).unwrap();
         self.file_handle = Some(file);
@@ -246,6 +260,10 @@ impl GraphMetadata {
 }
 
 pub trait GetData {
+    fn compatible_filenames(&self) -> Vec<&str> {
+        vec![]
+    }
+
     fn get_calls(&mut self) -> Result<Vec<String>> {
         unimplemented!();
     }

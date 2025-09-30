@@ -246,6 +246,10 @@ fn get_values(buffer: SystemInfo, metrics: &mut DataMetrics) -> Result<String> {
 }
 
 impl GetData for SystemInfo {
+    fn compatible_filenames(&self) -> Vec<&str> {
+        vec!["system_info"]
+    }
+
     fn process_raw_data(&mut self, buffer: Data) -> Result<ProcessedData> {
         let raw_value = match buffer {
             Data::SystemInfo(ref value) => value,
