@@ -227,7 +227,7 @@ impl CollectData for PerfStatRaw {
                             ErrorKind::PermissionDenied => {
                                 warn!("Set /proc/sys/kernel/perf_event_paranoid to 0")
                             }
-                            ErrorKind::NotFound => warn!("Instance does not expose Perf counters"),
+                            ErrorKind::NotFound => warn!("PMU counters not available on this instance type. Refer to APerf documentation for supported instances"),
                             _ => warn!("Unknown error when trying to use Perf API"),
                         }
                         return Err(e.into());
@@ -255,7 +255,7 @@ impl CollectData for PerfStatRaw {
                             if let Some(os_error) = e.downcast_ref::<std::io::Error>() {
                                 match os_error.kind() {
                                     ErrorKind::NotFound => {
-                                        warn!("Instance does not expose Perf counters")
+                                        warn!("PMU counters not available on this instance type. Refer to APerf documentation for supported instances")
                                     }
                                     _ => match os_error.raw_os_error().unwrap() {
                                         libc::EMFILE => warn!(
@@ -283,7 +283,7 @@ impl CollectData for PerfStatRaw {
                             if let Some(os_error) = e.downcast_ref::<std::io::Error>() {
                                 match os_error.kind() {
                                     ErrorKind::NotFound => {
-                                        warn!("Instance does not expose Perf counters")
+                                        warn!("PMU counters not available on this instance type. Refer to APerf documentation for supported instances")
                                     }
                                     _ => match os_error.raw_os_error().unwrap() {
                                         libc::EMFILE => warn!(
@@ -590,7 +590,7 @@ mod tests {
                         ErrorKind::PermissionDenied => {
                             panic!("Set /proc/sys/kernel/perf_event_paranoid to 0")
                         }
-                        ErrorKind::NotFound => println!("Instance does not expose Perf counters"),
+                        ErrorKind::NotFound => println!("PMU counters not available on this instance type. Refer to APerf documentation for supported instances"),
                         _ => panic!("{}", os_error),
                     }
                 }
@@ -616,7 +616,7 @@ mod tests {
                         ErrorKind::PermissionDenied => {
                             panic!("Set /proc/sys/kernel/perf_event_paranoid to 0")
                         }
-                        ErrorKind::NotFound => println!("Instance does not expose Perf counters"),
+                        ErrorKind::NotFound => println!("PMU counters not available on this instance type. Refer to APerf documentation for supported instances"),
                         _ => panic!("{}", os_error),
                     }
                 }
