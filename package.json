@@ -1,10 +1,10 @@
 {
   "name": "aperf",
   "dependencies": {
-    "plotly.js": "^2.33.0"
+    "plotly.js": "^3.1.1"
   },
   "devDependencies": {
-    "@types/plotly.js": "^2.29.5",
+    "@types/plotly.js": "^3.0.6",
     "typescript": "^5.5.3"
   }
 }
