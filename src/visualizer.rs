@@ -1,3 +1,4 @@
+use crate::data::data_formats::AperfData;
 use crate::utils::DataMetrics;
 use crate::{data::Data, data::ProcessedData, get_file, PDError};
 use anyhow::Result;
@@ -33,6 +34,7 @@ pub struct DataVisualizer {
     pub data: ProcessedData,
     pub file_handle: Option<File>,
     pub run_values: HashMap<String, Vec<ProcessedData>>,
+    pub run_values_new: HashMap<String, AperfData>,
     pub js_file_name: String,
     pub js: String,
     pub api_name: String,
@@ -53,6 +55,7 @@ impl DataVisualizer {
             data,
             file_handle: None,
             run_values: HashMap::new(),
+            run_values_new: HashMap::new(),
             js_file_name,
             js,
             api_name,
@@ -148,6 +151,42 @@ impl DataVisualizer {
         }
 
         self.run_values.insert(name.clone(), data);
+        Ok(())
+    }
+
+    pub fn process_raw_data_new(&mut self, name: String) -> Result<()> {
+        if !self.data_available.get(&name).unwrap() {
+            debug!("Raw data unavailable for: {}", self.api_name);
+            return Ok(());
+        }
+        debug!("Processing raw data new for: {}", self.api_name);
+
+        let mut raw_data = Vec::new();
+        loop {
+            match bincode::deserialize_from::<_, Data>(self.file_handle.as_ref().unwrap()) {
+                Ok(v) => raw_data.push(v),
+                Err(e) => match *e {
+                    // EOF
+                    bincode::ErrorKind::Io(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                        break
+                    }
+                    // Ignore invalid enum variant errors, raw data wont be used by self.data
+                    bincode::ErrorKind::Custom(ref msg)
+                        if msg.contains("expected variant index") =>
+                    {
+                        break
+                    }
+                    e => panic!(
+                        "Error when Deserializing {} data at {} : {}",
+                        self.api_name,
+                        self.report_params.data_file_path.display().to_string(),
+                        e
+                    ),
+                },
+            };
+        }
+        self.run_values_new
+            .insert(name.clone(), self.data.process_raw_data_new(raw_data)?);
         Ok(())
     }
 
@@ -279,6 +318,10 @@ pub trait GetData {
 
     fn process_raw_data(&mut self, _buffer: Data) -> Result<ProcessedData> {
         unimplemented!();
+    }
+
+    fn process_raw_data_new(&mut self, _raw_data: Vec<Data>) -> Result<AperfData> {
+        Err(PDError::VisualizerUnsupportedAPI.into()) // TODO: remove when all are implemented
     }
 
     fn custom_raw_data_parser(&mut self, _params: ReportParams) -> Result<Vec<ProcessedData>> {

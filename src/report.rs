@@ -1,3 +1,4 @@
+use crate::data::data_formats::AperfData;
 use crate::data::JS_DIR;
 use crate::{data, PDError, VisualizationData};
 use anyhow::Result;
@@ -20,6 +21,23 @@ pub struct Report {
     /// The directory and archive name of the report.
     #[clap(help_heading = "Basic Options", short, long, value_parser)]
     pub name: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct ReportData {
+    data_name: String,
+    data_format: String,
+    runs: HashMap<String, AperfData>,
+}
+
+impl ReportData {
+    fn new(data_name: String) -> Self {
+        ReportData {
+            data_name,
+            data_format: String::new(),
+            runs: HashMap::new(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -245,7 +263,8 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
     /* Init visualizers */
     for dir in dir_paths {
         let name = visualization_data.init_visualizers(dir.to_owned(), tmp_dir, &report_name)?;
-        visualization_data.unpack_data(name)?;
+        visualization_data.unpack_data(name.clone())?;
+        visualization_data.unpack_data_new(name)?;
     }
 
     /* Generate visualizer JS files */
@@ -311,6 +330,31 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
         let str_out_data = format!("{}_raw_data = {}", api.name.clone(), out_data.clone());
         write!(out_file, "{}", str_out_data)?;
     }
+
+    /* Get visualizer data unified */
+    let visualizer_names = visualization_data.get_visualizer_names()?; // TODO: remove after replacing old get visualizer data
+    let out_loc = report_name.join("data/js/processed_data.js");
+    let mut out_file = File::create(out_loc)?;
+    writeln!(out_file, "processed_data = {{")?;
+    for name in visualizer_names {
+        let mut report_data = ReportData::new(name.clone());
+        for run_name in &run_names {
+            let visualizer = visualization_data
+                .visualizers
+                .get_mut(&name)
+                .ok_or(PDError::VisualizerHashMapEntryError(name.to_string()))?;
+            let data = match visualizer.run_values_new.get(run_name) {
+                Some(data) => data,
+                None => continue,
+            };
+            report_data.runs.insert(run_name.clone(), data.clone());
+            report_data.data_format = data.get_format_name();
+        }
+        let out_data = serde_json::to_string(&report_data)?;
+        write!(out_file, r#""{}": "#, name.clone())?;
+        writeln!(out_file, "{},", out_data)?;
+    }
+    write!(out_file, "}}")?;
 
     let out_analytics = report_name.join("data/js/analytics.js");
     let mut out_file = File::create(out_analytics)?;
