@@ -2,7 +2,7 @@ pub mod aperf_runlog;
 pub mod aperf_stats;
 pub mod constants;
 pub mod cpu_utilization;
-mod data_formats;
+pub mod data_formats;
 pub mod diskstats;
 pub mod flamegraphs;
 pub mod hotline;
@@ -19,6 +19,7 @@ pub mod systeminfo;
 pub mod utils;
 pub mod vmstat;
 
+use crate::data::data_formats::AperfData;
 use crate::utils::{get_data_name_from_type, DataMetrics};
 use crate::visualizer::{DataVisualizer, GetData, ReportParams};
 use crate::{noop, InitParams, PerformanceData, VisualizationData, APERF_FILE_FORMAT};
@@ -350,6 +351,14 @@ macro_rules! processed_data {
                 match self {
                     $(
                         ProcessedData::$processed_data(ref mut value) => Ok(value.process_raw_data(buffer)?),
+                    )*
+                }
+            }
+
+            pub fn process_raw_data_new(&mut self, raw_data: Vec<Data>) -> Result<AperfData> {
+                match self {
+                    $(
+                        ProcessedData::$processed_data(ref mut value) => Ok(value.process_raw_data_new(raw_data)?),
                     )*
                 }
             }

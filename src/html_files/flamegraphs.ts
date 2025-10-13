@@ -4,15 +4,20 @@ function getJavaFlamegraphInfo(run, container_id, run_data, metric){
     if (handleNoData(container_id, run_data)) return;
 
     let values = JSON.parse(run_data['values']);
-    let data = values.find((d) => d['data_type'] == metric);
+    let data = values.find((d) => d['group_name'] == metric);
 
-    let sorted = data['graphs'].filter((graph) => !graph["graph_name"].includes('-')).toSorted((x, y) => y["graph_size"] - x["graph_size"]);
-
-    if(sorted.length == 0){
+    if (!data || !data['graphs'] || Object.keys(data['graphs']).length === 0) {
         var h3 = document.createElement('h3');
         h3.innerText = `No data collected.`;
         addElemToNode(container_id, h3);
+        return;
     }
+
+    let graphs = [];
+    for (let key in data['graphs']) {
+        graphs.push(data['graphs'][key]);
+    }
+    let sorted = graphs.filter((graph) => !graph["graph_name"].includes('-')).sort((x, y) => y["graph_size"] - x["graph_size"]);
 
     for(let graph of sorted){
         var h3 = document.createElement('h3');

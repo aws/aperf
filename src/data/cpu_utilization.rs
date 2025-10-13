@@ -1,3 +1,4 @@
+use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
 use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
 use crate::utils::{get_data_name_from_type, DataMetrics, Metric};
 use crate::visualizer::GetData;
@@ -349,6 +350,50 @@ fn get_type(count: u64, values: Vec<CpuUtilization>, util_type: &str) -> Result<
 impl GetData for CpuUtilization {
     fn process_raw_data(&mut self, buffer: Data) -> Result<ProcessedData> {
         process_gathered_raw_data(buffer)
+    }
+
+    fn process_raw_data_new(&mut self, raw_data: Vec<Data>) -> Result<AperfData> {
+        let mut time_series = TimeSeriesData::default();
+        let cpu_util_metrics = [
+            "aggregate",
+            "user",
+            "nice",
+            "system",
+            "irq",
+            "softirq",
+            "idle",
+            "iowait",
+            "steal",
+        ];
+        for metric in cpu_util_metrics {
+            time_series
+                .metrics
+                .insert(metric.to_string(), TimeSeriesMetric::default());
+        }
+
+        for metric in cpu_util_metrics {
+            let series = Series::new(Some(metric.to_string()));
+            time_series
+                .metrics
+                .get_mut("aggregate")
+                .unwrap()
+                .series
+                .push(series);
+        }
+
+        for buffer in raw_data {
+            let raw_value = match buffer {
+                Data::CpuUtilizationRaw(ref value) => value,
+                _ => panic!("Invalid Data type in raw file"),
+            };
+            let _stat = KernelStats::from_reader(raw_value.data.as_bytes()).unwrap();
+            let _time_now = match raw_value.time {
+                TimeEnum::DateTime(value) => value,
+                _ => panic!("Has to be datetime"),
+            };
+            //TODO: parse raw values and add to time_series
+        }
+        Ok(AperfData::TimeSeries(time_series))
     }
 
     fn get_calls(&mut self) -> Result<Vec<String>> {

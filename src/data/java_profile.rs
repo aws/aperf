@@ -1,4 +1,4 @@
-use crate::data::data_formats::{HtmlData, HtmlDataGraph};
+use crate::data::data_formats::{Graph, GraphGroup};
 use crate::data::{CollectData, CollectorParams, ProcessedData};
 use crate::utils::{get_data_name_from_type, DataMetrics};
 use crate::visualizer::GetData;
@@ -301,7 +301,7 @@ impl CollectData for JavaProfileRaw {
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct JavaProfile {
-    pub data: Vec<HtmlData>,
+    pub data: Vec<GraphGroup>,
 }
 
 impl JavaProfile {
@@ -328,8 +328,8 @@ impl GetData for JavaProfile {
         let mut profile_metrics = Vec::from(PROFILE_METRICS);
         profile_metrics.push("legacy");
         for metric in profile_metrics {
-            let mut java_profile_data = HtmlData::default();
-            java_profile_data.data_type = String::from(metric);
+            let mut java_profile_data = GraphGroup::default();
+            java_profile_data.group_name = String::from(metric);
 
             for (process, process_names) in &process_map {
                 let filename = if metric == "legacy" {
@@ -349,16 +349,19 @@ impl GetData for JavaProfile {
                     &params.data_dir,
                     &params.report_dir.join(relative_path),
                 ) {
-                    java_profile_data.graphs.push(HtmlDataGraph::new(
-                        format!(
-                            "JVM: {}, PID: {} ({})",
-                            process_names.first().map_or("unknown", |s| s.as_str()),
-                            process,
-                            metric
+                    java_profile_data.graphs.insert(
+                        process.clone(),
+                        Graph::new(
+                            format!(
+                                "JVM: {}, PID: {} ({})",
+                                process_names.first().map_or("unknown", |s| s.as_str()),
+                                process,
+                                metric
+                            ),
+                            format!("{}/{}", relative_path, filename),
+                            Some(file_size),
                         ),
-                        format!("{}/{}", relative_path, filename),
-                        Some(file_size),
-                    ));
+                    );
                 }
             }
 
