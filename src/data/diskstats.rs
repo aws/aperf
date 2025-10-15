@@ -276,6 +276,10 @@ fn get_values(values: Vec<Diskstats>, key: String, metrics: &mut DataMetrics) ->
             };
             metadata.update_limits(GraphLimitType::F64(stat_value));
             metric.insert_value(stat_value);
+
+            if !ev.contains_key(&disk.name) {
+                ev.insert(disk.name.clone(), DiskValues::new(disk.name.clone()));
+            }
             let dvs = ev.get_mut(&disk.name).unwrap();
             dvs.values.push(dv);
         }
