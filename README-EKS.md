@@ -88,10 +88,10 @@ Example node name: `ip-10-0-120-104.us-west-2.compute.internal` or `i-02a3f32795
 
 #### 3b. Execute APerf Collection
 
-Use the provided `eks-aperf.sh` script to run APerf on the selected node:
+Use the provided `kubectl-aperf` script to run APerf on the selected node:
 
 ```bash
-bash ./eks-aperf.sh \
+./kubectl-aperf \
   --aperf_image="${APERF_ECRREPO}:latest" \
   --node="ip-10-0-120-104.us-west-2.compute.internal" 
 ```
@@ -111,7 +111,7 @@ bash ./eks-aperf.sh \
 
 ```bash
 # Run APerf for 60 seconds with profiling enabled
-bash ./eks-aperf.sh \
+./kubectl-aperf \
   --aperf_image="${APERF_ECRREPO}:latest" \
   --node="ip-10-0-120-104.us-west-2.compute.internal" \
   --aperf_options="-p 60 --profile" \
@@ -122,7 +122,7 @@ bash ./eks-aperf.sh \
 
 ```bash
 # Run APerf with custom CPU and memory settings
-bash ./eks-aperf.sh \
+./kubectl-aperf \
   --aperf_image="${APERF_ECRREPO}:latest" \
   --node="ip-10-0-120-104.us-west-2.compute.internal" \
   --cpu-request="2.0" \
@@ -133,7 +133,7 @@ bash ./eks-aperf.sh \
 
 #### 3c. Collect Results
 
-The `eks-aperf.sh` script will automatically run the following steps:
+The `kubectl-aperf` script will automatically run the following steps:
 
 1. **Pod Deployment**: Deploy a privileged pod on the specified node
 2. **APerf Record**: Runs APerf record inside the pod with the specified options
@@ -145,7 +145,7 @@ The APerf report will be downloaded as a compressed tarball file with a timestam
 
 Example of correct output execution of the script:
 ```bash
-$ bash ./eks-aperf.sh --aperf_image="${APERF_ECRREPO}:latest"  --namespace=aperf --node  ip-10-0-120-104.us-west-2.compute.internal  --aperf_options="-p 30 --profile"
+$ ./kubectl-aperf --aperf_image="${APERF_ECRREPO}:latest"  --namespace=aperf --node  ip-10-0-120-104.us-west-2.compute.internal  --aperf_options="-p 30 --profile"
 
 Tageted node instance type...   m6g.8xlarge
 Check namespace security policy...   Namespace 'aperf' has 'privileged' policy - privileged pods allowed.
@@ -197,6 +197,24 @@ Done!
 - Ensure your cluster's security policies allow privileged pods if required
 - The pod is automatically cleaned up after execution
 
+
+## Installing as a kubectl Plugin
+
+You can install `kubectl-aperf` as a kubectl plugin to run it as `kubectl aperf` instead of  just `./kubectl-aperf`. 
+
+To do so, run the following commands:
+
+```bash
+sudo mv kubectl-aperf /usr/local/bin/
+kubectl plugin list
+kubectl aperf --help
+```
+
+Now you can run it as:
+
+```bash
+kubectl aperf --aperf_image="${APERF_ECRREPO}:latest" --node="ip-10-0-120-104.us-west-2.compute.internal"
+```
 
 ## Known Limitations
 
