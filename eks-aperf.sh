@@ -174,7 +174,7 @@ fi
 
 # Show resource usage for pods on this node
 echo -e "${BOLD}Resource usage for pods on ${NODE_NAME}:${NC}"
-rm  /tmp/allpods.out 2> /dev/null;  \
+rm  /tmp/allpods.out 2> /dev/null || true
 kubectl top pods --all-namespaces > /tmp/allpods.out  && \
 head -n 1 /tmp/allpods.out  &&  \
 grep "$(kubectl get pods --all-namespaces --field-selector spec.nodeName=${NODE_NAME} -o jsonpath='{range .items[*]}{.metadata.name}{" "}{end}' | sed 's/[[:space:]]*$//' | sed 's/[[:space:]]/\\|/g')" /tmp/allpods.out --color=never
