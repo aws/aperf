@@ -6,6 +6,7 @@ use log::debug;
 use rustix::fd::AsRawFd;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::{Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::{collections::HashMap, fs::File};
 
@@ -160,6 +161,11 @@ impl DataVisualizer {
             return Ok(());
         }
         debug!("Processing raw data new for: {}", self.api_name);
+
+        self.file_handle
+            .as_ref()
+            .unwrap()
+            .seek(SeekFrom::Start(0))?;
 
         let mut raw_data = Vec::new();
         loop {
