@@ -1,6 +1,5 @@
 use aperf::data::cpu_utilization::{CpuState, CpuUtilizationRaw};
 use aperf::data::TimeEnum;
-use aperf::visualizer::GetData;
 use chrono::Utc;
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
@@ -124,6 +123,27 @@ mod cpu_utilization_tests {
     use aperf::data::Data;
     use aperf::visualizer::GetData;
     use strum::IntoEnumIterator;
+
+    #[test]
+    fn test_process_cpu_utilization_empty_data() {
+        let raw_data: Vec<Data> = Vec::new();
+
+        let mut cpu_util = CpuUtilization::new();
+        let result = cpu_util.process_raw_data_new(raw_data).unwrap();
+
+        if let AperfData::TimeSeries(time_series_data) = result {
+            // With no raw data, no metrics are created (including aggregate)
+            assert_eq!(time_series_data.metrics.len(), 0);
+
+            // Sorted metric names should still be present (initialized from enum)
+            assert_eq!(
+                time_series_data.sorted_metric_names.len(),
+                CpuState::iter().count() + 1
+            ); // +1 for aggregate
+        } else {
+            panic!("Expected TimeSeries data");
+        }
+    }
 
     #[test]
     fn test_process_cpu_utilization_raw_data() {
