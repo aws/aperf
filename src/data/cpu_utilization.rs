@@ -350,6 +350,9 @@ fn get_type(count: u64, values: Vec<CpuUtilization>, util_type: &str) -> Result<
     Ok(serde_json::to_string(&end_values)?)
 }
 
+// TODO: ------------------------------------------------------------------------------------------
+//       Below are the new implementation to process cpu_utlization into uniform data format. Remove
+//       the original for the migration.
 #[derive(EnumIter, Display, Clone, Copy, Eq, Hash, PartialEq)]
 #[strum(serialize_all = "lowercase")]
 pub enum CpuState {
@@ -375,6 +378,7 @@ fn get_cpu_time(cpu_state: &CpuState, cpu_time: &CpuTime) -> u64 {
         CpuState::STEAL => cpu_time.steal.unwrap_or_default(),
     }
 }
+// TODO: ------------------------------------------------------------------------------------------
 
 impl GetData for CpuUtilization {
     fn process_raw_data(&mut self, buffer: Data) -> Result<ProcessedData> {
@@ -392,7 +396,9 @@ impl GetData for CpuUtilization {
         // memorize the previous CPU time to compute delta (the raw /proc/stat file contains
         // accumulated CPU jiffies since boot time)
         let mut prev_cpu_time: Vec<CpuTime> = Vec::new();
+        // initial time used to compute time diff for every series data point
         let mut time_zero: Option<TimeEnum> = None;
+
         for buffer in raw_data {
             let raw_value = match buffer {
                 Data::CpuUtilizationRaw(ref value) => value,
@@ -416,7 +422,7 @@ impl GetData for CpuUtilization {
             {
                 // in the case where the current raw data is the first data point, use the current
                 // CPU time as the prev time, to produce a dummy delta of 0
-                if cpu <= prev_cpu_time.len() {
+                if cpu >= prev_cpu_time.len() {
                     prev_cpu_time.push(cpu_time.clone());
                 }
 
@@ -513,18 +519,20 @@ impl GetData for CpuUtilization {
             }
         }
 
-        // create the aggregate metric to include the aggregate series of all CPU states as well
-        // as the total CPU utilization
         let aggregate_metric_name = "aggregate";
-        let mut aggregate_metric = TimeSeriesMetric::default();
-        aggregate_metric.metric_name = aggregate_metric_name.to_string();
-        aggregate_metric.value_range = (0, 100);
-        aggregate_metric.series = per_cpu_state_aggregate_series.into_values().collect();
-        aggregate_metric.stats = Statistics::from_values(&aggregate_total_util_series.values);
-        aggregate_metric.series.push(aggregate_total_util_series);
-        time_series_data
-            .metrics
-            .insert(aggregate_metric_name.to_string(), aggregate_metric);
+        if !per_cpu_state_aggregate_series.is_empty() {
+            // create the aggregate metric to include the aggregate series of all CPU states as well
+            // as the total CPU utilization
+            let mut aggregate_metric = TimeSeriesMetric::default();
+            aggregate_metric.metric_name = aggregate_metric_name.to_string();
+            aggregate_metric.value_range = (0, 100);
+            aggregate_metric.series = per_cpu_state_aggregate_series.into_values().collect();
+            aggregate_metric.stats = Statistics::from_values(&aggregate_total_util_series.values);
+            aggregate_metric.series.push(aggregate_total_util_series);
+            time_series_data
+                .metrics
+                .insert(aggregate_metric_name.to_string(), aggregate_metric);
+        }
 
         let mut sorted_metric_names = vec![aggregate_metric_name.to_string()];
         for cpu_state in CpuState::iter() {
