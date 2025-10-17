@@ -15,10 +15,6 @@ APERF_IMAGE=""
 REPORT_NAME="aperf_record"
 OPEN_BROWSER=true
 SHOW_HELP=false
-CPU_REQUEST="1.0"
-MEMORY_REQUEST="1Gi"
-CPU_LIMIT="4.0"
-MEMORY_LIMIT="4Gi"
 
 # Define color and formatting codes
 BOLD="\033[1m"
@@ -38,10 +34,6 @@ while [ $# -gt 0 ]; do
     --aperf_image) dest="APERF_IMAGE";;
     --report-name) dest="REPORT_NAME";;
     --open-browser) dest="OPEN_BROWSER";;
-    --cpu-request) dest="CPU_REQUEST";;
-    --memory-request) dest="MEMORY_REQUEST";;
-    --cpu-limit) dest="CPU_LIMIT";;
-    --memory-limit) dest="MEMORY_LIMIT";;
     --help)
       SHOW_HELP=true
       shift
@@ -74,10 +66,6 @@ if [ "$SHOW_HELP" = true ]; then
   echo "  --aperf_options  Optional. Options to pass to aperf (default: '${APERF_OPTIONS}')"
   echo "  --report-name    Optional. Name for aperf record/report (default: '${REPORT_NAME}')"
   echo "  --open-browser   Optional. Open report in browser (default: ${OPEN_BROWSER})"
-  echo "  --cpu-request    Optional. CPU request (default: '${CPU_REQUEST}')"
-  echo "  --memory-request Optional. Memory request (default: '${MEMORY_REQUEST}')"
-  echo "  --cpu-limit      Optional. CPU limit (default: '${CPU_LIMIT}')"
-  echo "  --memory-limit   Optional. Memory limit (default: '${MEMORY_LIMIT}')"
   echo "  --help           Show this help message"
   exit 0
 fi
@@ -170,14 +158,6 @@ ${TOLERATIONS}
 
       echo -e "\nWaiting for files to be copied..."
       sleep 7200
-
-    resources:
-      requests:
-        memory: "${MEMORY_REQUEST}"
-        cpu: "${CPU_REQUEST}"
-      limits:
-        memory: "${MEMORY_LIMIT}"
-        cpu: "${CPU_LIMIT}"
     volumeMounts:
     - mountPath: /boot
       name: boot-volume
