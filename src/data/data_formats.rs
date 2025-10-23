@@ -123,7 +123,7 @@ impl Statistics {
 
         let mut sum = 0.0;
         let mut min = values[0];
-        let mut max = values[1];
+        let mut max = values[0];
         for &value in values {
             sum += value;
             min = min.min(value);
