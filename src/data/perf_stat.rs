@@ -1,3 +1,5 @@
+use crate::data::data_formats::{AperfData, Series, Statistics, TimeSeriesData, TimeSeriesMetric};
+use crate::data::utils::{get_aggregate_cpu_series_name, get_cpu_series_name};
 use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
 use crate::utils::{add_metrics, get_data_name_from_type, DataMetrics, Metric};
 use crate::visualizer::{GetData, GraphLimitType, GraphMetadata};
@@ -8,6 +10,7 @@ use log::{error, info, trace, warn};
 use perf_event::events::{Raw, Software};
 use perf_event::{Builder, Counter, Group, ReadFormat};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, ErrorKind};
 use std::path::PathBuf;
@@ -488,6 +491,72 @@ fn get_named_events(value: PerfStat) -> Result<String> {
     Ok(serde_json::to_string(&evt_names)?)
 }
 
+// TODO: ------------------------------------------------------------------------------------------
+//       Below are the new implementation to process PMU stats into uniform data format. Remove
+//       the original for the migration.
+
+/// Parse the single-line raw PMU stat collected during APerf record into
+/// (cpu number, stat name, numerator, denominator, scale)
+fn parse_raw_pmu_stat(raw_pmu_stat: &str) -> Result<(usize, String, f64, f64, f64), String> {
+    let mut raw_items = raw_pmu_stat.split(";");
+
+    let header = raw_items
+        .next()
+        .ok_or(format!("Missing header in raw PMU stat: {raw_pmu_stat}"))?;
+    let mut header_parts = header.trim().split_whitespace();
+    let cpu = header_parts
+        .next()
+        .ok_or(format!(
+            "Missing CPU in raw PMU stat header: {raw_pmu_stat}"
+        ))?
+        .parse::<usize>()
+        .map_err(|_| format!("Invalid CPU number in raw PMU stat header: {raw_pmu_stat}"))?;
+    let pmu_stat_name = header_parts.next().ok_or(format!(
+        "Missing PMU stat name in raw PMU stat header: {raw_pmu_stat}"
+    ))?;
+
+    let numerator_sum = raw_items
+        .next()
+        .ok_or(format!(
+            "Missing numerators in raw PMU stat header: {raw_pmu_stat}"
+        ))?
+        .split_whitespace()
+        .try_fold(0u64, |acc, nr| {
+            nr.parse::<u64>()
+                .map(|nr_num| acc.checked_add(nr_num).unwrap_or(acc))
+                .map_err(|_| format!("Invalid numerator in raw PMU stat header: {raw_pmu_stat}"))
+        })?;
+    let denominator_sum = raw_items
+        .next()
+        .ok_or(format!(
+            "Missing denominator in raw PMU stat header: {raw_pmu_stat}"
+        ))?
+        .split_whitespace()
+        .try_fold(0u64, |acc, dr| {
+            dr.parse::<u64>()
+                .map(|nr_num| acc.checked_add(nr_num).unwrap_or(acc))
+                .map_err(|_| format!("Invalid denominator in raw PMU stat header: {raw_pmu_stat}"))
+        })?;
+
+    let scale = raw_items
+        .next()
+        .ok_or(format!(
+            "Missing scale in raw PMU stat header: {raw_pmu_stat}"
+        ))?
+        .parse::<u64>()
+        .map_err(|_| format!("Invalid scale in raw PMU stat header: {raw_pmu_stat}"))?;
+
+    Ok((
+        cpu,
+        pmu_stat_name.to_string(),
+        numerator_sum as f64,
+        denominator_sum as f64,
+        scale as f64,
+    ))
+}
+
+// TODO: ------------------------------------------------------------------------------------------
+
 impl GetData for PerfStat {
     fn process_raw_data(&mut self, buffer: Data) -> Result<ProcessedData> {
         let mut perf_stat = PerfStat::new();
@@ -566,6 +635,124 @@ impl GetData for PerfStat {
             }
             _ => panic!("Unsupported API"),
         }
+    }
+
+    fn process_raw_data_new(&mut self, raw_data: Vec<Data>) -> Result<AperfData> {
+        let mut time_series_data = TimeSeriesData::default();
+        // the aggregate series to be inserted into all PMU stat metrics
+        let mut per_pmu_stat_aggregate_series: HashMap<String, Series> = HashMap::new();
+
+        // initial time used to compute time diff for every series data point
+        let mut time_zero: Option<TimeEnum> = None;
+        // Keep track of the largest series value for each metric to compute its value range
+        let mut per_pmu_stat_min_value: HashMap<String, f64> = HashMap::new();
+        // Keep track of the least series value for each metric to compute its value range
+        let mut per_pmu_stat_max_value: HashMap<String, f64> = HashMap::new();
+
+        for buffer in raw_data {
+            let raw_value = match buffer {
+                Data::PerfStatRaw(ref value) => value,
+                _ => panic!("Invalid Data type in raw file"),
+            };
+
+            let time_diff: u64 = match raw_value.time - *time_zero.get_or_insert(raw_value.time) {
+                TimeEnum::TimeDiff(_time_diff) => _time_diff,
+                TimeEnum::DateTime(_) => panic!("Unexpected TimeEnum diff"),
+            };
+
+            // To count the sum of every PMU stat's numerator and denominator across all CPUs,
+            // for the computation of the aggregate PMU stats, which is
+            // <numerator sum> / <denominator sum> * scale
+            let mut per_pmu_stat_numerator_sums: HashMap<String, f64> = HashMap::new();
+            let mut per_pmu_stat_denominator_sums: HashMap<String, f64> = HashMap::new();
+
+            for raw_pmu_stat in raw_value.data.lines() {
+                let (cpu, pmu_stat_name, numerator, denominator, scale) =
+                    match parse_raw_pmu_stat(raw_pmu_stat) {
+                        Ok(parsed_pmu_stat) => parsed_pmu_stat,
+                        Err(message) => {
+                            error!("{}", message);
+                            continue;
+                        }
+                    };
+                let pmu_stat_value = numerator / denominator * scale;
+
+                // For the computation of aggregate PMU stats
+                per_pmu_stat_numerator_sums
+                    .entry(pmu_stat_name.clone())
+                    .and_modify(|numerator_sum| *numerator_sum += numerator * scale)
+                    .or_insert(numerator * scale);
+                per_pmu_stat_denominator_sums
+                    .entry(pmu_stat_name.clone())
+                    .and_modify(|denominator_sum| *denominator_sum += denominator)
+                    .or_insert(denominator);
+                // Update min and max series values
+                per_pmu_stat_min_value
+                    .entry(pmu_stat_name.clone())
+                    .and_modify(|min_value| *min_value = (*min_value).min(pmu_stat_value))
+                    .or_insert(pmu_stat_value);
+                per_pmu_stat_max_value
+                    .entry(pmu_stat_name.clone())
+                    .and_modify(|max_value| *max_value = (*max_value).max(pmu_stat_value))
+                    .or_insert(pmu_stat_value);
+
+                let pmu_stat_metric = time_series_data
+                    .metrics
+                    .entry(pmu_stat_name.clone())
+                    .or_insert(TimeSeriesMetric::new(pmu_stat_name.clone()));
+
+                while cpu >= pmu_stat_metric.series.len() {
+                    pmu_stat_metric
+                        .series
+                        .push(Series::new(get_cpu_series_name(cpu)));
+                }
+                let cpu_series = &mut pmu_stat_metric.series[cpu];
+                cpu_series.time_diff.push(time_diff);
+                cpu_series.values.push(pmu_stat_value);
+            }
+
+            // Insert average values into aggregate series
+            for (pmu_stat_name, numerator_sum) in per_pmu_stat_numerator_sums {
+                let denominator_sum = match per_pmu_stat_denominator_sums.get(&pmu_stat_name) {
+                    Some(denominator_sum) => *denominator_sum,
+                    None => continue,
+                };
+                let aggregate_series = per_pmu_stat_aggregate_series
+                    .entry(pmu_stat_name)
+                    .or_insert(Series::new(get_aggregate_cpu_series_name()));
+                aggregate_series.time_diff.push(time_diff);
+                aggregate_series
+                    .values
+                    .push(numerator_sum / denominator_sum);
+            }
+        }
+
+        // Compute the stats of every aggregate series and add them to the corresponding metric;
+        // also set every metric's value range
+        for (pmu_stat_name, pmu_stat_metric) in &mut time_series_data.metrics {
+            if let Some(aggregate_series) = per_pmu_stat_aggregate_series.get_mut(pmu_stat_name) {
+                let aggregate_stats = Statistics::from_values(&aggregate_series.values);
+                pmu_stat_metric.value_range = (
+                    per_pmu_stat_min_value
+                        .get(pmu_stat_name)
+                        .unwrap_or(&aggregate_stats.min)
+                        .floor() as u64,
+                    per_pmu_stat_max_value
+                        .get(pmu_stat_name)
+                        .unwrap_or(&aggregate_stats.max)
+                        .ceil() as u64,
+                );
+                pmu_stat_metric.stats = aggregate_stats;
+                aggregate_series.is_aggregate = true;
+                pmu_stat_metric.series.push(aggregate_series.clone());
+            }
+        }
+        // The metric order is simply by the metric names
+        let mut pmu_stat_names: Vec<String> = time_series_data.metrics.keys().cloned().collect();
+        pmu_stat_names.sort();
+        time_series_data.sorted_metric_names = pmu_stat_names;
+
+        Ok(AperfData::TimeSeries(time_series_data))
     }
 }
 
