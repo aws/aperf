@@ -1,6 +1,7 @@
+use crate::data::data_formats::{AperfData, KeyValueData, KeyValueGroup};
 use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
 use crate::utils::DataMetrics;
-use crate::visualizer::GetData;
+use crate::visualizer::{GetData, ReportParams};
 use anyhow::Result;
 use chrono::prelude::*;
 use log::trace;
@@ -79,6 +80,37 @@ impl GetData for SysctlData {
         };
         let processed_data = ProcessedData::SysctlData((*raw_value).clone());
         Ok(processed_data)
+    }
+
+    fn process_raw_data_new(
+        &mut self,
+        _params: ReportParams,
+        raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
+        let mut key_value_data = KeyValueData::default();
+
+        key_value_data
+            .key_value_groups
+            .insert("".to_string(), KeyValueGroup::default());
+        let key_value_map = &mut key_value_data
+            .key_value_groups
+            .get_mut("")
+            .unwrap()
+            .key_values;
+
+        for buffer in raw_data {
+            let raw_value = match buffer {
+                Data::SysctlData(ref value) => value,
+                _ => panic!("Invalid Data type in raw file"),
+            };
+
+            //add to key value data into default group
+            for (key, value) in &raw_value.sysctl_data {
+                key_value_map.insert(key.clone(), value.clone());
+            }
+        }
+
+        Ok(AperfData::KeyValue(key_value_data))
     }
 
     fn get_calls(&mut self) -> Result<Vec<String>> {
