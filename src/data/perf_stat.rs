@@ -2,7 +2,7 @@ use crate::data::data_formats::{AperfData, Series, Statistics, TimeSeriesData, T
 use crate::data::utils::{get_aggregate_cpu_series_name, get_cpu_series_name};
 use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
 use crate::utils::{add_metrics, get_data_name_from_type, DataMetrics, Metric};
-use crate::visualizer::{GetData, GraphLimitType, GraphMetadata};
+use crate::visualizer::{GetData, GraphLimitType, GraphMetadata, ReportParams};
 use crate::PDError;
 use anyhow::Result;
 use chrono::prelude::*;
@@ -637,7 +637,11 @@ impl GetData for PerfStat {
         }
     }
 
-    fn process_raw_data_new(&mut self, raw_data: Vec<Data>) -> Result<AperfData> {
+    fn process_raw_data_new(
+        &mut self,
+        _params: ReportParams,
+        raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
         let mut time_series_data = TimeSeriesData::default();
         // the aggregate series to be inserted into all PMU stat metrics
         let mut per_pmu_stat_aggregate_series: HashMap<String, Series> = HashMap::new();

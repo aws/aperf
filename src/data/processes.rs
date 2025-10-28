@@ -3,7 +3,7 @@ extern crate lazy_static;
 use crate::data::data_formats::{AperfData, Series, Statistics, TimeSeriesData, TimeSeriesMetric};
 use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
 use crate::utils::DataMetrics;
-use crate::visualizer::GetData;
+use crate::visualizer::{GetData, ReportParams};
 use anyhow::Result;
 use chrono::prelude::*;
 use core::f64;
@@ -312,7 +312,11 @@ impl GetData for Processes {
         Ok(processed_data)
     }
 
-    fn process_raw_data_new(&mut self, raw_data: Vec<Data>) -> Result<AperfData> {
+    fn process_raw_data_new(
+        &mut self,
+        _params: ReportParams,
+        raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
         let mut time_series_data = TimeSeriesData::default();
 
         // map process field -> process -> series

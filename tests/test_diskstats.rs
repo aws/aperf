@@ -126,7 +126,7 @@ mod diskstats_tests {
     use aperf::data::data_formats::AperfData;
     use aperf::data::diskstats::{DiskStatKey, Diskstats};
     use aperf::data::Data;
-    use aperf::visualizer::GetData;
+    use aperf::visualizer::{GetData, ReportParams};
     use std::collections::HashMap;
     use strum::IntoEnumIterator;
 
@@ -186,7 +186,9 @@ mod diskstats_tests {
             .collect();
 
         let mut diskstats = Diskstats::new();
-        let result = diskstats.process_raw_data_new(raw_data).unwrap();
+        let result = diskstats
+            .process_raw_data_new(ReportParams::new(), raw_data)
+            .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
             // Check each disk stat metric using the enum
@@ -282,7 +284,9 @@ mod diskstats_tests {
         let raw_data: Vec<Data> = Vec::new();
 
         let mut diskstats = Diskstats::new();
-        let result = diskstats.process_raw_data_new(raw_data).unwrap();
+        let result = diskstats
+            .process_raw_data_new(ReportParams::new(), raw_data)
+            .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
             // With no raw data, no metrics are created
@@ -356,7 +360,9 @@ mod diskstats_tests {
             .collect();
 
         let mut diskstats = Diskstats::new();
-        let result = diskstats.process_raw_data_new(raw_data).unwrap();
+        let result = diskstats
+            .process_raw_data_new(ReportParams::new(), raw_data)
+            .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
             let reads_metric = time_series_data.metrics.get("reads").unwrap();
@@ -436,7 +442,9 @@ mod diskstats_tests {
             .collect();
 
         let mut diskstats = Diskstats::new();
-        let result = diskstats.process_raw_data_new(raw_data).unwrap();
+        let result = diskstats
+            .process_raw_data_new(ReportParams::new(), raw_data)
+            .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
             // Check reads metric

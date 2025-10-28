@@ -46,7 +46,7 @@ mod vmstat_tests {
     use aperf::data::data_formats::AperfData;
     use aperf::data::vmstat::Vmstat;
     use aperf::data::Data;
-    use aperf::visualizer::GetData;
+    use aperf::visualizer::{GetData, ReportParams};
     use std::collections::HashMap;
 
     #[test]
@@ -54,7 +54,9 @@ mod vmstat_tests {
         let raw_data: Vec<Data> = Vec::new();
 
         let mut vmstat = Vmstat::new();
-        let result = vmstat.process_raw_data_new(raw_data).unwrap();
+        let result = vmstat
+            .process_raw_data_new(ReportParams::new(), raw_data)
+            .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
             assert_eq!(time_series_data.metrics.len(), 0);
@@ -95,7 +97,9 @@ mod vmstat_tests {
             .collect();
 
         let mut vmstat = Vmstat::new();
-        let result = vmstat.process_raw_data_new(raw_data).unwrap();
+        let result = vmstat
+            .process_raw_data_new(ReportParams::new(), raw_data)
+            .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
             assert_eq!(time_series_data.metrics.len(), 3);
@@ -209,7 +213,9 @@ mod vmstat_tests {
             .collect();
 
         let mut vmstat = Vmstat::new();
-        let result = vmstat.process_raw_data_new(raw_data).unwrap();
+        let result = vmstat
+            .process_raw_data_new(ReportParams::new(), raw_data)
+            .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
             assert_eq!(time_series_data.metrics.len(), 9);
@@ -343,7 +349,9 @@ mod vmstat_tests {
             .collect();
 
         let mut vmstat = Vmstat::new();
-        let result = vmstat.process_raw_data_new(raw_data).unwrap();
+        let result = vmstat
+            .process_raw_data_new(ReportParams::new(), raw_data)
+            .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
             // Should have 5 metrics total
