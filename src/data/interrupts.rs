@@ -2,7 +2,7 @@ use crate::data::data_formats::{AperfData, Series, Statistics, TimeSeriesData, T
 use crate::data::utils::{get_aggregate_cpu_series_name, get_cpu_series_name};
 use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
 use crate::utils::DataMetrics;
-use crate::visualizer::GetData;
+use crate::visualizer::{GetData, ReportParams};
 use crate::PDError;
 use anyhow::Result;
 use chrono::prelude::*;
@@ -451,7 +451,11 @@ impl GetData for InterruptData {
         }
     }
 
-    fn process_raw_data_new(&mut self, raw_data: Vec<Data>) -> Result<AperfData> {
+    fn process_raw_data_new(
+        &mut self,
+        _params: ReportParams,
+        raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
         let mut time_series_data = TimeSeriesData::default();
         // the aggregate series to be inserted into all interrupt metrics
         let mut per_interrupt_aggregate_series: HashMap<String, Series> = HashMap::new();

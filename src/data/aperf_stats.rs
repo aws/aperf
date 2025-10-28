@@ -1,4 +1,5 @@
-use crate::data::{ProcessedData, TimeEnum};
+use crate::data::data_formats::{AperfData, Series, Statistics, TimeSeriesData, TimeSeriesMetric};
+use crate::data::{Data, ProcessedData, TimeEnum};
 use crate::utils::{add_metrics, get_data_name_from_type, DataMetrics, Metric};
 use crate::visualizer::{GetData, GraphLimitType, GraphMetadata, ReportParams};
 use anyhow::Result;
@@ -115,6 +116,115 @@ impl GetData for AperfStat {
             };
         }
         Ok(raw_data)
+    }
+
+    fn process_raw_data_new(
+        &mut self,
+        params: ReportParams,
+        _raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
+        let mut time_series_data = TimeSeriesData::default();
+
+        let mut values = Vec::new();
+        let file: Result<fs::File> = Ok(fs::OpenOptions::new()
+            .read(true)
+            .open(params.data_file_path)
+            .expect("Could not open APerf Stats file"));
+        loop {
+            match bincode::deserialize_from::<_, AperfStat>(file.as_ref().unwrap()) {
+                Ok(v) => values.push(v),
+                Err(e) => match *e {
+                    // EOF
+                    bincode::ErrorKind::Io(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                        break
+                    }
+                    e => panic!("Error when Deserializing APerf Stats data: {}", e),
+                },
+            };
+        }
+
+        let mut time_zero: Option<TimeEnum> = None;
+
+        for value in values {
+            let time_diff: u64 = match value.time - *time_zero.get_or_insert(value.time) {
+                TimeEnum::TimeDiff(_time_diff) => _time_diff,
+                TimeEnum::DateTime(_) => panic!("Unexpected TimeEnum diff"),
+            };
+
+            for (name, stat) in value.data {
+                let datatype: Vec<&str> = name.split('-').collect();
+                let series_name = datatype.get(1).unwrap_or(&datatype[0]).to_string();
+
+                let metric = time_series_data
+                    .metrics
+                    .entry(datatype[0].to_string())
+                    .or_insert_with(|| TimeSeriesMetric::new(datatype[0].to_string()));
+
+                let series = if datatype[0] == "aperf" {
+                    if metric.series.is_empty() {
+                        metric.series.push(Series::new(Some(series_name)));
+                    }
+                    &mut metric.series[0]
+                } else {
+                    match metric
+                        .series
+                        .iter_mut()
+                        .find(|s| s.series_name == Some(series_name.clone()))
+                    {
+                        Some(s) => s,
+                        None => {
+                            metric.series.push(Series::new(Some(series_name)));
+                            metric.series.last_mut().unwrap()
+                        }
+                    }
+                };
+
+                series.values.push(stat as f64);
+                series.time_diff.push(time_diff);
+            }
+        }
+
+        let mut metrics_with_avg = Vec::new();
+
+        for (metric_name, metric) in &mut time_series_data.metrics {
+            let series = if metric_name == "aperf" {
+                &mut metric.series[0]
+            } else {
+                // create new series that is the sum of all series
+                let mut total_series = Series::new(Some("total".to_string()));
+                if !metric.series.is_empty() {
+                    let mut time_value_map: HashMap<u64, f64> = HashMap::new();
+
+                    for series in &metric.series {
+                        for (i, &time_diff) in series.time_diff.iter().enumerate() {
+                            *time_value_map.entry(time_diff).or_insert(0.0) += series.values[i];
+                        }
+                    }
+
+                    let mut sorted_times: Vec<_> = time_value_map.keys().cloned().collect();
+                    sorted_times.sort();
+
+                    total_series.time_diff = sorted_times.clone();
+                    total_series.values =
+                        sorted_times.iter().map(|&t| time_value_map[&t]).collect();
+                }
+                metric.series.push(total_series);
+                metric.series.last_mut().unwrap()
+            };
+
+            metric.stats = Statistics::from_values(&series.values);
+            metric.value_range = (
+                metric.stats.min.floor() as u64,
+                metric.stats.max.ceil() as u64,
+            );
+            metrics_with_avg.push((metric_name.clone(), metric.stats.avg));
+        }
+
+        metrics_with_avg.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        time_series_data.sorted_metric_names =
+            metrics_with_avg.into_iter().map(|(name, _)| name).collect();
+
+        Ok(AperfData::TimeSeries(time_series_data))
     }
 
     fn get_calls(&mut self) -> Result<Vec<String>> {

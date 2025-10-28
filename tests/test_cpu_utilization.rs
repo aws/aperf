@@ -121,7 +121,7 @@ mod cpu_utilization_tests {
     use aperf::data::cpu_utilization::{CpuState, CpuUtilization};
     use aperf::data::data_formats::AperfData;
     use aperf::data::Data;
-    use aperf::visualizer::GetData;
+    use aperf::visualizer::{GetData, ReportParams};
     use strum::IntoEnumIterator;
 
     #[test]
@@ -129,7 +129,9 @@ mod cpu_utilization_tests {
         let raw_data: Vec<Data> = Vec::new();
 
         let mut cpu_util = CpuUtilization::new();
-        let result = cpu_util.process_raw_data_new(raw_data).unwrap();
+        let result = cpu_util
+            .process_raw_data_new(ReportParams::new(), raw_data)
+            .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
             // With no raw data, no metrics are created (including aggregate)
@@ -193,7 +195,9 @@ mod cpu_utilization_tests {
             .collect();
 
         let mut cpu_util = CpuUtilization::new();
-        let result = cpu_util.process_raw_data_new(raw_data).unwrap();
+        let result = cpu_util
+            .process_raw_data_new(ReportParams::new(), raw_data)
+            .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
             // Check each CPU state metric

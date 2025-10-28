@@ -2,6 +2,7 @@ use aperf::data::data_formats::AperfData;
 use aperf::data::perf_stat::{PerfStat, PerfStatRaw};
 use aperf::data::{Data, TimeEnum};
 use aperf::visualizer::GetData;
+use aperf::visualizer::ReportParams;
 use chrono::prelude::*;
 use std::collections::HashMap;
 
@@ -129,7 +130,9 @@ fn test_process_pmu_stat_raw_data_complex() {
     }
 
     let raw_data = generate_pmu_stat_raw_data(&expected_data, 1);
-    let result = PerfStat::new().process_raw_data_new(raw_data).unwrap();
+    let result = PerfStat::new()
+        .process_raw_data_new(ReportParams::new(), raw_data)
+        .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {
         // Validate structure: 3 metrics (branch_accuracy, cache_miss_rate, ipc - sorted alphabetically)
@@ -237,7 +240,9 @@ fn test_process_pmu_stat_raw_data_simple() {
     }
 
     let raw_data = generate_pmu_stat_raw_data(&expected_data, 2);
-    let result = PerfStat::new().process_raw_data_new(raw_data).unwrap();
+    let result = PerfStat::new()
+        .process_raw_data_new(ReportParams::new(), raw_data)
+        .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {
         assert_eq!(time_series_data.metrics.len(), 1);
@@ -322,7 +327,9 @@ fn test_process_pmu_stat_multiple_numerators_denominators() {
     }
 
     let raw_data = generate_pmu_stat_raw_data(&expected_data, 1);
-    let result = PerfStat::new().process_raw_data_new(raw_data).unwrap();
+    let result = PerfStat::new()
+        .process_raw_data_new(ReportParams::new(), raw_data)
+        .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {
         let metric = &time_series_data.metrics["multi_counter_stat"];
@@ -373,7 +380,9 @@ fn test_process_pmu_stat_multiple_numerators_denominators() {
 #[test]
 fn test_process_pmu_stat_empty_data() {
     let raw_data = Vec::new();
-    let result = PerfStat::new().process_raw_data_new(raw_data).unwrap();
+    let result = PerfStat::new()
+        .process_raw_data_new(ReportParams::new(), raw_data)
+        .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {
         assert_eq!(time_series_data.metrics.len(), 0);

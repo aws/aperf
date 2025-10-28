@@ -2,7 +2,7 @@ use crate::data::constants::*;
 use crate::data::data_formats::{AperfData, Series, Statistics, TimeSeriesData, TimeSeriesMetric};
 use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
 use crate::utils::{add_metrics, get_data_name_from_type, DataMetrics, Metric};
-use crate::visualizer::{GetData, GraphLimitType, GraphMetadata};
+use crate::visualizer::{GetData, GraphLimitType, GraphMetadata, ReportParams};
 use anyhow::Result;
 use chrono::prelude::*;
 use log::{error, trace};
@@ -395,7 +395,11 @@ impl GetData for Diskstats {
         }
     }
 
-    fn process_raw_data_new(&mut self, raw_data: Vec<Data>) -> Result<AperfData> {
+    fn process_raw_data_new(
+        &mut self,
+        _params: ReportParams,
+        raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
         let mut time_series_data = TimeSeriesData::default();
 
         // (*Most of) the disk stats are accumulated since last boot, so memorize the previous

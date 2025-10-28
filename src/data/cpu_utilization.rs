@@ -2,7 +2,7 @@ use crate::data::data_formats::{AperfData, Series, Statistics, TimeSeriesData, T
 use crate::data::utils::{get_aggregate_cpu_series_name, get_cpu_series_name};
 use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
 use crate::utils::{get_data_name_from_type, DataMetrics, Metric};
-use crate::visualizer::GetData;
+use crate::visualizer::{GetData, ReportParams};
 use anyhow::Result;
 use chrono::prelude::*;
 use log::trace;
@@ -385,7 +385,11 @@ impl GetData for CpuUtilization {
         process_gathered_raw_data(buffer)
     }
 
-    fn process_raw_data_new(&mut self, raw_data: Vec<Data>) -> Result<AperfData> {
+    fn process_raw_data_new(
+        &mut self,
+        _params: ReportParams,
+        raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
         let mut time_series_data = TimeSeriesData::default();
         // the aggregate series of all CPU state's metrics to be included in the aggregate metric
         let mut per_cpu_state_aggregate_series: HashMap<CpuState, Series> = HashMap::new();

@@ -20,7 +20,7 @@ pub struct ReportParams {
 }
 
 impl ReportParams {
-    fn new() -> Self {
+    pub fn new() -> Self {
         ReportParams {
             data_dir: PathBuf::new(),
             tmp_dir: PathBuf::new(),
@@ -191,8 +191,11 @@ impl DataVisualizer {
                 },
             };
         }
-        self.run_values_new
-            .insert(name.clone(), self.data.process_raw_data_new(raw_data)?);
+        self.run_values_new.insert(
+            name.clone(),
+            self.data
+                .process_raw_data_new(self.report_params.clone(), raw_data)?,
+        );
         Ok(())
     }
 
@@ -326,7 +329,11 @@ pub trait GetData {
         unimplemented!();
     }
 
-    fn process_raw_data_new(&mut self, _raw_data: Vec<Data>) -> Result<AperfData> {
+    fn process_raw_data_new(
+        &mut self,
+        _params: ReportParams,
+        _raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
         Err(PDError::VisualizerUnsupportedAPI.into()) // TODO: remove when all are implemented
     }
 

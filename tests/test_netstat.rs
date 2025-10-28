@@ -1,6 +1,7 @@
 use aperf::data::netstat::NetstatRaw;
 use aperf::data::{Data, TimeEnum};
 use aperf::visualizer::GetData;
+use aperf::visualizer::ReportParams;
 use chrono::Utc;
 use std::collections::HashMap;
 
@@ -115,7 +116,9 @@ fn test_process_netstat_raw_data_complex() {
 
     let raw_data = generate_netstat_raw_data(&expected_per_sample_stats, 2);
     let mut netstat = aperf::data::netstat::Netstat::new();
-    let result = netstat.process_raw_data_new(raw_data).unwrap();
+    let result = netstat
+        .process_raw_data_new(ReportParams::new(), raw_data)
+        .unwrap();
 
     if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
         // Check each metric exists and has correct structure
@@ -219,7 +222,9 @@ fn test_process_netstat_raw_data_simple() {
 
     let raw_data = generate_netstat_raw_data(&expected_per_sample_stats, 1);
     let mut netstat = aperf::data::netstat::Netstat::new();
-    let result = netstat.process_raw_data_new(raw_data).unwrap();
+    let result = netstat
+        .process_raw_data_new(ReportParams::new(), raw_data)
+        .unwrap();
 
     if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
         assert_eq!(time_series_data.metrics.len(), 2);
@@ -280,7 +285,9 @@ fn test_process_netstat_dynamic_stats() {
 
     let raw_data = generate_netstat_raw_data(&expected_per_sample_stats, 1);
     let mut netstat = aperf::data::netstat::Netstat::new();
-    let result = netstat.process_raw_data_new(raw_data).unwrap();
+    let result = netstat
+        .process_raw_data_new(ReportParams::new(), raw_data)
+        .unwrap();
 
     if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
         assert_eq!(time_series_data.metrics.len(), 3);
@@ -329,7 +336,9 @@ fn test_process_netstat_single_prefix() {
 
     let raw_data = generate_netstat_raw_data(&expected_per_sample_stats, 2);
     let mut netstat = aperf::data::netstat::Netstat::new();
-    let result = netstat.process_raw_data_new(raw_data).unwrap();
+    let result = netstat
+        .process_raw_data_new(ReportParams::new(), raw_data)
+        .unwrap();
 
     if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
         assert_eq!(time_series_data.metrics.len(), 3);
@@ -367,7 +376,9 @@ fn test_process_netstat_single_prefix() {
 fn test_process_netstat_empty_data() {
     let raw_data = Vec::new();
     let mut netstat = aperf::data::netstat::Netstat::new();
-    let result = netstat.process_raw_data_new(raw_data).unwrap();
+    let result = netstat
+        .process_raw_data_new(ReportParams::new(), raw_data)
+        .unwrap();
 
     if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
         assert_eq!(time_series_data.metrics.len(), 0);
@@ -411,7 +422,9 @@ fn test_process_netstat_input_validation() {
     ];
 
     let mut netstat = aperf::data::netstat::Netstat::new();
-    let result = netstat.process_raw_data_new(raw_data).unwrap();
+    let result = netstat
+        .process_raw_data_new(ReportParams::new(), raw_data)
+        .unwrap();
 
     if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
         // Should have 2 metrics from the valid samples

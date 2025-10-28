@@ -2,6 +2,7 @@ use aperf::data::data_formats::AperfData;
 use aperf::data::processes::{ProcessKey, Processes, ProcessesRaw, TICKS_PER_SECOND};
 use aperf::data::{Data, TimeEnum};
 use aperf::visualizer::GetData;
+use aperf::visualizer::ReportParams;
 use chrono::prelude::*;
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
@@ -119,7 +120,9 @@ fn test_process_processes_raw_data_complex() {
         generate_processes_raw_data(&expected_per_sample_per_process_stats, 2, ticks_per_second);
 
     let mut processes = Processes::new();
-    let result = processes.process_raw_data_new(raw_data).unwrap();
+    let result = processes
+        .process_raw_data_new(ReportParams::new(), raw_data)
+        .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {
         // Validate structure
@@ -272,7 +275,9 @@ fn test_process_processes_raw_data_simple() {
         generate_processes_raw_data(&expected_per_sample_per_process_stats, 1, ticks_per_second);
 
     let mut processes = Processes::new();
-    let result = processes.process_raw_data_new(raw_data).unwrap();
+    let result = processes
+        .process_raw_data_new(ReportParams::new(), raw_data)
+        .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {
         assert_eq!(time_series_data.metrics.len(), ProcessKey::iter().count());
@@ -388,7 +393,9 @@ fn test_process_processes_dynamic_processes() {
         generate_processes_raw_data(&expected_per_sample_per_process_stats, 1, ticks_per_second);
 
     let mut processes = Processes::new();
-    let result = processes.process_raw_data_new(raw_data).unwrap();
+    let result = processes
+        .process_raw_data_new(ReportParams::new(), raw_data)
+        .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {
         // Should have all process keys
@@ -450,7 +457,9 @@ fn test_process_processes_top_16_ranking() {
         generate_processes_raw_data(&expected_per_sample_per_process_stats, 1, ticks_per_second);
 
     let mut processes = Processes::new();
-    let result = processes.process_raw_data_new(raw_data).unwrap();
+    let result = processes
+        .process_raw_data_new(ReportParams::new(), raw_data)
+        .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {
         // Should have all process keys
@@ -488,7 +497,9 @@ fn test_process_processes_empty_data() {
     let raw_data = Vec::new();
 
     let mut processes = Processes::new();
-    let result = processes.process_raw_data_new(raw_data).unwrap();
+    let result = processes
+        .process_raw_data_new(ReportParams::new(), raw_data)
+        .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {
         assert_eq!(time_series_data.metrics.len(), 0);
@@ -523,7 +534,9 @@ fn test_process_processes_memory_conversion() {
         generate_processes_raw_data(&expected_per_sample_per_process_stats, 1, ticks_per_second);
 
     let mut processes = Processes::new();
-    let result = processes.process_raw_data_new(raw_data).unwrap();
+    let result = processes
+        .process_raw_data_new(ReportParams::new(), raw_data)
+        .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {
         // Check virtual memory conversion to KB
