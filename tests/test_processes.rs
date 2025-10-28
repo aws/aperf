@@ -215,7 +215,7 @@ fn test_process_processes_raw_data_complex() {
                             }
                             ProcessKey::NumberThreads => expected_stats.number_threads as f64,
                             ProcessKey::VirtualMemorySize => {
-                                expected_stats.virtual_memory_size as f64 / 1000.0
+                                expected_stats.virtual_memory_size as f64 / 1024.0
                             } // Convert to KB
                             ProcessKey::ResidentSetSize => expected_stats.resident_set_size as f64,
                         };
@@ -322,7 +322,7 @@ fn test_process_processes_raw_data_simple() {
                     }
                     ProcessKey::NumberThreads => expected_stats.number_threads as f64,
                     ProcessKey::VirtualMemorySize => {
-                        expected_stats.virtual_memory_size as f64 / 1000.0
+                        expected_stats.virtual_memory_size as f64 / 1024.0
                     }
                     ProcessKey::ResidentSetSize => expected_stats.resident_set_size as f64,
                 };
@@ -523,8 +523,8 @@ fn test_process_processes_memory_conversion() {
         let mut proc_stats = ExpectedProcessStats::default();
         proc_stats.user_space_time = 1000 + sample * 10;
         proc_stats.kernel_space_time = 500 + sample * 5;
-        proc_stats.virtual_memory_size = 2000000; // 2MB in bytes
-        proc_stats.resident_set_size = 1000000; // 1MB in bytes
+        proc_stats.virtual_memory_size = 2097152; // 2MB in bytes
+        proc_stats.resident_set_size = 1000000;
         sample_stats.insert("1_test_proc".to_string(), proc_stats);
 
         expected_per_sample_per_process_stats.push(sample_stats);
@@ -543,9 +543,8 @@ fn test_process_processes_memory_conversion() {
         let vmem_metric = &time_series_data.metrics["virtual_memory_size"];
         let series = &vmem_metric.series[0];
 
-        // 2000000 bytes / 1000 = 2000 KB
-        assert_eq!(series.values[0], 2000.0);
-        assert_eq!(series.values[1], 2000.0);
+        assert_eq!(series.values[0], 2048.0);
+        assert_eq!(series.values[1], 2048.0);
 
         // RSS should remain as-is (not converted)
         let rss_metric = &time_series_data.metrics["resident_set_size"];
