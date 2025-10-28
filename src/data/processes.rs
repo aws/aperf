@@ -408,7 +408,7 @@ impl GetData for Processes {
                         }
                         ProcessKey::VirtualMemorySize => {
                             // Virtual memory size: snapshot convert to KB
-                            current_value / 1000.0
+                            current_value / 1024.0
                         }
                         _ => {
                             // Other metrics: snapshot value
