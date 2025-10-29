@@ -1,6 +1,7 @@
+use crate::data::data_formats::{AperfData, KeyValueData, KeyValueGroup};
 use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
 use crate::utils::{get_data_name_from_type, DataMetrics, ValueType};
-use crate::visualizer::GetData;
+use crate::visualizer::{GetData, ReportParams};
 use anyhow::Result;
 use chrono::prelude::*;
 use log::{trace, warn};
@@ -283,6 +284,60 @@ impl GetData for SystemInfo {
             "values" => get_values(values[0].clone(), metrics),
             _ => panic!("Unsupported API"),
         }
+    }
+
+    fn process_raw_data_new(
+        &mut self,
+        _params: ReportParams,
+        raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
+        let mut key_value_data = KeyValueData::default();
+
+        let mut key_values: HashMap<String, String> = HashMap::new();
+        // The raw_data should contain a single data. Processing it in a loop to follow the generic
+        // pattern
+        for buffer in raw_data {
+            let raw_value = match buffer {
+                Data::SystemInfo(ref value) => value,
+                _ => panic!("Invalid Data type in raw file"),
+            };
+            key_values.insert("System Name".to_string(), raw_value.system_name.clone());
+            key_values.insert("OS Version".to_string(), raw_value.os_version.clone());
+            key_values.insert(
+                "Kernel Version".to_string(),
+                raw_value.kernel_version.clone(),
+            );
+            key_values.insert("Hostname".to_string(), raw_value.host_name.clone());
+            key_values.insert("CPUs".to_string(), raw_value.total_cpus.to_string());
+            key_values.insert(
+                "Instance ID".to_string(),
+                raw_value.instance_metadata.instance_id.clone(),
+            );
+            key_values.insert(
+                "Region".to_string(),
+                raw_value.instance_metadata.region.clone(),
+            );
+            key_values.insert(
+                "Instance Type".to_string(),
+                raw_value.instance_metadata.instance_type.clone(),
+            );
+            key_values.insert(
+                "AMD ID".to_string(),
+                raw_value.instance_metadata.ami_id.clone(),
+            );
+            key_values.insert(
+                "Local Hostname".to_string(),
+                raw_value.instance_metadata.local_hostname.clone(),
+            );
+        }
+
+        let mut key_value_group = KeyValueGroup::default();
+        key_value_group.key_values = key_values;
+        key_value_data
+            .key_value_groups
+            .insert(String::new(), key_value_group);
+
+        Ok(AperfData::KeyValue(key_value_data))
     }
 }
 
