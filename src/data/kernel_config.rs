@@ -1,17 +1,18 @@
+use super::CollectorParams;
+use crate::data::data_formats::{AperfData, KeyValueData, KeyValueGroup};
 use crate::data::{CollectData, Data, ProcessedData, TimeEnum};
 use crate::utils::DataMetrics;
-use crate::visualizer::GetData;
+use crate::visualizer::{GetData, ReportParams};
 use crate::PDError;
 use anyhow::Result;
 use chrono::prelude::*;
 use log::{debug, trace};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs::OpenOptions;
 use std::io::{self, BufRead, BufReader};
 use std::path::Path;
-
-use super::CollectorParams;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Entry {
@@ -190,6 +191,42 @@ fn get_kernel_config(value: KernelConfig) -> Result<String> {
     Ok(serde_json::to_string(&value.kernel_config_data)?)
 }
 
+/// Recursively parse kernel configs into key-value data. Flatten the config group hierarchy by
+/// concatenating ancestors' group name.
+fn parse_kernel_config(
+    kernel_config_group_name_prefix: String,
+    kernel_config_group: KernelConfigEntryGroup,
+    key_value_groups: &mut HashMap<String, KeyValueGroup>,
+) {
+    // Append the current config group's name to form the final name as well as child config groups' prefix
+    let config_group_name = if kernel_config_group_name_prefix.is_empty() {
+        kernel_config_group.name
+    } else {
+        format!(
+            "{}:{}",
+            kernel_config_group_name_prefix, kernel_config_group.name
+        )
+    };
+    let mut key_value_group = KeyValueGroup::default();
+    for entry in kernel_config_group.entries {
+        match entry {
+            Entry::ConfigEntry(config_entry) => {
+                key_value_group
+                    .key_values
+                    .insert(config_entry.name, config_entry.value);
+            }
+            Entry::ConfigGroup(child_config_group) => {
+                parse_kernel_config(
+                    config_group_name.clone(),
+                    child_config_group,
+                    key_value_groups,
+                );
+            }
+        }
+    }
+    key_value_groups.insert(config_group_name, key_value_group);
+}
+
 impl GetData for KernelConfig {
     fn process_raw_data(&mut self, buffer: Data) -> Result<ProcessedData> {
         let raw_value = match buffer {
@@ -227,6 +264,33 @@ impl GetData for KernelConfig {
             "values" => get_kernel_config(values[0].clone()),
             _ => panic!("Unsupported API"),
         }
+    }
+
+    fn process_raw_data_new(
+        &mut self,
+        _params: ReportParams,
+        raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
+        let mut key_value_data = KeyValueData::default();
+
+        // The raw_data vector should contain only one item, but processing it in
+        // a loop to follow the generic pattern
+        for buffer in raw_data {
+            let raw_value = match buffer {
+                Data::KernelConfig(ref value) => value,
+                _ => panic!("Invalid Data type in raw file"),
+            };
+
+            for kernel_config_group in raw_value.kernel_config_data.clone() {
+                parse_kernel_config(
+                    "".to_string(),
+                    kernel_config_group,
+                    &mut key_value_data.key_value_groups,
+                );
+            }
+        }
+
+        Ok(AperfData::KeyValue(key_value_data))
     }
 }
 
