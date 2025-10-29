@@ -1,4 +1,5 @@
-use crate::data::{CollectData, CollectorParams, ProcessedData};
+use crate::data::data_formats::{AperfData, Graph, GraphData, GraphGroup};
+use crate::data::{CollectData, CollectorParams, Data, ProcessedData};
 use crate::utils::DataMetrics;
 use crate::visualizer::{GetData, ReportParams};
 use crate::{get_file_name, PDError};
@@ -188,5 +189,57 @@ impl GetData for Flamegraph {
 
     fn has_custom_raw_data_parser() -> bool {
         true
+    }
+
+    fn process_raw_data_new(
+        &mut self,
+        params: ReportParams,
+        _raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
+        fn copy_and_add_to_graph_group(
+            params: &ReportParams,
+            filename: String,
+            graph_data: &mut GraphData,
+            graph_group_name: String,
+        ) {
+            let source_path = params.data_dir.join(&filename);
+            let relative_dest_path = PathBuf::from("data/js").join(filename);
+            let dest_path = params.report_dir.join(relative_dest_path.clone());
+
+            if source_path.exists() {
+                if let Ok(_) = std::fs::copy(&source_path, &dest_path) {
+                    let mut graph_group = GraphGroup::default();
+                    graph_group.group_name = graph_group_name.clone();
+                    graph_group.graphs.insert(
+                        String::new(),
+                        Graph::new(
+                            format!("Kernel Profiling Flamegraph ({graph_group_name})"),
+                            relative_dest_path.into_os_string().into_string().unwrap(),
+                            None,
+                        ),
+                    );
+                    graph_data
+                        .graph_groups
+                        .insert(graph_group_name.clone(), graph_group);
+                }
+            }
+        }
+
+        let mut graph_data = GraphData::default();
+
+        copy_and_add_to_graph_group(
+            &params,
+            format!("{}-flamegraph.svg", params.run_name),
+            &mut graph_data,
+            String::from("default"),
+        );
+        copy_and_add_to_graph_group(
+            &params,
+            format!("{}-reverse-flamegraph.svg", params.run_name),
+            &mut graph_data,
+            String::from("reverse"),
+        );
+
+        Ok(AperfData::Graph(graph_data))
     }
 }
