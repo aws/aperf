@@ -8,6 +8,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "hotline")]
 use {
+    crate::data::data_formats::{AperfData, Graph, GraphData, GraphGroup},
     crate::{
         data::{Data, DataType},
         visualizer::DataVisualizer,
@@ -15,7 +16,10 @@ use {
     ctor::ctor,
     libc::{_exit, fork, geteuid, killpg, setpgid, waitpid, SIGTERM},
     log::{info, warn},
+    std::fs::File,
+    std::io::Write,
     std::path::Path,
+    std::path::PathBuf,
     std::{
         env,
         ffi::CString,
@@ -384,5 +388,62 @@ impl GetData for Hotline {
 
     fn has_custom_raw_data_parser() -> bool {
         true
+    }
+
+    #[cfg(feature = "hotline")]
+    fn process_raw_data_new(
+        &mut self,
+        params: ReportParams,
+        _raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
+        use crate::data::hotline::hotline_reports::REPORT_CONFIGS;
+
+        let mut graph_data = GraphData::default();
+
+        // TODO: remove the original implementation and the generate_html_files function once
+        //       we're ready to cut over and migrate to the new data format
+        for config in REPORT_CONFIGS {
+            let csv_string = fs::read_to_string(params.data_dir.join(config.filename))?;
+            let table_html = csv_to_html::convert(&csv_string, &b',', &true);
+
+            // Use relative path to CSS file
+            let full_html = format!(
+                r#"<!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <link rel="stylesheet" href="../../index.css">
+                </head>
+                <body>
+                    {}
+                </body>
+                </html>"#,
+                table_html
+            );
+
+            let relative_dest_path = PathBuf::from("data/js")
+                .join(format!("{}_{}.html", params.run_name, config.table_id));
+            let dest_path = params.report_dir.join(relative_dest_path.clone());
+            let mut file = File::create(dest_path)?;
+            file.write_all(full_html.as_bytes())?;
+
+            let mut graph_group = GraphGroup::default();
+            graph_group.group_name = config.table_id.to_string();
+            graph_group.graphs.insert(
+                String::new(),
+                Graph::new(
+                    format!("{}_table", config.table_id),
+                    relative_dest_path.into_os_string().into_string().unwrap(),
+                    None,
+                ),
+            );
+
+            graph_data
+                .graph_groups
+                .insert(config.table_id.to_string(), graph_group);
+        }
+
+        Ok(AperfData::Graph(graph_data))
     }
 }
