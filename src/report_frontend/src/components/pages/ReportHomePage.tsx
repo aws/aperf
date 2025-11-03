@@ -5,6 +5,7 @@ import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import { RUNS } from "../../definitions/data-config";
 import { RunSystemInfo } from "../data/RunSystemInfo";
 import { useReportState } from "../ReportStateProvider";
+import { RunFindings } from "../data/Finding";
 
 /**
  * This component renders the APerf report's home page, where users can view the system info
@@ -26,10 +27,11 @@ export default function () {
       <RunSystemInfo runName={runName} />
     </Container>
   ));
-  // TODO: add back analytics card when complete
-  // const perRunAnalyticalFindings = RUNS.map(() => (
-  //   <Container header={<Header variant={"h3"}>Analytical Findings</Header>} />
-  // ));
+  const perRunAnalyticalFindings = RUNS.map((runName) => (
+    <Container header={<Header variant={"h3"}>Analytical Findings</Header>}>
+      <RunFindings runName={runName} />
+    </Container>
+  ));
 
   return (
     <ContentLayout
@@ -60,8 +62,7 @@ export default function () {
         </Header>
       }
     >
-      {/* <Grid gridDefinition={gridDefinition}>{perRunSystemInfo.concat(perRunAnalyticalFindings)}</Grid> */}
-      <Grid gridDefinition={gridDefinition}>{perRunSystemInfo}</Grid>
+      <Grid gridDefinition={gridDefinition}>{perRunSystemInfo.concat(perRunAnalyticalFindings)}</Grid>
     </ContentLayout>
   );
 }
