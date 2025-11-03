@@ -1,0 +1,191 @@
+mod rules;
+mod key_value_run_comparison_rule;
+mod time_series_run_stat_comparison_rule;
+mod time_series_run_stat_similarity_rule;
+mod time_series_single_metric_data_point_rule;
+mod time_series_single_metric_stat_rule;
+
+use crate::data::data_formats::ProcessedData;
+use key_value_run_comparison_rule::KeyValueRunComparisonRule;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Mutex;
+use time_series_run_stat_comparison_rule::TimeSeriesRunStatComparisonRule;
+use time_series_run_stat_similarity_rule::TimeSeriesRunStatSimilarityRule;
+use time_series_single_metric_data_point_rule::TimeSeriesSingleMetricDataPointRule;
+use time_series_single_metric_stat_rule::TimeSeriesSingleMetricStatRule;
+use rules::multi_data_rules::MULTI_DATA_RULES;
+
+lazy_static! {
+    pub static ref BASE_RUN_NAME: Mutex<String> = Mutex::new(String::from(""));
+}
+
+fn get_base_run_name() -> String {
+    BASE_RUN_NAME.lock().unwrap().to_string()
+}
+
+pub struct AnalyticalEngine<'a> {
+    // Map from a data name to its processed data across all runs
+    all_processed_data: HashMap<String, &'a ProcessedData>,
+    // Map from a data name to its defined rules
+    per_data_rules: HashMap<String, Vec<AnalyticalRule>>,
+    // All rules that require multiple data types
+    multi_data_rules: Vec<MultiDataAnalyticalRule>,
+    // Map from a data name to its all analytical findings
+    pub findings: HashMap<String, DataFindings>,
+}
+
+impl Default for AnalyticalEngine<'_> {
+    fn default() -> Self {
+        AnalyticalEngine {
+            all_processed_data: Default::default(),
+            per_data_rules: Default::default(),
+            multi_data_rules: MULTI_DATA_RULES,
+            findings: Default::default(),
+        }
+    }
+}
+
+impl<'a> AnalyticalEngine<'a> {
+    pub fn add_processed_data(&mut self, data_name: String, processed_data: &'a ProcessedData) {
+        self.all_processed_data.insert(data_name, processed_data);
+    }
+
+    pub fn add_data_rules(&mut self, data_name: String, rules: Vec<AnalyticalRule>) {
+        self.per_data_rules.insert(data_name, rules);
+    }
+
+    pub fn run(&mut self) {
+        for (data_name, data_rules) in &self.per_data_rules {
+            if let Some(&processed_data) = self.all_processed_data.get(data_name) {
+                let data_findings = self.findings.entry(data_name.clone()).or_insert(DataFindings::default());
+                for data_rule in data_rules {
+                    data_rule.analyze(data_findings, processed_data);
+                }
+            }
+        }
+
+        for multi_data_rule in &self.multi_data_rules {
+            multi_data_rule.analyze(&self.findings, &self.all_processed_data);
+        }
+    }
+
+    pub fn get_data_findings(&mut self, data_name: String) -> &DataFindings {
+        self.findings.entry(data_name).or_insert(DataFindings::default())
+    }
+}
+
+#[derive(Serialize, Deserialize, Default)]
+pub struct DataFindings {
+    per_run_findings: HashMap<String, RunFindings>,
+}
+
+impl DataFindings {
+    pub fn insert_finding(
+        &mut self,
+        run_name: &String,
+        key: &str,
+        finding_score: f64,
+        finding_description: String,
+    ) {
+        let run_findings = self
+            .per_run_findings
+            .entry(run_name.clone())
+            .or_insert(RunFindings::default());
+        let key_findings = run_findings
+            .findings
+            .entry(key.to_string())
+            .or_insert(Vec::new());
+        key_findings.push(AnalyticalFinding::new(finding_score, finding_description));
+    }
+}
+
+#[derive(Serialize, Deserialize, Default)]
+pub struct RunFindings {
+    findings: HashMap<String, Vec<AnalyticalFinding>>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct AnalyticalFinding {
+    score: f64,
+    description: String,
+}
+
+impl AnalyticalFinding {
+    pub fn new(score: f64, description: String) -> Self {
+        AnalyticalFinding { score, description }
+    }
+}
+
+fn compute_finding_score(value: f64, threshold: f64, rule_score: f64) -> f64 {
+    let mut delta = value / threshold;
+    if delta < 1.0 {
+        delta = delta.recip();
+    }
+    delta * rule_score
+}
+
+/// The trait to be implemented by every single-data rule. It runs the rule against the
+/// processed data of the corresponding type. If a rule matches, it should produce one or
+/// more findings and store them in the data_findings struct.
+pub trait Analyze {
+    fn analyze(&self, data_findings: &mut DataFindings, processed_data: &ProcessedData);
+}
+
+/// The trait to be implemented by every multi-data rule. It runs the rule against multiple types
+/// of processed data. If a rule matches, it should produce one or more findings and store them
+/// in the relative data's findings.
+pub trait MultiDataAnalyze {
+    fn analyze(&self, findings: &HashMap<String, DataFindings>, all_processed_data: &HashMap<String, &ProcessedData>);
+}
+
+macro_rules! analytical_rules {
+    ($( $analytical_rule:ident ), *) => {
+        pub enum AnalyticalRule {
+            $(
+                $analytical_rule($analytical_rule),
+            )*
+        }
+
+        impl AnalyticalRule {
+            pub fn analyze(&self, data_findings: &mut DataFindings, processed_data: &ProcessedData) {
+                match self {
+                    $(
+                        AnalyticalRule::$analytical_rule(ref analytical_rule) => analytical_rule.analyze(data_findings, processed_data),
+                    )*
+                }
+            }
+        }
+    };
+}
+
+analytical_rules!(
+    TimeSeriesRunStatComparisonRule,
+    TimeSeriesRunStatSimilarityRule,
+    TimeSeriesSingleMetricStatRule,
+    TimeSeriesSingleMetricDataPointRule,
+    KeyValueRunComparisonRule
+);
+
+macro_rules! multi_data_analytical_rules {
+    ($( $multi_data_analytical_rule:ident ), *) => {
+        pub enum MultiDataAnalyticalRule {
+            $(
+                $multi_data_analytical_rule($multi_data_analytical_rule),
+            )*
+        }
+
+        impl MultiDataAnalyticalRule {
+            pub fn analyze(&self, findings: &HashMap<String, DataFindings>, all_processed_data: &HashMap<String, &ProcessedData>) {
+                match self {
+                    $(
+                        MultiDataAnalyticalRule::$multi_data_analytical_rule(ref multi_data_analytical_rule) => multi_data_analytical_rule.analyze(findings, all_processed_data),
+                    )*
+                    _ => todo!(),
+                }
+            }
+        }
+    };
+}
+
+multi_data_analytical_rules!();

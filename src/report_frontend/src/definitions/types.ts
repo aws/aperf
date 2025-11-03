@@ -87,8 +87,28 @@ export interface Statistics {
   readonly p99_9: number;
 }
 
+// See src/analytics/mod.rs
+export interface DataFindings {
+  readonly per_run_findings: { [key in string]: RunFindings };
+}
+
+export interface RunFindings {
+  readonly findings: { [key in string]: AnalyticalFinding[] };
+}
+
+export interface AnalyticalFinding {
+  readonly description: string;
+  readonly score: number;
+}
+
 export interface DataPageProps {
   readonly dataType: DataType;
+}
+
+export interface TimeSeriesMetricProps {
+  readonly dataType: DataType;
+  readonly runName: string;
+  readonly metricName: string;
 }
 
 export type NumCpusPerRun = { [key in string]: number };
