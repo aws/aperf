@@ -87,13 +87,22 @@ fi
 
 POD_NAME="aperf-pod-${NODE_NAME//[.]/-}"
 
+echo -e "${BOLD}Verifying node exists...${NC}"
+if ! kubectl get node ${NODE_NAME} &>/dev/null; then
+  echo -e "${RED}Error: Node '${NODE_NAME}' not found in the cluster.${NC}"
+  echo -e "${YELLOW}Available nodes:${NC}"
+  kubectl get nodes -o custom-columns=NAME:.metadata.name --no-headers
+  exit 1
+fi
+echo -e "${GREEN}Node '${NODE_NAME}' found${NC}"
+
 # Get node taints and generate tolerations
-echo -e "${BOLD}Checking node taints...${NC}"
+echo -e "${BOLD}Checking node taints... "
 TAINTS=$(kubectl get node ${NODE_NAME} -o jsonpath='{.spec.taints[*]}' 2>/dev/null)
 
 TOLERATIONS=""
 if [ -n "$TAINTS" ]; then
-  echo -e "  ${YELLOW}Node has taints, adding tolerations to pod spec${NC}"
+  echo -e "${YELLOW}Node has taints, adding tolerations to pod spec${NC}"
   
   # Parse taints and create tolerations YAML
   TOLERATIONS="  tolerations:"
@@ -121,7 +130,7 @@ if [ -n "$TAINTS" ]; then
     operator: \"Equal\""
   done
 else
-  echo -e "  ${GREEN}No taints found on node${NC}"
+  echo -e "${GREEN}No taints found on node${NC}"
 fi
 
 # Create pod YAML as a variable
@@ -197,13 +206,13 @@ else
 fi
 
 # Show resource usage for pods on this node
-echo -e "${BOLD}Resource usage for pods on ${NODE_NAME}:${NC}"
+echo -e "${BOLD}Resource usage for pods on ${NODE_NAME}: "
 if kubectl top pods --all-namespaces > /tmp/allpods.out 2>/dev/null; then
   head -n 1 /tmp/allpods.out
   grep "$(kubectl get pods --all-namespaces --field-selector spec.nodeName=${NODE_NAME} -o jsonpath='{range .items[*]}{.metadata.name}{" "}{end}' | sed 's/[[:space:]]*$//' | sed 's/[[:space:]]/\\|/g')" /tmp/allpods.out --color=never || echo "  No pods found on this node"
   rm /tmp/allpods.out 2>/dev/null || true
 else
-  echo "  ${YELLOW}Note: kubectl top not available (metrics-server may not be installed)${NC}"
+  echo "${YELLOW}Note: kubectl top not available (metrics-server may not be installed)${NC}"
 fi
 
 # Create APerf pod
@@ -256,7 +265,24 @@ echo -e "${BOLD}${GREEN}Files copied to${NC} ${BLUE}${LOCAL_FILE}${NC}"
 # Extract the tar.gz file
 echo -e "${BOLD}Extracting report files...${NC}"
 mkdir -p "${EXTRACT_DIR}"
-tar -xzf "${LOCAL_FILE}" -C "${EXTRACT_DIR}"
+
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" || "$OSTYPE" == "cygwin" ]]; then
+  # Windows - use tar if available, otherwise try 7z or PowerShell
+  if command -v tar &> /dev/null; then
+    tar -xzf "${LOCAL_FILE}" -C "${EXTRACT_DIR}"
+  elif command -v 7z &> /dev/null; then
+    7z x "${LOCAL_FILE}" -so | 7z x -si -ttar -o"${EXTRACT_DIR}"
+  elif command -v powershell.exe &> /dev/null; then
+    powershell.exe -Command "Expand-Archive -Path '${LOCAL_FILE}' -DestinationPath '${EXTRACT_DIR}' -Force"
+  else
+    echo -e "  ${RED}Error: No extraction tool found. Please install tar, 7-Zip, or use PowerShell${NC}"
+    exit 1
+  fi
+else
+  # macOS/Linux
+  tar -xzf "${LOCAL_FILE}" -C "${EXTRACT_DIR}"
+fi
+
 echo -e "  ${GREEN}Extracted to${NC} ${BLUE}${EXTRACT_DIR}/${NC}"
 
 # Open index.html in browser if enabled
@@ -276,6 +302,17 @@ if [ "$OPEN_BROWSER" = true ]; then
         xdg-open "$INDEX_FILE"
       elif command -v sensible-browser &> /dev/null; then
         sensible-browser "$INDEX_FILE"
+      else
+        echo -e "  ${YELLOW}Could not detect browser command. Please open manually:${NC} ${BLUE}${INDEX_FILE}${NC}"
+      fi
+    elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" || "$OSTYPE" == "cygwin" ]]; then
+      # Windows
+      if command -v start &> /dev/null; then
+        start "$INDEX_FILE"
+      elif command -v cmd.exe &> /dev/null; then
+        cmd.exe /c start "$INDEX_FILE"
+      elif command -v powershell.exe &> /dev/null; then
+        powershell.exe -Command "Start-Process '${INDEX_FILE}'"
       else
         echo -e "  ${YELLOW}Could not detect browser command. Please open manually:${NC} ${BLUE}${INDEX_FILE}${NC}"
       fi
