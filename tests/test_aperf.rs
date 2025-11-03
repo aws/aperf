@@ -282,8 +282,16 @@ fn report_with_name(run_dir: String, tempdir: PathBuf, aperf_tmp: PathBuf) -> Re
 
     // Check if the directory has the proper structure
     assert!(report_path.exists());
-    assert!(report_path.join("index.css").exists());
-    assert!(report_path.join("index.js").exists());
+    #[cfg(feature = "new-report")]
+    {
+        assert!(report_path.join("main.css").exists());
+        assert!(report_path.join("bundle.js").exists());
+    }
+    #[cfg(not(feature = "new-report"))]
+    {
+        assert!(report_path.join("index.css").exists());
+        assert!(report_path.join("index.js").exists());
+    }
     assert!(report_path.join("data/archive").exists());
     assert!(Path::new(&(report_loc.clone() + ".tar.gz")).exists());
 
@@ -303,8 +311,16 @@ fn report_with_name(run_dir: String, tempdir: PathBuf, aperf_tmp: PathBuf) -> Re
 
     // Check if the tarball of the directory has the proper structure
     assert!(paths.contains(&test_report_path.join("index.html")));
-    assert!(paths.contains(&test_report_path.join("index.css")));
-    assert!(paths.contains(&test_report_path.join("index.js")));
+    #[cfg(feature = "new-report")]
+    {
+        assert!(paths.contains(&test_report_path.join("main.css")));
+        assert!(paths.contains(&test_report_path.join("bundle.js")));
+    }
+    #[cfg(not(feature = "new-report"))]
+    {
+        assert!(paths.contains(&test_report_path.join("index.css")));
+        assert!(paths.contains(&test_report_path.join("index.js")));
+    }
     assert!(paths.contains(&test_report_path.join("data/archive")));
 
     fs::remove_dir_all(&run_dir).unwrap();

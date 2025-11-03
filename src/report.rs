@@ -31,6 +31,7 @@ struct ReportData {
 }
 
 impl ReportData {
+    #[cfg(feature = "new-report")]
     fn new(data_name: String) -> Self {
         ReportData {
             data_name,
@@ -208,6 +209,18 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
     // here will overwrite the run name after the '.'. To prevent that set the filename.
     report_name_tgz.set_file_name(report_name.to_str().unwrap().to_owned() + ".tar.gz");
 
+    #[cfg(feature = "new-report")]
+    {
+        generate_report_files(
+            report_name.clone(),
+            &dir_names,
+            &data_dirs,
+            &dir_paths,
+            tmp_dir,
+        );
+        return Ok(());
+    }
+
     info!("Creating APerf report...");
     let ico = include_bytes!("html_files/favicon.ico");
     let configure = include_bytes!("html_files/configure.png");
@@ -264,7 +277,6 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
     for dir in dir_paths {
         let name = visualization_data.init_visualizers(dir.to_owned(), tmp_dir, &report_name)?;
         visualization_data.unpack_data(name.clone())?;
-        visualization_data.unpack_data_new(name)?;
     }
 
     /* Generate visualizer JS files */
@@ -331,31 +343,6 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
         write!(out_file, "{}", str_out_data)?;
     }
 
-    /* Get visualizer data unified */
-    let visualizer_names = visualization_data.get_visualizer_names()?; // TODO: remove after replacing old get visualizer data
-    let out_loc = report_name.join("data/js/processed_data.js");
-    let mut out_file = File::create(out_loc)?;
-    writeln!(out_file, "processed_data = {{")?;
-    for name in visualizer_names {
-        let mut report_data = ReportData::new(name.clone());
-        for run_name in &run_names {
-            let visualizer = visualization_data
-                .visualizers
-                .get_mut(&name)
-                .ok_or(PDError::VisualizerHashMapEntryError(name.to_string()))?;
-            let data = match visualizer.run_values_new.get(run_name) {
-                Some(data) => data,
-                None => continue,
-            };
-            report_data.runs.insert(run_name.clone(), data.clone());
-            report_data.data_format = data.get_format_name();
-        }
-        let out_data = serde_json::to_string(&report_data)?;
-        write!(out_file, r#""{}": "#, name.clone())?;
-        writeln!(out_file, "{},", out_data)?;
-    }
-    write!(out_file, "}}")?;
-
     let out_analytics = report_name.join("data/js/analytics.js");
     let mut out_file = File::create(out_analytics)?;
     let stats = visualization_data.get_analytics()?;
@@ -376,4 +363,94 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
     tar.append_dir_all(&report_stem, &report_name)?;
 
     Ok(())
+}
+
+#[cfg(feature = "new-report")]
+fn generate_report_files(
+    report_dir: PathBuf,
+    run_names: &Vec<String>,
+    raw_run_paths: &Vec<PathBuf>,
+    run_dir_paths: &Vec<String>,
+    tmp_dir: &PathBuf,
+) {
+    info!("Creating APerf report...");
+    let report_data_dir = report_dir.join("data");
+    fs::create_dir_all(report_data_dir.join("archive")).unwrap();
+    let report_data_js_dir = report_data_dir.join("js");
+    fs::create_dir_all(report_data_js_dir.clone()).unwrap();
+
+    info!("Processing collected data...");
+    let mut visualization_data = VisualizationData::new();
+    data::add_all_visualization_data(&mut visualization_data);
+    /* Init visualizers */
+    for run_dir in run_dir_paths {
+        let name = visualization_data
+            .init_visualizers(run_dir.to_owned(), tmp_dir, &report_dir)
+            .unwrap();
+        visualization_data.unpack_data_new(name).unwrap();
+    }
+
+    /* Generate run.js */
+    let run_js_path = report_data_js_dir.join("runs.js");
+    let mut runs_file = File::create(run_js_path).unwrap();
+    write!(
+        runs_file,
+        "runs_raw = {}",
+        serde_json::to_string(run_names).unwrap()
+    )
+    .unwrap();
+
+    JS_DIR
+        .extract(&report_dir)
+        .expect("Failed to copy frontend files");
+
+    let visualizer_names = visualization_data.get_visualizer_names().unwrap(); // TODO: remove after replacing old get visualizer data
+    for name in visualizer_names {
+        let data_name = visualization_data.get_api(name.clone()).unwrap();
+        let processed_data_js_path = report_data_js_dir.join(format!("{}.js", data_name));
+        let mut processed_data_js_file = File::create(processed_data_js_path).unwrap();
+        let mut report_data = ReportData::new(data_name.clone());
+        for run_name in run_names {
+            let visualizer = visualization_data
+                .visualizers
+                .get_mut(&name)
+                .ok_or(PDError::VisualizerHashMapEntryError(name.clone()))
+                .unwrap();
+            let data = match visualizer.run_values_new.get(run_name) {
+                Some(data) => data,
+                None => continue,
+            };
+            report_data.runs.insert(run_name.clone(), data.clone());
+            report_data.data_format = data.get_format_name();
+        }
+        let out_data = serde_json::to_string(&report_data).unwrap();
+        write!(
+            processed_data_js_file,
+            "processed_{}_data = {}",
+            data_name, out_data
+        )
+        .unwrap();
+    }
+
+    /* Generate/copy the archives of the collected data into aperf_report */
+    for dir in raw_run_paths {
+        form_and_copy_archive(dir.to_path_buf(), &report_dir, tmp_dir).unwrap();
+    }
+
+    let mut report_name_tgz = PathBuf::new();
+    // If a user provided run name has a '.' in it, setting the extension as '.tar.gz'
+    // here will overwrite the run name after the '.'. To prevent that set the filename.
+    report_name_tgz.set_file_name(report_dir.to_str().unwrap().to_owned() + ".tar.gz");
+
+    let tar_gz = File::create(&report_name_tgz).unwrap();
+    let enc = GzEncoder::new(tar_gz, Compression::default());
+    let mut tar = tar::Builder::new(enc);
+    let report_stem = report_dir
+        .file_name()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    tar.append_dir_all(&report_stem, &report_dir).unwrap();
+    info!("Report archived at {}", report_name_tgz.display());
 }

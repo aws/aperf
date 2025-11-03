@@ -1,0 +1,12 @@
+{
+	"compilerOptions": {
+		"lib": ["es6", "dom"],
+        "module": "es6",
+        "moduleResolution": "node",
+		"target": "es6",
+		"outDir": "report_frontend/",
+		"jsx": "react",
+		"allowSyntheticDefaultImports": true
+	},
+	"include": ["./**/*"]
+}
