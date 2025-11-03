@@ -55,3 +55,11 @@ pub fn notargz_string_name(s: String) -> Result<String> {
     }
     Ok(s)
 }
+
+pub fn get_cpu_series_name(cpu: usize) -> Option<String> {
+    Some(format!("CPU{cpu}"))
+}
+
+pub fn get_aggregate_cpu_series_name() -> Option<String> {
+    Some("Aggregate".to_string())
+}

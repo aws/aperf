@@ -1,7 +1,7 @@
-use crate::data::data_formats::{Graph, GraphGroup};
-use crate::data::{CollectData, CollectorParams, ProcessedData};
+use crate::data::data_formats::{AperfData, Graph, GraphData, GraphGroup};
+use crate::data::{CollectData, CollectorParams, Data, ProcessedData};
 use crate::utils::{get_data_name_from_type, DataMetrics};
-use crate::visualizer::GetData;
+use crate::visualizer::{GetData, ReportParams};
 use crate::PDError;
 use anyhow::Result;
 use log::{debug, error, trace};
@@ -400,6 +400,73 @@ impl GetData for JavaProfile {
 
     fn has_custom_raw_data_parser() -> bool {
         true
+    }
+
+    fn process_raw_data_new(
+        &mut self,
+        params: ReportParams,
+        _raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
+        let mut graph_data = GraphData::default();
+
+        let processes_loc = params
+            .data_dir
+            .join(format!("{}-jps-map.json", params.run_name));
+        let processes_json =
+            fs::read_to_string(processes_loc.to_str().unwrap()).unwrap_or_default();
+        let process_map: HashMap<String, Vec<String>> =
+            serde_json::from_str(&processes_json).unwrap_or(HashMap::new());
+
+        let mut profile_metrics = Vec::from(PROFILE_METRICS);
+        profile_metrics.push("legacy");
+        for metric in profile_metrics {
+            let mut graph_group = GraphGroup::default();
+            graph_group.group_name = String::from(metric);
+
+            for (process, process_names) in &process_map {
+                let filename = if metric == "legacy" {
+                    // backward compatibility - to support previous versions where java profile
+                    // generates a single flamegraph
+                    format!("{}-java-flamegraph-{}.html", params.run_name, process)
+                } else {
+                    format!(
+                        "{}-java-profile-{}-{}.html",
+                        params.run_name, process, metric
+                    )
+                };
+
+                let relative_path = PathBuf::from("data/js");
+                if let Some(file_size) = copy_file_to_report_data(
+                    &filename,
+                    &params.data_dir,
+                    &params.report_dir.join(relative_path.clone()),
+                ) {
+                    graph_group.graphs.insert(
+                        process.clone(),
+                        Graph::new(
+                            format!(
+                                "JVM: {}, PID: {} ({})",
+                                process_names.first().map_or("unknown", |s| s.as_str()),
+                                process,
+                                metric
+                            ),
+                            relative_path
+                                .join(filename)
+                                .into_os_string()
+                                .into_string()
+                                .unwrap(),
+                            Some(file_size),
+                        ),
+                    );
+                }
+            }
+
+            graph_data
+                .graph_groups
+                .insert(String::from(metric), graph_group);
+        }
+
+        Ok(AperfData::Graph(graph_data))
     }
 }
 

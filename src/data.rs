@@ -355,10 +355,10 @@ macro_rules! processed_data {
                 }
             }
 
-            pub fn process_raw_data_new(&mut self, raw_data: Vec<Data>) -> Result<AperfData> {
+            pub fn process_raw_data_new(&mut self, parser_params: ReportParams, raw_data: Vec<Data>) -> Result<AperfData> {
                 match self {
                     $(
-                        ProcessedData::$processed_data(ref mut value) => Ok(value.process_raw_data_new(raw_data)?),
+                        ProcessedData::$processed_data(ref mut value) => Ok(value.process_raw_data_new(parser_params, raw_data)?),
                     )*
                 }
             }

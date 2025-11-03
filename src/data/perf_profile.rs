@@ -1,4 +1,5 @@
-use crate::data::{CollectData, CollectorParams, ProcessedData};
+use crate::data::data_formats::{AperfData, TextData};
+use crate::data::{CollectData, CollectorParams, Data, ProcessedData};
 use crate::utils::DataMetrics;
 use crate::visualizer::{GetData, ReportParams};
 use crate::PDError;
@@ -152,6 +153,22 @@ impl GetData for PerfProfile {
 
         let processed_data = vec![ProcessedData::PerfProfile(profile)];
         Ok(processed_data)
+    }
+
+    fn process_raw_data_new(
+        &mut self,
+        params: ReportParams,
+        _raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
+        let mut text_data = TextData::default();
+        let file_loc = params.data_dir.join(PERF_TOP_FUNCTIONS_FILE_NAME);
+        if file_loc.exists() {
+            text_data.lines = fs::read_to_string(&file_loc)?
+                .split('\n')
+                .map(|x| x.to_string())
+                .collect();
+        }
+        Ok(AperfData::Text(text_data))
     }
 
     fn get_calls(&mut self) -> Result<Vec<String>> {

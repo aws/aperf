@@ -6,6 +6,7 @@ use log::debug;
 use rustix::fd::AsRawFd;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::{Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::{collections::HashMap, fs::File};
 
@@ -19,7 +20,7 @@ pub struct ReportParams {
 }
 
 impl ReportParams {
-    fn new() -> Self {
+    pub fn new() -> Self {
         ReportParams {
             data_dir: PathBuf::new(),
             tmp_dir: PathBuf::new(),
@@ -161,6 +162,11 @@ impl DataVisualizer {
         }
         debug!("Processing raw data new for: {}", self.api_name);
 
+        self.file_handle
+            .as_ref()
+            .unwrap()
+            .seek(SeekFrom::Start(0))?;
+
         let mut raw_data = Vec::new();
         loop {
             match bincode::deserialize_from::<_, Data>(self.file_handle.as_ref().unwrap()) {
@@ -185,8 +191,11 @@ impl DataVisualizer {
                 },
             };
         }
-        self.run_values_new
-            .insert(name.clone(), self.data.process_raw_data_new(raw_data)?);
+        self.run_values_new.insert(
+            name.clone(),
+            self.data
+                .process_raw_data_new(self.report_params.clone(), raw_data)?,
+        );
         Ok(())
     }
 
@@ -320,7 +329,11 @@ pub trait GetData {
         unimplemented!();
     }
 
-    fn process_raw_data_new(&mut self, _raw_data: Vec<Data>) -> Result<AperfData> {
+    fn process_raw_data_new(
+        &mut self,
+        _params: ReportParams,
+        _raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
         Err(PDError::VisualizerUnsupportedAPI.into()) // TODO: remove when all are implemented
     }
 
