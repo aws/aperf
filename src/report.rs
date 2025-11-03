@@ -1,3 +1,4 @@
+use crate::analytics::BASE_RUN_NAME;
 use crate::data::JS_DIR;
 use crate::{data, PDError, VisualizationData};
 use anyhow::Result;
@@ -207,6 +208,11 @@ fn generate_report_files(
     run_dir_paths: &Vec<String>,
     tmp_dir: &PathBuf,
 ) {
+    {
+        let mut base_run_name = BASE_RUN_NAME.lock().unwrap();
+        *base_run_name = run_names.get(0).unwrap().to_string();
+    }
+
     info!("Creating APerf report...");
     let report_data_dir = report_dir.join("data");
     fs::create_dir_all(report_data_dir.join("archive")).unwrap();
@@ -223,6 +229,8 @@ fn generate_report_files(
             .unwrap();
         visualization_data.process_raw_data(name).unwrap();
     }
+
+    let analytical_findings = visualization_data.run_analytics();
 
     /* Generate run.js */
     let run_js_path = processed_data_js_dir.join("runs.js");
@@ -258,10 +266,19 @@ fn generate_report_files(
         let out_data = serde_json::to_string(&visualizer.processed_data).unwrap();
         write!(
             processed_data_js_file,
-            "processed_{}_data = {}",
+            "processed_{}_data = {}\n\n",
             data_name, out_data
         )
         .unwrap();
+
+        if let Some(data_findings) = analytical_findings.get(data_name) {
+            let out_findings = serde_json::to_string(data_findings).unwrap();
+            write!(
+                processed_data_js_file,
+                "{}_findings = {}",
+                data_name, out_findings
+            ).unwrap();
+        }
     }
 
     /* Generate/copy the archives of the collected data into aperf_report */
