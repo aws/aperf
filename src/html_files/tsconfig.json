@@ -1,6 +1,7 @@
 {
 	"compilerOptions": {
 		"allowJs": true,
+		"moduleResolution": "node",
 		"target": "es6",
 		"outDir": "js/",
 		"allowUmdGlobalAccess": true,

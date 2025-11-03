@@ -441,15 +441,16 @@ impl GetData for JavaProfile {
                     &params.data_dir,
                     &params.report_dir.join(relative_path.clone()),
                 ) {
+                    let graph_name = format!(
+                        "JVM: {}, PID: {} ({})",
+                        process_names.first().map_or("unknown", |s| s.as_str()),
+                        process,
+                        metric
+                    );
                     graph_group.graphs.insert(
-                        process.clone(),
+                        graph_name.clone(),
                         Graph::new(
-                            format!(
-                                "JVM: {}, PID: {} ({})",
-                                process_names.first().map_or("unknown", |s| s.as_str()),
-                                process,
-                                metric
-                            ),
+                            graph_name,
                             relative_path
                                 .join(filename)
                                 .into_os_string()
