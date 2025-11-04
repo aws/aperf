@@ -111,13 +111,13 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
     fieldDescriptions: {},
   },
   flamegraphs: {
-    readableName: "Kernel Profiling Flamegraphs",
+    readableName: "Flamegraphs",
     summary:
       "Kernel profiling flamegraphs visualize the call stack hierarchies and the amount of CPU time consumed by different functions. It supports viewing in both the normal (bottom-top) and reverse (top-bottom) order.",
     fieldDescriptions: {},
   },
   perf_profile: {
-    readableName: "Kernel Profiling Top Functions",
+    readableName: "Top Functions",
     summary:
       "Kernel profiling top functions are the text-based version of the flamegraphs and show the percentage of CPU time spent in each function. It only includes functions with at least 1% of CPU time.",
     fieldDescriptions: {},

@@ -7,6 +7,8 @@ interface ReportState {
   setDataComponent: (newDataComponent: DataType) => void;
   numMetricGraphsPerPage: number;
   setNumMetricGraphsPerPage: (newMetricsPerPage: number) => void;
+  showHelpPanel: boolean;
+  setShowHelpPanel: (newShowHelpPanel: boolean) => void;
   helpPanelType: string;
   setHelpPanelType: (newHelpPanelFieldKey: string) => void;
   combineGraphs: boolean;
@@ -25,6 +27,7 @@ const ReportStateContext = React.createContext<ReportState | undefined>(undefine
 export default function (props: { children: ReactNode }) {
   const [dataComponent, setDataComponent] = React.useState<DataType>("systeminfo");
   const [numMetricGraphsPerPage, setNumMetricGraphsPerPage] = React.useState(NUM_METRICS_PER_PAGE);
+  const [showHelpPanel, setShowHelpPanel] = React.useState(true);
   const [helpPanelType, setHelpPanelType] = React.useState<string>("general");
   const [combineGraphs, setCombineGraphs] = React.useState(false);
   const [numCpusPerRun, setNumCpusPerRun] = React.useState<NumCpusPerRun>({});
@@ -35,6 +38,8 @@ export default function (props: { children: ReactNode }) {
     setDataComponent,
     numMetricGraphsPerPage,
     setNumMetricGraphsPerPage,
+    showHelpPanel,
+    setShowHelpPanel,
     helpPanelType,
     setHelpPanelType,
     combineGraphs,

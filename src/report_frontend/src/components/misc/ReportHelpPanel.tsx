@@ -67,12 +67,13 @@ interface ReportHelpPanelLinkProps {
  * panel to show.
  */
 export function ReportHelpPanelLink(props: ReportHelpPanelLinkProps) {
-  const { setHelpPanelType } = useReportState();
+  const { setHelpPanelType, setShowHelpPanel } = useReportState();
   return (
     <Link
       variant={"info"}
       onFollow={() => {
         setHelpPanelType(props.type);
+        setShowHelpPanel(true);
       }}
     >
       info
