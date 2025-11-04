@@ -95,6 +95,7 @@ export default function (props: MetricGraphProps) {
           autosize: true,
         }}
         style={{ width: "100%", height: "100%" }}
+        useResizeHandler
       />
     </SpaceBetween>
   );

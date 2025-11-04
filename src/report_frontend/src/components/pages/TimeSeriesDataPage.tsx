@@ -1,13 +1,5 @@
 import React from "react";
-import {
-  Box,
-  Cards,
-  CardsProps,
-  Pagination,
-  SpaceBetween,
-  TextFilter,
-  Toggle,
-} from "@cloudscape-design/components";
+import { Box, Cards, CardsProps, Pagination, SpaceBetween, TextFilter, Toggle } from "@cloudscape-design/components";
 import { DataPageProps, DataType } from "../../definitions/types";
 import Header from "@cloudscape-design/components/header";
 import { RUNS } from "../../definitions/data-config";
@@ -65,7 +57,7 @@ export default function (props: DataPageProps) {
           {
             id: "combined_graphs",
             content: (metricKey) => (
-              <div style={{ paddingTop: "10px", paddingRight: "30px" }}>
+              <div style={{ paddingRight: "30px", overflowX: "hidden" }}>
                 <CombinedMetricGraph dataType={props.dataType} metricName={metricKey} key={props.dataType} />
               </div>
             ),
@@ -75,7 +67,7 @@ export default function (props: DataPageProps) {
           id: runName,
           header: <RunHeader runName={runName} />,
           content: (metricKey) => (
-            <div style={{ paddingTop: "10px", paddingRight: "30px" }}>
+            <div style={{ paddingRight: "30px", overflowX: "hidden" }}>
               <MetricGraph dataType={props.dataType} runName={runName} metricName={metricKey} key={props.dataType} />
             </div>
           ),

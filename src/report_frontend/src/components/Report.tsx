@@ -7,7 +7,7 @@ import { extractDataTypeFromFragment, getRunNumCpus } from "../utils/utils";
 import { ReportHelpPanel } from "./misc/ReportHelpPanel";
 import { NumCpusPerRun, SelectedCpusPerRun } from "../definitions/types";
 import TimeSeriesDataPage from "./pages/TimeSeriesDataPage";
-import KeyValuePairsDataPage from "./pages/KeyValuePairsDataPage";
+import KeyValueDataPage from "./pages/KeyValueDataPage";
 import GraphDataPage from "./pages/GraphDataPage";
 import TextDataPage from "./pages/TextDataPage";
 import ReportHomePage from "./pages/ReportHomePage";
@@ -17,8 +17,10 @@ import { MAX_NUM_CPU_SHOW_DEFAULT } from "../definitions/constants";
  * This component creates the APerf report top-level layout and controls which specific data tab to render
  */
 export default function () {
-  const { dataComponent, setDataComponent, setNumCpusPerRun, setSelectedCpusPerRun } = useReportState();
+  const { dataComponent, showHelpPanel, setShowHelpPanel, setDataComponent, setNumCpusPerRun, setSelectedCpusPerRun } =
+    useReportState();
   const [preprocessing, setPreprocessing] = React.useState(true);
+  const [showNavigation, setShowNavigation] = React.useState(true);
 
   React.useEffect(() => {
     // Allow the usage of URL fragment to control which data type to render
@@ -49,14 +51,22 @@ export default function () {
   return (
     <AppLayout
       contentType={"cards"}
-      toolsOpen={true}
+      toolsOpen={showHelpPanel}
       tools={<ReportHelpPanel />}
-      navigationOpen={true}
+      onToolsChange={({ detail }) => {
+        setShowHelpPanel(detail.open);
+        // Trigger a window resize event when the side panel is opened or closed, so that the Plotly graphs
+        // can resize accordingly. Add a 50ms delay here to let the changed components render first, so that
+        // the actual component size can be correctly read
+        setTimeout(() => window.dispatchEvent(new Event("resize")), 50);
+      }}
+      navigationOpen={showNavigation}
       navigation={<DataNavigation />}
-      // This is to make the page horizontally scrollable when there are multiple runs. The contents
-      // should be at least as wide as the browser windows minus the width of the navigation and help
-      // panel (about 650). Each metric graph should at least be 750px wide.
-      minContentWidth={Math.max(window.screen.width - 650, 750 * RUNS.length)}
+      onNavigationChange={({ detail }) => {
+        setShowNavigation(detail.open);
+        // Same reasoning as the help panel
+        setTimeout(() => window.dispatchEvent(new Event("resize")), 50);
+      }}
       content={
         <>
           {preprocessing && <Spinner size={"large"} />}
@@ -65,7 +75,7 @@ export default function () {
             <TimeSeriesDataPage dataType={dataComponent} key={dataComponent} />
           )}
           {!preprocessing && dataFormat == "key_value" && (
-            <KeyValuePairsDataPage dataType={dataComponent} key={dataComponent} />
+            <KeyValueDataPage dataType={dataComponent} key={dataComponent} />
           )}
           {!preprocessing && dataFormat == "graph" && <GraphDataPage dataType={dataComponent} key={dataComponent} />}
           {!preprocessing && dataFormat == "text" && <TextDataPage dataType={dataComponent} key={dataComponent} />}

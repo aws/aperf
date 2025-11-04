@@ -54,7 +54,7 @@ export const NAVIGATION_CONFIGS: NavigationConfig[] = [
     items: ["cpu_utilization", "processes", "perf_stat", "meminfo", "vmstat", "interrupts", "diskstats", "netstat"],
   },
   {
-    sectionName: "Metadata",
+    sectionName: "System Configurations",
     items: ["kernel_config", "sysctl"],
   },
   {
