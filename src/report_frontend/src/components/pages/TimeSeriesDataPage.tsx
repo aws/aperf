@@ -1,9 +1,9 @@
 import React from "react";
 import { Box, Cards, CardsProps, Pagination, SpaceBetween, TextFilter, Toggle } from "@cloudscape-design/components";
-import { DataPageProps, DataType } from "../../definitions/types";
+import { DataPageProps, DataType, TimeSeriesData } from "../../definitions/types";
 import Header from "@cloudscape-design/components/header";
-import { RUNS } from "../../definitions/data-config";
-import { getDataTypeSortedMetricNames, getDataTypeNonZeroMetricKeys } from "../../utils/utils";
+import { PROCESSED_DATA, RUNS } from "../../definitions/data-config";
+import { getDataTypeNonZeroMetricKeys } from "../../utils/utils";
 import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import { useCollection } from "@cloudscape-design/collection-hooks";
 import { ReportHelpPanelLink } from "../misc/ReportHelpPanel";
@@ -13,7 +13,6 @@ import MetricGraph from "../data/MetricGraph";
 import { RunHeader } from "../data/RunSystemInfo";
 import CombinedMetricGraph from "../data/CombinedMetricGraph";
 
-const SORTED_METRIC_NAMES_CACHE = new Map<DataType, string[]>();
 const NON_ZERO_METRIC_NAMES_CACHE = new Map<DataType, string[]>();
 
 /**
@@ -24,24 +23,26 @@ export default function (props: DataPageProps) {
   const { numMetricGraphsPerPage, combineGraphs, setCombineGraphs } = useReportState();
 
   const [hideAllZeroMetrics, setHideAllZeroMetrics] = React.useState(true);
-  // Compute and cache the sorted metric names across all runs, and the result
-  // decide the order of which metric graphs are present
-  let sortedMetricKeys: string[];
-  if (SORTED_METRIC_NAMES_CACHE.has(props.dataType)) {
-    sortedMetricKeys = SORTED_METRIC_NAMES_CACHE.get(props.dataType);
-  } else {
-    sortedMetricKeys = getDataTypeSortedMetricNames(props.dataType);
-    SORTED_METRIC_NAMES_CACHE.set(props.dataType, sortedMetricKeys);
+
+  let sortedMetricNames = [];
+  // Extract the sorted metric names from any run data. The data should already be post-processed in
+  // Rust and the sorted_metric_names field should be consolidated and consistent across all runs.
+  for (const runName of RUNS) {
+    const time_series_data = PROCESSED_DATA[props.dataType].runs[runName] as TimeSeriesData;
+    if (time_series_data) {
+      sortedMetricNames = time_series_data.sorted_metric_names;
+      break;
+    }
   }
 
   // If the option is enabled, perform an extra step to filter out names of all-zero metrics
   // so that they will not be rendered
   if (hideAllZeroMetrics) {
     if (NON_ZERO_METRIC_NAMES_CACHE.has(props.dataType)) {
-      sortedMetricKeys = NON_ZERO_METRIC_NAMES_CACHE.get(props.dataType);
+      sortedMetricNames = NON_ZERO_METRIC_NAMES_CACHE.get(props.dataType);
     } else {
-      sortedMetricKeys = getDataTypeNonZeroMetricKeys(props.dataType, sortedMetricKeys);
-      NON_ZERO_METRIC_NAMES_CACHE.set(props.dataType, sortedMetricKeys);
+      sortedMetricNames = getDataTypeNonZeroMetricKeys(props.dataType, sortedMetricNames);
+      NON_ZERO_METRIC_NAMES_CACHE.set(props.dataType, sortedMetricNames);
     }
   }
 
@@ -75,16 +76,19 @@ export default function (props: DataPageProps) {
         })),
   };
 
-  const { items, filteredItemsCount, collectionProps, filterProps, paginationProps } = useCollection(sortedMetricKeys, {
-    filtering: {
-      filteringFunction: (item: string, filteringText: string) =>
-        item.toLowerCase().startsWith(filteringText.toLowerCase()),
-      empty: <Box variant={"p"}>No metrics were collected</Box>,
-      noMatch: <Box variant={"p"}>No metrics found</Box>,
+  const { items, filteredItemsCount, collectionProps, filterProps, paginationProps } = useCollection(
+    sortedMetricNames,
+    {
+      filtering: {
+        filteringFunction: (item: string, filteringText: string) =>
+          item.toLowerCase().startsWith(filteringText.toLowerCase()),
+        empty: <Box variant={"p"}>No metrics were collected</Box>,
+        noMatch: <Box variant={"p"}>No metrics found</Box>,
+      },
+      pagination: { pageSize: Math.floor(numMetricGraphsPerPage / RUNS.length) },
+      selection: {},
     },
-    pagination: { pageSize: Math.floor(numMetricGraphsPerPage / RUNS.length) },
-    selection: {},
-  });
+  );
 
   return (
     <Cards

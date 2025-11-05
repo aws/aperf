@@ -1,4 +1,4 @@
-use crate::data::data_formats::AperfData;
+use crate::data::data_formats::{AperfData, ReportData};
 use crate::data::JS_DIR;
 use crate::{data, PDError, VisualizationData};
 use anyhow::Result;
@@ -21,24 +21,6 @@ pub struct Report {
     /// The directory and archive name of the report.
     #[clap(help_heading = "Basic Options", short, long, value_parser)]
     pub name: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct ReportData {
-    data_name: String,
-    data_format: String,
-    runs: HashMap<String, AperfData>,
-}
-
-impl ReportData {
-    #[cfg(feature = "new-report")]
-    fn new(data_name: String) -> Self {
-        ReportData {
-            data_name,
-            data_format: String::new(),
-            runs: HashMap::new(),
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -404,26 +386,12 @@ fn generate_report_files(
         .extract(&report_dir)
         .expect("Failed to copy frontend files");
 
-    let visualizer_names = visualization_data.get_visualizer_names().unwrap(); // TODO: remove after replacing old get visualizer data
-    for name in visualizer_names {
-        let data_name = visualization_data.get_api(name.clone()).unwrap();
+    for (data_name, visualizer) in &mut visualization_data.visualizers {
+        visualizer.post_process_data();
+
         let processed_data_js_path = report_data_js_dir.join(format!("{}.js", data_name));
         let mut processed_data_js_file = File::create(processed_data_js_path).unwrap();
-        let mut report_data = ReportData::new(data_name.clone());
-        for run_name in run_names {
-            let visualizer = visualization_data
-                .visualizers
-                .get_mut(&name)
-                .ok_or(PDError::VisualizerHashMapEntryError(name.clone()))
-                .unwrap();
-            let data = match visualizer.run_values_new.get(run_name) {
-                Some(data) => data,
-                None => continue,
-            };
-            report_data.runs.insert(run_name.clone(), data.clone());
-            report_data.data_format = data.get_format_name();
-        }
-        let out_data = serde_json::to_string(&report_data).unwrap();
+        let out_data = serde_json::to_string(&visualizer.report_data).unwrap();
         write!(
             processed_data_js_file,
             "processed_{}_data = {}",

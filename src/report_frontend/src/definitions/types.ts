@@ -19,7 +19,7 @@ export const ALL_DATA_TYPES = [
 ] as const;
 export type DataType = (typeof ALL_DATA_TYPES)[number];
 
-export type DataFormat = "time_series" | "key_value" | "text" | "graph";
+export type DataFormat = "time_series" | "key_value" | "text" | "graph" | "unknown";
 
 // See src/data/data_formats.rs
 export type AperfData = TimeSeriesData | KeyValueData | TextData | GraphData;
