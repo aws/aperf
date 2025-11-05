@@ -15,6 +15,10 @@ APERF_IMAGE=""
 REPORT_NAME="aperf_record"
 OPEN_BROWSER=true
 SHOW_HELP=false
+CPU_REQUEST=""
+MEMORY_REQUEST=""
+CPU_LIMIT=""
+MEMORY_LIMIT=""
 
 # Define color and formatting codes
 BOLD="\033[1m"
@@ -34,6 +38,10 @@ while [ $# -gt 0 ]; do
     --aperf_image) dest="APERF_IMAGE";;
     --report-name) dest="REPORT_NAME";;
     --open-browser) dest="OPEN_BROWSER";;
+    --cpu-request) dest="CPU_REQUEST";;
+    --memory-request) dest="MEMORY_REQUEST";;
+    --cpu-limit) dest="CPU_LIMIT";;
+    --memory-limit) dest="MEMORY_LIMIT";;
     --help)
       SHOW_HELP=true
       shift
@@ -66,6 +74,10 @@ if [ "$SHOW_HELP" = true ]; then
   echo "  --aperf_options  Optional. Options to pass to aperf (default: '${APERF_OPTIONS}')"
   echo "  --report-name    Optional. Name for aperf record/report (default: '${REPORT_NAME}')"
   echo "  --open-browser   Optional. Open report in browser (default: ${OPEN_BROWSER})"
+  echo "  --cpu-request    Optional. CPU request (e.g., '1.0', '500m')"
+  echo "  --memory-request Optional. Memory request (e.g., '1Gi', '512Mi')"
+  echo "  --cpu-limit      Optional. CPU limit (e.g., '1.0', '500m')"
+  echo "  --memory-limit   Optional. Memory limit (e.g., '1Gi', '512Mi')"
   echo "  --help           Show this help message"
   exit 0
 fi
@@ -133,6 +145,29 @@ else
   echo -e "${GREEN}No taints found on node${NC}"
 fi
 
+RESOURCES=""
+if [ -n "$CPU_REQUEST" ] || [ -n "$MEMORY_REQUEST" ] || [ -n "$CPU_LIMIT" ] || [ -n "$MEMORY_LIMIT" ]; then
+  RESOURCES="    resources:"
+  
+  if [ -n "$CPU_REQUEST" ] || [ -n "$MEMORY_REQUEST" ]; then
+    RESOURCES="${RESOURCES}
+      requests:"
+    [ -n "$MEMORY_REQUEST" ] && RESOURCES="${RESOURCES}
+        memory: \"${MEMORY_REQUEST}\""
+    [ -n "$CPU_REQUEST" ] && RESOURCES="${RESOURCES}
+        cpu: \"${CPU_REQUEST}\""
+  fi
+  
+  if [ -n "$CPU_LIMIT" ] || [ -n "$MEMORY_LIMIT" ]; then
+    RESOURCES="${RESOURCES}
+      limits:"
+    [ -n "$MEMORY_LIMIT" ] && RESOURCES="${RESOURCES}
+        memory: \"${MEMORY_LIMIT}\""
+    [ -n "$CPU_LIMIT" ] && RESOURCES="${RESOURCES}
+        cpu: \"${CPU_LIMIT}\""
+  fi
+fi
+
 # Create pod YAML as a variable
 POD_YAML=$(cat << EOF
 apiVersion: v1
@@ -167,6 +202,7 @@ ${TOLERATIONS}
 
       echo -e "\nWaiting for files to be copied..."
       sleep 7200
+${RESOURCES}
     volumeMounts:
     - mountPath: /boot
       name: boot-volume
