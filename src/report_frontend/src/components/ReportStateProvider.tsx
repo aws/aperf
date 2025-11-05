@@ -27,7 +27,7 @@ const ReportStateContext = React.createContext<ReportState | undefined>(undefine
 export default function (props: { children: ReactNode }) {
   const [dataComponent, setDataComponent] = React.useState<DataType>("systeminfo");
   const [numMetricGraphsPerPage, setNumMetricGraphsPerPage] = React.useState(NUM_METRICS_PER_PAGE);
-  const [showHelpPanel, setShowHelpPanel] = React.useState(true);
+  const [showHelpPanel, setShowHelpPanel] = React.useState(false);
   const [helpPanelType, setHelpPanelType] = React.useState<string>("general");
   const [combineGraphs, setCombineGraphs] = React.useState(false);
   const [numCpusPerRun, setNumCpusPerRun] = React.useState<NumCpusPerRun>({});
@@ -39,7 +39,16 @@ export default function (props: { children: ReactNode }) {
     numMetricGraphsPerPage,
     setNumMetricGraphsPerPage,
     showHelpPanel,
-    setShowHelpPanel,
+    setShowHelpPanel: (newShowHelpPanel) => {
+      const curShowHelpPanel = showHelpPanel;
+      setShowHelpPanel(newShowHelpPanel);
+      if (curShowHelpPanel != newShowHelpPanel) {
+        // Trigger a window resize event when the side panel is opened or closed, so that the Plotly graphs
+        // can resize accordingly. Add a 50ms delay here to let the changed components render first, so that
+        // the actual component size can be correctly read
+        setTimeout(() => window.dispatchEvent(new Event("resize")), 50);
+      }
+    },
     helpPanelType,
     setHelpPanelType,
     combineGraphs,
