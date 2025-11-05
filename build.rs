@@ -7,6 +7,7 @@ fn main() -> Result<()> {
 
     println!("cargo:rerun-if-changed=package.json");
     println!("cargo:rerun-if-changed=package-lock.json");
+    println!("cargo:rerun-if-changed=build.rs");
 
     match Command::new("npm").arg("install").spawn() {
         Err(_proc) => {
@@ -22,22 +23,46 @@ fn main() -> Result<()> {
         }
     }
 
-    let jsdir = format!("{}/js", env::var("OUT_DIR").unwrap());
-    println!("cargo:rustc-env=JS_DIR={}", jsdir);
-    println!("cargo:rerun-if-changed=src/html_files/");
-    let status = Command::new("npm")
-        .arg("exec")
-        .arg("--")
-        .arg("tsc")
-        .arg("-p")
-        .arg("src/html_files/")
-        .arg("--outDir")
-        .arg(jsdir)
-        .spawn()?
-        .wait()?;
-    if !status.success() {
-        println!("Failed to compile typescript.");
-        std::process::exit(1);
+    #[cfg(not(feature = "new-report"))]
+    {
+        let jsdir = format!("{}/js", env::var("OUT_DIR").unwrap());
+        println!("cargo:rustc-env=JS_DIR={}", jsdir);
+        println!("cargo:rerun-if-changed=src/html_files/");
+        let status = Command::new("npm")
+            .arg("exec")
+            .arg("--")
+            .arg("tsc")
+            .arg("-p")
+            .arg("src/html_files/")
+            .arg("--outDir")
+            .arg(jsdir)
+            .spawn()?
+            .wait()?;
+        if !status.success() {
+            println!("Failed to compile typescript.");
+            std::process::exit(1);
+        }
+    }
+
+    #[cfg(feature = "new-report")]
+    {
+        let report_frontend_dir = format!("{}/report_frontend", env::var("OUT_DIR")?);
+        println!("cargo:rustc-env=JS_DIR={}", report_frontend_dir);
+        println!("cargo:rerun-if-changed=src/report_frontend/*");
+        let status = Command::new("npm")
+            .arg("exec")
+            .arg("--")
+            .arg("webpack")
+            .arg("--config")
+            .arg("src/report_frontend/webpack.config.js")
+            .arg("--env")
+            .arg(format!("output={report_frontend_dir}"))
+            .spawn()?
+            .wait()?;
+        if !status.success() {
+            println!("Failed to compile report frontend Javascript.");
+            std::process::exit(1);
+        }
     }
 
     #[cfg(all(feature = "hotline", not(target_arch = "aarch64")))]

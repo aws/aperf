@@ -323,7 +323,6 @@ impl GetData for Processes {
         let mut per_field_per_process_series: HashMap<ProcessKey, HashMap<String, Series>> =
             HashMap::new();
 
-        let ticks_per_second: u64 = *TICKS_PER_SECOND.lock().unwrap();
         let time_zero = if let Some(first_buffer) = raw_data.first() {
             match first_buffer {
                 Data::ProcessesRaw(ref value) => value.time,
@@ -333,12 +332,15 @@ impl GetData for Processes {
             return Ok(AperfData::TimeSeries(time_series_data));
         };
 
+        let mut ticks_per_second_option: Option<f64> = None;
         // Get data into Series format
         for buffer in raw_data {
             let raw_value = match buffer {
                 Data::ProcessesRaw(ref value) => value,
                 _ => panic!("Invalid Data type in raw file"),
             };
+
+            ticks_per_second_option.get_or_insert(raw_value.ticks_per_second as f64);
 
             let time: u64 = match raw_value.time - time_zero {
                 TimeEnum::TimeDiff(v) => v,
@@ -381,6 +383,9 @@ impl GetData for Processes {
             }
         }
 
+        // If the raw data is empty default ticks per second to 1, in which case it should never
+        // be used to compute any series values
+        let ticks_per_second = ticks_per_second_option.unwrap_or_else(|| 1.0);
         // Track totals for filtering top processes
         let mut process_totals_map: HashMap<ProcessKey, HashMap<String, f64>> = HashMap::new();
 
