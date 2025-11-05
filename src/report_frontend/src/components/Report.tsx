@@ -22,6 +22,8 @@ export default function () {
   const [preprocessing, setPreprocessing] = React.useState(true);
   const [showNavigation, setShowNavigation] = React.useState(true);
 
+  // All the pre-processing logics that set up the report states/variables are defined below. The code
+  // will only run once when the report is loaded.
   React.useEffect(() => {
     // Allow the usage of URL fragment to control which data type to render
     const dataType = extractDataTypeFromFragment(window.location.hash);
@@ -55,16 +57,12 @@ export default function () {
       tools={<ReportHelpPanel />}
       onToolsChange={({ detail }) => {
         setShowHelpPanel(detail.open);
-        // Trigger a window resize event when the side panel is opened or closed, so that the Plotly graphs
-        // can resize accordingly. Add a 50ms delay here to let the changed components render first, so that
-        // the actual component size can be correctly read
-        setTimeout(() => window.dispatchEvent(new Event("resize")), 50);
       }}
       navigationOpen={showNavigation}
       navigation={<DataNavigation />}
       onNavigationChange={({ detail }) => {
         setShowNavigation(detail.open);
-        // Same reasoning as the help panel
+        // Same reasoning as the help panel (see the definition of setShowHelpPanel)
         setTimeout(() => window.dispatchEvent(new Event("resize")), 50);
       }}
       content={
@@ -79,7 +77,7 @@ export default function () {
           )}
           {!preprocessing && dataFormat == "graph" && <GraphDataPage dataType={dataComponent} key={dataComponent} />}
           {!preprocessing && dataFormat == "text" && <TextDataPage dataType={dataComponent} key={dataComponent} />}
-          {!preprocessing && (dataFormat as string) === "" && (
+          {!preprocessing && (dataFormat == "unknown" || (dataFormat as string) === "" || dataFormat === undefined) && (
             <Box textAlign="center" color="inherit">
               <b>Unavailable Data</b>
               <Box variant="p" color="inherit">

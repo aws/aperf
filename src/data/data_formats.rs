@@ -1,9 +1,41 @@
 use serde::{Deserialize, Serialize, Serializer};
 use std::collections::HashMap;
+use strum_macros::Display;
 
 /// This module defines generalized data types of all Aperf processed data used by the analytical
 /// engines and frontend JavaScripts. Before introducing a new data type, ensure that it can be
 /// processed into one of the formats defined here.
+
+/// The identifier of the data format, which is used by the frontend to easily
+/// recognize and parse the processed data.
+#[derive(Serialize, Deserialize, Debug, Display, Clone, Copy)]
+#[strum(serialize_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+pub enum DataFormat {
+    TimeSeries,
+    Text,
+    KeyValue,
+    Graph,
+    Unknown,
+}
+
+/// The struct holding processed data across all runs for a data type
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ReportData {
+    pub data_name: String,
+    pub data_format: DataFormat,
+    pub runs: HashMap<String, AperfData>,
+}
+
+impl ReportData {
+    pub fn new(data_name: String) -> Self {
+        ReportData {
+            data_name,
+            data_format: DataFormat::Unknown,
+            runs: HashMap::new(),
+        }
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
@@ -15,14 +47,12 @@ pub enum AperfData {
 }
 
 impl AperfData {
-    /// The string identifier of the data format, which is used by the frontend to easily
-    /// recognize and parse the processed data.
-    pub fn get_format_name(&self) -> String {
+    pub fn get_format_name(&self) -> DataFormat {
         match self {
-            AperfData::TimeSeries(_) => "time_series".to_string(),
-            AperfData::Text(_) => "text".to_string(),
-            AperfData::KeyValue(_) => "key_value".to_string(),
-            AperfData::Graph(_) => "graph".to_string(),
+            AperfData::TimeSeries(_) => DataFormat::TimeSeries,
+            AperfData::Text(_) => DataFormat::Text,
+            AperfData::KeyValue(_) => DataFormat::KeyValue,
+            AperfData::Graph(_) => DataFormat::Graph,
         }
     }
 }
