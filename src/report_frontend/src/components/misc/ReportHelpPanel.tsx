@@ -24,16 +24,16 @@ export function ReportHelpPanel() {
   let desiredValueMessage: string | undefined = undefined;
   switch (metricInfo?.desired) {
     case "higher":
-      desiredValueMessage = "Higher values of this metric usually indicate better performances.";
+      desiredValueMessage = "Higher values of this metric usually indicate better performance.";
       break;
     case "lower":
-      desiredValueMessage = "Lower values of this metric usually indicate better performances.";
+      desiredValueMessage = "Lower values of this metric usually indicate better performance.";
       break;
     case "moderate":
-      desiredValueMessage = "Moderate values of this metric usually indicate better performances.";
+      desiredValueMessage = "Moderate values of this metric usually indicate better performance.";
       break;
     case "depends":
-      desiredValueMessage = "The desired values of this metric depend on the type of workloads.";
+      desiredValueMessage = "The desired values of this metric depends on the type of workload.";
       break;
     case "fixed":
       desiredValueMessage = "The values of this metric should be fixed.";
