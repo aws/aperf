@@ -178,12 +178,12 @@ fn test_process_interrupts_raw_data_complex() {
 
     if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
         let mut expected_metric_names: HashMap<&str, &str> = HashMap::new();
-        expected_metric_names.insert("5", "Interrupt #5 (Some info about irq 5 ACPI:Ged)");
-        expected_metric_names.insert("10", "Interrupt #10 (Some info about irq 10 ACPI:Ged)");
-        expected_metric_names.insert("25", "Interrupt #25 (Some info about irq 25 ACPI:Ged)");
-        expected_metric_names.insert("123", "Interrupt #123 (Some info about irq 123 ACPI:Ged)");
-        expected_metric_names.insert("IPI0", "IPI0 (Some other info about this named interrupt)");
-        expected_metric_names.insert("IPI6", "IPI6 (Some other info about this named interrupt)");
+        expected_metric_names.insert("5", "Interrupt #5");
+        expected_metric_names.insert("10", "Interrupt #10");
+        expected_metric_names.insert("25", "Interrupt #25");
+        expected_metric_names.insert("123", "Interrupt #123");
+        expected_metric_names.insert("IPI0", "IPI0");
+        expected_metric_names.insert("IPI6", "IPI6");
         expected_metric_names.insert("ERR", "ERR");
         expected_metric_names.insert("MIS", "MIS");
 
@@ -294,15 +294,13 @@ fn test_process_interrupts_raw_data_simple() {
     if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
         assert_eq!(time_series_data.metrics.len(), 2);
 
-        let irq_11_metric =
-            &time_series_data.metrics["Interrupt #11 (Some info about irq 11 ACPI:Ged)"];
+        let irq_11_metric = &time_series_data.metrics["Interrupt #11"];
         assert_eq!(irq_11_metric.series.len(), 3); // 2 CPUs + 1 aggregate
         assert_eq!(irq_11_metric.series[0].values, vec![0.0, 50.0, 25.0]); // CPU0
         assert_eq!(irq_11_metric.series[1].values, vec![0.0, 75.0, 30.0]); // CPU1
         assert_eq!(irq_11_metric.series[2].values, vec![0.0, 62.5, 27.5]); // Average
 
-        let irq_12_metric =
-            &time_series_data.metrics["Interrupt #15 (Some info about irq 15 ACPI:Ged)"];
+        let irq_12_metric = &time_series_data.metrics["Interrupt #15"];
         assert_eq!(irq_12_metric.series.len(), 3); // 2 CPUs + 1 aggregate
         assert_eq!(irq_12_metric.series[0].values, vec![0.0, 60.0]); // CPU0
         assert_eq!(irq_12_metric.series[1].values, vec![0.0, 70.0]); // CPU1
