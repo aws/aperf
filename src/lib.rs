@@ -471,7 +471,6 @@ impl VisualizationData {
 
     pub fn unpack_data_new(&mut self, name: String) -> Result<()> {
         for (dvname, datavisualizer) in self.visualizers.iter_mut() {
-            debug!("Unpacking data for: {}", dvname);
             if datavisualizer.process_raw_data_new(name.clone()).is_err() {
                 // TODO: remove once all are implemented
                 debug!("process_raw_data_new not implemented for: {}", dvname);
