@@ -284,7 +284,6 @@ fn get_line_data(values: Vec<InterruptData>, key: String) -> Result<String> {
 #[derive(Clone)]
 struct Interrupt {
     pub interrupt_name: String,
-    pub interrupt_info: String,
     pub per_cpu_values: Vec<u64>,
     pub average_value: f64,
 }
@@ -293,7 +292,6 @@ impl Interrupt {
     fn new(interrupt_name: String) -> Self {
         Interrupt {
             interrupt_name,
-            interrupt_info: String::new(),
             per_cpu_values: Vec::new(),
             average_value: 0.0,
         }
@@ -320,7 +318,6 @@ fn parse_raw_interrupt_data(raw_interrupt_data: &String) -> Vec<Interrupt> {
         };
 
         let mut interrupt = Interrupt::new(interrupt_name.clone());
-        let mut interrupt_info_items: Vec<String> = Vec::new();
         let mut cpu_value_sum: u64 = 0;
 
         // process every CPU's value
@@ -335,12 +332,7 @@ fn parse_raw_interrupt_data(raw_interrupt_data: &String) -> Vec<Interrupt> {
                 None => break,
             }
         }
-        // store the remaining items as the interrupt info
-        for raw_column in raw_columns {
-            interrupt_info_items.push(raw_column.to_string());
-        }
 
-        interrupt.interrupt_info = interrupt_info_items.join(" ");
         // The MIS and ERR interrupts do not have per CPU counts
         if is_interrupt_name_mis_err(&interrupt_name) {
             interrupt.per_cpu_values.clear();
@@ -358,20 +350,8 @@ fn parse_raw_interrupt_data(raw_interrupt_data: &String) -> Vec<Interrupt> {
 /// Generate the name of the interrupt metric based on the interrupt name, number, and info.
 fn get_interrupt_metric_name(interrupt: &Interrupt) -> String {
     match interrupt.interrupt_name.parse::<u64>() {
-        Ok(interrupt_number) => format!(
-            "Interrupt #{} ({})",
-            interrupt_number, interrupt.interrupt_info
-        ),
-        Err(_) => {
-            if interrupt.interrupt_info.is_empty() {
-                interrupt.interrupt_name.clone()
-            } else {
-                format!(
-                    "{} ({})",
-                    interrupt.interrupt_name, interrupt.interrupt_info
-                )
-            }
-        }
+        Ok(interrupt_number) => format!("Interrupt #{}", interrupt_number,),
+        Err(_) => interrupt.interrupt_name.clone(),
     }
 }
 
