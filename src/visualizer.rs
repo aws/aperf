@@ -160,7 +160,7 @@ impl DataVisualizer {
             debug!("Raw data unavailable for: {}", self.api_name);
             return Ok(());
         }
-        debug!("Processing raw data new for: {}", self.api_name);
+        debug!("Processing raw {} data in {}", self.api_name, run_name);
 
         self.file_handle
             .as_ref()
