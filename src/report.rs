@@ -90,6 +90,7 @@ pub fn form_and_copy_archive(loc: PathBuf, report_name: &Path, tmp_dir: &Path) -
 }
 
 pub fn is_report_dir(dir: PathBuf) -> Option<PathBuf> {
+    /* Legacy report detection */
     if dir.join("index.css").exists()
         && dir.join("index.html").exists()
         && dir.join("index.js").exists()
@@ -98,6 +99,17 @@ pub fn is_report_dir(dir: PathBuf) -> Option<PathBuf> {
     {
         return Some(dir.join("data/archive"));
     }
+
+    /* New report detection */
+    if dir.join("main.css").exists()
+        && dir.join("index.html").exists()
+        && dir.join("bundle.js").exists()
+        && dir.join("data").exists()
+        && dir.join("data/archive").exists()
+    {
+        return Some(dir.join("data/archive"));
+    }
+
     None
 }
 

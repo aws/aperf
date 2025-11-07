@@ -5,11 +5,11 @@ import { CPU_DATA_TYPES, PROCESSED_DATA } from "../../definitions/data-config";
 import Plot from "react-plotly.js";
 import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import { Box, SpaceBetween } from "@cloudscape-design/components";
-import { formatNumber, shouldShowCpuSeries } from "../../utils/utils";
+import { shouldShowCpuSeries } from "../../utils/utils";
+import MetricStatsDisplay from "./MetricStatsDisplay";
 
 /**
- * Transform processed time series data into the format required by plotly.js and generate the
- * stats string.
+ * Transform processed time series data into the format required by plotly.js.
  */
 function getSeriesData(
   dataType: DataType,
@@ -17,15 +17,14 @@ function getSeriesData(
   metricName: string,
   selectedAggregate: boolean,
   selectedCpus: boolean[],
-): { seriesData: Partial<Plotly.PlotData>[]; statsString: string; valueRange: number[] } {
+): {
+  seriesData: Partial<Plotly.PlotData>[];
+  valueRange: number[];
+} {
   const metrics = (PROCESSED_DATA[dataType].runs[runName] as TimeSeriesData)?.metrics;
-  if (metrics === undefined) return { seriesData: [], statsString: "", valueRange: [] };
+  if (metrics === undefined) return { seriesData: [], valueRange: [] };
   const metric = metrics[metricName];
-  if (metric === undefined) return { seriesData: [], statsString: "", valueRange: [] };
-
-  const statsString = Object.entries(metric.stats)
-    .map(([statName, statValue]) => `${statName}: ${formatNumber(statValue)}`)
-    .join(" | ");
+  if (metric === undefined) return { seriesData: [], valueRange: [] };
 
   const isCpuDataType = CPU_DATA_TYPES.includes(dataType);
   const seriesData = metric.series.map(
@@ -44,7 +43,7 @@ function getSeriesData(
 
   const valueRange = metric.value_range;
 
-  return { seriesData, statsString, valueRange };
+  return { seriesData, valueRange };
 }
 
 export interface MetricGraphProps {
@@ -59,7 +58,7 @@ export interface MetricGraphProps {
 export default function (props: MetricGraphProps) {
   const { selectedCpusPerRun } = useReportState();
 
-  const { seriesData, statsString, valueRange } = getSeriesData(
+  const { seriesData, valueRange } = getSeriesData(
     props.dataType,
     props.runName,
     props.metricName,
@@ -80,7 +79,7 @@ export default function (props: MetricGraphProps) {
 
   return (
     <SpaceBetween size={"xs"}>
-      <Box variant={"small"}>{statsString}</Box>
+      <MetricStatsDisplay dataType={props.dataType} runName={props.runName} metricName={props.metricName} />
       <Plot
         data={seriesData}
         layout={{
