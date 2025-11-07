@@ -63,6 +63,7 @@ pub fn form_and_copy_archive(loc: PathBuf, report_name: &Path, tmp_dir: &Path) -
         let archive_name = format!("{}.tar.gz", &dir_name);
         let archive_path = tmp_dir.join(&archive_name);
         let archive_dst = report_name.join(format!("data/archive/{}", archive_name));
+        info!("Creating archive {}", archive_path.display());
         {
             let tar_gz = fs::File::create(&archive_path)?;
             let enc = GzEncoder::new(tar_gz, Compression::default());
@@ -71,6 +72,7 @@ pub fn form_and_copy_archive(loc: PathBuf, report_name: &Path, tmp_dir: &Path) -
         }
 
         /* Copy archive to aperf_report */
+        info!("Copying archive to {}", archive_dst.display());
         fs::copy(&archive_path, archive_dst)?;
         return Ok(());
     }
@@ -79,6 +81,8 @@ pub fn form_and_copy_archive(loc: PathBuf, report_name: &Path, tmp_dir: &Path) -
 
         /* Copy archive to aperf_report */
         let archive_dst = report_name.join(format!("data/archive/{}", file_name));
+
+        info!("Copying archive to {}", archive_dst.display());
         fs::copy(loc, archive_dst)?;
         return Ok(());
     }
@@ -86,6 +90,7 @@ pub fn form_and_copy_archive(loc: PathBuf, report_name: &Path, tmp_dir: &Path) -
 }
 
 pub fn is_report_dir(dir: PathBuf) -> Option<PathBuf> {
+    /* Legacy report detection */
     if dir.join("index.css").exists()
         && dir.join("index.html").exists()
         && dir.join("index.js").exists()
@@ -94,6 +99,17 @@ pub fn is_report_dir(dir: PathBuf) -> Option<PathBuf> {
     {
         return Some(dir.join("data/archive"));
     }
+
+    /* New report detection */
+    if dir.join("main.css").exists()
+        && dir.join("index.html").exists()
+        && dir.join("bundle.js").exists()
+        && dir.join("data").exists()
+        && dir.join("data/archive").exists()
+    {
+        return Some(dir.join("data/archive"));
+    }
+
     None
 }
 
@@ -112,6 +128,7 @@ pub fn get_dir(dir: PathBuf, tmp_dir: &PathBuf) -> Result<PathBuf> {
     }
     /* Unpack if archive */
     if infer::get_from_path(&dir)?.unwrap().mime_type() == "application/gzip" {
+        info!("Extracting {}", dir.display());
         let tar_gz = File::open(&dir)?;
         let tar = GzDecoder::new(tar_gz);
         let mut archive = tar::Archive::new(tar);
@@ -386,6 +403,7 @@ fn generate_report_files(
         .extract(&report_dir)
         .expect("Failed to copy frontend files");
 
+    info!("Writing processed data into report");
     for (data_name, visualizer) in &mut visualization_data.visualizers {
         visualizer.post_process_data();
 
@@ -410,6 +428,7 @@ fn generate_report_files(
     // here will overwrite the run name after the '.'. To prevent that set the filename.
     report_name_tgz.set_file_name(report_dir.to_str().unwrap().to_owned() + ".tar.gz");
 
+    info!("Creating report archive");
     let tar_gz = File::create(&report_name_tgz).unwrap();
     let enc = GzEncoder::new(tar_gz, Compression::default());
     let mut tar = tar::Builder::new(enc);

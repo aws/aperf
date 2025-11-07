@@ -40,19 +40,13 @@ jobs:
         run: sudo yum install -y "@Development Tools"
       - name: Install musl
         env:
-          MUSL_VERSION: musl-1.2.5
+          MUSL_VERSION: v1.2.5
         run: |
-          curl https://musl.libc.org/releases/$MUSL_VERSION.tar.gz -o $MUSL_VERSION.tar.gz
-          curl https://musl.libc.org/releases/$MUSL_VERSION.tar.gz.asc -o $MUSL_VERSION.tar.gz.asc
-          curl https://musl.libc.org/musl.pub -o musl.pub
-          sudo yum install -y gnupg
-          gpg --import musl.pub || true
-          gpg --verify $MUSL_VERSION.tar.gz.asc $MUSL_VERSION.tar.gz
-          tar -xvf $MUSL_VERSION.tar.gz
-          cd $MUSL_VERSION
+          git clone --depth 1 --branch $MUSL_VERSION https://github.com/kraj/musl.git
+          cd musl
           ./configure --prefix=/opt/musl
           sudo make install
-          cd .. && sudo rm -rf $MUSL_VERSION*
+          cd .. && sudo rm -rf musl
           if [ $(arch) = "aarch64" ]; then
             sudo ln -snf /opt/musl/bin/musl-gcc /usr/bin/aarch64-linux-musl-gcc
           else
