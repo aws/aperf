@@ -144,6 +144,8 @@ impl GetData for AperfStat {
         }
 
         let mut time_zero: Option<TimeEnum> = None;
+        // Keep track of the minimum value for each metric to set the value range
+        let mut per_metric_min_value: HashMap<String, u64> = HashMap::new();
 
         for value in values {
             let time_diff: u64 = match value.time - *time_zero.get_or_insert(value.time) {
@@ -153,14 +155,15 @@ impl GetData for AperfStat {
 
             for (name, stat) in value.data {
                 let datatype: Vec<&str> = name.split('-').collect();
-                let series_name = datatype.get(1).unwrap_or(&datatype[0]).to_string();
+                let metric_name = datatype[0];
+                let series_name = datatype.get(1).unwrap_or(&metric_name).to_string();
 
                 let metric = time_series_data
                     .metrics
-                    .entry(datatype[0].to_string())
-                    .or_insert_with(|| TimeSeriesMetric::new(datatype[0].to_string()));
+                    .entry(metric_name.to_string())
+                    .or_insert(TimeSeriesMetric::new(metric_name.to_string()));
 
-                let series = if datatype[0] == "aperf" {
+                let series = if metric_name == "aperf" {
                     if metric.series.is_empty() {
                         metric.series.push(Series::new(Some(series_name)));
                     }
@@ -178,6 +181,13 @@ impl GetData for AperfStat {
                         }
                     }
                 };
+
+                // Keep track of the global min value for the metric
+                if let Some(min_value) = per_metric_min_value.get_mut(metric_name) {
+                    *min_value = (*min_value).min(stat);
+                } else {
+                    per_metric_min_value.insert(metric_name.to_string(), stat);
+                }
 
                 series.values.push(stat as f64);
                 series.time_diff.push(time_diff);
@@ -214,7 +224,7 @@ impl GetData for AperfStat {
 
             metric.stats = Statistics::from_values(&series.values);
             metric.value_range = (
-                metric.stats.min.floor() as u64,
+                *per_metric_min_value.get(metric_name).unwrap_or(&0),
                 metric.stats.max.ceil() as u64,
             );
             metrics_with_avg.push((metric_name.clone(), metric.stats.avg));

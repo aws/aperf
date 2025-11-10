@@ -679,6 +679,9 @@ impl GetData for PerfStat {
                             continue;
                         }
                     };
+                if denominator == 0.0 {
+                    continue;
+                }
                 let pmu_stat_value = numerator / denominator * scale;
 
                 // For the computation of aggregate PMU stats

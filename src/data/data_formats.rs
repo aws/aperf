@@ -169,7 +169,7 @@ impl Statistics {
         let std = (sum_sq_diff / n as f64).sqrt();
 
         let mut sorted_values = values.clone();
-        sorted_values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted_values.sort_by(|a, b| a.total_cmp(b));
         let p50 = sorted_values[(0.5 * n as f64).floor() as usize];
         let p90 = sorted_values[(0.9 * n as f64).floor() as usize];
         let p99 = sorted_values[(0.99 * n as f64).floor() as usize];

@@ -530,7 +530,13 @@ impl GetData for CpuUtilization {
             let mut aggregate_metric = TimeSeriesMetric::default();
             aggregate_metric.metric_name = aggregate_metric_name.to_string();
             aggregate_metric.value_range = (0, 100);
-            aggregate_metric.series = per_cpu_state_aggregate_series.into_values().collect();
+            for cpu_state in CpuState::iter() {
+                if let Some(cpu_state_aggregate_series) =
+                    per_cpu_state_aggregate_series.remove(&cpu_state)
+                {
+                    aggregate_metric.series.push(cpu_state_aggregate_series);
+                }
+            }
             aggregate_metric.stats = Statistics::from_values(&aggregate_total_util_series.values);
             aggregate_metric.series.push(aggregate_total_util_series);
             time_series_data

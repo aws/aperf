@@ -391,3 +391,72 @@ fn test_process_pmu_stat_empty_data() {
         panic!("Expected TimeSeries data");
     }
 }
+
+#[test]
+fn test_process_pmu_stat_zero_denominator_data_point_skipped() {
+    let mut raw_data = Vec::new();
+    let base_time = Utc.with_ymd_and_hms(2023, 1, 1, 0, 0, 0).unwrap();
+
+    // Create raw data with zero denominators that should be skipped
+    let raw_stat = PerfStatRaw {
+        time: TimeEnum::DateTime(base_time),
+        data: "0 some_stat; 1000 2000; 0 0;1\n1 some_stat; 3000 4000; 5000 5000;1".to_string(),
+    };
+    raw_data.push(Data::PerfStatRaw(raw_stat));
+
+    let result = PerfStat::new()
+        .process_raw_data_new(ReportParams::new(), raw_data)
+        .unwrap();
+
+    if let AperfData::TimeSeries(time_series_data) = result {
+        // Should have no metrics since all denominators are zero
+        assert_eq!(time_series_data.metrics.len(), 1);
+        assert_eq!(time_series_data.sorted_metric_names.len(), 1);
+        let metric = &time_series_data.metrics["some_stat"];
+        assert_eq!(metric.series.len(), 3);
+        // The series for CPU should be created but not contain any values
+        assert_eq!(metric.series[0].values.len(), 0);
+        assert_eq!(metric.series[1].values[0], 0.7);
+        assert_eq!(metric.series[2].values[0], 0.7);
+    } else {
+        panic!("Expected TimeSeries data");
+    }
+}
+
+#[test]
+fn test_process_pmu_stat_zero_nonzero_metric_skipped() {
+    let mut raw_data = Vec::new();
+    let base_time = Utc.with_ymd_and_hms(2023, 1, 1, 0, 0, 0).unwrap();
+
+    // Create raw data with mixed zero and non-zero denominators
+    let raw_stat = PerfStatRaw {
+        time: TimeEnum::DateTime(base_time),
+        data:
+            "0 valid_stat; 1000; 2000;1\n0 zero_denom_stat; 1000; 0;1\n1 valid_stat; 3000; 4000;1"
+                .to_string(),
+    };
+    raw_data.push(Data::PerfStatRaw(raw_stat));
+
+    let result = PerfStat::new()
+        .process_raw_data_new(ReportParams::new(), raw_data)
+        .unwrap();
+
+    if let AperfData::TimeSeries(time_series_data) = result {
+        // Should have only 1 metric (valid_stat), zero_denom_stat should be skipped
+        assert_eq!(time_series_data.metrics.len(), 1);
+        assert_eq!(time_series_data.sorted_metric_names, vec!["valid_stat"]);
+
+        let metric = &time_series_data.metrics["valid_stat"];
+        // Should have 3 series: 2 CPUs + 1 aggregate
+        assert_eq!(metric.series.len(), 3);
+
+        // Verify the values are calculated correctly for valid denominators
+        assert_eq!(metric.series[0].values[0], 0.5); // CPU 0: 1000/2000 * 1 = 0.5
+        assert_eq!(metric.series[1].values[0], 0.75); // CPU 1: 3000/4000 * 1 = 0.75
+
+        // Aggregate: (1000*1 + 3000*1) / (2000 + 4000) = 4000/6000 = 0.6667
+        assert!((metric.series[2].values[0] - (4000.0 / 6000.0)).abs() < 1e-5);
+    } else {
+        panic!("Expected TimeSeries data");
+    }
+}
