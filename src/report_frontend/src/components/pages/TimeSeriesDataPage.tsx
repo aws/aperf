@@ -81,7 +81,7 @@ export default function (props: DataPageProps) {
     {
       filtering: {
         filteringFunction: (item: string, filteringText: string) =>
-          item.toLowerCase().startsWith(filteringText.toLowerCase()),
+          item.toLowerCase().includes(filteringText.toLowerCase()),
         empty: <Box variant={"p"}>No metrics were collected</Box>,
         noMatch: <Box variant={"p"}>No metrics found</Box>,
       },

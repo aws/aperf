@@ -156,7 +156,12 @@ impl GetData for AperfStat {
             for (name, stat) in value.data {
                 let datatype: Vec<&str> = name.split('-').collect();
                 let metric_name = datatype[0];
-                let series_name = datatype.get(1).unwrap_or(&metric_name).to_string();
+                let mut series_name = datatype.get(1).unwrap_or(&metric_name).to_string();
+                // Make the series name easier to understand - since it's essentially to write the
+                // collected data to disk
+                if series_name == "print" {
+                    series_name = "write".to_string();
+                }
 
                 let metric = time_series_data
                     .metrics
@@ -200,6 +205,11 @@ impl GetData for AperfStat {
             let series = if metric_name == "aperf" {
                 &mut metric.series[0]
             } else {
+                // sort the series first to make the order consistent across different runs
+                metric
+                    .series
+                    .sort_by(|a, b| a.series_name.cmp(&b.series_name));
+
                 // create new series that is the sum of all series
                 let mut total_series = Series::new(Some("total".to_string()));
                 if !metric.series.is_empty() {
