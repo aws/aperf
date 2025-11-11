@@ -51,7 +51,7 @@ interface NavigationConfig {
 export const NAVIGATION_CONFIGS: NavigationConfig[] = [
   {
     sectionName: "Performance Data",
-    items: ["cpu_utilization", "processes", "perf_stat", "meminfo", "vmstat", "interrupts", "diskstats", "netstat"],
+    items: ["cpu_utilization", "perf_stat", "meminfo", "vmstat", "interrupts", "diskstats", "netstat", "processes"],
   },
   {
     sectionName: "System Configurations",
