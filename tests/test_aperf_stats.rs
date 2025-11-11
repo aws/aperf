@@ -170,7 +170,7 @@ mod aperf_stats_tests {
                         let print_series = metric
                             .series
                             .iter()
-                            .find(|s| s.series_name.as_ref().unwrap().contains("print"))
+                            .find(|s| s.series_name.as_ref().unwrap().contains("write"))
                             .unwrap();
                         assert_eq!(print_series.values[sample_idx], *expected_print as f64);
                     }
@@ -434,7 +434,7 @@ mod aperf_stats_tests {
                 let print_series = metric
                     .series
                     .iter()
-                    .find(|s| s.series_name.as_ref().unwrap().contains("print"))
+                    .find(|s| s.series_name.as_ref().unwrap().contains("write"))
                     .unwrap();
                 let total_series = metric
                     .series
@@ -474,7 +474,7 @@ mod aperf_stats_tests {
                     let print_series = metric
                         .series
                         .iter()
-                        .find(|s| s.series_name.as_ref().unwrap().contains("print"))
+                        .find(|s| s.series_name.as_ref().unwrap().contains("write"))
                         .unwrap();
 
                     let expected_collect = expected_stats.stats[&collect_key] as f64;

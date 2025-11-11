@@ -6,7 +6,6 @@ interface DataDescription {
   readonly readableName: string;
   readonly summary: string;
   readonly defaultUnit?: string;
-  readonly yDomain?: number[];
   readonly fieldDescriptions: {
     [key in string]: {
       readonly readableName: string;
@@ -30,7 +29,6 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
     summary:
       "CPU utilization metrics measure the percentage of CPU time spent in various CPU state. The data were collected and computed from the system pseudo-file /proc/stat. Every metric graph shows the percentage of time spent in the corresponding state for each CPU, as well as the aggregate of all CPUs. Note that since the metric values were computed using the delta between two snapshots, the first value is always zero. The statistics of a metric graph accounts for its aggregate series.",
     defaultUnit: "Utilization (%)",
-    yDomain: [0, 100],
     fieldDescriptions: {
       aggregate: {
         readableName: "Total CPU Utilization",
@@ -2972,6 +2970,64 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
     readableName: "APerf Stats",
     summary:
       "APerf stats metrics measure the amount of time APerf spent on recording each data. Every graph contains the time of collecting the data from the system, the time of writing the data to the archive file, and the sum of both as the aggregate. The statistics of a metric graph accounts for the aggregate series.",
-    fieldDescriptions: {},
+    defaultUnit: "Time (us)",
+    fieldDescriptions: {
+      aperf: {
+        readableName: "Total collection time",
+        description: "The total time in us for APerf to collect all data during one interval.",
+        desired: "lower",
+      },
+      cpu_utilization: {
+        readableName: "CPU utilization collection time",
+        description: "The total time in us for APerf to collect the CPU utilization data during one interval.",
+        desired: "lower",
+      },
+      perf_stat: {
+        readableName: "PMU events collection time",
+        description: "The total time in us for APerf to collect the PMU events data during one interval.",
+        desired: "lower",
+      },
+      meminfo: {
+        readableName: "Memory usage collection time",
+        description: "The total time in us for APerf to collect the memory usage data during one interval.",
+        desired: "lower",
+      },
+      vmstat: {
+        readableName: "Virtual memory stats collection time",
+        description: "The total time in us for APerf to collect the virtual memory stats data during one interval.",
+        desired: "lower",
+      },
+      interrupts: {
+        readableName: "Interrupts collection time",
+        description: "The total time in us for APerf to collect the interrupts data during one interval.",
+        desired: "lower",
+      },
+      diskstats: {
+        readableName: "Disk stats collection time",
+        description: "The total time in us for APerf to collect the disk stats data during one interval.",
+        desired: "lower",
+      },
+      netstat: {
+        readableName: "Network stats collection time",
+        description: "The total time in us for APerf to collect the network stats data during one interval.",
+        desired: "lower",
+      },
+      processes: {
+        readableName: "Processes collection time",
+        description: "The total time in us for APerf to collect the processes data during one interval.",
+        desired: "lower",
+      },
+      flamegraphs: {
+        readableName: "Flamegraphs collection time",
+        description: "The total time in us for APerf to collect the kernel profiling flamegraphs during one interval.",
+        desired: "lower",
+      },
+      perf_profile: {
+        readableName: "Top functions collection time",
+        description:
+          "The total time in us for APerf to collect the kernel profiling top functions during one interval.",
+        desired: "lower",
+      },
+    },
   },
 };
