@@ -1,6 +1,6 @@
 import { DataPageProps, TextData } from "../../definitions/types";
 import { PROCESSED_DATA, RUNS } from "../../definitions/data-config";
-import { Cards, Textarea } from "@cloudscape-design/components";
+import { Box, Cards, Container } from "@cloudscape-design/components";
 import Header from "@cloudscape-design/components/header";
 import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import React from "react";
@@ -10,18 +10,22 @@ import { RunHeader } from "../data/RunSystemInfo";
  * This component renders the page for text data
  */
 export default function (props: DataPageProps) {
+  const [textAreaHeight, setTextAreaHeight] = React.useState(0);
+
+  // Below code only runs once to enable resizing of the text area
+  React.useEffect(() => {
+    const updateTextAreaHeight = () => {
+      setTextAreaHeight(window.innerHeight * 0.75);
+    };
+
+    updateTextAreaHeight();
+
+    window.addEventListener("resize", updateTextAreaHeight);
+
+    return () => window.removeEventListener("resize", updateTextAreaHeight);
+  }, []);
+
   const textWidthPercentage = Math.floor(100 / RUNS.length);
-  const textContentsPerRun = new Map<string, string>();
-  let maxRows = 1;
-  for (const runName of RUNS) {
-    const reportData = PROCESSED_DATA[props.dataType].runs[runName] as TextData;
-    if (reportData) {
-      textContentsPerRun.set(runName, reportData.lines.join("\n"));
-      maxRows = Math.max(maxRows, reportData.lines.length);
-    } else {
-      textContentsPerRun.set(runName, "The data was not collected in the Aperf run.");
-    }
-  }
 
   return (
     <Cards
@@ -38,13 +42,48 @@ export default function (props: DataPageProps) {
         sections: RUNS.map((runName) => ({
           id: runName,
           header: <RunHeader runName={runName} />,
-          content: () => (
-            // For some reason the Textarea is still scrollable if just setting rows to maxRows,
-            // so increase the number by 5 percent
-            <div style={{ paddingTop: "10px", paddingRight: "30px" }}>
-              <Textarea readOnly rows={maxRows * 1.05} value={textContentsPerRun.get(runName)} />
-            </div>
-          ),
+          content: () => {
+            const reportData = PROCESSED_DATA[props.dataType].runs[runName] as TextData;
+
+            return (
+              <div style={{ paddingTop: "10px", paddingRight: "30px" }}>
+                <Container>
+                  {!reportData && (
+                    <Box textAlign="center" color="inherit">
+                      <b>No data collected</b>
+                      <Box variant="p" color="inherit">
+                        This data was not collected in the Aperf run
+                      </Box>
+                    </Box>
+                  )}
+                  {reportData && (
+                    <div
+                      style={{
+                        width: "100%",
+                        height: textAreaHeight,
+
+                        // Enable scrolling
+                        overflowY: "auto",
+                        overflowX: "auto",
+
+                        // Text formatting
+                        whiteSpace: "pre",
+                        fontFamily: "monospace",
+                        fontSize: "14px",
+                        lineHeight: 1.4,
+
+                        // Better scrollbar experience
+                        scrollbarWidth: "thin",
+                        WebkitOverflowScrolling: "touch",
+                      }}
+                    >
+                      {reportData.lines.join("\n")}
+                    </div>
+                  )}
+                </Container>
+              </div>
+            );
+          },
           width: textWidthPercentage,
         })),
       }}
