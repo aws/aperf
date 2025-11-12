@@ -39,7 +39,7 @@ function getTableItemsAndDefinitions(dataType: DataType) {
       tableItem.key = key;
       for (const runName of RUNS) {
         const reportData = PROCESSED_DATA[dataType].runs[runName] as KeyValueData;
-        tableItem[runName] = reportData.key_value_groups[groupName]?.key_values[key] || "";
+        tableItem[runName] = reportData?.key_value_groups[groupName]?.key_values[key] || "";
       }
       tableItems.push(tableItem);
     }
