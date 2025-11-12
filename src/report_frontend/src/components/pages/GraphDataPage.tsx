@@ -15,6 +15,7 @@ import Header from "@cloudscape-design/components/header";
 import IframeGraph from "../data/IframeGraph";
 import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import { RunHeader } from "../data/RunSystemInfo";
+import { ReportHelpPanelLink } from "../misc/ReportHelpPanel";
 
 const NUM_GRAPHS_PER_PAGE = 10;
 
@@ -119,7 +120,7 @@ export default function (props: DataPageProps) {
       header={
         <Header
           variant={"awsui-h1-sticky"}
-          description={DATA_DESCRIPTIONS[props.dataType].summary}
+          info={<ReportHelpPanelLink type="summary" />}
           actions={
             allGraphGroups.length > 1 && (
               <SegmentedControl

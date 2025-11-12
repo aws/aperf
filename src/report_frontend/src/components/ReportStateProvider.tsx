@@ -17,6 +17,8 @@ interface ReportState {
   setNumCpusPerRun: (newNumCpusPerRun: NumCpusPerRun) => void;
   selectedCpusPerRun: SelectedCpusPerRun;
   setSelectedCpusPerRun: (newSelectedCpusPerRun: SelectedCpusPerRun) => void;
+  darkMode: boolean;
+  setDarkMode: (newDarkMode: boolean) => void;
 }
 
 const ReportStateContext = React.createContext<ReportState | undefined>(undefined);
@@ -32,6 +34,10 @@ export default function (props: { children: ReactNode }) {
   const [combineGraphs, setCombineGraphs] = React.useState(false);
   const [numCpusPerRun, setNumCpusPerRun] = React.useState<NumCpusPerRun>({});
   const [selectedCpusPerRun, setSelectedCpusPerRun] = React.useState<SelectedCpusPerRun>({});
+  const [darkMode, setDarkMode] = React.useState(() => {
+    const saved = localStorage.getItem("aperf-dark-mode");
+    return saved ? JSON.parse(saved) : false;
+  });
 
   const reportState: ReportState = {
     dataComponent,
@@ -57,6 +63,11 @@ export default function (props: { children: ReactNode }) {
     setNumCpusPerRun,
     selectedCpusPerRun,
     setSelectedCpusPerRun,
+    darkMode,
+    setDarkMode: (newDarkMode: boolean) => {
+      setDarkMode(newDarkMode);
+      localStorage.setItem("aperf-dark-mode", JSON.stringify(newDarkMode));
+    },
   };
 
   return <ReportStateContext.Provider value={reportState}>{props.children}</ReportStateContext.Provider>;
