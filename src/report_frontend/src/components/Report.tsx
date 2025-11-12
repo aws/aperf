@@ -1,5 +1,6 @@
 import React from "react";
 import { AppLayout, Box, Spinner } from "@cloudscape-design/components";
+import { applyMode, Mode } from "@cloudscape-design/global-styles";
 import DataNavigation from "./misc/DataNavigation";
 import { useReportState } from "./ReportStateProvider";
 import { PROCESSED_DATA, RUNS } from "../definitions/data-config";
@@ -17,8 +18,15 @@ import { MAX_NUM_CPU_SHOW_DEFAULT } from "../definitions/constants";
  * This component creates the APerf report top-level layout and controls which specific data tab to render
  */
 export default function () {
-  const { dataComponent, showHelpPanel, setShowHelpPanel, setDataComponent, setNumCpusPerRun, setSelectedCpusPerRun } =
-    useReportState();
+  const {
+    dataComponent,
+    showHelpPanel,
+    setShowHelpPanel,
+    setDataComponent,
+    setNumCpusPerRun,
+    setSelectedCpusPerRun,
+    darkMode,
+  } = useReportState();
   const [preprocessing, setPreprocessing] = React.useState(true);
   const [showNavigation, setShowNavigation] = React.useState(true);
 
@@ -47,6 +55,15 @@ export default function () {
     setSelectedCpusPerRun(selectedCpusPerRun);
     setPreprocessing(false);
   }, []);
+
+  // Apply dark mode using Cloudscape global styles
+  React.useEffect(() => {
+    applyMode(darkMode ? Mode.Dark : Mode.Light);
+    // Set index background color to match the theme
+    const backgroundColor = darkMode ? '#171D25' : '#ffffff';
+    document.body.style.backgroundColor = backgroundColor;
+    document.documentElement.style.backgroundColor = backgroundColor;
+  }, [darkMode]);
 
   const dataFormat = dataComponent == "systeminfo" ? "home" : PROCESSED_DATA[dataComponent].data_format;
 

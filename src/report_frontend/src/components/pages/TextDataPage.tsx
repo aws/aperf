@@ -5,6 +5,7 @@ import Header from "@cloudscape-design/components/header";
 import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import React from "react";
 import { RunHeader } from "../data/RunSystemInfo";
+import { ReportHelpPanelLink } from "../misc/ReportHelpPanel";
 
 /**
  * This component renders the page for text data
@@ -32,7 +33,7 @@ export default function (props: DataPageProps) {
       cardsPerRow={[{ cards: 1 }]}
       stickyHeader
       header={
-        <Header variant={"awsui-h1-sticky"} description={DATA_DESCRIPTIONS[props.dataType].summary}>
+        <Header variant={"awsui-h1-sticky"} info={<ReportHelpPanelLink type="summary" />}>
           {DATA_DESCRIPTIONS[props.dataType].readableName}
         </Header>
       }

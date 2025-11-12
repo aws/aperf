@@ -100,7 +100,7 @@ export default function (props: DataPageProps) {
       header={
         <Header
           variant={"awsui-h1-sticky"}
-          description={DATA_DESCRIPTIONS[props.dataType].summary}
+          info={<ReportHelpPanelLink type="summary" />}
           actions={
             <SpaceBetween size={"xs"} direction={"horizontal"}>
               <Toggle checked={combineGraphs} onChange={({ detail }) => setCombineGraphs(detail.checked)}>

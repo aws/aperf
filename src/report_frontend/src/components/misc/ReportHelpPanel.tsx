@@ -16,6 +16,9 @@ export function ReportHelpPanel() {
   if (helpPanelType == "general") {
     metricReadableName = "Data Information";
     metricDescription = "Learn more about a specific metric or configuration here.";
+  } else if (helpPanelType == "summary") {
+    metricReadableName = DATA_DESCRIPTIONS[dataComponent].readableName;
+    metricDescription = DATA_DESCRIPTIONS[dataComponent].summary;
   } else {
     metricReadableName = metricInfo?.readableName || helpPanelType;
     metricDescription = metricInfo?.description || "No extra information available for this metric.";
