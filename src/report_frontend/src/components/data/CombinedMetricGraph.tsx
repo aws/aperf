@@ -18,7 +18,7 @@ interface CombinedMetricGraphProps {
  * All visible series will be prepended with its run name and included in the graph.
  */
 export default function (props: CombinedMetricGraphProps) {
-  const { selectedCpusPerRun } = useReportState();
+  const { selectedCpusPerRun, darkMode } = useReportState();
 
   const isCpuData = CPU_DATA_TYPES.includes(props.dataType);
 
@@ -69,13 +69,20 @@ export default function (props: CombinedMetricGraphProps) {
     <Plot
       data={seriesData}
       layout={{
-        xaxis: { title: "Time Diff" },
+        xaxis: {
+          title: "Time Diff",
+          gridcolor: darkMode ? "#404040" : "#e0e0e0",
+        },
         yaxis: {
           title:
             DATA_DESCRIPTIONS[props.dataType].fieldDescriptions[props.metricName]?.unit ||
             DATA_DESCRIPTIONS[props.dataType].defaultUnit,
+          gridcolor: darkMode ? "#404040" : "#e0e0e0",
         },
         autosize: true,
+        paper_bgcolor: darkMode ? "#171D25" : "#ffffff",
+        plot_bgcolor: darkMode ? "#171D25" : "#ffffff",
+        font: { color: darkMode ? "#ffffff" : "#000000" },
       }}
       style={{ width: "100%", height: "100%" }}
     />

@@ -6,6 +6,7 @@ import { useCollection } from "@cloudscape-design/collection-hooks";
 import Header from "@cloudscape-design/components/header";
 import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import { RunHeader } from "../data/RunSystemInfo";
+import { ReportHelpPanelLink } from "../misc/ReportHelpPanel";
 
 const NUM_KEY_VALUE_PAIRS_PER_PAGE = 50;
 
@@ -136,7 +137,7 @@ export default function (props: DataPageProps) {
       header={
         <Header
           variant={"awsui-h1-sticky"}
-          description={DATA_DESCRIPTIONS[props.dataType].summary}
+          info={<ReportHelpPanelLink type="summary" />}
           actions={
             <Toggle checked={showDiffOnly} onChange={({ detail }) => setShowDiffOnly(detail.checked)}>
               {"Only show different values"}

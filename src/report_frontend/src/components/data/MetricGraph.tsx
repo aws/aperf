@@ -56,7 +56,7 @@ export interface MetricGraphProps {
  * This component renders a single metric graph of a particular time series metric of an APerf run.
  */
 export default function (props: MetricGraphProps) {
-  const { selectedCpusPerRun } = useReportState();
+  const { selectedCpusPerRun, darkMode } = useReportState();
 
   const { seriesData, valueRange } = getSeriesData(
     props.dataType,
@@ -83,15 +83,22 @@ export default function (props: MetricGraphProps) {
       <Plot
         data={seriesData}
         layout={{
-          xaxis: { title: "Seconds" },
+          xaxis: {
+            title: "Seconds",
+            gridcolor: darkMode ? "#404040" : "#e0e0e0",
+          },
           yaxis: {
             title:
               DATA_DESCRIPTIONS[props.dataType].fieldDescriptions[props.metricName]?.unit ||
               DATA_DESCRIPTIONS[props.dataType].defaultUnit,
             tickformat: ".3s",
             range: valueRange,
+            gridcolor: darkMode ? "#404040" : "#e0e0e0",
           },
           autosize: true,
+          paper_bgcolor: darkMode ? "#171D25" : "#ffffff",
+          plot_bgcolor: darkMode ? "#171D25" : "#ffffff",
+          font: { color: darkMode ? "#ffffff" : "#000000" },
         }}
         style={{ width: "100%", height: "100%" }}
         useResizeHandler
