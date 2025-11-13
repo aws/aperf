@@ -21,22 +21,19 @@ RUN dnf install -y jq tar perf tar gzip sudo  procps java-21-amazon-corretto-dev
 
 # Async profiler installation
 RUN source /root/.bashrc && \
-    echo https://github.com/async-profiler/async-profiler/releases/download/v4.0/async-profiler-4.0-linux-$ASYNC_ARCH.tar.gz && \
-    curl -s -L -o /tmp/async.tar.gz https://github.com/async-profiler/async-profiler/releases/download/v4.0/async-profiler-4.0-linux-$ASYNC_ARCH.tar.gz && \
+    export ASPROF_URL="$(curl -s https://api.github.com/repos/async-profiler/async-profiler/releases/latest | \
+        jq -r ".assets[] | select(.name | contains(\"linux-${ASYNC_ARCH}\") and (contains(\"debug\") | not)) | .browser_download_url")" && \
+    echo $ASPROF_URL && \
+    curl -s -L -o /tmp/async.tar.gz $ASPROF_URL && \
     mkdir -p /opt/async-profiler && \
     ls -alh /tmp/async.tar.gz && \
     tar -xzf /tmp/async.tar.gz -C /opt/async-profiler --strip-components=1 && \
     rm /tmp/async.tar.gz && \
-    chmod -R a+x /opt/async-profiler/bin/* /opt/async-profiler/lib/*  && \
-    ln -sf /opt/async-profiler/bin/asprof /usr/bin/asprof && \
-    ln -sf /opt/async-profiler/bin/jfrconv /usr/bin/jfrconv && \
-    ln -sf /opt/async-profiler/lib/libasyncProfiler.so /usr/lib/libasyncProfiler.so && \
-    ldconfig && \
-    echo 'export PATH="/opt/async-profiler/bin/:${PATH}"' >> /root/.bashrc
+    chmod -R a+x /opt/async-profiler/bin/* /opt/async-profiler/lib/* 
 
 # Install aperf with architecture detection
 RUN source /root/.bashrc && \
-    export APERF_VERSION="$(curl -s https://api.github.com/repos/aws/aperf/releases/latest | jq -r $ARGS.name)" && \
+    export APERF_VERSION="$(curl -s https://api.github.com/repos/aws/aperf/releases/latest | jq -r .tag_name)" && \
     echo https://github.com/aws/aperf/releases/download/$APERF_VERSION/aperf-$APERF_VERSION-$ARCH.tar.gz && \
     curl -s -L -o /opt/aperf.tar.gz https://github.com/aws/aperf/releases/download/$APERF_VERSION/aperf-$APERF_VERSION-$ARCH.tar.gz && \
     tar zxf /opt/aperf.tar.gz -C /opt/ --strip-components=1 && \
