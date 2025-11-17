@@ -221,6 +221,15 @@ Name of the file for an existing custom PMU configuration.
 
 Verify the supplied PMU file.
 
+### How does `aperf` work under the hood?
+
+Check out this interactive walkthrough of the `aperf` codebase on CodeCanvas [here](https://www.code-canvas.com/?session=unauthenticatedGithub&repo=aperf&owner=aws&branch=main&OnboardingTutorial=true).
+
+To refine existing dataflow simulation or create new ones, follow the quick tutorial [here](https://docs.code-canvas.com/updating-diagram).
+
+<img width="1916" alt="CodeCanvas Screenshot" src="https://codecanvas-media-public.s3.amazonaws.com/images/codecanvas-readme-screenshot.png" />
+
+
 ## APerf Issues?
 #### PMU Counters:
 * PMU counters are only available on [certain instance sizes](https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/debug_hw_perf.md#how-to-collect-pmu-counters) and families. Select the appropriate instance size if you need PMU stats.
