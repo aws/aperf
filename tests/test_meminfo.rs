@@ -1,6 +1,6 @@
 use aperf::data::meminfo::{MeminfoDataRaw, MeminfoType};
-use aperf::data::{Data, TimeEnum};
-use aperf::visualizer::{GetData, ReportParams};
+use aperf::data::{Data, ProcessData, TimeEnum};
+use aperf::visualizer::ReportParams;
 use chrono::Utc;
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
@@ -246,7 +246,7 @@ fn test_process_meminfo_raw_data_complex() {
     let raw_data = generate_meminfo_raw_data(&expected_per_sample_stats, 2);
     let mut meminfo = aperf::data::meminfo::MeminfoData::new();
     let result = meminfo
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
@@ -323,7 +323,7 @@ fn test_process_meminfo_raw_data_simple() {
     let raw_data = generate_meminfo_raw_data(&expected_per_sample_stats, 1);
     let mut meminfo = aperf::data::meminfo::MeminfoData::new();
     let result = meminfo
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
@@ -372,7 +372,7 @@ fn test_process_meminfo_hugepages_no_conversion() {
     let raw_data = generate_meminfo_raw_data(&expected_per_sample_stats, 1);
     let mut meminfo = aperf::data::meminfo::MeminfoData::new();
     let result = meminfo
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
@@ -399,7 +399,7 @@ fn test_process_meminfo_empty_data() {
     let raw_data = Vec::new();
     let mut meminfo = aperf::data::meminfo::MeminfoData::new();
     let result = meminfo
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
@@ -432,7 +432,7 @@ fn test_process_meminfo_missing_optional_fields() {
     let raw_data = generate_meminfo_raw_data(&expected_per_sample_stats, 1);
     let mut meminfo = aperf::data::meminfo::MeminfoData::new();
     let result = meminfo
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {

@@ -120,8 +120,8 @@ mod cpu_utilization_tests {
     };
     use aperf::data::cpu_utilization::{CpuState, CpuUtilization};
     use aperf::data::data_formats::AperfData;
-    use aperf::data::Data;
-    use aperf::visualizer::{GetData, ReportParams};
+    use aperf::data::{Data, ProcessData};
+    use aperf::visualizer::ReportParams;
     use strum::IntoEnumIterator;
 
     #[test]
@@ -130,7 +130,7 @@ mod cpu_utilization_tests {
 
         let mut cpu_util = CpuUtilization::new();
         let result = cpu_util
-            .process_raw_data_new(ReportParams::new(), raw_data)
+            .process_raw_data(ReportParams::new(), raw_data)
             .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
@@ -196,7 +196,7 @@ mod cpu_utilization_tests {
 
         let mut cpu_util = CpuUtilization::new();
         let result = cpu_util
-            .process_raw_data_new(ReportParams::new(), raw_data)
+            .process_raw_data(ReportParams::new(), raw_data)
             .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {

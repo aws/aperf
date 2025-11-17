@@ -1,6 +1,6 @@
 use aperf::data::kernel_config::{Entry, KernelConfig, KernelConfigEntry, KernelConfigEntryGroup};
-use aperf::data::{Data, TimeEnum};
-use aperf::visualizer::{GetData, ReportParams};
+use aperf::data::{Data, ProcessData, TimeEnum};
+use aperf::visualizer::ReportParams;
 use chrono::Utc;
 
 fn generate_kernel_config_raw_data() -> Vec<Data> {
@@ -136,7 +136,7 @@ fn test_process_kernel_config_hierarchical_data() {
     let raw_data = generate_kernel_config_raw_data();
     let mut kernel_config = KernelConfig::new();
     let result = kernel_config
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::KeyValue(key_value_data) = result {
@@ -283,7 +283,7 @@ fn test_process_kernel_config_simple_flat_data() {
     let raw_data = vec![Data::KernelConfig(kernel_config)];
     let mut kernel_config_processor = KernelConfig::new();
     let result = kernel_config_processor
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::KeyValue(key_value_data) = result {
@@ -344,7 +344,7 @@ fn test_process_kernel_config_empty_groups() {
     let raw_data = vec![Data::KernelConfig(kernel_config)];
     let mut kernel_config_processor = KernelConfig::new();
     let result = kernel_config_processor
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::KeyValue(key_value_data) = result {
@@ -386,7 +386,7 @@ fn test_process_kernel_config_empty_data() {
     let raw_data = Vec::new();
     let mut kernel_config = KernelConfig::new();
     let result = kernel_config
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::KeyValue(key_value_data) = result {
@@ -446,7 +446,7 @@ fn test_process_kernel_config_deep_nesting() {
     let raw_data = vec![Data::KernelConfig(kernel_config)];
     let mut kernel_config_processor = KernelConfig::new();
     let result = kernel_config_processor
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::KeyValue(key_value_data) = result {

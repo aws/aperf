@@ -1,7 +1,7 @@
 use crate::data::data_formats::{AperfData, Graph, GraphData, GraphGroup};
-use crate::data::{CollectData, CollectorParams, Data, ProcessedData};
-use crate::utils::{get_data_name_from_type, DataMetrics};
-use crate::visualizer::{GetData, ReportParams};
+use crate::data::{CollectData, CollectorParams, Data, ProcessData};
+use crate::utils::get_data_name_from_type;
+use crate::visualizer::ReportParams;
 use crate::PDError;
 use anyhow::Result;
 use log::{debug, error, trace};
@@ -299,110 +299,17 @@ impl CollectData for JavaProfileRaw {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, Clone)]
-pub struct JavaProfile {
-    pub data: Vec<GraphGroup>,
-}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct JavaProfile;
 
 impl JavaProfile {
     pub fn new() -> Self {
-        Self::default()
+        JavaProfile
     }
 }
 
-impl GetData for JavaProfile {
-    fn custom_raw_data_parser(
-        &mut self,
-        params: crate::visualizer::ReportParams,
-    ) -> Result<Vec<ProcessedData>> {
-        let processes_loc = params
-            .data_dir
-            .join(format!("{}-jps-map.json", params.run_name));
-        let processes_json =
-            fs::read_to_string(processes_loc.to_str().unwrap()).unwrap_or_default();
-        let process_map: HashMap<String, Vec<String>> =
-            serde_json::from_str(&processes_json).unwrap_or(HashMap::new());
-
-        let mut java_profile = JavaProfile::default();
-
-        let mut profile_metrics = Vec::from(PROFILE_METRICS);
-        profile_metrics.push("legacy");
-        for metric in profile_metrics {
-            let mut java_profile_data = GraphGroup::default();
-            java_profile_data.group_name = String::from(metric);
-
-            for (process, process_names) in &process_map {
-                let filename = if metric == "legacy" {
-                    // backward compatibility - to support previous versions where java profile
-                    // generates a single flamegraph
-                    format!("{}-java-flamegraph-{}.html", params.run_name, process)
-                } else {
-                    format!(
-                        "{}-java-profile-{}-{}.html",
-                        params.run_name, process, metric
-                    )
-                };
-
-                let relative_path = "data/js";
-                if let Some(file_size) = copy_file_to_report_data(
-                    &filename,
-                    &params.data_dir,
-                    &params.report_dir.join(relative_path),
-                ) {
-                    java_profile_data.graphs.insert(
-                        process.clone(),
-                        Graph::new(
-                            format!(
-                                "JVM: {}, PID: {} ({})",
-                                process_names.first().map_or("unknown", |s| s.as_str()),
-                                process,
-                                metric
-                            ),
-                            format!("{}/{}", relative_path, filename),
-                            Some(file_size),
-                        ),
-                    );
-                }
-            }
-
-            java_profile.data.push(java_profile_data);
-        }
-
-        let processed_data = vec![ProcessedData::JavaProfile(java_profile)];
-        Ok(processed_data)
-    }
-
-    fn get_calls(&mut self) -> Result<Vec<String>> {
-        Ok(vec!["values".to_string()])
-    }
-
-    fn get_data(
-        &mut self,
-        buffer: Vec<ProcessedData>,
-        query: String,
-        _metrics: &mut DataMetrics,
-    ) -> Result<String> {
-        let mut values = Vec::new();
-        for data in buffer {
-            match data {
-                ProcessedData::JavaProfile(ref value) => values.push(value.clone()),
-                _ => panic!("Invalid Data type in file"),
-            }
-        }
-        let param: Vec<(String, String)> = serde_urlencoded::from_str(&query).unwrap();
-        let (_, req_str) = &param[1];
-
-        match req_str.as_str() {
-            "values" => Ok(serde_json::to_string(&values[0].data)?),
-            _ => panic!("Unsupported API"),
-        }
-    }
-
-    fn has_custom_raw_data_parser() -> bool {
-        true
-    }
-
-    fn process_raw_data_new(
+impl ProcessData for JavaProfile {
+    fn process_raw_data(
         &mut self,
         params: ReportParams,
         _raw_data: Vec<Data>,

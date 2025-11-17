@@ -1,7 +1,7 @@
 use aperf::data::data_formats::AperfData;
 use aperf::data::systeminfo::{EC2Metadata, SystemInfo};
-use aperf::data::{Data, TimeEnum};
-use aperf::visualizer::{GetData, ReportParams};
+use aperf::data::{Data, ProcessData, TimeEnum};
+use aperf::visualizer::ReportParams;
 use chrono::Utc;
 
 fn create_test_systeminfo() -> SystemInfo {
@@ -23,13 +23,13 @@ fn create_test_systeminfo() -> SystemInfo {
 }
 
 #[test]
-fn test_process_raw_data_new() {
+fn test_process_raw_data() {
     let mut systeminfo = SystemInfo::new();
     let test_data = create_test_systeminfo();
     let raw_data = vec![Data::SystemInfo(test_data.clone())];
     let params = ReportParams::new();
 
-    let result = systeminfo.process_raw_data_new(params, raw_data).unwrap();
+    let result = systeminfo.process_raw_data(params, raw_data).unwrap();
 
     match result {
         AperfData::KeyValue(key_value_data) => {
@@ -65,7 +65,7 @@ fn test_process_raw_data_new() {
                 "m5.large"
             );
             assert_eq!(
-                key_value_group.key_values.get("AMD ID").unwrap(),
+                key_value_group.key_values.get("AMI ID").unwrap(),
                 "ami-0123456789abcdef0"
             );
             assert_eq!(
@@ -78,12 +78,12 @@ fn test_process_raw_data_new() {
 }
 
 #[test]
-fn test_process_raw_data_new_empty_data() {
+fn test_process_raw_data_empty_data() {
     let mut systeminfo = SystemInfo::new();
     let raw_data = vec![];
     let params = ReportParams::new();
 
-    let result = systeminfo.process_raw_data_new(params, raw_data).unwrap();
+    let result = systeminfo.process_raw_data(params, raw_data).unwrap();
 
     match result {
         AperfData::KeyValue(key_value_data) => {
@@ -95,7 +95,7 @@ fn test_process_raw_data_new_empty_data() {
 }
 
 #[test]
-fn test_process_raw_data_new_na_metadata() {
+fn test_process_raw_data_na_metadata() {
     let mut systeminfo = SystemInfo::new();
     let mut test_data = create_test_systeminfo();
     test_data.instance_metadata = EC2Metadata {
@@ -109,7 +109,7 @@ fn test_process_raw_data_new_na_metadata() {
     let raw_data = vec![Data::SystemInfo(test_data)];
     let params = ReportParams::new();
 
-    let result = systeminfo.process_raw_data_new(params, raw_data).unwrap();
+    let result = systeminfo.process_raw_data(params, raw_data).unwrap();
 
     match result {
         AperfData::KeyValue(key_value_data) => {
@@ -124,7 +124,7 @@ fn test_process_raw_data_new_na_metadata() {
                 key_value_group.key_values.get("Instance Type").unwrap(),
                 "N/A"
             );
-            assert_eq!(key_value_group.key_values.get("AMD ID").unwrap(), "N/A");
+            assert_eq!(key_value_group.key_values.get("AMI ID").unwrap(), "N/A");
             assert_eq!(
                 key_value_group.key_values.get("Local Hostname").unwrap(),
                 "N/A"

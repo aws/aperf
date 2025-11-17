@@ -10,6 +10,7 @@ pub mod visualizer;
 use crate::data::aperf_runlog::AperfRunlog;
 use crate::data::aperf_stats::AperfStat;
 use crate::utils::get_data_name_from_type;
+use crate::visualizer::DataVisualizer;
 use anyhow::Result;
 use chrono::prelude::*;
 use data::TimeEnum;
@@ -21,14 +22,12 @@ use nix::sys::{
     signalfd::{SfdFlags, SigSet, SignalFd},
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{self};
 use std::collections::HashMap;
 use std::os::unix::io::AsFd;
 use std::path::{Path, PathBuf};
 use std::{fs, process, time};
 use thiserror::Error;
 use timerfd::{SetTimeFlags, TimerFd, TimerState};
-use utils::DataMetrics;
 
 pub const APERF_FILE_FORMAT: &str = "bin";
 pub const APERF_TMP: &str = "/tmp";
@@ -387,19 +386,13 @@ pub fn get_file_name(dir: String, name: String) -> Result<String> {
 
 #[derive(Default)]
 pub struct VisualizationData {
-    pub visualizers: HashMap<String, visualizer::DataVisualizer>,
-    pub js_files: HashMap<String, String>,
-    pub run_names: Vec<String>,
-    pub analytics_data: HashMap<String, DataMetrics>,
+    pub visualizers: HashMap<String, DataVisualizer>,
 }
 
 impl VisualizationData {
     pub fn new() -> Self {
         VisualizationData {
             visualizers: HashMap::new(),
-            js_files: HashMap::new(),
-            run_names: Vec::new(),
-            analytics_data: HashMap::new(),
         }
     }
 
@@ -410,21 +403,18 @@ impl VisualizationData {
         report_dir: &Path,
     ) -> Result<String> {
         let dir_path = Path::new(&dir);
-        let dir_name = crate::data::utils::notargz_file_name(dir_path.to_path_buf())?;
-        self.run_names.push(dir_name.clone());
+        let dir_name = data::utils::notargz_file_name(dir_path.to_path_buf())?;
         let visualizers_len = self.visualizers.len();
         let mut error_count = 0;
 
-        for (_name, visualizer) in self.visualizers.iter_mut() {
+        for data_visualizer in self.visualizers.values_mut() {
             if let Err(e) =
-                visualizer.init_visualizer(dir.clone(), dir_name.clone(), tmp_dir, report_dir)
+                data_visualizer.init_visualizer(dir.clone(), dir_name.clone(), tmp_dir, report_dir)
             {
                 debug!("{:#?}", e);
                 error_count += 1;
             }
         }
-        self.analytics_data
-            .insert(dir_name.clone(), DataMetrics::new(dir_name.clone()));
 
         /* Works if a new type of visualizer is introduced but data not present */
         if error_count == visualizers_len {
@@ -433,67 +423,21 @@ impl VisualizationData {
         Ok(dir_name.clone())
     }
 
-    pub fn add_visualizer(&mut self, name: String, dv: visualizer::DataVisualizer) {
-        self.js_files.insert(dv.js_file_name.clone(), dv.js.clone());
-        self.visualizers.insert(name.clone(), dv);
+    pub fn add_visualizer(&mut self, data_visualizer: DataVisualizer) {
+        self.visualizers
+            .insert(data_visualizer.data_name.to_string(), data_visualizer);
     }
 
-    pub fn get_all_js_files(&mut self) -> Result<Vec<(String, String)>> {
-        let mut ret = Vec::new();
-        for (name, visualizer) in self.visualizers.iter() {
-            if visualizer.js_file_name.is_empty() {
-                continue;
-            }
-            let file = self
-                .js_files
-                .get(&visualizer.js_file_name)
-                .ok_or(PDError::VisualizerJSFileGetError(name.to_string()))?;
-            ret.push((visualizer.js_file_name.clone(), file.clone()));
-        }
-        Ok(ret)
-    }
-
-    pub fn get_js_file(&mut self, name: String) -> Result<&str> {
-        let file = self
-            .js_files
-            .get_mut(&name)
-            .ok_or(PDError::VisualizerJSFileGetError(name.to_string()))?;
-        Ok(file)
-    }
-
-    pub fn unpack_data(&mut self, name: String) -> Result<()> {
-        for (dvname, datavisualizer) in self.visualizers.iter_mut() {
-            debug!("Unpacking data for: {}", dvname);
-            datavisualizer.process_raw_data(name.clone())?;
-        }
-        Ok(())
-    }
-
-    pub fn unpack_data_new(&mut self, name: String) -> Result<()> {
-        for (dvname, datavisualizer) in self.visualizers.iter_mut() {
-            if datavisualizer.process_raw_data_new(name.clone()).is_err() {
-                // TODO: remove once all are implemented
-                debug!("process_raw_data_new not implemented for: {}", dvname);
+    pub fn process_raw_data(&mut self, name: String) -> Result<()> {
+        for data_visualizer in self.visualizers.values_mut() {
+            if let Err(e) = data_visualizer.process_raw_data(name.clone()) {
+                error!(
+                    "Error while processing {} raw data: {:#?}",
+                    data_visualizer.data_name, e
+                );
             }
         }
         Ok(())
-    }
-
-    pub fn get_api(&mut self, name: String) -> Result<String> {
-        let api = self.visualizers.get(&name).unwrap().api_name.clone();
-        Ok(api)
-    }
-
-    pub fn get_visualizer_names(&mut self) -> Result<Vec<String>> {
-        let mut visualizer_names = Vec::new();
-        for (name, _visualizer) in self.visualizers.iter() {
-            visualizer_names.push(name.clone());
-        }
-        Ok(visualizer_names)
-    }
-
-    pub fn get_run_names(&mut self) -> Result<String> {
-        Ok(serde_json::to_string(&self.run_names)?)
     }
 
     pub fn is_data_available(&self, run_name: &String, visualizer_name: &str) -> bool {
@@ -505,31 +449,6 @@ impl VisualizationData {
                     .get(run_name)
                     .is_some_and(|&value| value)
             })
-    }
-
-    pub fn get_data(
-        &mut self,
-        run_name: &String,
-        visualizer_name: &str,
-        query: String,
-    ) -> Result<String> {
-        let visualizer = self.visualizers.get_mut(visualizer_name).ok_or(
-            PDError::VisualizerHashMapEntryError(visualizer_name.to_string()),
-        )?;
-        visualizer.get_data(
-            run_name.to_string(),
-            query.clone(),
-            self.analytics_data.get_mut(run_name).unwrap(),
-        )
-    }
-
-    pub fn get_calls(&mut self, name: String) -> Result<Vec<String>> {
-        let visualizer = self.visualizers.get_mut(&name).unwrap();
-        visualizer.get_calls()
-    }
-
-    pub fn get_analytics(&mut self) -> Result<String> {
-        Ok(serde_json::to_string(&self.analytics_data)?)
     }
 }
 

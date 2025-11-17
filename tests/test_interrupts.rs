@@ -1,7 +1,7 @@
 use aperf::data::interrupts::InterruptData;
 use aperf::data::interrupts::InterruptDataRaw;
+use aperf::data::ProcessData;
 use aperf::data::{Data, TimeEnum};
-use aperf::visualizer::GetData;
 use aperf::visualizer::ReportParams;
 use chrono::prelude::*;
 use chrono::Duration;
@@ -173,7 +173,7 @@ fn test_process_interrupts_raw_data_complex() {
     let raw_data =
         generate_interrupts_raw_data(&expected_per_sample_stats, num_cpus, interval_seconds);
     let result = InterruptData::new()
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
@@ -288,7 +288,7 @@ fn test_process_interrupts_raw_data_simple() {
     let raw_data =
         generate_interrupts_raw_data(&expected_per_sample_stats, num_cpus, interval_seconds);
     let result = InterruptData::new()
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
@@ -314,7 +314,7 @@ fn test_process_interrupts_raw_data_simple() {
 fn test_process_interrupts_empty_data() {
     let raw_data: Vec<Data> = Vec::new();
     let result = InterruptData::new()
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
@@ -351,7 +351,7 @@ fn test_process_interrupts_mis_err_only() {
     let raw_data =
         generate_interrupts_raw_data(&expected_per_sample_stats, num_cpus, interval_seconds);
     let result = InterruptData::new()
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {

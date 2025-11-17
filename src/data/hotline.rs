@@ -1,8 +1,7 @@
 extern crate ctor;
 
-use crate::data::{CollectData, CollectorParams, ProcessedData};
-use crate::utils::DataMetrics;
-use crate::visualizer::GetData;
+use crate::data::ProcessData;
+use crate::data::{CollectData, CollectorParams};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -96,12 +95,6 @@ pub fn check_preconditions() -> Result<bool> {
 
 #[cfg(feature = "hotline")]
 pub mod hotline_reports {
-    use super::ReportParams;
-    use std::error::Error;
-    use std::fs::File;
-    use std::io::Write;
-    use std::path::Path;
-
     pub struct ReportConfig<'a> {
         pub table_id: &'a str,
         pub filename: &'a str,
@@ -129,43 +122,6 @@ pub mod hotline_reports {
             filename: "hotline_bmiss_map.csv",
         },
     ];
-
-    pub fn generate_html_files(params: &ReportParams) -> Result<(), Box<dyn Error>> {
-        // First, create the CSS file
-        for config in REPORT_CONFIGS {
-            let csv_string = std::fs::read_to_string(format!(
-                "{}/{}",
-                params.data_dir.display(),
-                config.filename
-            ))?;
-            let table_html = csv_to_html::convert(&csv_string, &b',', &true);
-
-            // Use relative path to CSS file
-            let full_html = format!(
-                r#"<!DOCTYPE html>
-                <html lang="en">
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <link rel="stylesheet" href="../../index.css">
-                </head>
-                <body>
-                    {}
-                </body>
-                </html>"#,
-                table_html
-            );
-
-            let output_path = Path::new(&params.report_dir)
-                .join("data")
-                .join("js")
-                .join(format!("{}_{}.html", params.run_name, config.table_id));
-            let mut file = File::create(output_path)?;
-            file.write_all(full_html.as_bytes())?;
-        }
-
-        Ok(())
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -319,79 +275,17 @@ impl CollectData for HotlineRaw {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Hotline {
-    pub generated_files: Vec<String>,
-}
+pub struct Hotline;
 
 impl Hotline {
     pub fn new() -> Self {
-        Hotline {
-            generated_files: vec![],
-        }
+        Hotline
     }
 }
 
-impl GetData for Hotline {
+impl ProcessData for Hotline {
     #[cfg(feature = "hotline")]
-    fn custom_raw_data_parser(&mut self, params: ReportParams) -> Result<Vec<ProcessedData>> {
-        use crate::data::hotline::hotline_reports::REPORT_CONFIGS;
-
-        match hotline_reports::generate_html_files(&params) {
-            Ok(_) => (),
-            Err(e) => eprintln!("Warning: Failed to generate HTML tables: {}", e),
-        }
-
-        let mut hotline_data = Hotline::new();
-        hotline_data.generated_files = Vec::new();
-
-        for config in REPORT_CONFIGS.iter() {
-            let file_path = format!("{}/{}", params.data_dir.display(), config.filename);
-            let path = Path::new(&file_path);
-            if path.exists() && path.is_file() {
-                hotline_data
-                    .generated_files
-                    .push(config.table_id.to_string());
-            }
-        }
-
-        let data = ProcessedData::Hotline(hotline_data.clone());
-        Ok(vec![data])
-    }
-
-    #[cfg(not(feature = "hotline"))]
-    fn custom_raw_data_parser(&mut self, _params: ReportParams) -> Result<Vec<ProcessedData>> {
-        Ok(vec![])
-    }
-
-    fn get_calls(&mut self) -> Result<Vec<String>> {
-        Ok(vec!["values".to_string()])
-    }
-
-    fn get_data(
-        &mut self,
-        buffer: Vec<ProcessedData>,
-        _query: String,
-        _metrics: &mut DataMetrics,
-    ) -> Result<String> {
-        let mut values = Vec::new();
-        for data in buffer {
-            match data {
-                ProcessedData::Hotline(ref value) => {
-                    values.extend(value.generated_files.clone());
-                }
-                _ => unreachable!(),
-            }
-        }
-
-        Ok(serde_json::to_string(&values)?)
-    }
-
-    fn has_custom_raw_data_parser() -> bool {
-        true
-    }
-
-    #[cfg(feature = "hotline")]
-    fn process_raw_data_new(
+    fn process_raw_data(
         &mut self,
         params: ReportParams,
         _raw_data: Vec<Data>,
@@ -400,8 +294,6 @@ impl GetData for Hotline {
 
         let mut graph_data = GraphData::default();
 
-        // TODO: remove the original implementation and the generate_html_files function once
-        //       we're ready to cut over and migrate to the new data format
         for config in REPORT_CONFIGS {
             let csv_string = fs::read_to_string(params.data_dir.join(config.filename))?;
             let table_html = csv_to_html::convert(&csv_string, &b',', &true);

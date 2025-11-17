@@ -125,8 +125,8 @@ mod diskstats_tests {
     use crate::{generate_diskstats_raw_data, get_disk_stat_field, ExpectedDiskStats};
     use aperf::data::data_formats::AperfData;
     use aperf::data::diskstats::{DiskStatKey, Diskstats};
-    use aperf::data::Data;
-    use aperf::visualizer::{GetData, ReportParams};
+    use aperf::data::{Data, ProcessData};
+    use aperf::visualizer::ReportParams;
     use std::collections::HashMap;
     use strum::IntoEnumIterator;
 
@@ -187,7 +187,7 @@ mod diskstats_tests {
 
         let mut diskstats = Diskstats::new();
         let result = diskstats
-            .process_raw_data_new(ReportParams::new(), raw_data)
+            .process_raw_data(ReportParams::new(), raw_data)
             .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
@@ -285,7 +285,7 @@ mod diskstats_tests {
 
         let mut diskstats = Diskstats::new();
         let result = diskstats
-            .process_raw_data_new(ReportParams::new(), raw_data)
+            .process_raw_data(ReportParams::new(), raw_data)
             .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
@@ -361,7 +361,7 @@ mod diskstats_tests {
 
         let mut diskstats = Diskstats::new();
         let result = diskstats
-            .process_raw_data_new(ReportParams::new(), raw_data)
+            .process_raw_data(ReportParams::new(), raw_data)
             .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
@@ -443,7 +443,7 @@ mod diskstats_tests {
 
         let mut diskstats = Diskstats::new();
         let result = diskstats
-            .process_raw_data_new(ReportParams::new(), raw_data)
+            .process_raw_data(ReportParams::new(), raw_data)
             .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {

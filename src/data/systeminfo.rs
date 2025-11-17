@@ -1,7 +1,6 @@
 use crate::data::data_formats::{AperfData, KeyValueData, KeyValueGroup};
-use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
-use crate::utils::{get_data_name_from_type, DataMetrics, ValueType};
-use crate::visualizer::{GetData, ReportParams};
+use crate::data::{CollectData, CollectorParams, Data, ProcessData, TimeEnum};
+use crate::visualizer::ReportParams;
 use anyhow::Result;
 use chrono::prelude::*;
 use log::{trace, warn};
@@ -141,152 +140,12 @@ impl CollectData for SystemInfo {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct SUTConfigEntry {
-    pub name: String,
-    pub value: String,
-}
-
-fn get_values(buffer: SystemInfo, metrics: &mut DataMetrics) -> Result<String> {
-    let mut end_values = Vec::new();
-    let mut my_metrics = HashMap::new();
-
-    let system_name = SUTConfigEntry {
-        name: "System Name".to_string(),
-        value: buffer.system_name.clone(),
-    };
-    my_metrics.insert(
-        "System Name".to_string(),
-        ValueType::String(buffer.system_name),
-    );
-    end_values.push(system_name);
-
-    let os_version = SUTConfigEntry {
-        name: "OS Version".to_string(),
-        value: buffer.os_version.clone(),
-    };
-    my_metrics.insert(
-        "OS Version".to_string(),
-        ValueType::String(buffer.os_version),
-    );
-    end_values.push(os_version);
-
-    let kernel_version = SUTConfigEntry {
-        name: "Kernel Version".to_string(),
-        value: buffer.kernel_version.clone(),
-    };
-    my_metrics.insert(
-        "Kernel Version".to_string(),
-        ValueType::String(buffer.kernel_version),
-    );
-    end_values.push(kernel_version);
-
-    let region = SUTConfigEntry {
-        name: "Region".to_string(),
-        value: buffer.instance_metadata.region.clone(),
-    };
-    my_metrics.insert(
-        "Region".to_string(),
-        ValueType::String(buffer.instance_metadata.region),
-    );
-    end_values.push(region);
-
-    let instance_type = SUTConfigEntry {
-        name: "Instance Type".to_string(),
-        value: buffer.instance_metadata.instance_type.clone(),
-    };
-    my_metrics.insert(
-        "Instance Type".to_string(),
-        ValueType::String(buffer.instance_metadata.instance_type),
-    );
-    end_values.push(instance_type);
-
-    let total_cpus = SUTConfigEntry {
-        name: "Total CPUs".to_string(),
-        value: buffer.total_cpus.to_string(),
-    };
-    my_metrics.insert(
-        "Total CPUs".to_string(),
-        ValueType::UInt64(buffer.total_cpus as u64),
-    );
-    end_values.push(total_cpus);
-
-    let instance_id = SUTConfigEntry {
-        name: "Instance ID".to_string(),
-        value: buffer.instance_metadata.instance_id.clone(),
-    };
-    my_metrics.insert(
-        "Instance ID".to_string(),
-        ValueType::String(buffer.instance_metadata.instance_id),
-    );
-    end_values.push(instance_id);
-
-    let ami_id = SUTConfigEntry {
-        name: "AMI ID".to_string(),
-        value: buffer.instance_metadata.ami_id.clone(),
-    };
-    my_metrics.insert(
-        "AMI ID".to_string(),
-        ValueType::String(buffer.instance_metadata.ami_id),
-    );
-    end_values.push(ami_id);
-
-    let host_name = SUTConfigEntry {
-        name: "Host Name".to_string(),
-        value: buffer.host_name.clone(),
-    };
-    my_metrics.insert("Host Name".to_string(), ValueType::String(buffer.host_name));
-    end_values.push(host_name);
-
-    metrics.values.insert(
-        get_data_name_from_type::<SystemInfo>().to_string(),
-        my_metrics,
-    );
-
-    Ok(serde_json::to_string(&end_values)?)
-}
-
-impl GetData for SystemInfo {
+impl ProcessData for SystemInfo {
     fn compatible_filenames(&self) -> Vec<&str> {
         vec!["system_info"]
     }
 
-    fn process_raw_data(&mut self, buffer: Data) -> Result<ProcessedData> {
-        let raw_value = match buffer {
-            Data::SystemInfo(ref value) => value,
-            _ => panic!("Invalid Data type in raw file"),
-        };
-        let processed_data = ProcessedData::SystemInfo((*raw_value).clone());
-        Ok(processed_data)
-    }
-
-    fn get_calls(&mut self) -> Result<Vec<String>> {
-        Ok(vec!["values".to_string()])
-    }
-
-    fn get_data(
-        &mut self,
-        buffer: Vec<ProcessedData>,
-        query: String,
-        metrics: &mut DataMetrics,
-    ) -> Result<String> {
-        let mut values = Vec::new();
-        for data in buffer {
-            match data {
-                ProcessedData::SystemInfo(ref value) => values.push(value.clone()),
-                _ => panic!("Invalid Data type in file"),
-            }
-        }
-        let param: Vec<(String, String)> = serde_urlencoded::from_str(&query).unwrap();
-        let (_, req_str) = &param[1];
-
-        match req_str.as_str() {
-            "values" => get_values(values[0].clone(), metrics),
-            _ => panic!("Unsupported API"),
-        }
-    }
-
-    fn process_raw_data_new(
+    fn process_raw_data(
         &mut self,
         _params: ReportParams,
         raw_data: Vec<Data>,
@@ -322,7 +181,7 @@ impl GetData for SystemInfo {
                 raw_value.instance_metadata.instance_type.clone(),
             );
             key_values.insert(
-                "AMD ID".to_string(),
+                "AMI ID".to_string(),
                 raw_value.instance_metadata.ami_id.clone(),
             );
             key_values.insert(
@@ -343,10 +202,8 @@ impl GetData for SystemInfo {
 
 #[cfg(test)]
 mod tests {
-    use super::{SUTConfigEntry, SystemInfo};
-    use crate::data::{CollectData, CollectorParams, Data, ProcessedData};
-    use crate::utils::DataMetrics;
-    use crate::visualizer::GetData;
+    use super::SystemInfo;
+    use crate::data::{CollectData, CollectorParams};
 
     #[test]
     fn test_collect_data() {
@@ -359,30 +216,5 @@ mod tests {
         assert_ne!(systeminfo.kernel_version, String::new());
         assert_ne!(systeminfo.os_version, String::new());
         assert_ne!(systeminfo.host_name, String::new());
-    }
-
-    #[test]
-    fn test_get_values() {
-        let mut buffer: Vec<Data> = Vec::<Data>::new();
-        let mut system_info = SystemInfo::new();
-        let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
-        let params = CollectorParams::new();
-
-        system_info.collect_data(&params).unwrap();
-        buffer.push(Data::SystemInfo(system_info));
-        processed_buffer.push(
-            SystemInfo::new()
-                .process_raw_data(buffer[0].clone())
-                .unwrap(),
-        );
-        let json = SystemInfo::new()
-            .get_data(
-                processed_buffer,
-                "run=test&get=values".to_string(),
-                &mut DataMetrics::new(String::new()),
-            )
-            .unwrap();
-        let values: Vec<SUTConfigEntry> = serde_json::from_str(&json).unwrap();
-        assert!(!values.is_empty());
     }
 }
