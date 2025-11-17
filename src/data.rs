@@ -1,6 +1,5 @@
 pub mod aperf_runlog;
 pub mod aperf_stats;
-pub mod constants;
 pub mod cpu_utilization;
 pub mod data_formats;
 pub mod diskstats;
@@ -20,8 +19,8 @@ pub mod utils;
 pub mod vmstat;
 
 use crate::data::data_formats::AperfData;
-use crate::utils::{get_data_name_from_type, DataMetrics};
-use crate::visualizer::{DataVisualizer, GetData, ReportParams};
+use crate::utils::get_data_name_from_type;
+use crate::visualizer::{DataVisualizer, ReportParams};
 use crate::{noop, InitParams, PerformanceData, VisualizationData, APERF_FILE_FORMAT};
 use anyhow::Result;
 use aperf_runlog::AperfRunlog;
@@ -322,99 +321,52 @@ macro_rules! data {
 }
 
 /// This macro expands to:
-/// 1. define the ProcessedData Enum to hold all report data structs for visualization
+/// 1. define the ReportData Enum to hold all report data structs for visualization
 /// 2. define the function that instantiates all data structs and adds them
 ///    to the VisualizationData object.
 /// The main report function (aperf::report::report(&Report, &PathBuf) -> Result<()>
 /// creates the VisualizationData object and invokes the function.
-macro_rules! processed_data {
-    ( $( $processed_data:ident ),* ) => {
+macro_rules! report_data {
+    ( $( $report_data:ident ),* ) => {
         pub static JS_DIR: Dir<'_> = include_directory!("$JS_DIR");
 
         #[derive(Clone, Debug, Deserialize, Serialize)]
-        pub enum ProcessedData {
+        pub enum ReportData {
             $(
-                $processed_data($processed_data),
+                $report_data($report_data),
             )*
         }
 
-        impl ProcessedData {
+        impl ReportData {
             pub fn compatible_filenames(&self) -> Vec<&str> {
                  match self {
                     $(
-                        ProcessedData::$processed_data(ref value) => value.compatible_filenames(),
+                        ReportData::$report_data(ref value) => value.compatible_filenames(),
                     )*
                 }
             }
 
-            pub fn process_raw_data(&mut self, buffer: Data) -> Result<ProcessedData> {
+            pub fn process_raw_data(&mut self, report_params: ReportParams, raw_data: Vec<Data>) -> Result<AperfData> {
                 match self {
                     $(
-                        ProcessedData::$processed_data(ref mut value) => Ok(value.process_raw_data(buffer)?),
-                    )*
-                }
-            }
-
-            pub fn process_raw_data_new(&mut self, parser_params: ReportParams, raw_data: Vec<Data>) -> Result<AperfData> {
-                match self {
-                    $(
-                        ProcessedData::$processed_data(ref mut value) => Ok(value.process_raw_data_new(parser_params, raw_data)?),
-                    )*
-                }
-            }
-
-            pub fn custom_raw_data_parser(&mut self, parser_params: ReportParams) -> Result<Vec<ProcessedData>> {
-                match self {
-                    $(
-                        ProcessedData::$processed_data(ref mut value) => Ok(value.custom_raw_data_parser(parser_params)?),
-                    )*
-                }
-            }
-
-            pub fn get_data(&mut self, values: Vec<ProcessedData>, query: String, metrics: &mut DataMetrics) -> Result<String> {
-                match self {
-                    $(
-                        ProcessedData::$processed_data(ref mut value) => Ok(value.get_data(values, query, metrics)?),
-                    )*
-                }
-            }
-
-            pub fn get_calls(&mut self) -> Result<Vec<String>> {
-                match self {
-                    $(
-                        ProcessedData::$processed_data(ref mut value) => Ok(value.get_calls()?),
+                        ReportData::$report_data(ref mut value) => Ok(value.process_raw_data(report_params, raw_data)?),
                     )*
                 }
             }
         }
 
-        fn add_visualization_data(visualization_data: &mut VisualizationData, data_name: &str, processed_data: ProcessedData, has_custom_raw_data_parser: bool) {
-            let mut js_file_name = format!("{}.js", data_name);
-            let mut js_content: &str = "";
-
-            if !JS_DIR.contains(&js_file_name) {
-                trace!("Skip reading {} since it does not exist", js_file_name);
-                js_file_name = String::new();
-            } else {
-                let js_file_bytes = JS_DIR.get_file(&js_file_name).unwrap();
-                js_content = js_file_bytes.contents_utf8().unwrap();
-            }
-
+        fn add_visualization_data(visualization_data: &mut VisualizationData, data_name: &'static str, report_data: ReportData) {
             let data_visualizer = DataVisualizer::new(
-                processed_data,
-                data_name.to_string(),
-                js_file_name,
-                js_content.to_string(),
-                has_custom_raw_data_parser,
+                data_name,
+                report_data,
             );
-
-            visualization_data.add_visualizer(data_name.to_string(), data_visualizer);
+            visualization_data.add_visualizer(data_visualizer);
         }
 
         pub fn add_all_visualization_data(visualization_data: &mut VisualizationData) {
             $(
-                let data_name = get_data_name_from_type::<$processed_data>();
-                add_visualization_data(visualization_data, data_name, ProcessedData::$processed_data($processed_data::new()), $processed_data::has_custom_raw_data_parser());
+                let data_name = get_data_name_from_type::<$report_data>();
+                add_visualization_data(visualization_data, data_name, ReportData::$report_data($report_data::new()));
             )*
         }
     };
@@ -438,7 +390,7 @@ data!(
     HotlineRaw
 );
 
-processed_data!(
+report_data!(
     CpuUtilization,
     Vmstat,
     Diskstats,
@@ -489,6 +441,20 @@ pub trait CollectData {
 
     fn is_java_profile() -> bool {
         false
+    }
+}
+
+pub trait ProcessData {
+    fn compatible_filenames(&self) -> Vec<&str> {
+        vec![]
+    }
+
+    fn process_raw_data(
+        &mut self,
+        _params: ReportParams,
+        _raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
+        unimplemented!();
     }
 }
 

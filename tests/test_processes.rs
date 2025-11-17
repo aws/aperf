@@ -1,7 +1,7 @@
 use aperf::data::data_formats::AperfData;
 use aperf::data::processes::{ProcessKey, Processes, ProcessesRaw, TICKS_PER_SECOND};
+use aperf::data::ProcessData;
 use aperf::data::{Data, TimeEnum};
-use aperf::visualizer::GetData;
 use aperf::visualizer::ReportParams;
 use chrono::prelude::*;
 use std::collections::HashMap;
@@ -121,7 +121,7 @@ fn test_process_processes_raw_data_complex() {
 
     let mut processes = Processes::new();
     let result = processes
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {
@@ -276,7 +276,7 @@ fn test_process_processes_raw_data_simple() {
 
     let mut processes = Processes::new();
     let result = processes
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {
@@ -394,7 +394,7 @@ fn test_process_processes_dynamic_processes() {
 
     let mut processes = Processes::new();
     let result = processes
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {
@@ -458,7 +458,7 @@ fn test_process_processes_top_16_ranking() {
 
     let mut processes = Processes::new();
     let result = processes
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {
@@ -498,7 +498,7 @@ fn test_process_processes_empty_data() {
 
     let mut processes = Processes::new();
     let result = processes
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {
@@ -535,7 +535,7 @@ fn test_process_processes_memory_conversion() {
 
     let mut processes = Processes::new();
     let result = processes
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {

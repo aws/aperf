@@ -1,6 +1,6 @@
 use aperf::data::sysctl::SysctlData;
-use aperf::data::{Data, TimeEnum};
-use aperf::visualizer::{GetData, ReportParams};
+use aperf::data::{Data, ProcessData, TimeEnum};
+use aperf::visualizer::ReportParams;
 use chrono::Utc;
 use std::collections::BTreeMap;
 
@@ -37,7 +37,7 @@ fn test_process_sysctl_raw_data_complex() {
     let raw_data = generate_sysctl_raw_data(&expected_sysctl_data);
     let mut sysctl = SysctlData::new();
     let result = sysctl
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::KeyValue(key_value_data) = result {
@@ -69,7 +69,7 @@ fn test_process_sysctl_raw_data_simple() {
     let raw_data = generate_sysctl_raw_data(&expected_sysctl_data);
     let mut sysctl = SysctlData::new();
     let result = sysctl
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::KeyValue(key_value_data) = result {
@@ -113,7 +113,7 @@ fn test_process_sysctl_raw_data_special_values() {
     let raw_data = generate_sysctl_raw_data(&expected_sysctl_data);
     let mut sysctl = SysctlData::new();
     let result = sysctl
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::KeyValue(key_value_data) = result {
@@ -152,7 +152,7 @@ fn test_process_sysctl_raw_data_empty_data() {
     let raw_data = Vec::new();
     let mut sysctl = SysctlData::new();
     let result = sysctl
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::KeyValue(key_value_data) = result {

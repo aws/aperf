@@ -21,15 +21,15 @@ pub enum DataFormat {
 
 /// The struct holding processed data across all runs for a data type
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ReportData {
+pub struct ProcessedData {
     pub data_name: String,
     pub data_format: DataFormat,
     pub runs: HashMap<String, AperfData>,
 }
 
-impl ReportData {
+impl ProcessedData {
     pub fn new(data_name: String) -> Self {
-        ReportData {
+        ProcessedData {
             data_name,
             data_format: DataFormat::Unknown,
             runs: HashMap::new(),

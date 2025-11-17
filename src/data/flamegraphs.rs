@@ -1,7 +1,6 @@
 use crate::data::data_formats::{AperfData, Graph, GraphData, GraphGroup};
-use crate::data::{CollectData, CollectorParams, Data, ProcessedData};
-use crate::utils::DataMetrics;
-use crate::visualizer::{GetData, ReportParams};
+use crate::data::{CollectData, CollectorParams, Data, ProcessData};
+use crate::visualizer::ReportParams;
 use crate::{get_file_name, PDError};
 use anyhow::Result;
 use inferno::collapse::perf::Folder;
@@ -121,77 +120,20 @@ impl CollectData for FlamegraphRaw {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Flamegraph {
-    pub data: String,
-}
+pub struct Flamegraph;
 
 impl Flamegraph {
     pub fn new() -> Self {
-        Flamegraph {
-            data: String::new(),
-        }
+        Flamegraph
     }
 }
 
-impl GetData for Flamegraph {
+impl ProcessData for Flamegraph {
     fn compatible_filenames(&self) -> Vec<&str> {
         vec!["flamegraph"]
     }
 
-    fn custom_raw_data_parser(&mut self, params: ReportParams) -> Result<Vec<ProcessedData>> {
-        let mut processed_data = Vec::new();
-
-        let file_name = format!("{}-flamegraph.svg", params.run_name);
-        let fg_loc = params.data_dir.join(&file_name);
-        let fg_out_relative = format!("data/js/{file_name}");
-        let fg_out = params.report_dir.join(&fg_out_relative);
-
-        /* Copy the flamegraph to the report dir */
-        if fg_loc.exists() {
-            std::fs::copy(&fg_loc, &fg_out)?;
-            let mut flamegraph = Flamegraph::new();
-            flamegraph.data = fg_out_relative;
-            processed_data.push(ProcessedData::Flamegraph(flamegraph));
-        }
-
-        /* Copy the reverse flamegraph to the report dir */
-        let reverse_file_name = format!("{}-reverse-flamegraph.svg", params.run_name);
-        let reverse_fg_loc = params.data_dir.join(&reverse_file_name);
-        let reverse_fg_out = params
-            .report_dir
-            .join(format!("data/js/{reverse_file_name}"));
-        if reverse_fg_loc.exists() {
-            std::fs::copy(&reverse_fg_loc, &reverse_fg_out)?;
-        }
-
-        Ok(processed_data)
-    }
-
-    fn get_calls(&mut self) -> Result<Vec<String>> {
-        Ok(vec!["values".to_string()])
-    }
-
-    fn get_data(
-        &mut self,
-        buffer: Vec<ProcessedData>,
-        _query: String,
-        _metrics: &mut DataMetrics,
-    ) -> Result<String> {
-        if buffer.is_empty() {
-            return Ok(String::new());
-        }
-
-        match buffer[0] {
-            ProcessedData::Flamegraph(ref value) => Ok(value.data.clone()),
-            _ => unreachable!(),
-        }
-    }
-
-    fn has_custom_raw_data_parser() -> bool {
-        true
-    }
-
-    fn process_raw_data_new(
+    fn process_raw_data(
         &mut self,
         params: ReportParams,
         _raw_data: Vec<Data>,

@@ -1,6 +1,6 @@
 use aperf::data::netstat::NetstatRaw;
+use aperf::data::ProcessData;
 use aperf::data::{Data, TimeEnum};
-use aperf::visualizer::GetData;
 use aperf::visualizer::ReportParams;
 use chrono::Utc;
 use std::collections::HashMap;
@@ -117,7 +117,7 @@ fn test_process_netstat_raw_data_complex() {
     let raw_data = generate_netstat_raw_data(&expected_per_sample_stats, 2);
     let mut netstat = aperf::data::netstat::Netstat::new();
     let result = netstat
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
@@ -223,7 +223,7 @@ fn test_process_netstat_raw_data_simple() {
     let raw_data = generate_netstat_raw_data(&expected_per_sample_stats, 1);
     let mut netstat = aperf::data::netstat::Netstat::new();
     let result = netstat
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
@@ -286,7 +286,7 @@ fn test_process_netstat_dynamic_stats() {
     let raw_data = generate_netstat_raw_data(&expected_per_sample_stats, 1);
     let mut netstat = aperf::data::netstat::Netstat::new();
     let result = netstat
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
@@ -337,7 +337,7 @@ fn test_process_netstat_single_prefix() {
     let raw_data = generate_netstat_raw_data(&expected_per_sample_stats, 2);
     let mut netstat = aperf::data::netstat::Netstat::new();
     let result = netstat
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
@@ -377,7 +377,7 @@ fn test_process_netstat_empty_data() {
     let raw_data = Vec::new();
     let mut netstat = aperf::data::netstat::Netstat::new();
     let result = netstat
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
@@ -423,7 +423,7 @@ fn test_process_netstat_input_validation() {
 
     let mut netstat = aperf::data::netstat::Netstat::new();
     let result = netstat
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {

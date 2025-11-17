@@ -1,8 +1,7 @@
-use super::CollectorParams;
+use super::{CollectorParams, ProcessData};
 use crate::data::data_formats::{AperfData, KeyValueData, KeyValueGroup};
-use crate::data::{CollectData, Data, ProcessedData, TimeEnum};
-use crate::utils::DataMetrics;
-use crate::visualizer::{GetData, ReportParams};
+use crate::data::{CollectData, Data, TimeEnum};
+use crate::visualizer::ReportParams;
 use crate::PDError;
 use anyhow::Result;
 use chrono::prelude::*;
@@ -187,10 +186,6 @@ impl CollectData for KernelConfig {
     }
 }
 
-fn get_kernel_config(value: KernelConfig) -> Result<String> {
-    Ok(serde_json::to_string(&value.kernel_config_data)?)
-}
-
 /// Recursively parse kernel configs into key-value data. Flatten the config group hierarchy by
 /// concatenating ancestors' group name.
 fn parse_kernel_config(
@@ -227,46 +222,8 @@ fn parse_kernel_config(
     key_value_groups.insert(config_group_name, key_value_group);
 }
 
-impl GetData for KernelConfig {
-    fn process_raw_data(&mut self, buffer: Data) -> Result<ProcessedData> {
-        let raw_value = match buffer {
-            Data::KernelConfig(ref value) => value,
-            _ => panic!("Invalid Data type in raw file"),
-        };
-        let processed_data = ProcessedData::KernelConfig((*raw_value).clone());
-        Ok(processed_data)
-    }
-
-    fn get_calls(&mut self) -> Result<Vec<String>> {
-        Ok(vec!["values".to_string()])
-    }
-
-    fn get_data(
-        &mut self,
-        buffer: Vec<ProcessedData>,
-        query: String,
-        _metrics: &mut DataMetrics,
-    ) -> Result<String> {
-        let mut values = Vec::new();
-        for data in buffer {
-            match data {
-                ProcessedData::KernelConfig(ref value) => values.push(value.clone()),
-                _ => panic!("Invalid Data type in file"),
-            }
-        }
-        let param: Vec<(String, String)> = serde_urlencoded::from_str(&query).unwrap();
-        if param.len() < 2 {
-            panic!("Not enough arguments");
-        }
-        let (_, req_str) = &param[1];
-
-        match req_str.as_str() {
-            "values" => get_kernel_config(values[0].clone()),
-            _ => panic!("Unsupported API"),
-        }
-    }
-
-    fn process_raw_data_new(
+impl ProcessData for KernelConfig {
+    fn process_raw_data(
         &mut self,
         _params: ReportParams,
         raw_data: Vec<Data>,
@@ -296,10 +253,8 @@ impl GetData for KernelConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::{KernelConfig, KernelConfigEntryGroup};
-    use crate::data::{CollectData, CollectorParams, Data, ProcessedData};
-    use crate::utils::DataMetrics;
-    use crate::visualizer::GetData;
+    use super::KernelConfig;
+    use crate::data::{CollectData, CollectorParams};
 
     #[test]
     fn test_collect_data() {
@@ -308,30 +263,5 @@ mod tests {
 
         kernel_config.collect_data(&params).unwrap();
         assert!(!kernel_config.kernel_config_data.is_empty());
-    }
-
-    #[test]
-    fn test_get_values() {
-        let mut buffer: Vec<Data> = Vec::<Data>::new();
-        let mut kernel_config = KernelConfig::new();
-        let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
-        let params = CollectorParams::new();
-
-        kernel_config.collect_data(&params).unwrap();
-        buffer.push(Data::KernelConfig(kernel_config));
-        processed_buffer.push(
-            KernelConfig::new()
-                .process_raw_data(buffer[0].clone())
-                .unwrap(),
-        );
-        let json = KernelConfig::new()
-            .get_data(
-                processed_buffer,
-                "run=test&get=values".to_string(),
-                &mut DataMetrics::new(String::new()),
-            )
-            .unwrap();
-        let values: Vec<KernelConfigEntryGroup> = serde_json::from_str(&json).unwrap();
-        assert!(!values.is_empty());
     }
 }
