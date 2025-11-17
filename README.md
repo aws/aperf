@@ -227,8 +227,7 @@ Check out this interactive walkthrough of the `aperf` codebase on CodeCanvas [he
 
 To refine existing dataflow simulation or create new ones, follow the quick tutorial [here](https://docs.code-canvas.com/updating-diagram).
 
-<img width="1916" alt="CodeCanvas Screenshot" src="https://codecanvas-media-public.s3.amazonaws.com/images/codecanvas-readme-screenshot.png" />
-
+<img width="1469" height="727" alt="image" src="https://github.com/user-attachments/assets/86cd1eab-7f67-4719-95aa-65b64e4c6ac7" />
 
 ## APerf Issues?
 #### PMU Counters:
