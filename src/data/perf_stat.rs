@@ -1,8 +1,7 @@
 use crate::data::data_formats::{AperfData, Series, Statistics, TimeSeriesData, TimeSeriesMetric};
 use crate::data::utils::{get_aggregate_cpu_series_name, get_cpu_series_name};
-use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
-use crate::utils::{add_metrics, get_data_name_from_type, DataMetrics, Metric};
-use crate::visualizer::{GetData, GraphLimitType, GraphMetadata, ReportParams};
+use crate::data::{CollectData, CollectorParams, Data, ProcessData, TimeEnum};
+use crate::visualizer::ReportParams;
 use crate::PDError;
 use anyhow::Result;
 use chrono::prelude::*;
@@ -12,25 +11,25 @@ use perf_event::{Builder, Counter, Group, ReadFormat};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader, ErrorKind};
+use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
 #[cfg(target_arch = "aarch64")]
 pub mod arm64_perf_list {
-    pub static GRV_EVENTS: &[u8] = include_bytes!("grv_perf_list.json");
+    pub static GRV_EVENTS: &[u8] = include_bytes!("../pmu_configs/grv_perf_list.json");
 }
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub mod x86_perf_list {
     /// Intel+ events.
-    pub static INTEL_EVENTS: &[u8] = include_bytes!("intel_perf_list.json");
-    pub static ICX_CTRS: &[u8] = include_bytes!("intel_icelake_ctrs.json");
-    pub static SPR_CTRS: &[u8] = include_bytes!("intel_sapphire_rapids_ctrs.json");
+    pub static INTEL_EVENTS: &[u8] = include_bytes!("../pmu_configs/intel_perf_list.json");
+    pub static ICX_CTRS: &[u8] = include_bytes!("../pmu_configs/intel_icelake_ctrs.json");
+    pub static SPR_CTRS: &[u8] = include_bytes!("../pmu_configs/intel_sapphire_rapids_ctrs.json");
 
     /// AMD+ events.
-    pub static AMD_EVENTS: &[u8] = include_bytes!("amd_perf_list.json");
-    pub static GENOA_CTRS: &[u8] = include_bytes!("amd_genoa_ctrs.json");
-    pub static MILAN_CTRS: &[u8] = include_bytes!("amd_milan_ctrs.json");
+    pub static AMD_EVENTS: &[u8] = include_bytes!("../pmu_configs/amd_perf_list.json");
+    pub static GENOA_CTRS: &[u8] = include_bytes!("../pmu_configs/amd_genoa_ctrs.json");
+    pub static MILAN_CTRS: &[u8] = include_bytes!("../pmu_configs/amd_milan_ctrs.json");
 }
 
 #[derive(Copy, Clone, Debug, Deserialize, Serialize)]
@@ -341,159 +340,13 @@ impl CollectData for PerfStatRaw {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct PerfStat {
-    pub perf_stats: Vec<PerCPUNamedStats>,
-}
+pub struct PerfStat;
 
 impl PerfStat {
     pub fn new() -> Self {
-        PerfStat {
-            perf_stats: Vec::new(),
-        }
-    }
-
-    fn add_named_stat(&mut self, cpu: u64, stat: NamedStat) {
-        for per_cpu_named_stat in &mut self.perf_stats {
-            if per_cpu_named_stat.cpu == cpu {
-                per_cpu_named_stat.named_stats.push(stat);
-                return;
-            }
-        }
-        let mut per_cpu_named_stats = PerCPUNamedStats {
-            cpu,
-            named_stats: Vec::new(),
-        };
-        per_cpu_named_stats.named_stats.push(stat);
-        self.perf_stats.push(per_cpu_named_stats);
+        PerfStat
     }
 }
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct PerCPUNamedStats {
-    pub cpu: u64,
-    pub named_stats: Vec<NamedStat>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct NamedStat {
-    pub time: TimeEnum,
-    pub name: String,
-    pub nr_value: u64,
-    pub dr_value: u64,
-    pub scale: u64,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct EndStat {
-    pub cpu: i64,
-    pub value: f64,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct EndStats {
-    pub time: TimeEnum,
-    pub cpus: Vec<EndStat>,
-}
-
-impl EndStats {
-    fn new() -> Self {
-        EndStats {
-            time: TimeEnum::DateTime(Utc::now()),
-            cpus: Vec::new(),
-        }
-    }
-}
-
-pub struct InterStat {
-    pub cpu: u64,
-    pub named_stat: NamedStat,
-}
-
-fn get_named_stat_for_all_cpus(value: PerfStat, key: String) -> Vec<InterStat> {
-    let mut named_stats = Vec::new();
-    for per_cpu_named_stat in value.perf_stats {
-        for named_stat in per_cpu_named_stat.named_stats {
-            if named_stat.name == key {
-                named_stats.push(InterStat {
-                    cpu: per_cpu_named_stat.cpu,
-                    named_stat,
-                });
-                break;
-            }
-        }
-    }
-    named_stats
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct EndPerfData {
-    pub data: Vec<EndStats>,
-    pub metadata: GraphMetadata,
-}
-
-fn get_values(values: Vec<PerfStat>, key: String, metrics: &mut DataMetrics) -> Result<String> {
-    let time_zero = &values[0].perf_stats[0].named_stats[0].time;
-    let mut metadata = GraphMetadata::new();
-    let mut end_values = Vec::new();
-    let mut aggregate_value: f64;
-    let mut metric = Metric::new(key.clone());
-    for value in &values {
-        let mut end_stats = EndStats::new();
-        let mut end_cpu_stats = Vec::new();
-        let stats = get_named_stat_for_all_cpus(value.clone(), key.clone());
-        let mut aggregate_nr = 0;
-        let mut aggregate_dr = 0;
-        for stat in &stats {
-            let this_cpu_end_stat_value =
-                stat.named_stat.nr_value as f64 / stat.named_stat.dr_value as f64;
-            let this_cpu_end_stat = EndStat {
-                cpu: stat.cpu as i64,
-                value: this_cpu_end_stat_value * stat.named_stat.scale as f64,
-            };
-            metadata.update_limits(GraphLimitType::F64(this_cpu_end_stat.value));
-            end_cpu_stats.push(this_cpu_end_stat);
-            aggregate_nr += stat.named_stat.nr_value;
-            aggregate_dr += stat.named_stat.dr_value;
-        }
-        aggregate_value =
-            (aggregate_nr as f64 / aggregate_dr as f64) * stats[0].named_stat.scale as f64;
-        metadata.update_limits(GraphLimitType::F64(aggregate_value));
-        let aggr_cpu_stat = EndStat {
-            cpu: -1,
-            value: aggregate_value,
-        };
-        metric.insert_value(aggregate_value);
-        end_cpu_stats.push(aggr_cpu_stat);
-
-        end_stats.time = stats[0].named_stat.time - *time_zero;
-        end_stats.cpus = end_cpu_stats;
-        end_values.push(end_stats);
-    }
-    add_metrics(
-        key,
-        &mut metric,
-        metrics,
-        get_data_name_from_type::<PerfStat>().to_string(),
-    )?;
-    let perf_data = EndPerfData {
-        data: end_values,
-        metadata,
-    };
-    Ok(serde_json::to_string(&perf_data)?)
-}
-
-fn get_named_events(value: PerfStat) -> Result<String> {
-    let mut evt_names = Vec::new();
-    let named_stats = &value.perf_stats[0].named_stats;
-    for stat in named_stats {
-        evt_names.push(stat.name.clone());
-    }
-    Ok(serde_json::to_string(&evt_names)?)
-}
-
-// TODO: ------------------------------------------------------------------------------------------
-//       Below are the new implementation to process PMU stats into uniform data format. Remove
-//       the original for the migration.
 
 /// Parse the single-line raw PMU stat collected during APerf record into
 /// (cpu number, stat name, numerator, denominator, scale)
@@ -555,89 +408,8 @@ fn parse_raw_pmu_stat(raw_pmu_stat: &str) -> Result<(usize, String, f64, f64, f6
     ))
 }
 
-// TODO: ------------------------------------------------------------------------------------------
-
-impl GetData for PerfStat {
-    fn process_raw_data(&mut self, buffer: Data) -> Result<ProcessedData> {
-        let mut perf_stat = PerfStat::new();
-        let raw_value = match buffer {
-            Data::PerfStatRaw(ref value) => value,
-            _ => panic!("Invalid Data type in raw file"),
-        };
-        let reader = BufReader::new(raw_value.data.as_bytes());
-        for line in reader.lines() {
-            let line = line?;
-            let line_str: Vec<&str> = line.split(';').collect();
-
-            // CPU and Stat name
-            let mut cpu_and_name: Vec<&str> = line_str[0].split_whitespace().collect();
-            let cpu = cpu_and_name[0].parse::<u64>();
-            cpu_and_name.remove(0);
-            let stat_name = cpu_and_name.join(" ");
-
-            // Numerators
-            let nr_split: Vec<&str> = line_str[1].split_whitespace().collect();
-            let mut nr_value: u64 = 0;
-            for nr in nr_split {
-                nr_value += nr.parse::<u64>()?;
-            }
-
-            // Denominators
-            let dr_split: Vec<&str> = line_str[2].split_whitespace().collect();
-            let mut dr_value: u64 = 0;
-            for dr in dr_split {
-                dr_value += dr.parse::<u64>()?;
-            }
-
-            let scale: u64 = line_str[3].parse::<u64>()?;
-
-            let named_stat = NamedStat {
-                time: raw_value.time,
-                name: stat_name.to_string(),
-                nr_value,
-                dr_value,
-                scale,
-            };
-            perf_stat.add_named_stat(cpu?, named_stat);
-        }
-        let processed_data = ProcessedData::PerfStat(perf_stat);
-        Ok(processed_data)
-    }
-
-    fn get_calls(&mut self) -> Result<Vec<String>> {
-        Ok(vec!["keys".to_string(), "values".to_string()])
-    }
-
-    fn get_data(
-        &mut self,
-        buffer: Vec<ProcessedData>,
-        query: String,
-        metrics: &mut DataMetrics,
-    ) -> Result<String> {
-        let mut values = Vec::new();
-        for data in buffer {
-            match data {
-                ProcessedData::PerfStat(ref value) => values.push(value.clone()),
-                _ => unreachable!(),
-            }
-        }
-        let param: Vec<(String, String)> = serde_urlencoded::from_str(&query).unwrap();
-        if param.len() < 2 {
-            panic!("Not enough arguments");
-        }
-        let (_, req_str) = &param[1];
-
-        match req_str.as_str() {
-            "keys" => get_named_events(values[0].clone()),
-            "values" => {
-                let (_, key) = &param[2];
-                get_values(values, key.to_string(), metrics)
-            }
-            _ => panic!("Unsupported API"),
-        }
-    }
-
-    fn process_raw_data_new(
+impl ProcessData for PerfStat {
+    fn process_raw_data(
         &mut self,
         _params: ReportParams,
         raw_data: Vec<Data>,
@@ -765,11 +537,8 @@ impl GetData for PerfStat {
 
 #[cfg(test)]
 mod tests {
-    use super::{PerfStat, PerfStatRaw};
-    use crate::data::{CollectData, CollectorParams, Data, ProcessedData};
-    use crate::utils::DataMetrics;
-    use crate::visualizer::GetData;
-    use std::collections::HashMap;
+    use super::PerfStatRaw;
+    use crate::data::{CollectData, CollectorParams};
     use std::io::ErrorKind;
 
     #[test]
@@ -792,60 +561,6 @@ mod tests {
             Ok(_) => {
                 perf_stat.collect_data(&params).unwrap();
                 assert!(!perf_stat.data.is_empty());
-            }
-        }
-    }
-
-    #[test]
-    fn test_get_named_events() {
-        let mut perf_stat = PerfStatRaw::new();
-        let mut buffer: Vec<Data> = Vec::<Data>::new();
-        let mut processed_buffer: Vec<ProcessedData> = Vec::new();
-        let params = CollectorParams::new();
-
-        match perf_stat.prepare_data_collector(&params) {
-            Err(e) => {
-                if let Some(os_error) = e.downcast_ref::<std::io::Error>() {
-                    match os_error.kind() {
-                        ErrorKind::PermissionDenied => {
-                            panic!("Set /proc/sys/kernel/perf_event_paranoid to 0")
-                        }
-                        ErrorKind::NotFound => println!("PMU counters not available on this instance type. Refer to APerf documentation for supported instances"),
-                        _ => panic!("{}", os_error),
-                    }
-                }
-            }
-            Ok(_) => {
-                perf_stat.collect_data(&params).unwrap();
-                buffer.push(Data::PerfStatRaw(perf_stat));
-                for buf in buffer {
-                    processed_buffer.push(PerfStat::new().process_raw_data(buf).unwrap());
-                }
-                let events = PerfStat::new()
-                    .get_data(
-                        processed_buffer,
-                        "run=test&get=keys".to_string(),
-                        &mut DataMetrics::new(String::new()),
-                    )
-                    .unwrap();
-                let values: Vec<String> = serde_json::from_str(&events).unwrap();
-
-                // Make sure at least ipc was reported (should be present everywhere)
-                assert!(values.contains(&"ipc".to_owned()));
-
-                // Make sure all keys that were reported were returned the same number of
-                // times (in other words that they were all reported for all CPUs)
-                let mut event_counts = HashMap::new();
-                for event in values {
-                    if let Some(c) = event_counts.get_mut(&event) {
-                        *c += 1;
-                    } else {
-                        event_counts.insert(event, 1);
-                    }
-                }
-                let mut counts: Vec<_> = event_counts.into_values().collect();
-                counts.dedup();
-                assert_eq!(counts.len(), 1);
             }
         }
     }

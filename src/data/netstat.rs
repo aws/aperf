@@ -1,14 +1,11 @@
 use crate::data::data_formats::{AperfData, Series, Statistics, TimeSeriesData, TimeSeriesMetric};
-use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
-use crate::utils::{add_metrics, get_data_name_from_type, DataMetrics, Metric};
-use crate::visualizer::{GetData, GraphLimitType, GraphMetadata, ReportParams};
-use crate::PDError;
+use crate::data::{CollectData, CollectorParams, Data, ProcessData, TimeEnum};
+use crate::visualizer::ReportParams;
 use anyhow::Result;
 use chrono::prelude::*;
 use log::{error, trace};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NetstatRaw {
@@ -36,90 +33,13 @@ impl CollectData for NetstatRaw {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Netstat {
-    pub time: TimeEnum,
-    pub netstat_data: HashMap<String, u64>,
-}
+pub struct Netstat;
 
 impl Netstat {
     pub fn new() -> Self {
-        Netstat {
-            time: TimeEnum::DateTime(Utc::now()),
-            netstat_data: HashMap::new(),
-        }
-    }
-
-    fn set_time(&mut self, time: TimeEnum) {
-        self.time = time;
-    }
-
-    fn set_data(&mut self, data: HashMap<String, u64>) {
-        self.netstat_data = data;
+        Netstat
     }
 }
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct NetstatEntry {
-    pub time: TimeEnum,
-    pub value: u64,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct EndNetData {
-    pub data: Vec<NetstatEntry>,
-    pub metadata: GraphMetadata,
-}
-
-fn get_entry(values: Vec<Netstat>, key: String, metrics: &mut DataMetrics) -> Result<String> {
-    let mut end_values = Vec::new();
-    let mut metric = Metric::new(key.clone());
-    let mut metadata = GraphMetadata::new();
-    let time_zero = values[0].time;
-    let mut prev_netstat = values[0].clone();
-    for value in values {
-        let current_netstat = value.clone();
-        let current_time = current_netstat.time;
-
-        let curr_data = current_netstat.netstat_data.clone();
-        let curr_value = curr_data
-            .get(&key)
-            .ok_or(PDError::VisualizerNetstatValueGetError(key.to_string()))?;
-        let prev_data = prev_netstat.netstat_data.clone();
-        let prev_value = prev_data
-            .get(&key)
-            .ok_or(PDError::VisualizerNetstatValueGetError(key.to_string()))?;
-
-        let netstat_entry = NetstatEntry {
-            time: (current_time - time_zero),
-            value: *curr_value - *prev_value,
-        };
-        metric.insert_value(netstat_entry.value as f64);
-        metadata.update_limits(GraphLimitType::UInt64(netstat_entry.value));
-        end_values.push(netstat_entry);
-        prev_netstat = value.clone();
-    }
-    let netdata = EndNetData {
-        data: end_values,
-        metadata,
-    };
-    add_metrics(
-        key,
-        &mut metric,
-        metrics,
-        get_data_name_from_type::<Netstat>().to_string(),
-    )?;
-    Ok(serde_json::to_string(&netdata)?)
-}
-
-fn get_entries(value: Netstat) -> Result<String> {
-    let mut keys: Vec<String> = value.netstat_data.into_keys().collect();
-    keys.sort();
-    Ok(serde_json::to_string(&keys)?)
-}
-
-// TODO: ------------------------------------------------------------------------------------------
-//       Below are the new implementation to process netstat into uniform data format. Remove
-//       the original for the migration.
 
 fn parse_raw_netstat_data(raw_netstat_data: &String) -> Result<HashMap<String, u64>, String> {
     let mut netstat: HashMap<String, u64> = HashMap::new();
@@ -158,79 +78,8 @@ fn parse_raw_netstat_data(raw_netstat_data: &String) -> Result<HashMap<String, u
     Ok(netstat)
 }
 
-// TODO: ------------------------------------------------------------------------------------------
-
-impl GetData for Netstat {
-    fn process_raw_data(&mut self, buffer: Data) -> Result<ProcessedData> {
-        let raw_value = match buffer {
-            Data::NetstatRaw(ref value) => value,
-            _ => panic!("Invalid Data type in raw file"),
-        };
-        let mut netstat = Netstat::new();
-        let reader = BufReader::new(raw_value.data.as_bytes());
-        let mut map: HashMap<String, u64> = HashMap::new();
-        let mut lines = reader.lines();
-
-        while let (Some(line1), Some(line2)) = (lines.next(), lines.next()) {
-            let binding = line1.unwrap();
-            let params: Vec<&str> = binding.split_whitespace().collect();
-
-            let binding = line2.unwrap();
-            let values: Vec<&str> = binding.split_whitespace().collect();
-
-            if params.len() != values.len() {
-                panic!("Parameter count should match value count!")
-            }
-
-            let mut param_itr = params.iter();
-            let mut val_itr = values.iter();
-
-            let tag = param_itr.next().unwrap().to_owned();
-            val_itr.next();
-
-            for param in param_itr {
-                let val = val_itr.next().ok_or(PDError::ProcessorOptionExtractError)?;
-                map.insert(tag.to_owned() + " " + param.to_owned(), val.parse::<u64>()?);
-            }
-        }
-
-        netstat.set_time(raw_value.time);
-        netstat.set_data(map);
-        let processed_data = ProcessedData::Netstat(netstat);
-        Ok(processed_data)
-    }
-
-    fn get_calls(&mut self) -> Result<Vec<String>> {
-        Ok(vec!["keys".to_string(), "values".to_string()])
-    }
-
-    fn get_data(
-        &mut self,
-        buffer: Vec<ProcessedData>,
-        query: String,
-        metrics: &mut DataMetrics,
-    ) -> Result<String> {
-        let mut values = Vec::new();
-        for data in buffer {
-            match data {
-                ProcessedData::Netstat(ref value) => values.push(value.clone()),
-                _ => unreachable!(),
-            }
-        }
-        let param: Vec<(String, String)> = serde_urlencoded::from_str(&query).unwrap();
-        let (_, req_str) = &param[1];
-
-        match req_str.as_str() {
-            "keys" => get_entries(values[0].clone()),
-            "values" => {
-                let (_, key) = &param[2];
-                get_entry(values, key.to_string(), metrics)
-            }
-            _ => panic!("Unsupported API"),
-        }
-    }
-
-    fn process_raw_data_new(
+impl ProcessData for Netstat {
+    fn process_raw_data(
         &mut self,
         _params: ReportParams,
         raw_data: Vec<Data>,
@@ -316,10 +165,8 @@ impl GetData for Netstat {
 
 #[cfg(test)]
 mod tests {
-    use super::{EndNetData, Netstat, NetstatRaw};
-    use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
-    use crate::utils::DataMetrics;
-    use crate::visualizer::GetData;
+    use super::NetstatRaw;
+    use crate::data::{CollectData, CollectorParams};
 
     #[test]
     fn test_collect_data() {
@@ -328,51 +175,5 @@ mod tests {
 
         netstat.collect_data(&params).unwrap();
         assert!(!netstat.data.is_empty());
-    }
-
-    #[test]
-    fn test_get_entries() {
-        let mut buffer: Vec<Data> = Vec::<Data>::new();
-        let mut netstat = NetstatRaw::new();
-        let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
-        let params = CollectorParams::new();
-
-        netstat.collect_data(&params).unwrap();
-        buffer.push(Data::NetstatRaw(netstat));
-        processed_buffer.push(Netstat::new().process_raw_data(buffer[0].clone()).unwrap());
-        let json = Netstat::new()
-            .get_data(
-                processed_buffer,
-                "run=test&get=keys".to_string(),
-                &mut DataMetrics::new(String::new()),
-            )
-            .unwrap();
-        let values: Vec<&str> = serde_json::from_str(&json).unwrap();
-        assert!(!values.is_empty());
-    }
-
-    #[test]
-    fn test_get_values() {
-        let mut buffer: Vec<Data> = Vec::<Data>::new();
-        let mut netstat = NetstatRaw::new();
-        let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
-        let params = CollectorParams::new();
-
-        netstat.collect_data(&params).unwrap();
-        buffer.push(Data::NetstatRaw(netstat));
-        processed_buffer.push(Netstat::new().process_raw_data(buffer[0].clone()).unwrap());
-        let json = Netstat::new()
-            .get_data(
-                processed_buffer,
-                "run=test&get=values&key=TcpExt: TCPDSACKRecv".to_string(),
-                &mut DataMetrics::new(String::new()),
-            )
-            .unwrap();
-        let data: EndNetData = serde_json::from_str(&json).unwrap();
-        assert!(!data.data.is_empty());
-        match data.data[0].time {
-            TimeEnum::TimeDiff(value) => assert_eq!(value, 0),
-            _ => unreachable!(),
-        }
     }
 }

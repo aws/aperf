@@ -1,7 +1,7 @@
 use aperf::data::data_formats::AperfData;
 use aperf::data::perf_stat::{PerfStat, PerfStatRaw};
+use aperf::data::ProcessData;
 use aperf::data::{Data, TimeEnum};
-use aperf::visualizer::GetData;
 use aperf::visualizer::ReportParams;
 use chrono::prelude::*;
 use std::collections::HashMap;
@@ -131,7 +131,7 @@ fn test_process_pmu_stat_raw_data_complex() {
 
     let raw_data = generate_pmu_stat_raw_data(&expected_data, 1);
     let result = PerfStat::new()
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {
@@ -241,7 +241,7 @@ fn test_process_pmu_stat_raw_data_simple() {
 
     let raw_data = generate_pmu_stat_raw_data(&expected_data, 2);
     let result = PerfStat::new()
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {
@@ -328,7 +328,7 @@ fn test_process_pmu_stat_multiple_numerators_denominators() {
 
     let raw_data = generate_pmu_stat_raw_data(&expected_data, 1);
     let result = PerfStat::new()
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {
@@ -381,7 +381,7 @@ fn test_process_pmu_stat_multiple_numerators_denominators() {
 fn test_process_pmu_stat_empty_data() {
     let raw_data = Vec::new();
     let result = PerfStat::new()
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {
@@ -405,7 +405,7 @@ fn test_process_pmu_stat_zero_denominator_data_point_skipped() {
     raw_data.push(Data::PerfStatRaw(raw_stat));
 
     let result = PerfStat::new()
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {
@@ -438,7 +438,7 @@ fn test_process_pmu_stat_zero_nonzero_metric_skipped() {
     raw_data.push(Data::PerfStatRaw(raw_stat));
 
     let result = PerfStat::new()
-        .process_raw_data_new(ReportParams::new(), raw_data)
+        .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {

@@ -1,7 +1,6 @@
 use crate::data::data_formats::{AperfData, KeyValueData, KeyValueGroup};
-use crate::data::{CollectData, CollectorParams, Data, ProcessedData, TimeEnum};
-use crate::utils::DataMetrics;
-use crate::visualizer::{GetData, ReportParams};
+use crate::data::{CollectData, CollectorParams, Data, ProcessData, TimeEnum};
+use crate::visualizer::ReportParams;
 use anyhow::Result;
 use chrono::prelude::*;
 use log::trace;
@@ -68,21 +67,8 @@ impl CollectData for SysctlData {
     }
 }
 
-fn get_sysctl_data(value: SysctlData) -> Result<String> {
-    Ok(serde_json::to_string(&value.sysctl_data)?)
-}
-
-impl GetData for SysctlData {
-    fn process_raw_data(&mut self, buffer: Data) -> Result<ProcessedData> {
-        let raw_value = match buffer {
-            Data::SysctlData(ref value) => value,
-            _ => panic!("Invalid Data type in raw file"),
-        };
-        let processed_data = ProcessedData::SysctlData((*raw_value).clone());
-        Ok(processed_data)
-    }
-
-    fn process_raw_data_new(
+impl ProcessData for SysctlData {
+    fn process_raw_data(
         &mut self,
         _params: ReportParams,
         raw_data: Vec<Data>,
@@ -112,44 +98,12 @@ impl GetData for SysctlData {
 
         Ok(AperfData::KeyValue(key_value_data))
     }
-
-    fn get_calls(&mut self) -> Result<Vec<String>> {
-        Ok(vec!["values".to_string()])
-    }
-
-    fn get_data(
-        &mut self,
-        buffer: Vec<ProcessedData>,
-        query: String,
-        _metrics: &mut DataMetrics,
-    ) -> Result<String> {
-        let mut values = Vec::new();
-        for data in buffer {
-            match data {
-                ProcessedData::SysctlData(ref value) => values.push(value.clone()),
-                _ => unreachable!(),
-            }
-        }
-        let param: Vec<(String, String)> = serde_urlencoded::from_str(&query).unwrap();
-        if param.len() < 2 {
-            return Ok("Not enough parameters".to_string());
-        }
-        let (_, req_str) = &param[1];
-
-        match req_str.as_str() {
-            "values" => get_sysctl_data(values[0].clone()),
-            _ => panic!("Unsupported API"),
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{SysctlData, DONT_COLLECT};
-    use crate::data::{CollectData, CollectorParams, Data, ProcessedData};
-    use crate::utils::DataMetrics;
-    use crate::visualizer::GetData;
-    use std::collections::BTreeMap;
+    use crate::data::{CollectData, CollectorParams};
 
     #[test]
     fn test_collect_data() {
@@ -174,30 +128,5 @@ mod tests {
                 }
             }
         }
-    }
-
-    #[test]
-    fn test_get_values() {
-        let mut buffer: Vec<Data> = Vec::<Data>::new();
-        let mut sysctl = SysctlData::new();
-        let mut processed_buffer: Vec<ProcessedData> = Vec::<ProcessedData>::new();
-        let params = CollectorParams::new();
-
-        sysctl.collect_data(&params).unwrap();
-        buffer.push(Data::SysctlData(sysctl));
-        processed_buffer.push(
-            SysctlData::new()
-                .process_raw_data(buffer[0].clone())
-                .unwrap(),
-        );
-        let json = SysctlData::new()
-            .get_data(
-                processed_buffer,
-                "run=test&get=values".to_string(),
-                &mut DataMetrics::new(String::new()),
-            )
-            .unwrap();
-        let values: BTreeMap<String, String> = serde_json::from_str(&json).unwrap();
-        assert!(!values.is_empty());
     }
 }

@@ -1,10 +1,9 @@
-use crate::data::data_formats::{AperfData, DataFormat, ReportData};
-use crate::utils::{combine_value_ranges, topological_sort, DataMetrics};
-use crate::{data::Data, data::ProcessedData, get_file, PDError};
+use crate::data::data_formats::{AperfData, DataFormat, ProcessedData};
+use crate::utils::{combine_value_ranges, topological_sort};
+use crate::{data::Data, data::ReportData, get_file};
 use anyhow::Result;
 use log::{debug, error};
 use rustix::fd::AsRawFd;
-use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -32,35 +31,21 @@ impl ReportParams {
 }
 
 pub struct DataVisualizer {
-    pub data: ProcessedData,
+    pub data_name: &'static str,
+    pub data: ReportData,
     pub file_handle: Option<File>,
-    pub run_values: HashMap<String, Vec<ProcessedData>>,
-    pub report_data: ReportData,
-    pub js_file_name: String,
-    pub js: String,
-    pub api_name: String,
-    pub has_custom_raw_data_parser: bool,
+    pub processed_data: ProcessedData,
     pub data_available: HashMap<String, bool>,
     pub report_params: ReportParams,
 }
 
 impl DataVisualizer {
-    pub fn new(
-        data: ProcessedData,
-        api_name: String,
-        js_file_name: String,
-        js: String,
-        has_custom_raw_data_parser: bool,
-    ) -> Self {
+    pub fn new(data_name: &'static str, data: ReportData) -> Self {
         DataVisualizer {
+            data_name,
             data,
             file_handle: None,
-            run_values: HashMap::new(),
-            report_data: ReportData::new(api_name.clone()),
-            js_file_name,
-            js,
-            api_name,
-            has_custom_raw_data_parser,
+            processed_data: ProcessedData::new(data_name.to_string()),
             data_available: HashMap::new(),
             report_params: ReportParams::new(),
         }
@@ -73,7 +58,7 @@ impl DataVisualizer {
         tmp_dir: &Path,
         report_dir: &Path,
     ) -> Result<()> {
-        let file = get_file(dir.clone(), self.api_name.clone()).or_else(|e| {
+        let file = get_file(dir.clone(), self.data_name.to_string()).or_else(|e| {
             // Backward compatibility: if file is not found using the data's name,
             // see if files with compatible names exist
             for compatible_name in self.data.compatible_filenames() {
@@ -81,7 +66,7 @@ impl DataVisualizer {
                     Ok(compatible_file) => {
                         debug!(
                             "Data file {} not found, use compatible file name {}",
-                            self.api_name, compatible_name
+                            self.data_name, compatible_name
                         );
                         return Ok(compatible_file);
                     }
@@ -98,69 +83,16 @@ impl DataVisualizer {
         self.report_params.run_name = name.clone();
         self.report_params.data_file_path = fs::read_link(full_path).unwrap();
         self.file_handle = Some(file);
-        self.run_values.insert(name.clone(), Vec::new());
         self.data_available.insert(name, true);
         Ok(())
     }
 
-    pub fn process_raw_data(&mut self, name: String) -> Result<()> {
-        if !self.data_available.get(&name).unwrap() {
-            debug!("Raw data unavailable for: {}", self.api_name);
-            return Ok(());
-        }
-        debug!("Processing raw data for: {}", self.api_name);
-        let mut data: Vec<ProcessedData>;
-
-        if self.has_custom_raw_data_parser {
-            data = self
-                .data
-                .custom_raw_data_parser(self.report_params.clone())?;
-        } else {
-            data = Vec::new();
-            let mut raw_data = Vec::new();
-            loop {
-                match bincode::deserialize_from::<_, Data>(self.file_handle.as_ref().unwrap()) {
-                    Ok(v) => raw_data.push(v),
-                    Err(e) => match *e {
-                        // EOF
-                        bincode::ErrorKind::Io(e)
-                            if e.kind() == std::io::ErrorKind::UnexpectedEof =>
-                        {
-                            break
-                        }
-                        e => panic!(
-                            "Error when Deserializing {} data at {} : {}",
-                            self.api_name,
-                            self.report_params.data_file_path.display().to_string(),
-                            e
-                        ),
-                    },
-                };
-            }
-            for value in raw_data {
-                let processed_data = self.data.process_raw_data(value)?;
-                data.push(processed_data);
-            }
-        }
-
-        if data.is_empty() {
-            debug!(
-                "No processed data available for {} at run {}. Marking the run as unavailable.",
-                self.api_name, name
-            );
-            self.data_available.insert(name.clone(), false);
-        }
-
-        self.run_values.insert(name.clone(), data);
-        Ok(())
-    }
-
-    pub fn process_raw_data_new(&mut self, run_name: String) -> Result<()> {
+    pub fn process_raw_data(&mut self, run_name: String) -> Result<()> {
         if !self.data_available.get(&run_name).unwrap() {
-            debug!("Raw data unavailable for: {}", self.api_name);
+            debug!("Raw data unavailable for: {}", self.data_name);
             return Ok(());
         }
-        debug!("Processing raw {} data in {}", self.api_name, run_name);
+        debug!("Processing raw {} data in {}", self.data_name, run_name);
 
         self.file_handle
             .as_ref()
@@ -182,21 +114,24 @@ impl DataVisualizer {
                     {
                         break
                     }
-                    e => panic!(
-                        "Error when Deserializing {} data at {} : {}",
-                        self.api_name,
-                        self.report_params.data_file_path.display().to_string(),
-                        e
-                    ),
+                    e => {
+                        error!(
+                            "Error when Deserializing {} data at {} : {}",
+                            self.data_name,
+                            self.report_params.data_file_path.display().to_string(),
+                            e
+                        );
+                        break;
+                    }
                 },
             };
         }
 
         let processed_data = self
             .data
-            .process_raw_data_new(self.report_params.clone(), raw_data)?;
-        self.report_data.data_format = processed_data.get_format_name();
-        self.report_data.runs.insert(run_name, processed_data);
+            .process_raw_data(self.report_params.clone(), raw_data)?;
+        self.processed_data.data_format = processed_data.get_format_name();
+        self.processed_data.runs.insert(run_name, processed_data);
 
         Ok(())
     }
@@ -204,39 +139,10 @@ impl DataVisualizer {
     /// After the raw data across all runs are processed, run additional data-processing logics
     /// which require all processed data to be available
     pub fn post_process_data(&mut self) {
-        match self.report_data.data_format {
-            DataFormat::TimeSeries => post_process_time_series_data(&mut self.report_data),
+        match self.processed_data.data_format {
+            DataFormat::TimeSeries => post_process_time_series_data(&mut self.processed_data),
             _ => return,
         }
-    }
-
-    pub fn get_data(
-        &mut self,
-        name: String,
-        query: String,
-        metrics: &mut DataMetrics,
-    ) -> Result<String> {
-        if !self.data_available.get(&name).unwrap() {
-            return Err(PDError::DataUnavailableError(
-                self.api_name.clone(),
-                name.clone(),
-            ))?;
-        }
-
-        /* Get run name from Query */
-        let param: Vec<(String, String)> = serde_urlencoded::from_str(&query)?;
-        let (_, run) = param[0].clone();
-
-        let values = self
-            .run_values
-            .get_mut(&run)
-            .ok_or(PDError::VisualizerRunValueGetError(run.to_string()))?;
-
-        self.data.get_data(values.clone(), query, metrics)
-    }
-
-    pub fn get_calls(&mut self) -> Result<Vec<String>> {
-        self.data.get_calls()
     }
 }
 
@@ -245,12 +151,12 @@ impl DataVisualizer {
 ///   graphs could have the same y-axis
 /// - Consolidate sorted_metric_names across different runs, so that the frontend can know
 ///   what metric graphs to render as well the order of rendering
-fn post_process_time_series_data(report_data: &mut ReportData) {
+fn post_process_time_series_data(processed_data: &mut ProcessedData) {
     let mut per_run_sorted_metric_names: Vec<&Vec<String>> = Vec::new();
     let mut per_metric_value_ranges: HashMap<String, Vec<(u64, u64)>> = HashMap::new();
 
     // Collect every run's sorted metric name and every metric's value range
-    for aperf_data in report_data.runs.values() {
+    for aperf_data in processed_data.runs.values() {
         match aperf_data {
             AperfData::TimeSeries(time_series_data) => {
                 per_run_sorted_metric_names.push(&time_series_data.sorted_metric_names);
@@ -291,7 +197,7 @@ fn post_process_time_series_data(report_data: &mut ReportData) {
     }
 
     // Update the TimeSeriesData with the cross-run sorted metric names and value ranges
-    for aperf_data in report_data.runs.values_mut() {
+    for aperf_data in processed_data.runs.values_mut() {
         let time_series_data = match aperf_data {
             AperfData::TimeSeries(time_series_data) => time_series_data,
             _ => {
@@ -304,168 +210,6 @@ fn post_process_time_series_data(report_data: &mut ReportData) {
             if let Some(combined_value_range) = per_metric_combined_value_range.get(metric_name) {
                 time_series_metric.value_range = combined_value_range.to_owned();
             }
-        }
-    }
-}
-
-pub enum GraphLimitType {
-    UInt64(u64),
-    F64(f64),
-}
-
-#[derive(Default, Serialize, Deserialize, Debug, Clone)]
-pub struct GraphLimits {
-    pub low: u64,
-    pub high: u64,
-    pub init_done: bool,
-}
-
-impl GraphLimits {
-    pub fn new() -> Self {
-        GraphLimits {
-            low: 0,
-            high: 0,
-            init_done: false,
-        }
-    }
-}
-
-#[derive(Default, Serialize, Deserialize, Debug, Clone)]
-pub struct GraphMetadata {
-    pub limits: GraphLimits,
-}
-
-impl GraphMetadata {
-    pub fn new() -> Self {
-        GraphMetadata {
-            limits: GraphLimits::new(),
-        }
-    }
-
-    fn update_limit_u64(&mut self, value: u64) {
-        if !self.limits.init_done {
-            self.limits.low = value;
-            self.limits.init_done = true;
-        }
-        if value < self.limits.low {
-            self.limits.low = value;
-        }
-        if value > self.limits.high {
-            self.limits.high = value;
-        }
-    }
-
-    fn update_limit_f64(&mut self, value: f64) {
-        let value_floor = value.floor() as u64;
-        let value_ceil = value.ceil() as u64;
-        if !self.limits.init_done {
-            self.limits.low = value_floor;
-            self.limits.init_done = true;
-        }
-        // Set low
-        if value_floor < self.limits.low {
-            self.limits.low = value_floor;
-        }
-        if value_ceil < self.limits.low {
-            self.limits.low = value_ceil;
-        }
-        // Set high
-        if value_floor > self.limits.high {
-            self.limits.high = value_floor;
-        }
-        if value_ceil > self.limits.high {
-            self.limits.high = value_ceil;
-        }
-    }
-
-    pub fn update_limits(&mut self, value: GraphLimitType) {
-        match value {
-            GraphLimitType::UInt64(v) => self.update_limit_u64(v),
-            GraphLimitType::F64(v) => self.update_limit_f64(v),
-        }
-    }
-}
-
-pub trait GetData {
-    fn compatible_filenames(&self) -> Vec<&str> {
-        vec![]
-    }
-
-    fn get_calls(&mut self) -> Result<Vec<String>> {
-        unimplemented!();
-    }
-
-    fn get_data(
-        &mut self,
-        _values: Vec<ProcessedData>,
-        _query: String,
-        _metrics: &mut DataMetrics,
-    ) -> Result<String> {
-        unimplemented!();
-    }
-
-    fn process_raw_data(&mut self, _buffer: Data) -> Result<ProcessedData> {
-        unimplemented!();
-    }
-
-    fn process_raw_data_new(
-        &mut self,
-        _params: ReportParams,
-        _raw_data: Vec<Data>,
-    ) -> Result<AperfData> {
-        Err(PDError::VisualizerUnsupportedAPI.into()) // TODO: remove when all are implemented
-    }
-
-    fn custom_raw_data_parser(&mut self, _params: ReportParams) -> Result<Vec<ProcessedData>> {
-        unimplemented!();
-    }
-
-    fn has_custom_raw_data_parser() -> bool {
-        false
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::DataVisualizer;
-    use crate::data::cpu_utilization::{CpuData, CpuUtilization};
-    use crate::data::{ProcessedData, TimeEnum};
-    use crate::utils::DataMetrics;
-    use std::path::PathBuf;
-
-    #[test]
-    fn test_unpack_data() {
-        let mut dv = DataVisualizer::new(
-            ProcessedData::CpuUtilization(CpuUtilization::new()),
-            "cpu_utilization".to_string(),
-            String::new(),
-            String::new(),
-            false,
-        );
-        dv.init_visualizer(
-            "tests/test-data/aperf_2023-07-26_18_37_43/".to_string(),
-            "test".to_string(),
-            &PathBuf::new(),
-            &PathBuf::new(),
-        )
-        .unwrap();
-        dv.process_raw_data("test".to_string()).unwrap();
-        let ret = dv
-            .get_data(
-                "test".to_string(),
-                "run=test&get=values&key=aggregate".to_string(),
-                &mut DataMetrics::new(String::new()),
-            )
-            .unwrap();
-        let values: Vec<CpuData> = serde_json::from_str(&ret).unwrap();
-        assert!(values[0].cpu == -1);
-        match values[0].time {
-            TimeEnum::TimeDiff(value) => assert!(value == 0),
-            _ => unreachable!(),
-        }
-        match values[1].time {
-            TimeEnum::TimeDiff(value) => assert!(value == 1),
-            _ => unreachable!(),
         }
     }
 }

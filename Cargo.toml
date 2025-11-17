@@ -68,4 +68,3 @@ csv-to-html = "0.5.10"
 [features]
 default = []
 hotline = []
-new-report = []

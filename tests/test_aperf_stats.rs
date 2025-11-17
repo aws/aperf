@@ -2,8 +2,8 @@
 mod aperf_stats_tests {
     use aperf::data::aperf_stats::AperfStat;
     use aperf::data::data_formats::AperfData;
-    use aperf::data::TimeEnum;
-    use aperf::visualizer::{GetData, ReportParams};
+    use aperf::data::{ProcessData, TimeEnum};
+    use aperf::visualizer::ReportParams;
     use chrono::Utc;
     use std::collections::HashMap;
     use std::path::PathBuf;
@@ -108,7 +108,7 @@ mod aperf_stats_tests {
         let mut aperf_stats = AperfStat::new();
         let params = create_named_report_params(temp_path.to_string());
 
-        let result = aperf_stats.process_raw_data_new(params, vec![]).unwrap();
+        let result = aperf_stats.process_raw_data(params, vec![]).unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
             // Validate structure - should have 5 metrics (aperf + 4 data types)
@@ -208,7 +208,7 @@ mod aperf_stats_tests {
         let mut aperf_stats = AperfStat::new();
         let params = create_named_report_params(temp_path.to_string());
 
-        let result = aperf_stats.process_raw_data_new(params, vec![]).unwrap();
+        let result = aperf_stats.process_raw_data(params, vec![]).unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
             assert_eq!(time_series_data.metrics.len(), 3); // aperf + cpu_utilization + diskstats
@@ -267,7 +267,7 @@ mod aperf_stats_tests {
         let mut aperf_stats = AperfStat::new();
         let params = create_named_report_params(temp_path.to_string());
 
-        let result = aperf_stats.process_raw_data_new(params, vec![]).unwrap();
+        let result = aperf_stats.process_raw_data(params, vec![]).unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
             // Validate series lengths match appearance timing
@@ -320,7 +320,7 @@ mod aperf_stats_tests {
         let mut aperf_stats = AperfStat::new();
         let params = create_named_report_params(temp_path.to_string());
 
-        let result = aperf_stats.process_raw_data_new(params, vec![]).unwrap();
+        let result = aperf_stats.process_raw_data(params, vec![]).unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
             assert_eq!(time_series_data.metrics.len(), 1);
@@ -345,7 +345,7 @@ mod aperf_stats_tests {
         let mut aperf_stats = AperfStat::new();
         let params = create_named_report_params(temp_path.to_string());
 
-        let result = aperf_stats.process_raw_data_new(params, vec![]).unwrap();
+        let result = aperf_stats.process_raw_data(params, vec![]).unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
             // Empty data should result in no metrics
@@ -403,7 +403,7 @@ mod aperf_stats_tests {
         let mut aperf_stats = AperfStat::new();
         let params = create_named_report_params(temp_path.to_string());
 
-        let result = aperf_stats.process_raw_data_new(params, vec![]).unwrap();
+        let result = aperf_stats.process_raw_data(params, vec![]).unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
             // Should have 4 metrics: aperf + cpu_utilization + diskstats + vmstat
