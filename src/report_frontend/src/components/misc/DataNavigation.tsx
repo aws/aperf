@@ -1,7 +1,7 @@
 import React from "react";
-import { SideNavigation, SideNavigationProps } from "@cloudscape-design/components";
+import { SideNavigation, SideNavigationProps, Box } from "@cloudscape-design/components";
 import { APERF_SERVICE_NAME } from "../../definitions/constants";
-import { NAVIGATION_CONFIGS } from "../../definitions/data-config";
+import { NAVIGATION_CONFIGS, VERSION_INFO } from "../../definitions/data-config";
 import { DataType } from "../../definitions/types";
 import { useReportState } from "../ReportStateProvider";
 import { extractDataTypeFromFragment } from "../../utils/utils";
@@ -40,19 +40,29 @@ export default function () {
     href: "https://github.com/aws/aperf/discussions/329",
     external: true,
   });
+  items.push({ type: "divider" });
 
   return (
-    <SideNavigation
-      header={{
-        href: "",
-        text: APERF_SERVICE_NAME,
-      }}
-      items={items}
-      onFollow={(event) => {
-        const dataType = extractDataTypeFromFragment(event.detail.href);
-        if (dataType) setDataComponent(dataType);
-        else setDataComponent("systeminfo");
-      }}
-    />
+    <>
+      <SideNavigation
+        header={{
+          href: "",
+          text: APERF_SERVICE_NAME,
+        }}
+        items={items}
+        onFollow={(event) => {
+          const dataType = extractDataTypeFromFragment(event.detail.href);
+          if (dataType) setDataComponent(dataType);
+          else setDataComponent("systeminfo");
+        }}
+      />
+      <Box color="text-body-secondary" padding={{ left: "xl" }}>
+        <strong>Version Info</strong>
+        <br />
+        Cargo Version: {VERSION_INFO.version}
+        <br />
+        Git SHA: {VERSION_INFO.git_sha.substring(0, 8)}
+      </Box>
+    </>
   );
 }

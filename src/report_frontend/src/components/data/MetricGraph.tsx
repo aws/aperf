@@ -71,7 +71,7 @@ export default function (props: MetricGraphProps) {
       <Box textAlign="center" color="inherit">
         <b>No data collected</b>
         <Box variant="p" color="inherit">
-          This metric was not collected in the Aperf run
+          This metric was not collected in the APerf run
         </Box>
       </Box>
     );

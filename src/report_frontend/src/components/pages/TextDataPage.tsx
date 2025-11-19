@@ -53,7 +53,7 @@ export default function (props: DataPageProps) {
                     <Box textAlign="center" color="inherit">
                       <b>No data collected</b>
                       <Box variant="p" color="inherit">
-                        This data was not collected in the Aperf run
+                        This data was not collected in the APerf run
                       </Box>
                     </Box>
                   )}
