@@ -48,6 +48,7 @@ impl InterruptData {
 #[derive(Clone)]
 struct Interrupt {
     pub interrupt_name: String,
+    pub interrupt_info: String,
     pub per_cpu_values: Vec<u64>,
     pub average_value: f64,
 }
@@ -56,6 +57,7 @@ impl Interrupt {
     fn new(interrupt_name: String) -> Self {
         Interrupt {
             interrupt_name,
+            interrupt_info: String::new(),
             per_cpu_values: Vec::new(),
             average_value: 0.0,
         }
@@ -82,6 +84,7 @@ fn parse_raw_interrupt_data(raw_interrupt_data: &String) -> Vec<Interrupt> {
         };
 
         let mut interrupt = Interrupt::new(interrupt_name.clone());
+        let mut interrupt_info_items: Vec<String> = Vec::new();
         let mut cpu_value_sum: u64 = 0;
 
         // process every CPU's value
@@ -96,7 +99,12 @@ fn parse_raw_interrupt_data(raw_interrupt_data: &String) -> Vec<Interrupt> {
                 None => break,
             }
         }
+        // store the remaining items as the interrupt info
+        for raw_column in raw_columns {
+            interrupt_info_items.push(raw_column.to_string());
+        }
 
+        interrupt.interrupt_info = interrupt_info_items.join(" ");
         // The MIS and ERR interrupts do not have per CPU counts
         if is_interrupt_name_mis_err(&interrupt_name) {
             interrupt.per_cpu_values.clear();
@@ -114,49 +122,23 @@ fn parse_raw_interrupt_data(raw_interrupt_data: &String) -> Vec<Interrupt> {
 /// Generate the name of the interrupt metric based on the interrupt name, number, and info.
 fn get_interrupt_metric_name(interrupt: &Interrupt) -> String {
     match interrupt.interrupt_name.parse::<u64>() {
-        Ok(interrupt_number) => format!("Interrupt #{}", interrupt_number,),
-        Err(_) => interrupt.interrupt_name.clone(),
+        Ok(_interrupt_number) => format!("({})", interrupt.interrupt_info),
+        Err(_) => {
+            if interrupt.interrupt_info.is_empty() {
+                interrupt.interrupt_name.clone()
+            } else {
+                format!(
+                    "{} ({})",
+                    interrupt.interrupt_name, interrupt.interrupt_info
+                )
+            }
+        }
     }
 }
 
 /// Check if the interrupt name is the special interrupt MIS or ERR
 fn is_interrupt_name_mis_err(interrupt_name: &String) -> bool {
     interrupt_name.to_uppercase() == "MIS" || interrupt_name.to_uppercase() == "ERR"
-}
-
-/// Sort all interrupt metric names:
-/// - All Interrupt #* metrics are shown first (ordered by the interrupt numbers)
-/// - If the name is MIS or ERR, they are shown at last
-/// - Others are sorted by name
-fn get_sorted_metric_names(mut interrupt_metric_names: Vec<String>) -> Vec<String> {
-    fn get_interrupt_number(s: &str) -> Option<u32> {
-        if s.starts_with("Interrupt #") {
-            s["Interrupt #".len()..]
-                .split_whitespace()
-                .next()
-                .and_then(|num| num.parse().ok())
-        } else {
-            None
-        }
-    }
-
-    interrupt_metric_names.sort_by(|a, b| {
-        let a_mis_err = is_interrupt_name_mis_err(a);
-        let b_mis_err = is_interrupt_name_mis_err(b);
-        match (a_mis_err, b_mis_err) {
-            (true, true) => a.cmp(b),
-            (true, false) => std::cmp::Ordering::Greater,
-            (false, true) => std::cmp::Ordering::Less,
-            (false, false) => match (get_interrupt_number(a), get_interrupt_number(b)) {
-                (Some(num_a), Some(num_b)) => num_a.cmp(&num_b),
-                (Some(_), None) => std::cmp::Ordering::Less,
-                (None, Some(_)) => std::cmp::Ordering::Greater,
-                (None, None) => a.cmp(b),
-            },
-        }
-    });
-
-    interrupt_metric_names
 }
 
 impl ProcessData for InterruptData {
@@ -253,8 +235,19 @@ impl ProcessData for InterruptData {
                 interrupt_metric.series.push(aggregate_series.clone());
             }
         }
-        time_series_data.sorted_metric_names =
-            get_sorted_metric_names(time_series_data.metrics.keys().cloned().collect());
+
+        // sort by highest avg
+        let mut metric_names_with_avg: Vec<(String, f64)> = time_series_data
+            .metrics
+            .iter()
+            .map(|(name, metric)| (name.clone(), metric.stats.avg))
+            .collect();
+        metric_names_with_avg
+            .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        time_series_data.sorted_metric_names = metric_names_with_avg
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect();
 
         Ok(AperfData::TimeSeries(time_series_data))
     }

@@ -23,7 +23,7 @@ export function RunSystemInfo(props: { runName: string }) {
       <Box textAlign="center" color="inherit">
         <b>No system info collected</b>
         <Box variant="p" color="inherit">
-          The system info was not collected in the Aperf run
+          The system info was not collected in the APerf run
         </Box>
       </Box>
     );
