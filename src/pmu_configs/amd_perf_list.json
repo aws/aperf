@@ -108,7 +108,7 @@
     "scale": 1000
   },
   {
-    "name": "stall_frontend_pkc",
+    "name": "stall-frontend-pkc",
     "nrs": [
       {
         "perf_type": "RAW",

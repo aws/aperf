@@ -4,10 +4,26 @@ use anyhow::Result;
 use clap::Args;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use log::{error, info};
+use serde::Serialize;
 use std::fs;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+
+#[derive(Serialize)]
+struct VersionInfo {
+    version: &'static str,
+    git_sha: &'static str,
+}
+
+impl VersionInfo {
+    fn new() -> Self {
+        Self {
+            version: env!("CARGO_PKG_VERSION"),
+            git_sha: env!("VERGEN_GIT_SHA"),
+        }
+    }
+}
 
 #[derive(Clone, Args, Debug)]
 pub struct Report {
@@ -215,6 +231,17 @@ fn generate_report_files(
         runs_file,
         "runs_raw = {}",
         serde_json::to_string(run_names).unwrap()
+    )
+    .unwrap();
+
+    /* Generate version.js */
+    let version_js_path = processed_data_js_dir.join("version.js");
+    let mut version_file = File::create(version_js_path).unwrap();
+    let version_info = VersionInfo::new();
+    write!(
+        version_file,
+        "version_info = {}",
+        serde_json::to_string(&version_info).unwrap()
     )
     .unwrap();
 

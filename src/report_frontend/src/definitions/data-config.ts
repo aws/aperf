@@ -1,6 +1,7 @@
 import { DataType, ReportData } from "./types";
 
 declare let runs_raw;
+declare let version_info;
 declare let processed_systeminfo_data;
 declare let processed_cpu_utilization_data;
 declare let processed_vmstat_data;
@@ -41,6 +42,8 @@ export const PROCESSED_DATA: { [key in DataType]: ReportData } = {
 
 export const RUNS: string[] = Array.from(runs_raw);
 
+export const VERSION_INFO = version_info;
+
 export const CPU_DATA_TYPES: DataType[] = ["cpu_utilization", "perf_stat", "interrupts"];
 
 interface NavigationConfig {
@@ -62,7 +65,7 @@ export const NAVIGATION_CONFIGS: NavigationConfig[] = [
     items: ["flamegraphs", "perf_profile", "java_profile", "hotline"],
   },
   {
-    sectionName: "Aperf Execution",
+    sectionName: "APerf Execution",
     items: ["aperf_stats", "aperf_runlog"],
   },
 ];
