@@ -2,7 +2,6 @@ extern crate ctor;
 
 use crate::data::ProcessData;
 use crate::data::{CollectData, CollectorParams};
-use crate::visualizer::ReportParams;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "hotline")]
@@ -10,7 +9,7 @@ use {
     crate::data::data_formats::{AperfData, Graph, GraphData, GraphGroup},
     crate::{
         data::{Data, DataType},
-        visualizer::DataVisualizer,
+        visualizer::{DataVisualizer, ReportParams},
     },
     ctor::ctor,
     libc::{_exit, fork, geteuid, killpg, setpgid, waitpid, SIGTERM},
