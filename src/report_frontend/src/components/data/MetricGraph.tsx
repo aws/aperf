@@ -5,7 +5,7 @@ import { CPU_DATA_TYPES, PROCESSED_DATA } from "../../definitions/data-config";
 import Plot from "react-plotly.js";
 import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import { Box, SpaceBetween } from "@cloudscape-design/components";
-import { shouldShowCpuSeries } from "../../utils/utils";
+import { shouldShowCpuSeries, scaleKBData } from "../../utils/utils";
 import MetricStatsDisplay from "./MetricStatsDisplay";
 
 /**
@@ -20,11 +20,19 @@ function getSeriesData(
 ): {
   seriesData: Partial<Plotly.PlotData>[];
   valueRange: number[];
+  scaledUnit: string;
 } {
   const metrics = (PROCESSED_DATA[dataType].runs[runName] as TimeSeriesData)?.metrics;
-  if (metrics === undefined) return { seriesData: [], valueRange: [] };
+  if (metrics === undefined) return { seriesData: [], valueRange: [], scaledUnit: "" };
   const metric = metrics[metricName];
-  if (metric === undefined) return { seriesData: [], valueRange: [] };
+  if (metric === undefined) return { seriesData: [], valueRange: [], scaledUnit: "" };
+
+  const originalUnit =
+    DATA_DESCRIPTIONS[dataType].fieldDescriptions[metricName]?.unit || DATA_DESCRIPTIONS[dataType].defaultUnit;
+
+  // Collect all values to determine scaling
+  const allValues = metric.series.flatMap((series) => series.values);
+  const { scaledUnit, scaleFactor } = scaleKBData(allValues, originalUnit);
 
   const isCpuDataType = CPU_DATA_TYPES.includes(dataType);
   const seriesData = metric.series.map(
@@ -32,7 +40,7 @@ function getSeriesData(
       ({
         name: series.series_name,
         x: series.time_diff,
-        y: series.values,
+        y: scaleFactor === 1 ? series.values : series.values.map((v) => v / scaleFactor),
         type: "scatter",
         visible:
           isCpuDataType && !shouldShowCpuSeries(series.series_name, selectedAggregate, selectedCpus)
@@ -41,9 +49,9 @@ function getSeriesData(
       }) as Partial<Plotly.PlotData>,
   );
 
-  const valueRange = metric.value_range;
+  const scaledValueRange = scaleFactor === 1 ? metric.value_range : metric.value_range.map((v) => v / scaleFactor);
 
-  return { seriesData, valueRange };
+  return { seriesData, valueRange: scaledValueRange, scaledUnit };
 }
 
 export interface MetricGraphProps {
@@ -58,7 +66,7 @@ export interface MetricGraphProps {
 export default function (props: MetricGraphProps) {
   const { selectedCpusPerRun, darkMode } = useReportState();
 
-  const { seriesData, valueRange } = getSeriesData(
+  const { seriesData, valueRange, scaledUnit } = getSeriesData(
     props.dataType,
     props.runName,
     props.metricName,
@@ -88,9 +96,7 @@ export default function (props: MetricGraphProps) {
             gridcolor: darkMode ? "#404040" : "#e0e0e0",
           },
           yaxis: {
-            title:
-              DATA_DESCRIPTIONS[props.dataType].fieldDescriptions[props.metricName]?.unit ||
-              DATA_DESCRIPTIONS[props.dataType].defaultUnit,
+            title: scaledUnit,
             tickformat: ".3s",
             range: valueRange,
             gridcolor: darkMode ? "#404040" : "#e0e0e0",

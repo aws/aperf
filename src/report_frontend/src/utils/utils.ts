@@ -1,4 +1,4 @@
-import { ALL_DATA_TYPES, DataType, TimeSeriesData } from "../definitions/types";
+import { ALL_DATA_TYPES, DataType, TimeSeriesData, Statistics } from "../definitions/types";
 import { CPU_DATA_TYPES, PROCESSED_DATA } from "../definitions/data-config";
 
 export function extractDataTypeFromFragment(fragment: string): DataType {
@@ -69,4 +69,91 @@ export function shouldShowCpuSeries(seriesName: string, selectedAggregate: boole
   } else {
     return true;
   }
+}
+
+/**
+ * Scales KB data and determines appropriate unit based on the maximum value in the dataset
+ */
+export function scaleKBData(
+  data: number[],
+  originalUnit: string,
+): {
+  scaledData: number[];
+  scaledUnit: string;
+  scaleFactor: number;
+} {
+  const { scaledUnit, scaleFactor } = getKBScaling(data, originalUnit);
+  return {
+    scaledData: scaleFactor === 1 ? data : data.map((v) => v / scaleFactor),
+    scaledUnit,
+    scaleFactor,
+  };
+}
+
+/**
+ * Scales KB statistics using the same logic as scaleKBData
+ */
+export function scaleKBStats(
+  stats: Statistics,
+  originalUnit: string,
+  allValues: number[],
+): {
+  scaledStats: Statistics;
+  scaledUnit: string;
+  scaleFactor: number;
+} {
+  const { scaledUnit, scaleFactor } = getKBScaling(allValues, originalUnit);
+
+  if (scaleFactor === 1) {
+    return { scaledStats: stats, scaledUnit, scaleFactor };
+  }
+
+  const scaledStats: Statistics = {
+    avg: stats.avg / scaleFactor,
+    std: stats.std / scaleFactor,
+    min: stats.min / scaleFactor,
+    max: stats.max / scaleFactor,
+    p50: stats.p50 / scaleFactor,
+    p90: stats.p90 / scaleFactor,
+    p99: stats.p99 / scaleFactor,
+    p99_9: stats.p99_9 / scaleFactor,
+  };
+
+  return { scaledStats, scaledUnit, scaleFactor };
+}
+
+/**
+ * Determines the appropriate scaling factor and unit for KB data
+ */
+function getKBScaling(
+  data: number[],
+  originalUnit: string,
+): {
+  scaledUnit: string;
+  scaleFactor: number;
+} {
+  if (!originalUnit.includes("KB")) {
+    return { scaledUnit: originalUnit, scaleFactor: 1 };
+  }
+
+  const filteredData = data.filter((v) => !isNaN(v) && isFinite(v));
+  if (filteredData.length === 0) {
+    return { scaledUnit: originalUnit, scaleFactor: 1 };
+  }
+
+  const maxValue = Math.max(...filteredData);
+
+  if (maxValue >= 1024 * 1024) {
+    return {
+      scaledUnit: originalUnit.replace("KB", "GB"),
+      scaleFactor: 1024 * 1024,
+    };
+  } else if (maxValue >= 1024) {
+    return {
+      scaledUnit: originalUnit.replace("KB", "MB"),
+      scaleFactor: 1024,
+    };
+  }
+
+  return { scaledUnit: originalUnit, scaleFactor: 1 };
 }

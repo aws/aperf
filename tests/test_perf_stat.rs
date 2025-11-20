@@ -111,7 +111,7 @@ fn test_process_pmu_stat_raw_data_complex() {
             let cache_numerators = vec![(100 + sample * 2 + cpu) as u64];
             let cache_denominators = vec![(10000 + sample * 100 + cpu * 50) as u64];
             per_stat.insert(
-                "cache_miss_rate".to_string(),
+                "l3-mpki".to_string(),
                 ExpectedPmuStats::new(cache_numerators, cache_denominators, 100),
             );
 
@@ -119,7 +119,7 @@ fn test_process_pmu_stat_raw_data_complex() {
             let branch_numerators = vec![(9000 + sample * 5 + cpu * 2) as u64];
             let branch_denominators = vec![(10000 + sample * 10 + cpu * 3) as u64];
             per_stat.insert(
-                "branch_accuracy".to_string(),
+                "branch-mpki".to_string(),
                 ExpectedPmuStats::new(branch_numerators, branch_denominators, 1000),
             );
 
@@ -135,12 +135,12 @@ fn test_process_pmu_stat_raw_data_complex() {
         .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {
-        // Validate structure: 3 metrics (branch_accuracy, cache_miss_rate, ipc - sorted alphabetically)
+        // Validate structure: 3 metrics (branch_accuracy, cache_miss_rate, ipc - sorted by guidance)
         assert_eq!(time_series_data.metrics.len(), 3);
         assert_eq!(time_series_data.sorted_metric_names.len(), 3);
         assert_eq!(
             time_series_data.sorted_metric_names,
-            vec!["branch_accuracy", "cache_miss_rate", "ipc"]
+            vec!["ipc", "branch-mpki", "l3-mpki"]
         );
 
         // Validate each metric has 5 series (4 CPUs + 1 aggregate)

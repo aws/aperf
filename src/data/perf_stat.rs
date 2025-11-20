@@ -526,9 +526,35 @@ impl ProcessData for PerfStat {
                 pmu_stat_metric.series.push(aggregate_series.clone());
             }
         }
-        // The metric order is simply by the metric names
+        // The metric order is defined by top down debug method https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/debug_hw_perf.md#how-to-collect-pmu-counters
+        let top_down_order = [
+            "ipc",
+            "stall-frontend-pkc",
+            "stall-backend-pkc",
+            "branch-mpki",
+            "inst-l1-mpki",
+            "inst-tlb-mpki",
+            "inst-tlb-tw-pki",
+            "inst-tlb-tw-mpki",
+            "code-sparsity",
+            "data-l1-mpki",
+            "l2-mpki",
+            "l3-mpki",
+            "data-tlb-mpki",
+            "data-tlb-tw-pki",
+            "data-st-tlb-mpki",
+            "data-st-tlb-tw-pki",
+            "data-rd-tlb-mpki",
+            "data-rd-tlb-tw-pki",
+        ];
+
         let mut pmu_stat_names: Vec<String> = time_series_data.metrics.keys().cloned().collect();
-        pmu_stat_names.sort();
+        pmu_stat_names.sort_by_key(|name| {
+            top_down_order
+                .iter()
+                .position(|&order_name| order_name == name)
+                .unwrap_or(top_down_order.len())
+        });
         time_series_data.sorted_metric_names = pmu_stat_names;
 
         Ok(AperfData::TimeSeries(time_series_data))
