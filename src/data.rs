@@ -18,7 +18,6 @@ pub mod systeminfo;
 pub mod utils;
 pub mod vmstat;
 
-use crate::analytics::AnalyticalRule;
 use crate::data::data_formats::AperfData;
 use crate::utils::get_data_name_from_type;
 use crate::visualizer::{DataVisualizer, ReportParams};
@@ -354,14 +353,6 @@ macro_rules! report_data {
                     )*
                 }
             }
-
-            pub fn get_analytical_rules(&self) -> Vec<AnalyticalRule> {
-                match self {
-                    $(
-                        ReportData::$report_data(ref value) => value.get_analytical_rules(),
-                    )*
-                }
-            }
         }
 
         fn add_visualization_data(visualization_data: &mut VisualizationData, data_name: &'static str, report_data: ReportData) {
@@ -464,12 +455,6 @@ pub trait ProcessData {
         _raw_data: Vec<Data>,
     ) -> Result<AperfData> {
         unimplemented!();
-    }
-}
-
-pub trait AnalyzeData {
-    fn get_analytical_rules(&self) -> Vec<AnalyticalRule> {
-        Vec::new()
     }
 }
 
