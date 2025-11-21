@@ -1,5 +1,5 @@
 import React from "react";
-import {DataType, TimeSeriesData, TimeSeriesMetricProps} from "../../definitions/types";
+import { DataType, TimeSeriesData } from "../../definitions/types";
 import { useReportState } from "../ReportStateProvider";
 import { CPU_DATA_TYPES, PROCESSED_DATA } from "../../definitions/data-config";
 import Plot from "react-plotly.js";
@@ -7,7 +7,6 @@ import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import { Box, SpaceBetween } from "@cloudscape-design/components";
 import { shouldShowCpuSeries, scaleKBData } from "../../utils/utils";
 import MetricStatsDisplay from "./MetricStatsDisplay";
-import {MetricFindings} from "./Finding";
 
 /**
  * Transform processed time series data into the format required by plotly.js.
@@ -55,10 +54,16 @@ function getSeriesData(
   return { seriesData, valueRange: scaledValueRange, scaledUnit };
 }
 
+export interface MetricGraphProps {
+  readonly dataType: DataType;
+  readonly runName: string;
+  readonly metricName: string;
+}
+
 /**
  * This component renders a single metric graph of a particular time series metric of an APerf run.
  */
-export default function (props: TimeSeriesMetricProps) {
+export default function (props: MetricGraphProps) {
   const { selectedCpusPerRun, darkMode } = useReportState();
 
   const { seriesData, valueRange, scaledUnit } = getSeriesData(
@@ -104,7 +109,6 @@ export default function (props: TimeSeriesMetricProps) {
         style={{ width: "100%", height: "100%" }}
         useResizeHandler
       />
-      <MetricFindings dataType={props.dataType} runName={props.runName} metricName={props.metricName} />
     </SpaceBetween>
   );
 }

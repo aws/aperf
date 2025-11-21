@@ -1,7 +1,6 @@
 extern crate lazy_static;
 
-use crate::computations::Statistics;
-use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
+use crate::data::data_formats::{AperfData, Series, Statistics, TimeSeriesData, TimeSeriesMetric};
 use crate::data::{CollectData, CollectorParams, Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;

@@ -1,11 +1,17 @@
 import React, { useRef } from "react";
-import {DataType, Statistics, TimeSeriesData, TimeSeriesMetricProps} from "../../definitions/types";
+import { DataType, Statistics, TimeSeriesData } from "../../definitions/types";
 import { PROCESSED_DATA, RUNS } from "../../definitions/data-config";
 import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import { formatNumber, scaleKBStats } from "../../utils/utils";
 import { Button, SpaceBetween, Box } from "@cloudscape-design/components";
 
-export default function MetricStatsDisplay(props: TimeSeriesMetricProps) {
+interface MetricStatsDisplayProps {
+  dataType: DataType;
+  runName: string;
+  metricName: string;
+}
+
+export default function MetricStatsDisplay(props: MetricStatsDisplayProps) {
   const boxRef = useRef<HTMLDivElement>(null);
 
   const metrics = (PROCESSED_DATA[props.dataType].runs[props.runName] as TimeSeriesData)?.metrics;

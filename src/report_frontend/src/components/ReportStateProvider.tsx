@@ -19,8 +19,6 @@ interface ReportState {
   setSelectedCpusPerRun: (newSelectedCpusPerRun: SelectedCpusPerRun) => void;
   darkMode: boolean;
   setDarkMode: (newDarkMode: boolean) => void;
-  searchKey: string;
-  setSearchKey: (newSearchKey: string) => void;
 }
 
 const ReportStateContext = React.createContext<ReportState | undefined>(undefined);
@@ -40,7 +38,6 @@ export default function (props: { children: ReactNode }) {
     const saved = localStorage.getItem("aperf-dark-mode");
     return saved ? JSON.parse(saved) : false;
   });
-  const [searchKey, setSearchKey] = React.useState("");
 
   const reportState: ReportState = {
     dataComponent,
@@ -71,8 +68,6 @@ export default function (props: { children: ReactNode }) {
       setDarkMode(newDarkMode);
       localStorage.setItem("aperf-dark-mode", JSON.stringify(newDarkMode));
     },
-    searchKey,
-    setSearchKey,
   };
 
   return <ReportStateContext.Provider value={reportState}>{props.children}</ReportStateContext.Provider>;
