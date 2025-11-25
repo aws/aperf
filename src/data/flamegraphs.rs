@@ -5,7 +5,7 @@ use crate::{get_file_name, PDError};
 use anyhow::Result;
 use inferno::collapse::perf::Folder;
 use inferno::collapse::Collapse;
-use inferno::flamegraph::{self, Options};
+use inferno::flamegraph::{self, Direction, Options};
 use log::{error, info, trace};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
@@ -93,14 +93,17 @@ impl CollectData for FlamegraphRaw {
 
                         Folder::default()
                             .collapse_file(Some(script_loc), File::create(&collapse_loc)?)?;
+                        // Generate icicle graph as default
+                        let mut reverse_options = Options::default();
+                        reverse_options.direction = Direction::Inverted;
+                        reverse_options.reverse_stack_order = false;
                         flamegraph::from_files(
-                            &mut Options::default(),
+                            &mut reverse_options,
                             &[collapse_loc.to_path_buf()],
                             fg_out,
                         )?;
 
-                        // Generate reverse flamegraph
-                        let mut reverse_options = Options::default();
+                        // Generate reverse icicle graph
                         reverse_options.reverse_stack_order = true;
                         flamegraph::from_files(
                             &mut reverse_options,
