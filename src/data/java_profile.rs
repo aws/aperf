@@ -349,9 +349,8 @@ impl ProcessData for JavaProfile {
                     &params.report_dir.join(relative_path.clone()),
                 ) {
                     let graph_name = format!(
-                        "JVM: {}, PID: {} ({})",
+                        "JVM: {}, ({})",
                         process_names.first().map_or("unknown", |s| s.as_str()),
-                        process,
                         metric
                     );
                     graph_group.graphs.insert(
