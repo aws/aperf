@@ -4,13 +4,19 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: cargo
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
