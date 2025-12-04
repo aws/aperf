@@ -26,7 +26,7 @@
     "mini-css-extract-plugin": "^2.9.4",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
-    "eslint": "^8.57.1",
+    "eslint": "^9.39.1",
     "eslint-config-prettier": "^8.10.2",
     "eslint-plugin-prettier": "^5.0.0"
   }
