@@ -245,8 +245,7 @@ pub struct KeyValueGroup {
 /// at a time.
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct GraphData {
-    /// A map from group name to all the graphs within the group.
-    pub graph_groups: HashMap<String, GraphGroup>,
+    pub graph_groups: Vec<GraphGroup>,
 }
 
 /// Contents of a graph group, which contains all graphs to be displayed together.

@@ -163,9 +163,7 @@ impl ProcessData for Flamegraph {
                             None,
                         ),
                     );
-                    graph_data
-                        .graph_groups
-                        .insert(graph_group_name.clone(), graph_group);
+                    graph_data.graph_groups.push(graph_group);
                 }
             }
         }
