@@ -369,9 +369,7 @@ impl ProcessData for JavaProfile {
                 }
             }
 
-            graph_data
-                .graph_groups
-                .insert(String::from(metric), graph_group);
+            graph_data.graph_groups.push(graph_group);
         }
 
         Ok(AperfData::Graph(graph_data))
