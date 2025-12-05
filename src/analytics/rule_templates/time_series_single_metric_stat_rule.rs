@@ -67,7 +67,11 @@ impl Analyze for TimeSeriesSingleMetricStatRule {
                     analytics::compute_finding_score(metric_stat, self.threshold, self.score);
                 let mut finding_description = format!(
                     "The {} in {} is {} ({} the threshold of {}).",
-                    self.stat, run_name, f64_to_fixed_2(metric_stat), self.comparator, self.threshold
+                    self.stat,
+                    run_name,
+                    f64_to_fixed_2(metric_stat),
+                    self.comparator,
+                    self.threshold
                 );
                 if !self.message.is_empty() {
                     finding_description.push(' ');

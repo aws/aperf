@@ -1,20 +1,17 @@
+mod rule_templates;
 mod rules;
-mod key_value_run_comparison_rule;
-mod time_series_run_stat_comparison_rule;
-mod time_series_run_stat_similarity_rule;
-mod time_series_single_metric_data_point_rule;
-mod time_series_single_metric_stat_rule;
 
 use crate::data::data_formats::ProcessedData;
-use key_value_run_comparison_rule::KeyValueRunComparisonRule;
+use rule_templates::{
+    key_value_run_comparison_rule::KeyValueRunComparisonRule,
+    time_series_run_stat_comparison_rule::TimeSeriesRunStatComparisonRule,
+    time_series_run_stat_similarity_rule::TimeSeriesRunStatSimilarityRule,
+    time_series_single_metric_data_point_rule::TimeSeriesSingleMetricDataPointRule,
+    time_series_single_metric_stat_rule::TimeSeriesSingleMetricStatRule,
+};
+use rules::multi_data_rules::get_multi_data_rules;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Mutex;
-use time_series_run_stat_comparison_rule::TimeSeriesRunStatComparisonRule;
-use time_series_run_stat_similarity_rule::TimeSeriesRunStatSimilarityRule;
-use time_series_single_metric_data_point_rule::TimeSeriesSingleMetricDataPointRule;
-use time_series_single_metric_stat_rule::TimeSeriesSingleMetricStatRule;
-use rules::multi_data_rules::MULTI_DATA_RULES;
+use std::{collections::HashMap, sync::Mutex};
 
 lazy_static! {
     pub static ref BASE_RUN_NAME: Mutex<String> = Mutex::new(String::from(""));
@@ -40,7 +37,7 @@ impl Default for AnalyticalEngine<'_> {
         AnalyticalEngine {
             all_processed_data: Default::default(),
             per_data_rules: Default::default(),
-            multi_data_rules: MULTI_DATA_RULES,
+            multi_data_rules: get_multi_data_rules(),
             findings: Default::default(),
         }
     }
@@ -58,7 +55,10 @@ impl<'a> AnalyticalEngine<'a> {
     pub fn run(&mut self) {
         for (data_name, data_rules) in &self.per_data_rules {
             if let Some(&processed_data) = self.all_processed_data.get(data_name) {
-                let data_findings = self.findings.entry(data_name.clone()).or_insert(DataFindings::default());
+                let data_findings = self
+                    .findings
+                    .entry(data_name.clone())
+                    .or_insert(DataFindings::default());
                 for data_rule in data_rules {
                     data_rule.analyze(data_findings, processed_data);
                 }
@@ -66,12 +66,14 @@ impl<'a> AnalyticalEngine<'a> {
         }
 
         for multi_data_rule in &self.multi_data_rules {
-            multi_data_rule.analyze(&self.findings, &self.all_processed_data);
+            multi_data_rule.analyze(&mut self.findings, &self.all_processed_data);
         }
     }
 
     pub fn get_data_findings(&mut self, data_name: String) -> &DataFindings {
-        self.findings.entry(data_name).or_insert(DataFindings::default())
+        self.findings
+            .entry(data_name)
+            .or_insert(DataFindings::default())
     }
 }
 
@@ -136,7 +138,11 @@ pub trait Analyze {
 /// of processed data. If a rule matches, it should produce one or more findings and store them
 /// in the relative data's findings.
 pub trait MultiDataAnalyze {
-    fn analyze(&self, findings: &HashMap<String, DataFindings>, all_processed_data: &HashMap<String, &ProcessedData>);
+    fn analyze(
+        &self,
+        findings: &HashMap<String, DataFindings>,
+        all_processed_data: &HashMap<String, &ProcessedData>,
+    );
 }
 
 macro_rules! analytical_rules {
@@ -176,7 +182,7 @@ macro_rules! multi_data_analytical_rules {
         }
 
         impl MultiDataAnalyticalRule {
-            pub fn analyze(&self, findings: &HashMap<String, DataFindings>, all_processed_data: &HashMap<String, &ProcessedData>) {
+            pub fn analyze(&self, _findings: &mut HashMap<String, DataFindings>, _all_processed_data: &HashMap<String, &ProcessedData>) {
                 match self {
                     $(
                         MultiDataAnalyticalRule::$multi_data_analytical_rule(ref multi_data_analytical_rule) => multi_data_analytical_rule.analyze(findings, all_processed_data),

@@ -10,6 +10,7 @@ pub mod report;
 pub mod utils;
 pub mod visualizer;
 
+use crate::analytics::{AnalyticalEngine, DataFindings};
 use crate::data::aperf_runlog::AperfRunlog;
 use crate::data::aperf_stats::AperfStat;
 use crate::utils::get_data_name_from_type;
@@ -31,7 +32,6 @@ use std::path::{Path, PathBuf};
 use std::{fs, process, time};
 use thiserror::Error;
 use timerfd::{SetTimeFlags, TimerFd, TimerState};
-use crate::analytics::{AnalyticalEngine, DataFindings};
 
 pub const APERF_FILE_FORMAT: &str = "bin";
 pub const APERF_TMP: &str = "/tmp";
@@ -447,13 +447,17 @@ impl VisualizationData {
     pub fn run_analytics(&mut self) -> HashMap<String, DataFindings> {
         let mut analytical_engine = AnalyticalEngine::default();
         for (data_name, data_visualizer) in &self.visualizers {
-            analytical_engine.add_data_rules(data_name.clone(), data_visualizer.data.get_analytical_rules());
-            analytical_engine.add_processed_data(data_name.clone(), &data_visualizer.processed_data);
+            analytical_engine.add_data_rules(
+                data_name.clone(),
+                data_visualizer.data.get_analytical_rules(),
+            );
+            analytical_engine
+                .add_processed_data(data_name.clone(), &data_visualizer.processed_data);
         }
-        
+
         info!("Running analytical rules");
         analytical_engine.run();
-        
+
         analytical_engine.findings
     }
 

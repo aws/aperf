@@ -8,6 +8,7 @@ use std::fmt::Formatter;
 /// This rule compares the value of the specified key in every run against the base run and produces
 /// a finding if the value is different from the base run.
 pub struct KeyValueRunComparisonRule {
+    pub key_group: &'static str,
     pub key: &'static str,
     pub score: f64,
     pub message: &'static str,
@@ -15,12 +16,14 @@ pub struct KeyValueRunComparisonRule {
 
 macro_rules! key_value_comparison {
     {
+        key_group: $key_group:literal,
         key: $key:literal,
         score: $score:literal,
         message: $message:literal,
     } => {
         AnalyticalRule::KeyValueRunComparisonRule(
             KeyValueRunComparisonRule{
+                key_group: $key_group,
                 key: $key,
                 score: $score,
                 message: $message,
@@ -34,8 +37,8 @@ impl fmt::Display for KeyValueRunComparisonRule {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "KeyValueRunComparisonRule <checking different values of key {}>",
-            self.key
+            "KeyValueRunComparisonRule <checking different values of key {} in group {}>",
+            self.key, self.key_group
         )
     }
 }
@@ -52,14 +55,8 @@ impl Analyze for KeyValueRunComparisonRule {
             }
         };
         let mut base_value: Option<&String> = None;
-        for key_value_group in base_key_value_data.key_value_groups.values() {
-            match key_value_group.key_values.get(self.key) {
-                Some(value) => {
-                    base_value = Some(value);
-                    break;
-                }
-                None => continue,
-            }
+        if let Some(key_value_group) = base_key_value_data.key_value_groups.get(self.key_group) {
+            base_value = key_value_group.key_values.get(self.key);
         }
 
         if base_value.is_none() {
@@ -69,7 +66,11 @@ impl Analyze for KeyValueRunComparisonRule {
         let base_value = base_value.unwrap();
 
         for run_name in processed_data.runs.keys() {
-            let key_value_data = match processed_data.get_key_value_data(&base_run_name) {
+            if base_run_name == *run_name {
+                continue;
+            }
+
+            let key_value_data = match processed_data.get_key_value_data(&run_name) {
                 Some(key_value_data) => key_value_data,
                 None => continue,
             };

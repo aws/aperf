@@ -85,7 +85,10 @@ impl Analyze for TimeSeriesSingleMetricDataPointRule {
                 };
                 let mut finding_description = format!(
                     "At least one data point in {} is {} ({} the threshold of {}).",
-                    run_name, f64_to_fixed_2(max_score_value), self.comparator, self.threshold
+                    run_name,
+                    f64_to_fixed_2(max_score_value),
+                    self.comparator,
+                    self.threshold
                 );
                 if !self.message.is_empty() {
                     finding_description.push(' ');

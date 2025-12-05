@@ -277,7 +277,8 @@ fn generate_report_files(
                 processed_data_js_file,
                 "{}_findings = {}",
                 data_name, out_findings
-            ).unwrap();
+            )
+            .unwrap();
         }
     }
 

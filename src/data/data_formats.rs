@@ -1,5 +1,5 @@
 use crate::computations::{serialize_f64_vec_fixed2, Statistics};
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use strum_macros::Display;
 
