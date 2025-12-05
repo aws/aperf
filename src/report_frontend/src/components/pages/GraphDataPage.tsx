@@ -24,32 +24,22 @@ const NUM_GRAPHS_PER_PAGE = 10;
  * by SegmentedControl
  */
 function getAllGraphGroups(dataType: DataType): SegmentedControlProps.Option[] {
-  const graphGroupIds: string[] = [];
+  const graphGroupNames: string[] = [];
   for (const runName of RUNS) {
     const reportData = PROCESSED_DATA[dataType].runs[runName] as GraphData;
     if (reportData == undefined) continue;
-    for (const groupId in reportData.graph_groups) {
-      if (!graphGroupIds.includes(groupId)) {
-        graphGroupIds.push(groupId);
+    for (const graphGroup of reportData.graph_groups) {
+      if (!graphGroupNames.includes(graphGroup.group_name)) {
+        graphGroupNames.push(graphGroup.group_name);
       }
     }
   }
-  // Sort the group names and always put the one containing "legacy" at last
-  graphGroupIds.sort((a, b) => {
-    if (a.toLowerCase().includes("legacy")) {
-      return 1;
-    }
-    if (b.toLowerCase().includes("legacy")) {
-      return -1;
-    }
-    return a.localeCompare(b);
-  });
 
   const allGraphGroups: SegmentedControlProps.Option[] = [];
-  for (const groupId of graphGroupIds) {
+  for (const groupName of graphGroupNames) {
     allGraphGroups.push({
-      id: groupId,
-      text: DATA_DESCRIPTIONS[dataType].fieldDescriptions[groupId]?.readableName || groupId,
+      id: groupName,
+      text: DATA_DESCRIPTIONS[dataType].fieldDescriptions[groupName]?.readableName || groupName,
     });
   }
 
@@ -59,19 +49,17 @@ function getAllGraphGroups(dataType: DataType): SegmentedControlProps.Option[] {
 /**
  * Compute the list of graph names sorted by size
  */
-function getGraphNames(dataType: DataType, graphGroup: string): string[] {
+function getGraphNames(dataType: DataType, graphGroupName: string): string[] {
   const graphSizes = new Map<string, number>();
   for (const runName of RUNS) {
     const reportData = PROCESSED_DATA[dataType].runs[runName] as GraphData;
-    if (reportData == undefined || reportData.graph_groups[graphGroup] == undefined) continue;
-    for (const graphName in reportData.graph_groups[graphGroup].graphs) {
+    const graphGroup = reportData?.graph_groups.find((graphGroup) => graphGroup.group_name === graphGroupName);
+    if (graphGroup == undefined) continue;
+    for (const graphName in graphGroup.graphs) {
       if (!graphSizes.has(graphName)) {
         graphSizes.set(graphName, 0);
       }
-      graphSizes.set(
-        graphName,
-        graphSizes.get(graphName) + (reportData.graph_groups[graphGroup].graphs[graphName]?.graph_size || 0),
-      );
+      graphSizes.set(graphName, graphSizes.get(graphName) + (graphGroup.graphs[graphName]?.graph_size || 0));
     }
   }
   return Array.from(graphSizes.keys()).sort((a, b) => graphSizes.get(b) - graphSizes.get(a));
@@ -83,7 +71,7 @@ function getGraphNames(dataType: DataType, graphGroup: string): string[] {
 export default function (props: DataPageProps) {
   const allGraphGroups = React.useMemo(() => getAllGraphGroups(props.dataType), [props.dataType]);
 
-  const [graphGroupId, setGraphGroupId] = React.useState(allGraphGroups[0]?.id || "");
+  const [graphGroupName, setGraphGroupName] = React.useState(allGraphGroups[0]?.id || "");
 
   const graphRowPercentage = Math.floor(100 / RUNS.length);
   const cardDefinition: CardsProps.CardDefinition<string> = {
@@ -93,14 +81,14 @@ export default function (props: DataPageProps) {
       header: <RunHeader runName={runName} />,
       content: (graphName) => (
         <div style={{ paddingTop: "10px", paddingRight: "30px" }}>
-          <IframeGraph dataType={props.dataType} runName={runName} graphGroup={graphGroupId} graphName={graphName} />
+          <IframeGraph dataType={props.dataType} runName={runName} graphGroup={graphGroupName} graphName={graphName} />
         </div>
       ),
       width: graphRowPercentage,
     })),
   };
 
-  const sortedGraphNames = getGraphNames(props.dataType, graphGroupId);
+  const sortedGraphNames = getGraphNames(props.dataType, graphGroupName);
   const { items, filteredItemsCount, collectionProps, filterProps, paginationProps } = useCollection(sortedGraphNames, {
     filtering: {
       filteringFunction: (item: string, filteringText: string) =>
@@ -124,8 +112,8 @@ export default function (props: DataPageProps) {
           actions={
             allGraphGroups.length > 1 && (
               <SegmentedControl
-                selectedId={graphGroupId}
-                onChange={({ detail }) => setGraphGroupId(detail.selectedId)}
+                selectedId={graphGroupName}
+                onChange={({ detail }) => setGraphGroupName(detail.selectedId)}
                 options={allGraphGroups}
               />
             )

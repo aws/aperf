@@ -62,7 +62,7 @@ export interface TextData {
 }
 
 export interface GraphData {
-  readonly graph_groups: { [key in string]: GraphGroup };
+  readonly graph_groups: GraphGroup[];
 }
 
 export interface GraphGroup {

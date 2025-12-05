@@ -13,7 +13,9 @@ export interface IframeGraphProps {
 
 export default function (props: IframeGraphProps) {
   const graphData: GraphData | undefined = PROCESSED_DATA[props.dataType].runs[props.runName] as GraphData;
-  const graphInfo: GraphInfo | undefined = graphData?.graph_groups[props.graphGroup]?.graphs[props.graphName];
+  const graphInfo: GraphInfo | undefined = graphData?.graph_groups.find(
+    (graph_group) => graph_group.group_name == props.graphGroup,
+  )?.graphs[props.graphName];
 
   if (!graphInfo) {
     return <Container>This data was not collected in the APerf run.</Container>;

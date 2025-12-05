@@ -330,9 +330,7 @@ impl ProcessData for Hotline {
                 ),
             );
 
-            graph_data
-                .graph_groups
-                .insert(config.table_id.to_string(), graph_group);
+            graph_data.graph_groups.push(graph_group);
         }
 
         Ok(AperfData::Graph(graph_data))
