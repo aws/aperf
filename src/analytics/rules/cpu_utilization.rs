@@ -1,13 +1,14 @@
-use crate::analytics::time_series_run_stat_similarity_rule::time_series_run_stat_similarity;
-use crate::analytics::time_series_single_metric_stat_rule::time_series_single_metric_stat;
-use crate::analytics::AnalyticalRule;
-use crate::analytics::time_series_run_stat_comparison_rule::time_series_run_stat_comparison;
-use crate::analytics::TimeSeriesRunStatSimilarityRule;
-use crate::analytics::TimeSeriesSingleMetricStatRule;
-use crate::analytics::TimeSeriesRunStatComparisonRule;
+use crate::analytics::rule_templates::{
+    time_series_run_stat_comparison_rule::time_series_run_stat_comparison,
+    time_series_run_stat_similarity_rule::time_series_run_stat_similarity,
+    time_series_single_metric_stat_rule::time_series_single_metric_stat,
+};
+use crate::analytics::{
+    AnalyticalRule, TimeSeriesRunStatComparisonRule, TimeSeriesRunStatSimilarityRule,
+    TimeSeriesSingleMetricStatRule,
+};
 use crate::computations::{Comparator, Stat};
-use crate::data::cpu_utilization::CpuUtilization;
-use crate::data::AnalyzeData;
+use crate::data::{cpu_utilization::CpuUtilization, AnalyzeData};
 
 impl AnalyzeData for CpuUtilization {
     fn get_analytical_rules(&self) -> Vec<AnalyticalRule> {

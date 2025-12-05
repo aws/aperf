@@ -149,8 +149,8 @@ where
 }
 
 pub fn ratio_to_percentage_string(ratio: f64) -> String {
-    let truncate_ratio = f64_to_fixed_2(ratio);
-    format!("{}%", truncate_ratio * 100.0)
+    let percentage = f64_to_fixed_2(ratio * 100.0);
+    format!("{:.2}%", percentage)
 }
 
 pub fn ratio_to_percentage_delta_string(ratio: f64) -> String {

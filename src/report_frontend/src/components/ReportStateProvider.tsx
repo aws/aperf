@@ -21,6 +21,8 @@ interface ReportState {
   setDarkMode: (newDarkMode: boolean) => void;
   searchKey: string;
   setSearchKey: (newSearchKey: string) => void;
+  findingsFilter: { [runName: string]: Set<string> };
+  setFindingsFilter: (runName: string, newFindingsFilter: Set<string>) => void;
 }
 
 const ReportStateContext = React.createContext<ReportState | undefined>(undefined);
@@ -41,6 +43,7 @@ export default function (props: { children: ReactNode }) {
     return saved ? JSON.parse(saved) : false;
   });
   const [searchKey, setSearchKey] = React.useState("");
+  const [findingsFilter, setFindingsFilter] = React.useState<{ [runName: string]: Set<string> }>({});
 
   const reportState: ReportState = {
     dataComponent,
@@ -73,6 +76,10 @@ export default function (props: { children: ReactNode }) {
     },
     searchKey,
     setSearchKey,
+    findingsFilter,
+    setFindingsFilter: (runName: string, newFindingsFilter: Set<string>) => {
+      setFindingsFilter(prev => ({ ...prev, [runName]: newFindingsFilter }));
+    },
   };
 
   return <ReportStateContext.Provider value={reportState}>{props.children}</ReportStateContext.Provider>;

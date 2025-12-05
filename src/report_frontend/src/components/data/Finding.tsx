@@ -1,13 +1,13 @@
-import React from "react";
+import React, { useState } from "react";
 import { ALL_DATA_TYPES, AnalyticalFinding, DataType, TimeSeriesMetricProps } from "../../definitions/types";
-import { Icon, Link, SpaceBetween } from "@cloudscape-design/components";
+import { Icon, Link, SpaceBetween, Button } from "@cloudscape-design/components";
 import { ANALYTICAL_FINDINGS } from "../../definitions/data-config";
 import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import { useReportState } from "../ReportStateProvider";
 
 function getFindingColor(score: number): string {
   if (score == 0 || isNaN(score)) {
-    return "#F2CD54";
+    return "rgba(125, 125, 125, 0.2)";
   } else if (score > 0) {
     return `rgba(0, ${Math.min(score * 60, 255)}, 0, 0.2)`;
   } else {
@@ -26,7 +26,7 @@ function FindingIcon(props: { score: number }) {
 }
 
 /**
- * This component renders a single analytica finding. If showDataLink is true,
+ * This component renders a single analytical finding. If showDataLink is true,
  * it contains a link that directs the user to the corresponding data that this
  * finding belongs to.
  */
@@ -76,6 +76,9 @@ export function Finding(props: FindingProps) {
 }
 
 export function MetricFindings(props: TimeSeriesMetricProps) {
+  const { findingsFilter } = useReportState();
+  const runFilter = findingsFilter[props.runName] || new Set(["negative", "zero", "positive"]);
+  
   const dataFindings = ANALYTICAL_FINDINGS[props.dataType];
   if (dataFindings == undefined) return null;
   const curRunFindings = dataFindings.per_run_findings[props.runName];
@@ -87,9 +90,17 @@ export function MetricFindings(props: TimeSeriesMetricProps) {
   // The findings with low scores ("bad findings") are put at top
   sortedMetricFindings.sort((a, b) => a.score - b.score);
 
+  const filteredFindings = sortedMetricFindings.filter((finding) => {
+    const score = finding.score;
+    if (score < 0) return runFilter.has("negative");
+    if (score === 0 || isNaN(score)) return runFilter.has("zero");
+    if (score > 0) return runFilter.has("positive");
+    return false;
+  });
+
   return (
     <SpaceBetween size={"xxxs"}>
-      {sortedMetricFindings.map((finding) => (
+      {filteredFindings.map((finding) => (
         <Finding finding={finding} />
       ))}
     </SpaceBetween>
@@ -110,6 +121,9 @@ const RUN_FINDINGS_CACHE = new Map<string, RunFindingData[]>();
  * sorted by the score in ascending order.
  */
 export function RunFindings(props: { runName: string }) {
+  const { findingsFilter, setFindingsFilter } = useReportState();
+  const runFilter = findingsFilter[props.runName] || new Set(["negative", "zero", "positive"]);
+
   let runFindings = RUN_FINDINGS_CACHE.get(props.runName);
   if (runFindings == undefined) {
     // Flatten findings of all data types within this run
@@ -129,16 +143,59 @@ export function RunFindings(props: { runName: string }) {
     RUN_FINDINGS_CACHE.set(props.runName, runFindings);
   }
 
+  const filteredFindings = runFindings.filter((findingData) => {
+    const score = findingData.finding.score;
+    if (score < 0) return runFilter.has("negative");
+    if (score === 0 || isNaN(score)) return runFilter.has("zero");
+    if (score > 0) return runFilter.has("positive");
+    return false;
+  });
+
+  const toggleFilter = (filter: string) => {
+    const newFilters = new Set(runFilter);
+    if (newFilters.has(filter)) {
+      newFilters.delete(filter);
+    } else {
+      newFilters.add(filter);
+    }
+    setFindingsFilter(props.runName, newFilters);
+  };
+
   return (
-    <SpaceBetween size={"xxxs"}>
-      {runFindings.map((findingData) => (
-        <Finding
-          dataType={findingData.dataType}
-          dataKey={findingData.dataKey}
-          finding={findingData.finding}
-          showDataLink
-        />
-      ))}
+    <SpaceBetween size={"s"}>
+      <SpaceBetween direction="horizontal" size="xs">
+        <Button
+          variant={runFilter.has("negative") ? "primary" : "normal"}
+          onClick={() => toggleFilter("negative")}
+          iconName="face-sad"
+        >
+          Bad
+        </Button>
+        <Button
+          variant={runFilter.has("zero") ? "primary" : "normal"}
+          onClick={() => toggleFilter("zero")}
+          iconName="face-neutral"
+        >
+          Neutral
+        </Button>
+        <Button
+          variant={runFilter.has("positive") ? "primary" : "normal"}
+          onClick={() => toggleFilter("positive")}
+          iconName="face-happy"
+        >
+          Good
+        </Button>
+      </SpaceBetween>
+      <SpaceBetween size={"xxxs"}>
+        {filteredFindings.map((findingData) => (
+          <Finding
+            dataType={findingData.dataType}
+            dataKey={findingData.dataKey}
+            finding={findingData.finding}
+            showDataLink
+          />
+        ))}
+      </SpaceBetween>
     </SpaceBetween>
   );
 }

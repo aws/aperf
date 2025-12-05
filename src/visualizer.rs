@@ -1,7 +1,6 @@
 use crate::data::data_formats::{AperfData, DataFormat, ProcessedData};
 use crate::utils::{combine_value_ranges, topological_sort};
 use crate::{data::Data, data::ReportData, get_file};
-use crate::analytics::DataFindings;
 use anyhow::Result;
 use log::{debug, error};
 use rustix::fd::AsRawFd;
@@ -9,7 +8,6 @@ use std::fs;
 use std::io::{Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::{collections::HashMap, fs::File};
-use rustix::path::Arg;
 
 #[derive(Clone, Debug)]
 pub struct ReportParams {
