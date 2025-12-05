@@ -1,4 +1,5 @@
-use crate::data::data_formats::{AperfData, Series, Statistics, TimeSeriesData, TimeSeriesMetric};
+use crate::computations::Statistics;
+use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
 use crate::data::utils::{get_aggregate_cpu_series_name, get_cpu_series_name};
 use crate::data::{CollectData, CollectorParams, Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;

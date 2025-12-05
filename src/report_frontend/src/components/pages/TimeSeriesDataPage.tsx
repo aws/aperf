@@ -3,7 +3,7 @@ import { Box, Cards, CardsProps, Pagination, SpaceBetween, TextFilter, Toggle } 
 import { DataPageProps, DataType, TimeSeriesData } from "../../definitions/types";
 import Header from "@cloudscape-design/components/header";
 import { PROCESSED_DATA, RUNS } from "../../definitions/data-config";
-import { getDataTypeNonZeroMetricKeys } from "../../utils/utils";
+import { getDataTypeNonZeroMetricNames } from "../../utils/utils";
 import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import { useCollection } from "@cloudscape-design/collection-hooks";
 import { ReportHelpPanelLink } from "../misc/ReportHelpPanel";
@@ -20,7 +20,7 @@ const NON_ZERO_METRIC_NAMES_CACHE = new Map<DataType, string[]>();
  * all APerf runs
  */
 export default function (props: DataPageProps) {
-  const { numMetricGraphsPerPage, combineGraphs, setCombineGraphs } = useReportState();
+  const { numMetricGraphsPerPage, combineGraphs, searchKey, setCombineGraphs } = useReportState();
 
   const [hideAllZeroMetrics, setHideAllZeroMetrics] = React.useState(true);
 
@@ -41,7 +41,7 @@ export default function (props: DataPageProps) {
     if (NON_ZERO_METRIC_NAMES_CACHE.has(props.dataType)) {
       sortedMetricNames = NON_ZERO_METRIC_NAMES_CACHE.get(props.dataType);
     } else {
-      sortedMetricNames = getDataTypeNonZeroMetricKeys(props.dataType, sortedMetricNames);
+      sortedMetricNames = getDataTypeNonZeroMetricNames(props.dataType, sortedMetricNames);
       NON_ZERO_METRIC_NAMES_CACHE.set(props.dataType, sortedMetricNames);
     }
   }
@@ -84,6 +84,7 @@ export default function (props: DataPageProps) {
           item.toLowerCase().includes(filteringText.toLowerCase()),
         empty: <Box variant={"p"}>No metrics were collected</Box>,
         noMatch: <Box variant={"p"}>No metrics found</Box>,
+        defaultFilteringText: searchKey,
       },
       pagination: { pageSize: Math.floor(numMetricGraphsPerPage / RUNS.length) },
       selection: {},

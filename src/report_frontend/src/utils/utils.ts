@@ -12,13 +12,16 @@ export function extractDataTypeFromFragment(fragment: string): DataType {
   return dataType;
 }
 
-export function getDataTypeNonZeroMetricKeys(dataType: DataType, sortedMetricKeys: string[]): string[] {
+/**
+ * Get the list of sorted metric names that contain at least one non-zero data point
+ */
+export function getDataTypeNonZeroMetricNames(dataType: DataType, sortedMetricNames: string[]): string[] {
   const reportData = PROCESSED_DATA[dataType];
   if (!reportData || reportData.data_format != "time_series") {
     throw new Error(`getNonZeroMetricKeys invoked for invalid time series data: ${dataType}`);
   }
 
-  return sortedMetricKeys.filter((metricKey) => {
+  return sortedMetricNames.filter((metricKey) => {
     for (const runName in reportData.runs) {
       const curRunMetrics = (reportData.runs[runName] as TimeSeriesData).metrics;
       if (
@@ -32,6 +35,9 @@ export function getDataTypeNonZeroMetricKeys(dataType: DataType, sortedMetricKey
   });
 }
 
+/**
+ * Compute the number of CPUs from time series metrics whose series are all CPUs
+ */
 export function getRunNumCpus(runName: string): number {
   for (const cpuDataType of CPU_DATA_TYPES) {
     const reportData = PROCESSED_DATA[cpuDataType].runs[runName] as TimeSeriesData;

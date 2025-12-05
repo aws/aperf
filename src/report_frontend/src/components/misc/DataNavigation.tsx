@@ -12,7 +12,7 @@ import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
  * different data
  */
 export default function () {
-  const { setDataComponent } = useReportState();
+  const { setDataComponent, setSearchKey } = useReportState();
 
   const items: SideNavigationProps.Item[] = [
     { type: "link", text: DATA_DESCRIPTIONS["systeminfo"].readableName, href: "#systeminfo" },
@@ -51,6 +51,7 @@ export default function () {
         }}
         items={items}
         onFollow={(event) => {
+          setSearchKey("");
           const dataType = extractDataTypeFromFragment(event.detail.href);
           if (dataType) setDataComponent(dataType);
           else setDataComponent("systeminfo");
