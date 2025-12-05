@@ -19,6 +19,10 @@ interface ReportState {
   setSelectedCpusPerRun: (newSelectedCpusPerRun: SelectedCpusPerRun) => void;
   darkMode: boolean;
   setDarkMode: (newDarkMode: boolean) => void;
+  searchKey: string;
+  setSearchKey: (newSearchKey: string) => void;
+  findingsFilter: { [runName: string]: Set<string> };
+  setFindingsFilter: (runName: string, newFindingsFilter: Set<string>) => void;
 }
 
 const ReportStateContext = React.createContext<ReportState | undefined>(undefined);
@@ -38,6 +42,8 @@ export default function (props: { children: ReactNode }) {
     const saved = localStorage.getItem("aperf-dark-mode");
     return saved ? JSON.parse(saved) : false;
   });
+  const [searchKey, setSearchKey] = React.useState("");
+  const [findingsFilter, setFindingsFilter] = React.useState<{ [runName: string]: Set<string> }>({});
 
   const reportState: ReportState = {
     dataComponent,
@@ -67,6 +73,12 @@ export default function (props: { children: ReactNode }) {
     setDarkMode: (newDarkMode: boolean) => {
       setDarkMode(newDarkMode);
       localStorage.setItem("aperf-dark-mode", JSON.stringify(newDarkMode));
+    },
+    searchKey,
+    setSearchKey,
+    findingsFilter,
+    setFindingsFilter: (runName: string, newFindingsFilter: Set<string>) => {
+      setFindingsFilter(prev => ({ ...prev, [runName]: newFindingsFilter }));
     },
   };
 
