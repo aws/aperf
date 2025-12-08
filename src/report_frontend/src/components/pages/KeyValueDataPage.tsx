@@ -16,39 +16,41 @@ type TableItem = { [key in string]: string };
  * Transform processed key value data into formats required by the Table component
  */
 function getTableItemsAndDefinitions(dataType: DataType) {
-  // Collect all unique keys of a key value group across all runs
-  const allKeysPerGroup = new Map<string, Set<string>>();
+  // If there is only one KeyValueGroup, and it is an empty string, we consider it as dummy
+  // and the table will not show the "section"
+  let isDummySection = true;
+  // The map from lower-case key-value group name + key to TableItem - we want to make
+  // group names and keys with only case differences to be still placed at the same row
+  const keyValueTableItems = new Map<string, TableItem>();
+
   for (const runName of RUNS) {
     const reportData = PROCESSED_DATA[dataType].runs[runName] as KeyValueData;
     if (reportData === undefined) continue;
     for (const groupName in reportData.key_value_groups) {
-      if (!allKeysPerGroup.has(groupName)) {
-        allKeysPerGroup.set(groupName, new Set<string>());
+      if (groupName != "") isDummySection = false;
+      for (const [key, value] of Object.entries(reportData.key_value_groups[groupName].key_values)) {
+        const tableItemsKey = `${groupName} ${key}`.toLowerCase();
+        // If a group name or key is only case-different across runs, they will be placed
+        // at the same row in the table which shows the first occurrence of the group name
+        // or key
+        if (!keyValueTableItems.has(tableItemsKey)) {
+          const newTableItem = {
+            sectionName: groupName,
+            key: key,
+          };
+          for (const runName of RUNS) {
+            newTableItem[runName] = "";
+          }
+          keyValueTableItems.set(tableItemsKey, newTableItem);
+        }
+        const tableItem = keyValueTableItems.get(tableItemsKey);
+        tableItem[runName] = value;
       }
-      for (const key in reportData.key_value_groups[groupName].key_values) {
-        allKeysPerGroup.get(groupName).add(key);
-      }
-    }
-  }
-
-  // TableItem includes the actual data to be shown in the table
-  const tableItems: TableItem[] = [];
-  for (const groupName of allKeysPerGroup.keys()) {
-    for (const key of allKeysPerGroup.get(groupName)) {
-      const tableItem: TableItem = {};
-      tableItem.sectionName = groupName;
-      tableItem.key = key;
-      for (const runName of RUNS) {
-        const reportData = PROCESSED_DATA[dataType].runs[runName] as KeyValueData;
-        tableItem[runName] = reportData?.key_value_groups[groupName]?.key_values[key] || "";
-      }
-      tableItems.push(tableItem);
     }
   }
 
   // ColumnDefinition defines how the table items will be shown
   const tableColumnDefinitions: TableProps.ColumnDefinition<TableItem>[] = [];
-  const isDummySection = allKeysPerGroup.size == 1 && allKeysPerGroup.has("");
   if (!isDummySection) {
     tableColumnDefinitions.push({
       id: "section_name",
@@ -73,7 +75,7 @@ function getTableItemsAndDefinitions(dataType: DataType) {
     });
   }
 
-  return { tableItems, tableColumnDefinitions };
+  return { tableItems: Array.from(keyValueTableItems.values()), tableColumnDefinitions };
 }
 
 /**
