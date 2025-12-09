@@ -1,11 +1,18 @@
 # APerf
+
+> [!NOTE]
+> Leave us a feedback at https://github.com/aws/aperf/discussions/329
+
 ## What is APerf?
 A CLI tool to gather many pieces of performance data in one go. APerf includes a recorder, reporter and custom-pmu sub tools. The recorder gathers performance metrics, stores them in a set of local files that can then be analyzed via the reporter sub tool. The custom-pmu sub-tool can be used to create custom PMU configs which can configure the events an aperf recorder collects.
 
 ## Why does APerf exist?
 Performance issues in applications are investigated by recreating them locally and collecting data/metrics using monitoring tools like sysstat, perf, sysctl, ebpf, etc... or by running these tools remotely. Installing and executing various performance monitoring tools is a manual process and prone to errors. Even with the [Graviton Performance Runbook](https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/README.md), understanding the output of these tools requires deep domain specific knowledge.
 
-The aim of APerf is to enable anyone to collect performance data in their environment while providing tools to analyze and visualize application performance. APerf will hopefully enable faster troubleshooting by analyzing and highlighting deviations in performance between two application environments automatically. 
+The aim of APerf is to enable anyone to collect performance data in their environment while providing tools to analyze and visualize application performance. APerf will hopefully enable faster troubleshooting by analyzing and highlighting deviations in performance between two application environments automatically.
+
+> [!TIP]
+> Check out the APerf guide and demo video at https://www.youtube.com/watch?v=mSrDZuxWFtw
 
 ## What data does APerf collect?
 APerf collects the following metadata:
