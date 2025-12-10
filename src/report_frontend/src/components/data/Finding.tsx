@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { ALL_DATA_TYPES, AnalyticalFinding, DataType, TimeSeriesMetricProps } from "../../definitions/types";
 import { Icon, Link, SpaceBetween, Button } from "@cloudscape-design/components";
 import { ANALYTICAL_FINDINGS } from "../../definitions/data-config";
@@ -78,7 +78,7 @@ export function Finding(props: FindingProps) {
 export function MetricFindings(props: TimeSeriesMetricProps) {
   const { findingsFilter } = useReportState();
   const runFilter = findingsFilter[props.runName] || new Set(["negative", "zero", "positive"]);
-  
+
   const dataFindings = ANALYTICAL_FINDINGS[props.dataType];
   if (dataFindings == undefined) return null;
   const curRunFindings = dataFindings.per_run_findings[props.runName];

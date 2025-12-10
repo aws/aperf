@@ -102,9 +102,9 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       },
       virtual_memory_size: {
         readableName: "Virtual Memory Size (vsize)",
-        description: "Total virtual memory used by the process in KB.",
+        description: "Total virtual memory used by the process in Bytes.",
         desired: "lower",
-        unit: "KB",
+        unit: "Bytes",
       },
       resident_set_size: {
         readableName: "Resident Set Size (rss)",
@@ -246,7 +246,7 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
     readableName: "Memory Usage",
     summary:
       "Memory usage metrics measure the usage of the system's physical memory. The data were collected from the system pseudo-file /proc/meminfo.",
-    defaultUnit: "KB",
+    defaultUnit: "Bytes",
     fieldDescriptions: {
       vmalloc_used: {
         readableName: "Virtual Memory Allocated Used",
@@ -1673,33 +1673,39 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       time_discarding: {
         readableName: "Time Spent Discarding",
         description: "Total time spent on discard operations in milliseconds.",
+        unit: "milliseconds",
         desired: "lower",
       },
       time_flushing: {
         readableName: "Time Spent Flushing",
         description: "Total time spent on flush operations in milliseconds.",
+        unit: "milliseconds",
         desired: "lower",
       },
       time_in_progress: {
         readableName: "Time with I/O In Progress",
         description: "Total time with I/O operations in progress in milliseconds.",
+        unit: "milliseconds",
         desired: "lower",
       },
       time_reading: {
         readableName: "Time Spent Reading",
         description:
           "Total time spent on read operations in milliseconds (as measured from blk_mq_alloc_request() to __blk_mq_end_request()).",
+        unit: "milliseconds",
         desired: "lower",
       },
       time_writing: {
         readableName: "Time Spent Writing",
         description:
           "Total time spent on write operations in milliseconds (as measured from blk_mq_alloc_request() to __blk_mq_end_request()).",
+        unit: "milliseconds",
         desired: "lower",
       },
       weighted_time_in_progress: {
         readableName: "Weighted Time In Progress",
         description: "Weighted time with I/O operations in progress accounting for queue depth.",
+        unit: "milliseconds",
         desired: "lower",
       },
       writes: {

@@ -215,8 +215,8 @@ fn test_process_processes_raw_data_complex() {
                             }
                             ProcessKey::NumberThreads => expected_stats.number_threads as f64,
                             ProcessKey::VirtualMemorySize => {
-                                expected_stats.virtual_memory_size as f64 / 1024.0
-                            } // Convert to KB
+                                expected_stats.virtual_memory_size as f64
+                            }
                             ProcessKey::ResidentSetSize => expected_stats.resident_set_size as f64,
                         };
 
@@ -321,9 +321,7 @@ fn test_process_processes_raw_data_simple() {
                         }
                     }
                     ProcessKey::NumberThreads => expected_stats.number_threads as f64,
-                    ProcessKey::VirtualMemorySize => {
-                        expected_stats.virtual_memory_size as f64 / 1024.0
-                    }
+                    ProcessKey::VirtualMemorySize => expected_stats.virtual_memory_size as f64,
                     ProcessKey::ResidentSetSize => expected_stats.resident_set_size as f64,
                 };
 
@@ -504,64 +502,6 @@ fn test_process_processes_empty_data() {
     if let AperfData::TimeSeries(time_series_data) = result {
         assert_eq!(time_series_data.metrics.len(), 0);
         assert_eq!(time_series_data.sorted_metric_names.len(), 0);
-    } else {
-        panic!("Expected TimeSeries data");
-    }
-}
-
-#[test]
-fn test_process_processes_memory_conversion() {
-    let ticks_per_second = 100;
-    *TICKS_PER_SECOND.lock().unwrap() = ticks_per_second;
-
-    let mut expected_per_sample_per_process_stats = Vec::new();
-
-    // Generate 2 samples to test memory conversion
-    for sample in 0..2 {
-        let mut sample_stats = HashMap::new();
-
-        let mut proc_stats = ExpectedProcessStats::default();
-        proc_stats.user_space_time = 1000 + sample * 10;
-        proc_stats.kernel_space_time = 500 + sample * 5;
-        proc_stats.virtual_memory_size = 2097152; // 2MB in bytes
-        proc_stats.resident_set_size = 1000000;
-        sample_stats.insert("1_test_proc".to_string(), proc_stats);
-
-        expected_per_sample_per_process_stats.push(sample_stats);
-    }
-
-    let raw_data =
-        generate_processes_raw_data(&expected_per_sample_per_process_stats, 1, ticks_per_second);
-
-    let mut processes = Processes::new();
-    let result = processes
-        .process_raw_data(ReportParams::new(), raw_data)
-        .unwrap();
-
-    if let AperfData::TimeSeries(time_series_data) = result {
-        // Check virtual memory conversion to KB
-        let vmem_metric = &time_series_data.metrics["virtual_memory_size"];
-        let series = &vmem_metric.series[0];
-
-        assert_eq!(series.values[0], 2048.0);
-        assert_eq!(series.values[1], 2048.0);
-
-        // RSS should remain as-is (not converted)
-        let rss_metric = &time_series_data.metrics["resident_set_size"];
-        let rss_series = &rss_metric.series[0];
-        assert_eq!(rss_series.values[0], 1000000.0);
-        assert_eq!(rss_series.values[1], 1000000.0);
-
-        // Validate sorted metric names
-        assert_eq!(
-            time_series_data.sorted_metric_names.len(),
-            ProcessKey::iter().count()
-        );
-        for process_key in ProcessKey::iter() {
-            assert!(time_series_data
-                .sorted_metric_names
-                .contains(&process_key.to_string()));
-        }
     } else {
         panic!("Expected TimeSeries data");
     }
