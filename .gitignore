@@ -1,4 +1,4 @@
 /target
 /node_modules
 .idea
-./pmu_config.json
+pmu_config.json
