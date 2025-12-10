@@ -209,10 +209,6 @@ impl ProcessData for Processes {
                             };
                             s
                         }
-                        ProcessKey::VirtualMemorySize => {
-                            // Virtual memory size: snapshot convert to KB
-                            current_value / 1024.0
-                        }
                         _ => {
                             // Other metrics: snapshot value
                             current_value

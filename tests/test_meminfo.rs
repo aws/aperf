@@ -32,8 +32,11 @@ fn generate_meminfo_raw_data(
         // Generate /proc/meminfo format data with all required fields
         let mut meminfo_data = String::new();
 
-        // Helper function to get value or default
-        let get_value = |key: &str| -> u64 { expected_stats.stats.get(key).copied().unwrap_or(0) };
+        // Helper function to get KB value or original value
+        let get_value =
+            |key: &str| -> u64 { expected_stats.stats.get(key).copied().unwrap_or(0) / 1024 };
+        let get_original_value =
+            |key: &str| -> u64 { expected_stats.stats.get(key).copied().unwrap_or(0) };
 
         // Generate in the order that /proc/meminfo typically appears
         meminfo_data.push_str(&format!("MemTotal:       {} kB\n", get_value("mem_total")));
@@ -159,19 +162,19 @@ fn generate_meminfo_raw_data(
         meminfo_data.push_str(&format!("CmaFree:        {} kB\n", get_value("cma_free")));
         meminfo_data.push_str(&format!(
             "HugePages_Total:   {}\n",
-            get_value("hugepages_total")
+            get_original_value("hugepages_total")
         ));
         meminfo_data.push_str(&format!(
             "HugePages_Free:    {}\n",
-            get_value("hugepages_free")
+            get_original_value("hugepages_free")
         ));
         meminfo_data.push_str(&format!(
             "HugePages_Rsvd:    {}\n",
-            get_value("hugepages_rsvd")
+            get_original_value("hugepages_rsvd")
         ));
         meminfo_data.push_str(&format!(
             "HugePages_Surp:    {}\n",
-            get_value("hugepages_surp")
+            get_original_value("hugepages_surp")
         ));
         meminfo_data.push_str(&format!(
             "Hugepagesize:   {} kB\n",
@@ -217,23 +220,23 @@ fn test_process_meminfo_raw_data_complex() {
     for sample_idx in 0..50 {
         let mut expected_stats = ExpectedMeminfoStats::new();
 
-        // Core memory stats (values in kB, will be converted to KB by dividing by 1024)
+        // Memory stats in bytes
         expected_stats.set_stat(MeminfoType::MemTotal, 16777216 + sample_idx * 1024); // 16GB base
-        expected_stats.set_stat(MeminfoType::MemFree, 8388608 - sample_idx * 512); // Decreasing free memory
-        expected_stats.set_stat(MeminfoType::MemAvailable, 10485760 - sample_idx * 256);
-        expected_stats.set_stat(MeminfoType::Buffers, 524288 + sample_idx * 128);
-        expected_stats.set_stat(MeminfoType::Cached, 2097152 + sample_idx * 256);
+        expected_stats.set_stat(MeminfoType::MemFree, 8388608 - sample_idx * 2 * 1024); // Decreasing free memory
+        expected_stats.set_stat(MeminfoType::MemAvailable, 10485760 - sample_idx * 1024 * 2);
+        expected_stats.set_stat(MeminfoType::Buffers, 524288 + sample_idx * 1024);
+        expected_stats.set_stat(MeminfoType::Cached, 2097152 + sample_idx * 1024 * 3);
 
         // Swap stats
         expected_stats.set_stat(MeminfoType::SwapTotal, 4194304); // 4GB swap
-        expected_stats.set_stat(MeminfoType::SwapFree, 4194304 - sample_idx * 64);
-        expected_stats.set_stat(MeminfoType::SwapCached, sample_idx * 32);
+        expected_stats.set_stat(MeminfoType::SwapFree, 4194304 - sample_idx * 1024);
+        expected_stats.set_stat(MeminfoType::SwapCached, sample_idx * 1024);
 
         // Active/Inactive memory
-        expected_stats.set_stat(MeminfoType::Active, 4194304 + sample_idx * 128);
-        expected_stats.set_stat(MeminfoType::Inactive, 2097152 + sample_idx * 64);
-        expected_stats.set_stat(MeminfoType::ActiveAnon, 2097152 + sample_idx * 64);
-        expected_stats.set_stat(MeminfoType::InactiveAnon, 1048576 + sample_idx * 32);
+        expected_stats.set_stat(MeminfoType::Active, 4194304 + sample_idx * 1024 * 2);
+        expected_stats.set_stat(MeminfoType::Inactive, 2097152 + sample_idx * 1024);
+        expected_stats.set_stat(MeminfoType::ActiveAnon, 2097152 + sample_idx * 1024 * 3);
+        expected_stats.set_stat(MeminfoType::InactiveAnon, 1048576 + sample_idx * 1024);
 
         // HugePages (count values, not converted)
         expected_stats.set_stat(MeminfoType::HugepagesTotal, 100 + sample_idx);
@@ -315,8 +318,7 @@ fn test_process_meminfo_raw_data_simple() {
     for sample_idx in 0..3 {
         let mut expected_stats = ExpectedMeminfoStats::new();
         expected_stats.set_stat(MeminfoType::MemTotal, 8388608 + sample_idx * 1024); // 8GB base
-        expected_stats.set_stat(MeminfoType::MemFree, 4194304 - sample_idx * 512);
-        expected_stats.set_stat(MeminfoType::Cached, 1048576 + sample_idx * 256);
+        expected_stats.set_stat(MeminfoType::MemFree, 4194304 - sample_idx * 1024 * 2);
         expected_per_sample_stats.push(expected_stats);
     }
 
@@ -335,7 +337,6 @@ fn test_process_meminfo_raw_data_simple() {
         // Check specific metrics that we set
         let mem_total = &time_series_data.metrics["mem_total"];
         assert_eq!(mem_total.series[0].values.len(), 3);
-        // Values are raw kB values (not converted)
         assert!((mem_total.series[0].values[0] - 8388608.0).abs() < 1e-5);
         assert!((mem_total.series[0].values[1] - 8389632.0).abs() < 1e-5); // 8388608 + 1024
         assert!((mem_total.series[0].values[2] - 8390656.0).abs() < 1e-5); // 8388608 + 2048
@@ -343,7 +344,8 @@ fn test_process_meminfo_raw_data_simple() {
         let mem_free = &time_series_data.metrics["mem_free"];
         assert_eq!(mem_free.series[0].values.len(), 3);
         assert!((mem_free.series[0].values[0] - 4194304.0).abs() < 1e-5);
-        assert!((mem_free.series[0].values[1] - 4193792.0).abs() < 1e-5); // 4194304 - 512
+        assert!((mem_free.series[0].values[1] - 4192256.0).abs() < 1e-5); // 4194304 - 2 * 1024
+        assert!((mem_free.series[0].values[2] - 4190208.0).abs() < 1e-5); // 4194304 - 4 * 1024
 
         // Check time progression
         for metric in time_series_data.metrics.values() {

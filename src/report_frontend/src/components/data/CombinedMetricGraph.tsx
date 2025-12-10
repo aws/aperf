@@ -1,7 +1,7 @@
 import { DataType, TimeSeriesData } from "../../definitions/types";
 import { CPU_DATA_TYPES, PROCESSED_DATA, RUNS } from "../../definitions/data-config";
 import { useReportState } from "../ReportStateProvider";
-import { shouldShowCpuSeries, scaleKBData } from "../../utils/utils";
+import { shouldShowCpuSeries } from "../../utils/utils";
 import { MAX_SERIES_PER_GRAPH } from "../../definitions/constants";
 import { Box } from "@cloudscape-design/components";
 import React from "react";
@@ -21,29 +21,6 @@ export default function (props: CombinedMetricGraphProps) {
   const { selectedCpusPerRun, darkMode } = useReportState();
 
   const isCpuData = CPU_DATA_TYPES.includes(props.dataType);
-  const originalUnit =
-    DATA_DESCRIPTIONS[props.dataType].fieldDescriptions[props.metricName]?.unit ||
-    DATA_DESCRIPTIONS[props.dataType].defaultUnit;
-
-  // Collect all values across all runs to determine scaling
-  const allValues: number[] = [];
-  for (const runName of RUNS) {
-    const curRunMetrics = (PROCESSED_DATA[props.dataType].runs[runName] as TimeSeriesData).metrics;
-    if (curRunMetrics === undefined) continue;
-    const curRunMetric = curRunMetrics[props.metricName];
-    if (curRunMetric === undefined) continue;
-
-    for (const series of curRunMetric.series) {
-      if (
-        !isCpuData ||
-        shouldShowCpuSeries(series.series_name, selectedCpusPerRun[runName].aggregate, selectedCpusPerRun[runName].cpus)
-      ) {
-        allValues.push(...series.values);
-      }
-    }
-  }
-
-  const { scaledUnit, scaleFactor } = scaleKBData(allValues, originalUnit);
 
   const seriesData: Partial<Plotly.PlotData>[] = [];
   for (const runName of RUNS) {
@@ -60,7 +37,7 @@ export default function (props: CombinedMetricGraphProps) {
         seriesData.push({
           name: `${runName}:${series.series_name || ""}`,
           x: series.time_diff,
-          y: scaleFactor === 1 ? series.values : series.values.map((v) => v / scaleFactor),
+          y: series.values,
           type: "scatter",
           visible: true,
         });
@@ -97,7 +74,9 @@ export default function (props: CombinedMetricGraphProps) {
           gridcolor: darkMode ? "#404040" : "#e0e0e0",
         },
         yaxis: {
-          title: scaledUnit,
+          title:
+            DATA_DESCRIPTIONS[props.dataType].fieldDescriptions[props.metricName]?.unit ||
+            DATA_DESCRIPTIONS[props.dataType].defaultUnit,
           gridcolor: darkMode ? "#404040" : "#e0e0e0",
         },
         autosize: true,

@@ -112,7 +112,7 @@ pub enum MeminfoType {
     DirectMap1G,
 }
 
-fn get_meminfo_data(meminfo_type: MeminfoType, meminfo: &procfs::Meminfo) -> Option<u64> {
+fn get_meminfo_data(meminfo_type: MeminfoType, meminfo: &Meminfo) -> Option<u64> {
     match meminfo_type {
         MeminfoType::MemTotal => Some(meminfo.mem_total),
         MeminfoType::MemFree => Some(meminfo.mem_free),
@@ -203,17 +203,6 @@ impl ProcessData for MeminfoData {
                     None => continue,
                 } as f64;
 
-                let meminfo_value = match meminfo_type {
-                    // These types are count and do not have any units, so use the data
-                    // directly
-                    MeminfoType::HugepagesTotal
-                    | MeminfoType::HugepagesFree
-                    | MeminfoType::HugepagesRsvd
-                    | MeminfoType::HugepagesSurp => meminfo_data,
-                    // All other types are in bytes, so converting it to KB
-                    _ => meminfo_data / 1024.0,
-                };
-
                 let meminfo_metric = time_series_data
                     .metrics
                     .entry(meminfo_type.to_string())
@@ -225,7 +214,7 @@ impl ProcessData for MeminfoData {
                     });
                 let meminfo_series = &mut meminfo_metric.series[0];
                 meminfo_series.time_diff.push(time_diff);
-                meminfo_series.values.push(meminfo_value);
+                meminfo_series.values.push(meminfo_data);
             }
         }
 
