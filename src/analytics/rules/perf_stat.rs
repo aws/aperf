@@ -88,14 +88,14 @@ impl AnalyzeData for PerfStat {
                 message: "This indicates the working set data footprint could be an issue.",
             ),
             time_series_data_point_threshold!(
-                metric_name: "data-l2-mpki",
+                metric_name: "l2-mpki",
                 comparator: Comparator::GreaterEqual,
                 threshold: 10.0,
                 score: Score::VeryBad,
                 message: "This indicates the working set data footprint could be an issue.",
             ),
             time_series_data_point_threshold!(
-                metric_name: "data-l3-mpki",
+                metric_name: "l3-mpki",
                 comparator: Comparator::GreaterEqual,
                 threshold: 10.0,
                 score: Score::VeryBad,
