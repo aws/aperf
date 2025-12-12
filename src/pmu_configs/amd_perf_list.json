@@ -144,7 +144,7 @@
     "scale": 1000
   },
   {
-    "name": "inst-tlb-tw-mpki",
+    "name": "inst-tlb-tw-pki",
     "nrs": [
       {
         "perf_type": "RAW",
