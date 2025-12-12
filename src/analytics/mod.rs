@@ -3,11 +3,12 @@ mod rules;
 
 use crate::data::data_formats::ProcessedData;
 use rule_templates::{
-    key_value_run_comparison_rule::KeyValueRunComparisonRule,
-    time_series_run_stat_comparison_rule::TimeSeriesRunStatComparisonRule,
-    time_series_run_stat_similarity_rule::TimeSeriesRunStatSimilarityRule,
-    time_series_single_metric_data_point_rule::TimeSeriesSingleMetricDataPointRule,
-    time_series_single_metric_stat_rule::TimeSeriesSingleMetricStatRule,
+    key_value_key_expected_rule::KeyValueKeyExpectedRule,
+    key_value_key_run_comparison_rule::KeyValueKeyRunComparisonRule,
+    time_series_data_point_threshold_rule::TimeSeriesDataPointThresholdRule,
+    time_series_stat_intra_run_comparison_rule::TimeSeriesStatIntraRunComparisonRule,
+    time_series_stat_run_comparison_rule::TimeSeriesStatRunComparisonRule,
+    time_series_stat_threshold_rule::TimeSeriesStatThresholdRule,
 };
 use rules::multi_data_rules::get_multi_data_rules;
 use serde::{Deserialize, Serialize};
@@ -119,6 +120,21 @@ impl AnalyticalFinding {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum Score {
+    VeryBad = -2,
+    Bad = -1,
+    Neutral = 0,
+    Good = 1,
+    VeryGood = 2,
+}
+
+impl Score {
+    pub fn as_f64(self) -> f64 {
+        self as i32 as f64
+    }
+}
+
 fn compute_finding_score(value: f64, threshold: f64, rule_score: f64) -> f64 {
     let mut delta = value / threshold;
     if delta < 1.0 {
@@ -166,11 +182,12 @@ macro_rules! analytical_rules {
 }
 
 analytical_rules!(
-    TimeSeriesRunStatComparisonRule,
-    TimeSeriesRunStatSimilarityRule,
-    TimeSeriesSingleMetricStatRule,
-    TimeSeriesSingleMetricDataPointRule,
-    KeyValueRunComparisonRule
+    TimeSeriesStatRunComparisonRule,
+    TimeSeriesStatThresholdRule,
+    TimeSeriesDataPointThresholdRule,
+    KeyValueKeyRunComparisonRule,
+    KeyValueKeyExpectedRule,
+    TimeSeriesStatIntraRunComparisonRule
 );
 
 macro_rules! multi_data_analytical_rules {
