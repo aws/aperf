@@ -154,11 +154,6 @@ pub fn ratio_to_percentage_string(ratio: f64) -> String {
 }
 
 pub fn ratio_to_percentage_delta_string(ratio: f64) -> String {
-    let abs_ratio_delta = f64_to_fixed_2((ratio - 1.0).abs());
-    let relation_string = if ratio > 0.0 {
-        "greater than"
-    } else {
-        "less than"
-    };
-    format!("{}% {}", abs_ratio_delta, relation_string)
+    let percentage = f64_to_fixed_2(ratio * 100.0);
+    format!("{:+.2}%", percentage)
 }

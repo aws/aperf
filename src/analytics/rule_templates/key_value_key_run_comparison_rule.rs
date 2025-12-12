@@ -7,43 +7,43 @@ use std::fmt::Formatter;
 
 /// This rule compares the value of the specified key in every run against the base run and produces
 /// a finding if the value is different from the base run.
-pub struct KeyValueRunComparisonRule {
+pub struct KeyValueKeyRunComparisonRule {
     pub key_group: &'static str,
     pub key: &'static str,
     pub score: f64,
     pub message: &'static str,
 }
 
-macro_rules! key_value_comparison {
+macro_rules! key_value_key_run_comparison {
     {
         key_group: $key_group:literal,
         key: $key:literal,
-        score: $score:literal,
+        score: $score:expr,
         message: $message:literal,
     } => {
-        AnalyticalRule::KeyValueRunComparisonRule(
-            KeyValueRunComparisonRule{
+        AnalyticalRule::KeyValueKeyRunComparisonRule(
+            KeyValueKeyRunComparisonRule{
                 key_group: $key_group,
                 key: $key,
-                score: $score,
+                score: $score.as_f64(),
                 message: $message,
             }
         )
     };
 }
-pub(crate) use key_value_comparison;
+pub(crate) use key_value_key_run_comparison;
 
-impl fmt::Display for KeyValueRunComparisonRule {
+impl fmt::Display for KeyValueKeyRunComparisonRule {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "KeyValueRunComparisonRule <checking different values of key {} in group {}>",
+            "KeyValueKeyRunComparisonRule <checking different values of key {} in group {}>",
             self.key, self.key_group
         )
     }
 }
 
-impl Analyze for KeyValueRunComparisonRule {
+impl Analyze for KeyValueKeyRunComparisonRule {
     fn analyze(&self, report_findings: &mut DataFindings, processed_data: &ProcessedData) {
         let base_run_name = analytics::get_base_run_name();
 
