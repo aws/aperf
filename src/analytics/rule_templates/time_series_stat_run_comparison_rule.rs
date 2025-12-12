@@ -1,49 +1,59 @@
 use crate::analytics;
 use crate::analytics::{Analyze, DataFindings};
-use crate::computations::{ratio_to_percentage_string, Comparator, Stat};
+use crate::computations::{f64_to_fixed_2, ratio_to_percentage_delta_string, Comparator, Stat};
 use crate::data::data_formats::ProcessedData;
 use log::error;
 use std::fmt;
 use std::fmt::Formatter;
 
-/// This rule checks the specified metric stat of every run with the base run, compute the ratio,
-/// and compares it against the threshold ratio.
-pub struct TimeSeriesRunStatSimilarityRule {
+/// This rule computes the delta_ratio between the specified metric stat of every run and the base run,
+/// and compares it against the threshold delta_ratio. If abs, is true, the magnitude of the ratio is used.
+pub struct TimeSeriesStatRunComparisonRule {
     pub metric_name: &'static str,
     pub stat: Stat,
+    pub comparator: Comparator,
+    pub abs: bool,
     pub delta_ratio: f64,
     pub score: f64,
     pub message: &'static str,
 }
 
-macro_rules! time_series_run_stat_similarity {
+macro_rules! time_series_stat_run_comparison {
     {
         metric_name: $metric_name:literal,
         stat: $stat:path,
+        comparator: $comparator:path,
+        abs: $abs:literal,
         delta_ratio: $delta_ratio:literal,
-        score: $score:literal,
+        score: $score:expr,
         message: $message:literal,
     } => {
-        AnalyticalRule::TimeSeriesRunStatSimilarityRule(
-            TimeSeriesRunStatSimilarityRule{
+        AnalyticalRule::TimeSeriesStatRunComparisonRule(
+            TimeSeriesStatRunComparisonRule{
                 metric_name: $metric_name,
                 stat: $stat,
+                comparator: $comparator,
+                abs: $abs,
                 delta_ratio: $delta_ratio,
-                score: $score,
+                score: $score.as_f64(),
                 message: $message,
             }
         )
     };
 }
-pub(crate) use time_series_run_stat_similarity;
+pub(crate) use time_series_stat_run_comparison;
 
-impl fmt::Display for TimeSeriesRunStatSimilarityRule {
+impl fmt::Display for TimeSeriesStatRunComparisonRule {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "TimeSeriesRunStatSimilarityRule <checking if the {} of {} is less than {} different from the base run >", self.stat, self.metric_name, self.delta_ratio)
+        write!(
+            f,
+            "TimeSeriesStatRunComparisonRule <checking if the delta_ratio {} of {} is {} {} of the base run >",
+            self.stat, self.metric_name, self.comparator, self.delta_ratio
+        )
     }
 }
 
-impl Analyze for TimeSeriesRunStatSimilarityRule {
+impl Analyze for TimeSeriesStatRunComparisonRule {
     fn analyze(&self, data_findings: &mut DataFindings, processed_data: &ProcessedData) {
         let base_run_name = &analytics::get_base_run_name();
 
@@ -78,27 +88,34 @@ impl Analyze for TimeSeriesRunStatSimilarityRule {
             };
             let cur_stat = self.stat.get_stat(&cur_metric.stats);
 
-            let abs_delta = (cur_stat - base_stat).abs() / base_stat;
+            let mut cur_ratio = (cur_stat - base_stat) / base_stat;
+            if self.abs {
+                cur_ratio = cur_ratio.abs();
+            }
 
-            if Comparator::LessEqual.compare(abs_delta, self.delta_ratio) {
+            if self.comparator.compare(cur_ratio, self.delta_ratio) {
+                let finding_score =
+                    analytics::compute_finding_score(cur_ratio, self.delta_ratio, self.score);
                 let mut finding_description = format!(
-                    "The {} in {} ({}) is {} different from {} ({}).",
+                    "The delta_ratio of {} in {} between runs {} ({}) and {} ({}) is {} which is {} than threshold of {}.",
                     self.stat,
+                    self.metric_name,
                     run_name,
-                    cur_stat,
-                    ratio_to_percentage_string(abs_delta),
+                    f64_to_fixed_2(cur_stat),
                     base_run_name,
-                    base_stat
+                    f64_to_fixed_2(base_stat),
+                    ratio_to_percentage_delta_string(cur_ratio),
+                    self.comparator,
+                    ratio_to_percentage_delta_string(self.delta_ratio)
                 );
                 if !self.message.is_empty() {
                     finding_description.push(' ');
                     finding_description.push_str(self.message);
                 }
-                // Use the rule's score directly since we usually do not need to care how similar the run is
                 data_findings.insert_finding(
                     run_name,
                     self.metric_name,
-                    self.score,
+                    finding_score,
                     finding_description,
                 );
             }

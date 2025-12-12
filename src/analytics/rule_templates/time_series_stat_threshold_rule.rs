@@ -7,7 +7,7 @@ use std::fmt::Formatter;
 
 /// This rule runs for the specified metric in every run and compares each metric's specified stat
 /// against the threshold.
-pub struct TimeSeriesSingleMetricStatRule {
+pub struct TimeSeriesStatThresholdRule {
     pub metric_name: &'static str,
     pub stat: Stat,
     pub comparator: Comparator,
@@ -16,40 +16,40 @@ pub struct TimeSeriesSingleMetricStatRule {
     pub message: &'static str,
 }
 
-macro_rules! time_series_single_metric_stat {
+macro_rules! time_series_stat_threshold {
     {
         metric_name: $metric_name:literal,
         stat: $stat:path,
         comparator: $comparator:path,
         threshold: $threshold:literal,
-        score: $score:literal,
+        score: $score:expr,
         message: $message:literal,
     } => {
-        AnalyticalRule::TimeSeriesSingleMetricStatRule(
-            TimeSeriesSingleMetricStatRule{
+        AnalyticalRule::TimeSeriesStatThresholdRule(
+            TimeSeriesStatThresholdRule{
                 metric_name: $metric_name,
                 stat: $stat,
                 comparator: $comparator,
                 threshold: $threshold,
-                score: $score,
+                score: $score.as_f64(),
                 message: $message,
             }
         )
     };
 }
-pub(crate) use time_series_single_metric_stat;
+pub(crate) use time_series_stat_threshold;
 
-impl fmt::Display for TimeSeriesSingleMetricStatRule {
+impl fmt::Display for TimeSeriesStatThresholdRule {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "TimeSeriesSingleMetricStatRule <checking if the {} of {} is {} {}>",
+            "TimeSeriesStatThresholdRule <checking if the {} of {} is {} {}>",
             self.stat, self.metric_name, self.comparator, self.threshold
         )
     }
 }
 
-impl Analyze for TimeSeriesSingleMetricStatRule {
+impl Analyze for TimeSeriesStatThresholdRule {
     fn analyze(&self, data_findings: &mut DataFindings, processed_data: &ProcessedData) {
         for run_name in processed_data.runs.keys() {
             let time_series_data = match processed_data.get_time_series_data(run_name) {
