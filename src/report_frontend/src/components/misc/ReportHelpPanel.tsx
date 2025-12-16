@@ -1,26 +1,27 @@
-import { HelpPanel, Link, StatusIndicator } from "@cloudscape-design/components";
+import { Button, HelpPanel, Link, StatusIndicator } from "@cloudscape-design/components";
 import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import React from "react";
 import { useReportState } from "../ReportStateProvider";
+import { DataType } from "../../definitions/types";
 
 /**
  * This component renders the help panel on the right side to show metric descriptions and helpful messages.
  */
 export function ReportHelpPanel() {
-  const { dataComponent, helpPanelType } = useReportState();
+  const { helpPanelDataType, helpPanelFieldKey } = useReportState();
 
-  const metricInfo = DATA_DESCRIPTIONS[dataComponent].fieldDescriptions[helpPanelType];
+  const metricInfo = DATA_DESCRIPTIONS[helpPanelDataType].fieldDescriptions[helpPanelFieldKey];
 
   let metricReadableName: string;
   let metricDescription: string;
-  if (helpPanelType == "general") {
+  if (helpPanelFieldKey == "general") {
     metricReadableName = "Data Information";
     metricDescription = "Learn more about a specific metric or configuration here.";
-  } else if (helpPanelType == "summary") {
-    metricReadableName = DATA_DESCRIPTIONS[dataComponent].readableName;
-    metricDescription = DATA_DESCRIPTIONS[dataComponent].summary;
+  } else if (helpPanelFieldKey == "summary") {
+    metricReadableName = DATA_DESCRIPTIONS[helpPanelDataType].readableName;
+    metricDescription = DATA_DESCRIPTIONS[helpPanelDataType].summary;
   } else {
-    metricReadableName = metricInfo?.readableName || helpPanelType;
+    metricReadableName = metricInfo?.readableName || helpPanelFieldKey;
     metricDescription = metricInfo?.description || "No extra information available for this metric.";
   }
 
@@ -62,24 +63,45 @@ export function ReportHelpPanel() {
 }
 
 interface ReportHelpPanelLinkProps {
-  readonly type: string;
+  readonly dataType: DataType;
+  readonly fieldKey: string;
 }
 
 /**
- * This component renders an "info" link to be shown by a metric name, which controls which help
- * panel to show.
+ * This component renders an "info" link that configures and shows the help panel.
  */
 export function ReportHelpPanelLink(props: ReportHelpPanelLinkProps) {
-  const { setHelpPanelType, setShowHelpPanel } = useReportState();
+  const { setHelpPanelDataType, setHelpPanelFieldKey, setShowHelpPanel } = useReportState();
   return (
     <Link
       variant={"info"}
       onFollow={() => {
-        setHelpPanelType(props.type);
+        setHelpPanelDataType(props.dataType);
+        setHelpPanelFieldKey(props.fieldKey);
         setShowHelpPanel(true);
       }}
     >
       info
     </Link>
+  );
+}
+
+/**
+ * This component renders an icon that configures and shows the help panel.
+ */
+export function ReportHelpPanelIcon(props: ReportHelpPanelLinkProps) {
+  const { setHelpPanelDataType, setHelpPanelFieldKey, setShowHelpPanel } = useReportState();
+  return (
+    <Button
+      iconName={"status-info"}
+      variant={"icon"}
+      onClick={() => {
+        setHelpPanelDataType(props.dataType);
+        setHelpPanelFieldKey(props.fieldKey);
+        setShowHelpPanel(true);
+      }}
+    >
+      info
+    </Button>
   );
 }

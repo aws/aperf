@@ -76,16 +76,9 @@ export interface GraphInfo {
   readonly graph_size?: number;
 }
 
-export interface Statistics {
-  readonly avg: number;
-  readonly std: number;
-  readonly min: number;
-  readonly max: number;
-  readonly p50: number;
-  readonly p90: number;
-  readonly p99: number;
-  readonly p99_9: number;
-}
+export const ALL_STATS = ["avg", "std", "min", "max", "p50", "p90", "p99", "p99_9"] as const;
+export type Stat = (typeof ALL_STATS)[number];
+export type Statistics = { [key in Stat]: number };
 
 // See src/analytics/mod.rs
 export interface DataFindings {
@@ -113,3 +106,8 @@ export interface TimeSeriesMetricProps {
 
 export type NumCpusPerRun = { [key in string]: number };
 export type SelectedCpusPerRun = { [key in string]: { aggregate: boolean; cpus: boolean[] } };
+
+export const ALL_FINDING_TYPES = ["negative", "zero", "positive"] as const;
+export type FindingType = (typeof ALL_FINDING_TYPES)[number];
+
+export type SplitPanelType = "analytical" | "statistical";

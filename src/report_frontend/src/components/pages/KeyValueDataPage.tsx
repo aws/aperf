@@ -1,12 +1,13 @@
 import { DataPageProps, DataType, KeyValueData } from "../../definitions/types";
 import React from "react";
 import { PROCESSED_DATA, RUNS } from "../../definitions/data-config";
-import { Box, Pagination, Table, TableProps, TextFilter, Toggle } from "@cloudscape-design/components";
+import { Box, Pagination, SpaceBetween, Table, TableProps, TextFilter, Toggle } from "@cloudscape-design/components";
 import { useCollection } from "@cloudscape-design/collection-hooks";
 import Header from "@cloudscape-design/components/header";
 import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import { RunHeader } from "../data/RunSystemInfo";
 import { ReportHelpPanelLink } from "../misc/ReportHelpPanel";
+import { ShowFindingsPanelButton } from "../analytics/FindingsSplitPanel";
 
 const NUM_KEY_VALUE_PAIRS_PER_PAGE = 50;
 
@@ -139,11 +140,14 @@ export default function (props: DataPageProps) {
       header={
         <Header
           variant={"awsui-h1-sticky"}
-          info={<ReportHelpPanelLink type="summary" />}
+          info={<ReportHelpPanelLink dataType={props.dataType} fieldKey={"summary"} />}
           actions={
-            <Toggle checked={showDiffOnly} onChange={({ detail }) => setShowDiffOnly(detail.checked)}>
-              {"Only show different values"}
-            </Toggle>
+            <SpaceBetween direction={"horizontal"} size={"xs"}>
+              <ShowFindingsPanelButton />
+              <Toggle checked={showDiffOnly} onChange={({ detail }) => setShowDiffOnly(detail.checked)}>
+                {"Only show different values"}
+              </Toggle>
+            </SpaceBetween>
           }
         >
           {DATA_DESCRIPTIONS[props.dataType].readableName}

@@ -1,4 +1,4 @@
-import {DataFindings, DataType, ReportData} from "./types";
+import { ALL_DATA_TYPES, DataFindings, DataType, ReportData } from "./types";
 
 declare let runs_raw;
 declare let version_info;
@@ -57,7 +57,7 @@ export const PROCESSED_DATA: { [key in DataType]: ReportData } = {
   aperf_stats: processed_aperf_stats_data,
 };
 
-export const ANALYTICAL_FINDINGS: { [key in DataType]: DataFindings } = {
+export const PER_DATA_ANALYTICAL_FINDINGS: { [key in DataType]: DataFindings } = {
   systeminfo: systeminfo_findings,
   cpu_utilization: cpu_utilization_findings,
   processes: processes_findings,
@@ -82,6 +82,10 @@ export const RUNS: string[] = Array.from(runs_raw);
 export const VERSION_INFO = version_info;
 
 export const CPU_DATA_TYPES: DataType[] = ["cpu_utilization", "perf_stat", "interrupts"];
+
+export const TIME_SERIES_DATA_TYPES = ALL_DATA_TYPES.filter(
+  (dataType) => PROCESSED_DATA[dataType]?.data_format == "time_series",
+);
 
 interface NavigationConfig {
   readonly sectionName: string;

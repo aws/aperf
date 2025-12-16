@@ -33,7 +33,10 @@ export default function (props: DataPageProps) {
       cardsPerRow={[{ cards: 1 }]}
       stickyHeader
       header={
-        <Header variant={"awsui-h1-sticky"} info={<ReportHelpPanelLink type="summary" />}>
+        <Header
+          variant={"awsui-h1-sticky"}
+          info={<ReportHelpPanelLink dataType={props.dataType} fieldKey={"summary"} />}
+        >
           {DATA_DESCRIPTIONS[props.dataType].readableName}
         </Header>
       }

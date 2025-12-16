@@ -13,6 +13,8 @@ import GraphDataPage from "./pages/GraphDataPage";
 import TextDataPage from "./pages/TextDataPage";
 import ReportHomePage from "./pages/ReportHomePage";
 import { MAX_NUM_CPU_SHOW_DEFAULT } from "../definitions/constants";
+import { computeAllTimeSeriesStatsDelta, processAnalyticalFindings } from "../utils/analytics";
+import FindingsSplitPanel from "./analytics/FindingsSplitPanel";
 
 /**
  * This component creates the APerf report top-level layout and controls which specific data tab to render
@@ -21,6 +23,10 @@ export default function () {
   const {
     dataComponent,
     showHelpPanel,
+    showSplitPanel,
+    splitPanelSize,
+    setSplitPanelSize,
+    setShowSplitPanel,
     setShowHelpPanel,
     setDataComponent,
     setNumCpusPerRun,
@@ -37,6 +43,12 @@ export default function () {
     const dataType = extractDataTypeFromFragment(window.location.hash);
     if (dataType) setDataComponent(dataType);
     else setDataComponent("systeminfo");
+
+    // Process all analytical findings into per-run cache
+    processAnalyticalFindings();
+    // Pre-compute and cache the stats delta of all time-series metrics and generate
+    // all statistical findings
+    computeAllTimeSeriesStatsDelta();
 
     // Read the number of CPUs from processed data to be used by the configuration
     const numCpusPerRun: NumCpusPerRun = {};
@@ -60,7 +72,7 @@ export default function () {
   React.useEffect(() => {
     applyMode(darkMode ? Mode.Dark : Mode.Light);
     // Set index background color to match the theme
-    const backgroundColor = darkMode ? '#171D25' : '#ffffff';
+    const backgroundColor = darkMode ? "#171D25" : "#ffffff";
     document.body.style.backgroundColor = backgroundColor;
     document.documentElement.style.backgroundColor = backgroundColor;
   }, [darkMode]);
@@ -82,6 +94,12 @@ export default function () {
         // Same reasoning as the help panel (see the definition of setShowHelpPanel)
         setTimeout(() => window.dispatchEvent(new Event("resize")), 50);
       }}
+      splitPanel={<FindingsSplitPanel />}
+      splitPanelOpen={showSplitPanel}
+      splitPanelSize={splitPanelSize}
+      splitPanelPreferences={{ position: "bottom" }}
+      onSplitPanelToggle={({ detail }) => setShowSplitPanel(detail.open)}
+      onSplitPanelResize={({ detail }) => setSplitPanelSize(detail.size)}
       content={
         <>
           {preprocessing && <Spinner size={"large"} />}

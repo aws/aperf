@@ -1,6 +1,7 @@
 import React, { ReactNode } from "react";
-import { DataType, NumCpusPerRun, SelectedCpusPerRun } from "../definitions/types";
+import { DataType, FindingType, NumCpusPerRun, SelectedCpusPerRun, Stat } from "../definitions/types";
 import { NUM_METRICS_PER_PAGE } from "../definitions/constants";
+import { RUNS, TIME_SERIES_DATA_TYPES } from "../definitions/data-config";
 
 interface ReportState {
   dataComponent: DataType;
@@ -9,8 +10,16 @@ interface ReportState {
   setNumMetricGraphsPerPage: (newMetricsPerPage: number) => void;
   showHelpPanel: boolean;
   setShowHelpPanel: (newShowHelpPanel: boolean) => void;
-  helpPanelType: string;
-  setHelpPanelType: (newHelpPanelFieldKey: string) => void;
+  helpPanelDataType: DataType;
+  setHelpPanelDataType: (newHelpPanelDataType: DataType) => void;
+  helpPanelFieldKey: string;
+  setHelpPanelFieldKey: (newHelpPanelFieldKey: string) => void;
+  showSplitPanel: boolean;
+  setShowSplitPanel: (newShowSplitPanel: boolean) => void;
+  splitPanelSize: number;
+  setSplitPanelSize: (newSplitPanelSize: number) => void;
+  updateFilteringText: (text: string) => void;
+  setUpdateFilteringText: (newUpdateFilteringText: (text: string) => void) => void;
   combineGraphs: boolean;
   setCombineGraphs: (newCombineGraphs: boolean) => void;
   numCpusPerRun: NumCpusPerRun;
@@ -21,8 +30,14 @@ interface ReportState {
   setDarkMode: (newDarkMode: boolean) => void;
   searchKey: string;
   setSearchKey: (newSearchKey: string) => void;
-  findingsFilter: { [runName: string]: Set<string> };
-  setFindingsFilter: (runName: string, newFindingsFilter: Set<string>) => void;
+  analyticalFindingsTypes: { [runName: string]: Set<FindingType> };
+  setAnalyticalFindingsTypes: (runName: string, newFindingTypes: Set<FindingType>) => void;
+  statisticalFindingsDataTypes: { [runName: string]: DataType[] };
+  updateStatisticalFindingsDataTypes: (runName: string, newDataTypes: DataType[]) => void;
+  statisticalFindingsStats: { [runName: string]: Stat[] };
+  updateStatisticalFindingsStats: (runName: string, newStats: Stat[]) => void;
+  statisticalFindingsTypes: { [runName: string]: FindingType[] };
+  updateStatisticalFindingsTypes: (runName: string, newFindingTypes: FindingType[]) => void;
 }
 
 const ReportStateContext = React.createContext<ReportState | undefined>(undefined);
@@ -34,7 +49,13 @@ export default function (props: { children: ReactNode }) {
   const [dataComponent, setDataComponent] = React.useState<DataType>("systeminfo");
   const [numMetricGraphsPerPage, setNumMetricGraphsPerPage] = React.useState(NUM_METRICS_PER_PAGE);
   const [showHelpPanel, setShowHelpPanel] = React.useState(false);
-  const [helpPanelType, setHelpPanelType] = React.useState<string>("general");
+  const [helpPanelDataType, setHelpPanelDataType] = React.useState<DataType>("systeminfo");
+  const [helpPanelFieldKey, setHelpPanelFieldKey] = React.useState<string>("general");
+  const [showSplitPanel, setShowSplitPanel] = React.useState(false);
+  const [splitPanelSize, setSplitPanelSize] = React.useState<number>(500);
+  // To store a function in React state, we need to set the value with a function that returns the function,
+  // to be distinguished from the function argument supported by the React useState and setState function
+  const [updateFilteringText, setUpdateFilteringText] = React.useState<(text: string) => void>(() => () => {});
   const [combineGraphs, setCombineGraphs] = React.useState(false);
   const [numCpusPerRun, setNumCpusPerRun] = React.useState<NumCpusPerRun>({});
   const [selectedCpusPerRun, setSelectedCpusPerRun] = React.useState<SelectedCpusPerRun>({});
@@ -43,7 +64,18 @@ export default function (props: { children: ReactNode }) {
     return saved ? JSON.parse(saved) : false;
   });
   const [searchKey, setSearchKey] = React.useState("");
-  const [findingsFilter, setFindingsFilter] = React.useState<{ [runName: string]: Set<string> }>({});
+  const [analyticalFindingsTypes, setAnalyticalFindingsTypes] = React.useState<{
+    [runName: string]: Set<FindingType>;
+  }>({});
+  const [statisticalFindingsDataTypes, setStatisticalFindingsDataTypes] = React.useState<{
+    [runName: string]: DataType[];
+  }>(Object.fromEntries(RUNS.map((runName) => [runName, TIME_SERIES_DATA_TYPES])));
+  const [statisticalFindingsStats, setStatisticalFindingsStats] = React.useState<{
+    [runName: string]: Stat[];
+  }>(Object.fromEntries(RUNS.map((runName) => [runName, ["avg"]])));
+  const [statisticalFindingsTypes, setStatisticalFindingsTypes] = React.useState<{
+    [runName: string]: FindingType[];
+  }>(Object.fromEntries(RUNS.map((runName) => [runName, ["negative"]])));
 
   const reportState: ReportState = {
     dataComponent,
@@ -61,8 +93,16 @@ export default function (props: { children: ReactNode }) {
         setTimeout(() => window.dispatchEvent(new Event("resize")), 50);
       }
     },
-    helpPanelType,
-    setHelpPanelType,
+    helpPanelDataType,
+    setHelpPanelDataType,
+    helpPanelFieldKey,
+    setHelpPanelFieldKey,
+    showSplitPanel,
+    setShowSplitPanel,
+    splitPanelSize,
+    setSplitPanelSize,
+    updateFilteringText,
+    setUpdateFilteringText,
     combineGraphs,
     setCombineGraphs,
     numCpusPerRun,
@@ -76,9 +116,21 @@ export default function (props: { children: ReactNode }) {
     },
     searchKey,
     setSearchKey,
-    findingsFilter,
-    setFindingsFilter: (runName: string, newFindingsFilter: Set<string>) => {
-      setFindingsFilter(prev => ({ ...prev, [runName]: newFindingsFilter }));
+    analyticalFindingsTypes,
+    setAnalyticalFindingsTypes: (runName: string, newFindingsFilter: Set<FindingType>) => {
+      setAnalyticalFindingsTypes((prev) => ({ ...prev, [runName]: newFindingsFilter }));
+    },
+    statisticalFindingsDataTypes,
+    updateStatisticalFindingsDataTypes: (runName: string, newDataTypes: DataType[]) => {
+      setStatisticalFindingsDataTypes((prev) => ({ ...prev, [runName]: newDataTypes }));
+    },
+    statisticalFindingsStats,
+    updateStatisticalFindingsStats: (runName: string, newStats: Stat[]) => {
+      setStatisticalFindingsStats((prev) => ({ ...prev, [runName]: newStats }));
+    },
+    statisticalFindingsTypes,
+    updateStatisticalFindingsTypes: (runName: string, newFindingTypes: FindingType[]) => {
+      setStatisticalFindingsTypes((prev) => ({ ...prev, [runName]: newFindingTypes }));
     },
   };
 

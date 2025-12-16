@@ -19,10 +19,21 @@ interface DataDescription {
 
 export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
   systeminfo: {
-    readableName: "Report",
+    readableName: "Report Home",
     summary:
-      "The APerf report homepage provides overviews of each recording run. In this page, you can view every run's system information and analytical findings. For more details, use the side navigation panel to open a specific data's report, which includes everything that APerf collected.",
-    fieldDescriptions: {},
+      "The APerf report homepage provides overviews of each recording run. In this page, you can view every run's system information, analytical findings, and statistical findings. For more details, use the side navigation panel to open a specific data's page.",
+    fieldDescriptions: {
+      statisticalFinding: {
+        readableName: "Statistical Findings",
+        description:
+          "A statistical finding represents the delta of comparing a time-series metric's stat against the same metric in the base run. The deltas are color-coded based on the desired value of the metric - green means as desired (good) and red means otherwise (bad). Use the filters to select data types, stats, and finding types to be included in the table.",
+      },
+      analyticalFinding: {
+        readableName: "Analytical Findings",
+        description:
+          "An analytical finding is produced when matching a predefined analytical rule against the data during report generation. They describe how the data in-scope is potentially impacting performance.",
+      },
+    },
   },
   cpu_utilization: {
     readableName: "CPU Utilization",
