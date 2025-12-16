@@ -1,5 +1,7 @@
-import { ALL_DATA_TYPES, DataType, TimeSeriesData, Statistics } from "../definitions/types";
+import { ALL_DATA_TYPES, DataType, TimeSeriesData, FindingType } from "../definitions/types";
 import { CPU_DATA_TYPES, PROCESSED_DATA } from "../definitions/data-config";
+import { IconProps } from "@cloudscape-design/components/icon/interfaces";
+import {DATA_DESCRIPTIONS} from "../definitions/data-descriptions";
 
 export function extractDataTypeFromFragment(fragment: string): DataType {
   if (!fragment || !fragment.startsWith("#")) {
@@ -75,5 +77,40 @@ export function shouldShowCpuSeries(seriesName: string, selectedAggregate: boole
     return !!selectedCpus[Number(seriesName.substring(3))];
   } else {
     return true;
+  }
+}
+
+/**
+ * Finds the unit of a time-series metric.
+ */
+export function getTimeSeriesMetricUnit(dataType: DataType, metricName: string): string {
+  return DATA_DESCRIPTIONS[dataType].fieldDescriptions[metricName]?.unit || DATA_DESCRIPTIONS[dataType].defaultUnit;
+}
+
+/**
+ * Maps a finding type to its corresponding icon name.
+ */
+export function getFindingTypeIconName(findingType: FindingType): IconProps.Name {
+  switch (findingType) {
+    case "negative":
+      return "face-sad";
+    case "zero":
+      return "face-neutral";
+    case "positive":
+      return "face-happy";
+  }
+}
+
+/**
+ * Maps a finding type to its human-readable name to be rendered.
+ */
+export function getFindingTypeReadableName(findingType: FindingType): string {
+  switch (findingType) {
+    case "negative":
+      return "Bad";
+    case "zero":
+      return "Neutral";
+    case "positive":
+      return "Good";
   }
 }

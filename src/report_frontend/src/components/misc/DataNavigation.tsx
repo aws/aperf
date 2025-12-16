@@ -1,11 +1,12 @@
 import React from "react";
-import { SideNavigation, SideNavigationProps, Box } from "@cloudscape-design/components";
+import { SideNavigation, SideNavigationProps, Box, Link } from "@cloudscape-design/components";
 import { APERF_SERVICE_NAME } from "../../definitions/constants";
 import { NAVIGATION_CONFIGS, VERSION_INFO } from "../../definitions/data-config";
 import { DataType } from "../../definitions/types";
 import { useReportState } from "../ReportStateProvider";
 import { extractDataTypeFromFragment } from "../../utils/utils";
 import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
+import { ReportHelpPanelIcon } from "./ReportHelpPanel";
 
 /**
  * This component renders the navigation panel on the left side that allows users to navigate between
@@ -66,4 +67,40 @@ export default function () {
       </Box>
     </>
   );
+}
+
+/**
+ * This component renders a link that directs to the corresponding data type page while searching for
+ * the specified dataKey
+ */
+export function DataLink(props: { dataType: DataType; dataKey: string }) {
+  const { setDataComponent, setSearchKey } = useReportState();
+
+  // Since system info does not have a dedicated page, we don't need to
+  // render a link
+  if (props.dataType == "systeminfo") {
+    return <b>{`[System Info] ${props.dataKey}`}</b>;
+  }
+
+  return (
+    <Link
+      href={`#${props.dataType}`}
+      onFollow={() => {
+        setSearchKey(props.dataKey);
+        setDataComponent(props.dataType);
+      }}
+    >
+      {`[${DATA_DESCRIPTIONS[props.dataType].readableName}] ${props.dataKey}`}
+    </Link>
+  );
+}
+
+/**
+ * This component renders a link that sets the page's filtering text to the corresponding
+ * data key (metric name or key-value key) to show the data
+ */
+export function SamePageDataLink(props: { dataKey: string }) {
+  const { updateFilteringText } = useReportState();
+
+  return <Link onFollow={() => updateFilteringText(props.dataKey)}>{props.dataKey}</Link>;
 }

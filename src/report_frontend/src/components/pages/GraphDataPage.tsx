@@ -108,7 +108,7 @@ export default function (props: DataPageProps) {
       header={
         <Header
           variant={"awsui-h1-sticky"}
-          info={<ReportHelpPanelLink type="summary" />}
+          info={<ReportHelpPanelLink dataType={props.dataType} fieldKey={"summary"} />}
           actions={
             allGraphGroups.length > 1 && (
               <SegmentedControl
