@@ -12,6 +12,7 @@ import { useReportState } from "../ReportStateProvider";
 import MetricGraph from "../data/MetricGraph";
 import { RunHeader } from "../data/RunSystemInfo";
 import CombinedMetricGraph from "../data/CombinedMetricGraph";
+import { ShowFindingsPanelButton } from "../analytics/FindingsSplitPanel";
 
 const NON_ZERO_METRIC_NAMES_CACHE = new Map<DataType, string[]>();
 
@@ -20,7 +21,8 @@ const NON_ZERO_METRIC_NAMES_CACHE = new Map<DataType, string[]>();
  * all APerf runs
  */
 export default function (props: DataPageProps) {
-  const { numMetricGraphsPerPage, combineGraphs, searchKey, setCombineGraphs } = useReportState();
+  const { numMetricGraphsPerPage, combineGraphs, searchKey, setCombineGraphs, setUpdateFilteringText } =
+    useReportState();
 
   const [hideAllZeroMetrics, setHideAllZeroMetrics] = React.useState(true);
 
@@ -49,7 +51,7 @@ export default function (props: DataPageProps) {
   const graphWidthPercentage = Math.floor(100 / RUNS.length);
   const cardDefinition: CardsProps.CardDefinition<string> = {
     header: (metricKey: string) => (
-      <Header variant={"h2"} info={<ReportHelpPanelLink type={metricKey} />}>
+      <Header variant={"h2"} info={<ReportHelpPanelLink dataType={props.dataType} fieldKey={metricKey} />}>
         {metricKey}
       </Header>
     ),
@@ -91,6 +93,14 @@ export default function (props: DataPageProps) {
     },
   );
 
+  React.useEffect(() => {
+    // Store the function to update the filtering text in the global state, so that they can be accessed
+    // by other components to change the filtering text and locate a particular metric.
+    // To be distinguished from the function argument supported by the React set state API, we need to
+    // pass in a function that returns the actual function.
+    setUpdateFilteringText(() => (text: string) => filterProps.onChange({ detail: { filteringText: text } }));
+  }, [props.dataType]);
+
   return (
     <Cards
       {...collectionProps}
@@ -101,9 +111,10 @@ export default function (props: DataPageProps) {
       header={
         <Header
           variant={"awsui-h1-sticky"}
-          info={<ReportHelpPanelLink type="summary" />}
+          info={<ReportHelpPanelLink dataType={props.dataType} fieldKey={"summary"} />}
           actions={
             <SpaceBetween size={"xs"} direction={"horizontal"}>
+              <ShowFindingsPanelButton />
               <Toggle checked={combineGraphs} onChange={({ detail }) => setCombineGraphs(detail.checked)}>
                 {"Combine run graphs"}
               </Toggle>

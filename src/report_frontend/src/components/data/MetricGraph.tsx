@@ -3,11 +3,10 @@ import { DataType, TimeSeriesData, TimeSeriesMetricProps } from "../../definitio
 import { useReportState } from "../ReportStateProvider";
 import { CPU_DATA_TYPES, PROCESSED_DATA } from "../../definitions/data-config";
 import Plot from "react-plotly.js";
-import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import { Box, SpaceBetween } from "@cloudscape-design/components";
-import { shouldShowCpuSeries } from "../../utils/utils";
+import { getTimeSeriesMetricUnit, shouldShowCpuSeries } from "../../utils/utils";
 import MetricStatsDisplay from "./MetricStatsDisplay";
-import { MetricFindings } from "./Finding";
+import { MetricAnalyticalFindings } from "../analytics/AnalyticalFindings";
 
 /**
  * Transform processed time series data into the format required by plotly.js.
@@ -73,7 +72,7 @@ export default function (props: TimeSeriesMetricProps) {
   }
 
   return (
-    <SpaceBetween size={"xs"}>
+    <SpaceBetween size={"xxs"}>
       <MetricStatsDisplay dataType={props.dataType} runName={props.runName} metricName={props.metricName} />
       <Plot
         data={seriesData}
@@ -83,9 +82,7 @@ export default function (props: TimeSeriesMetricProps) {
             gridcolor: darkMode ? "#404040" : "#e0e0e0",
           },
           yaxis: {
-            title:
-              DATA_DESCRIPTIONS[props.dataType].fieldDescriptions[props.metricName]?.unit ||
-              DATA_DESCRIPTIONS[props.dataType].defaultUnit,
+            title: getTimeSeriesMetricUnit(props.dataType, props.metricName),
             tickformat: ".3s",
             range: valueRange,
             gridcolor: darkMode ? "#404040" : "#e0e0e0",
@@ -94,11 +91,12 @@ export default function (props: TimeSeriesMetricProps) {
           paper_bgcolor: darkMode ? "#171D25" : "#ffffff",
           plot_bgcolor: darkMode ? "#171D25" : "#ffffff",
           font: { color: darkMode ? "#ffffff" : "#000000" },
+          margin: { t: 30, b: 50 },
         }}
         style={{ width: "100%", height: "100%" }}
         useResizeHandler
       />
-      <MetricFindings dataType={props.dataType} runName={props.runName} metricName={props.metricName} />
+      <MetricAnalyticalFindings dataType={props.dataType} runName={props.runName} metricName={props.metricName} />
     </SpaceBetween>
   );
 }
