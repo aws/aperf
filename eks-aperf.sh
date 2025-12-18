@@ -115,10 +115,14 @@ spec:
       set -e
       set -o pipefail
 
-      echo -e "Copy async-profiler files..."
-      cp -r /opt/async-profiler /tmp/aperf/ > /dev/null
-      ln -sf /tmp/aperf/async-profiler/bin/asprof /usr/bin/asprof > /dev/null
-      ln -sf /tmp/aperf/async-profiler/bin/jfrconv /usr/bin/jfrconv > /dev/null
+      if [ ! -d "/tmp/aperf/async-profiler" ]; then
+        echo -e "Copy async-profiler files..."
+        cp -r /opt/async-profiler /tmp/aperf/ > /dev/null
+      else
+        echo -e "async-profiler files already exist, skipping copy"
+      fi
+      [ ! -L "/usr/bin/asprof" ] && ln -sf /tmp/aperf/async-profiler/bin/asprof /usr/bin/asprof > /dev/null
+      [ ! -L "/usr/bin/jfrconv" ] && ln -sf /tmp/aperf/async-profiler/bin/jfrconv /usr/bin/jfrconv > /dev/null
       export LD_LIBRARY_PATH="/tmp/aperf/async-profiler/lib:${LD_LIBRARY_PATH}"
       
       echo -e "Starting Aperf recording execution..."
@@ -126,7 +130,7 @@ spec:
       mkdir -p /tmp/aperf/profile 
       chmod -R 777 /tmp/aperf/profile
       /usr/bin/aperf record --tmp-dir="/tmp/aperf/profile" -r aperf_record ${APERF_OPTIONS}
-      rm -rf  /tmp/aperf/profile /tmp/aperf/async-profiler
+      rm -rf  /tmp/aperf/profile
       echo "APerf record completed"
 
       echo -e "\nStarting Aperf report generation..."
