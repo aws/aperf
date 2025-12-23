@@ -3,10 +3,10 @@ import { DataType, TimeSeriesData, TimeSeriesMetricProps } from "../../definitio
 import { useReportState } from "../ReportStateProvider";
 import { CPU_DATA_TYPES, PROCESSED_DATA } from "../../definitions/data-config";
 import Plot from "react-plotly.js";
-import { Box, SpaceBetween } from "@cloudscape-design/components";
+import { Box, Button, Popover } from "@cloudscape-design/components";
 import { getTimeSeriesMetricUnit, shouldShowCpuSeries } from "../../utils/utils";
-import MetricStatsDisplay from "./MetricStatsDisplay";
-import { MetricAnalyticalFindings } from "../analytics/AnalyticalFindings";
+import MetricGraph from "./MetricGraph";
+import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 
 /**
  * Transform processed time series data into the format required by plotly.js.
@@ -72,31 +72,43 @@ export default function (props: TimeSeriesMetricProps) {
   }
 
   return (
-    <SpaceBetween size={"xxs"}>
-      <MetricStatsDisplay dataType={props.dataType} runName={props.runName} metricName={props.metricName} />
-      <Plot
-        data={seriesData}
-        layout={{
-          xaxis: {
-            title: "Seconds",
-            gridcolor: darkMode ? "#404040" : "#e0e0e0",
-          },
-          yaxis: {
-            title: getTimeSeriesMetricUnit(props.dataType, props.metricName),
-            tickformat: ".3s",
-            range: valueRange,
-            gridcolor: darkMode ? "#404040" : "#e0e0e0",
-          },
-          autosize: true,
-          paper_bgcolor: darkMode ? "#171D25" : "#ffffff",
-          plot_bgcolor: darkMode ? "#171D25" : "#ffffff",
-          font: { color: darkMode ? "#ffffff" : "#000000" },
-          margin: { t: 30, b: 50 },
-        }}
-        style={{ width: "100%", height: "100%" }}
-        useResizeHandler
-      />
-      <MetricAnalyticalFindings dataType={props.dataType} runName={props.runName} metricName={props.metricName} />
-    </SpaceBetween>
+    <Plot
+      data={seriesData}
+      layout={{
+        xaxis: {
+          title: "Seconds",
+          gridcolor: darkMode ? "#404040" : "#e0e0e0",
+        },
+        yaxis: {
+          title: getTimeSeriesMetricUnit(props.dataType, props.metricName),
+          tickformat: ".3s",
+          range: valueRange,
+          gridcolor: darkMode ? "#404040" : "#e0e0e0",
+        },
+        autosize: true,
+        paper_bgcolor: darkMode ? "#171D25" : "#ffffff",
+        plot_bgcolor: darkMode ? "#171D25" : "#ffffff",
+        font: { color: darkMode ? "#ffffff" : "#000000" },
+        margin: { t: 30, b: 50 },
+      }}
+      style={{ width: "100%", height: "100%" }}
+      useResizeHandler
+    />
+  );
+}
+
+export function SingleMetricGraphPopover(props: TimeSeriesMetricProps) {
+  return (
+    <Popover
+      triggerType={"custom"}
+      wrapTriggerText={false}
+      position={"left"}
+      size={"large"}
+      fixedWidth
+      header={`[${DATA_DESCRIPTIONS[props.dataType].readableName}] ${props.metricName} (${props.runName})`}
+      content={<MetricGraph dataType={props.dataType} runName={props.runName} metricName={props.metricName} />}
+    >
+      <Button iconName={"zoom-in"} variant={"icon"} />
+    </Popover>
   );
 }

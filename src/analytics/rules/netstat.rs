@@ -8,22 +8,26 @@ impl AnalyzeData for Netstat {
     fn get_analytical_rules(&self) -> Vec<AnalyticalRule> {
         vec![
             time_series_stat_run_comparison! (
-                metric_name: "IpExt:InOctets",
+                name: "Inconsistent Inbound Network Traffic",
+                metric: "IpExt:InOctets",
                 stat: Stat::Average,
                 comparator: Comparator::GreaterEqual,
                 abs: true,
                 delta_ratio: 0.1,
                 score: Score::Bad,
-                message: "The average number of bytes received by the network interface is different between runs. Verify expected behavior for the load generator. https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/debug_system_perf.md#check-network-usage",
+                message: "The average number of bytes received by the network interface is different. Verify that the load generator is providing the expected traffics, if the system is under tests." ,
+                reference: "https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/debug_system_perf.md#check-network-usage",
             ),
             time_series_stat_run_comparison! (
-                metric_name: "IpExt:OutOctets",
+                name: "Inconsistent Outbound Network Traffic",
+                metric: "IpExt:OutOctets",
                 stat: Stat::Average,
                 comparator: Comparator::GreaterEqual,
                 abs: true,
                 delta_ratio: 0.1,
                 score: Score::Bad,
-                message: "The average number of bytes transmitted by the network interface is different between runs. Verify expected behavior for the SUT. https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/debug_system_perf.md#check-network-usage",
+                message: "The average number of bytes transmitted by the network interface is different. Look for heavily used connections on the system through \"watch netstat -t\".",
+                reference: "https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/debug_system_perf.md#check-network-usage",
             ),
         ]
     }

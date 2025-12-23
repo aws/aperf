@@ -1,5 +1,13 @@
 import React, { ReactNode } from "react";
-import { DataType, FindingType, NumCpusPerRun, SelectedCpusPerRun, Stat } from "../definitions/types";
+import {
+  ALL_DATA_TYPES,
+  ALL_FINDING_TYPES,
+  DataType,
+  FindingType,
+  NumCpusPerRun,
+  SelectedCpusPerRun,
+  Stat,
+} from "../definitions/types";
 import { NUM_METRICS_PER_PAGE } from "../definitions/constants";
 import { RUNS, TIME_SERIES_DATA_TYPES } from "../definitions/data-config";
 
@@ -30,8 +38,10 @@ interface ReportState {
   setDarkMode: (newDarkMode: boolean) => void;
   searchKey: string;
   setSearchKey: (newSearchKey: string) => void;
-  analyticalFindingsTypes: { [runName: string]: Set<FindingType> };
-  setAnalyticalFindingsTypes: (runName: string, newFindingTypes: Set<FindingType>) => void;
+  analyticalFindingsDataTypes: { [runName: string]: DataType[] };
+  updateAnalyticalFindingsDataTypes: (runName: string, newDataTypes: DataType[]) => void;
+  analyticalFindingsTypes: { [runName: string]: FindingType[] };
+  updateAnalyticalFindingsTypes: (runName: string, newFindingTypes: FindingType[]) => void;
   statisticalFindingsDataTypes: { [runName: string]: DataType[] };
   updateStatisticalFindingsDataTypes: (runName: string, newDataTypes: DataType[]) => void;
   statisticalFindingsStats: { [runName: string]: Stat[] };
@@ -64,15 +74,23 @@ export default function (props: { children: ReactNode }) {
     return saved ? JSON.parse(saved) : false;
   });
   const [searchKey, setSearchKey] = React.useState("");
+
+  const [analyticalFindingsDataTypes, setAnalyticalFindingsDataTypes] = React.useState<{
+    [runName: string]: DataType[];
+  }>(Object.fromEntries(RUNS.map((runName) => [runName, [...ALL_DATA_TYPES]])));
+
   const [analyticalFindingsTypes, setAnalyticalFindingsTypes] = React.useState<{
-    [runName: string]: Set<FindingType>;
-  }>({});
+    [runName: string]: FindingType[];
+  }>(Object.fromEntries(RUNS.map((runName) => [runName, [...ALL_FINDING_TYPES]])));
+
   const [statisticalFindingsDataTypes, setStatisticalFindingsDataTypes] = React.useState<{
     [runName: string]: DataType[];
   }>(Object.fromEntries(RUNS.map((runName) => [runName, TIME_SERIES_DATA_TYPES])));
+
   const [statisticalFindingsStats, setStatisticalFindingsStats] = React.useState<{
     [runName: string]: Stat[];
   }>(Object.fromEntries(RUNS.map((runName) => [runName, ["avg"]])));
+
   const [statisticalFindingsTypes, setStatisticalFindingsTypes] = React.useState<{
     [runName: string]: FindingType[];
   }>(Object.fromEntries(RUNS.map((runName) => [runName, ["negative"]])));
@@ -116,8 +134,12 @@ export default function (props: { children: ReactNode }) {
     },
     searchKey,
     setSearchKey,
+    analyticalFindingsDataTypes,
+    updateAnalyticalFindingsDataTypes: (runName: string, newDataTypes: DataType[]) => {
+      setAnalyticalFindingsDataTypes((prev) => ({ ...prev, [runName]: newDataTypes }));
+    },
     analyticalFindingsTypes,
-    setAnalyticalFindingsTypes: (runName: string, newFindingsFilter: Set<FindingType>) => {
+    updateAnalyticalFindingsTypes: (runName: string, newFindingsFilter: FindingType[]) => {
       setAnalyticalFindingsTypes((prev) => ({ ...prev, [runName]: newFindingsFilter }));
     },
     statisticalFindingsDataTypes,

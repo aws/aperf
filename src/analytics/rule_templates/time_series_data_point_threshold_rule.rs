@@ -1,6 +1,6 @@
 use crate::analytics;
-use crate::analytics::{Analyze, DataFindings};
-use crate::computations::{f64_to_fixed_2, Comparator};
+use crate::analytics::{AnalyticalFinding, Analyze, DataFindings};
+use crate::computations::{formatted_number_string, Comparator};
 use crate::data::data_formats::ProcessedData;
 use std::fmt;
 use std::fmt::Formatter;
@@ -8,16 +8,40 @@ use std::fmt::Formatter;
 /// This rule runs for the specified metric in every run and compares every data point in each metric
 /// against the threshold.
 pub struct TimeSeriesDataPointThresholdRule {
+    pub rule_name: &'static str,
     pub metric_name: &'static str,
     pub comparator: Comparator,
     pub threshold: f64,
     pub score: f64,
     pub message: &'static str,
+    pub reference: &'static str,
 }
 
 macro_rules! time_series_data_point_threshold {
     {
-        metric_name: $metric_name:literal,
+        name: $rule_name:literal,
+        metric: $metric_name:literal,
+        comparator: $comparator:path,
+        threshold: $threshold:literal,
+        score: $score:expr,
+        message: $message:literal,
+        reference: $reference:literal,
+    } => {
+        AnalyticalRule::TimeSeriesDataPointThresholdRule(
+            TimeSeriesDataPointThresholdRule{
+                rule_name: $rule_name,
+                metric_name: $metric_name,
+                comparator: $comparator,
+                threshold: $threshold,
+                score: $score.as_f64(),
+                message: $message,
+                reference: $reference,
+            }
+        )
+    };
+    {
+        name: $rule_name:literal,
+        metric: $metric_name:literal,
         comparator: $comparator:path,
         threshold: $threshold:literal,
         score: $score:expr,
@@ -25,11 +49,13 @@ macro_rules! time_series_data_point_threshold {
     } => {
         AnalyticalRule::TimeSeriesDataPointThresholdRule(
             TimeSeriesDataPointThresholdRule{
+                rule_name: $rule_name,
                 metric_name: $metric_name,
                 comparator: $comparator,
                 threshold: $threshold,
                 score: $score.as_f64(),
                 message: $message,
+                reference: "",
             }
         )
     };
@@ -40,8 +66,8 @@ impl fmt::Display for TimeSeriesDataPointThresholdRule {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "TimeSeriesDataPointThresholdRule <checking if any data points of {} is {} {}>",
-            self.metric_name, self.comparator, self.threshold
+            "TimeSeriesDataPointThresholdRule {} <checking if any data points of {} is {} {}>",
+            self.rule_name, self.metric_name, self.comparator, self.threshold
         )
     }
 }
@@ -83,22 +109,24 @@ impl Analyze for TimeSeriesDataPointThresholdRule {
                 } else {
                     max_abs_finding_score * -1.0
                 };
-                let mut finding_description = format!(
+                let finding_description = format!(
                     "At least one data point in {} is {} ({} the threshold of {}).",
                     run_name,
-                    f64_to_fixed_2(max_score_value),
+                    formatted_number_string(max_score_value),
                     self.comparator,
                     self.threshold
                 );
-                if !self.message.is_empty() {
-                    finding_description.push(' ');
-                    finding_description.push_str(self.message);
-                }
+
                 data_findings.insert_finding(
                     run_name,
                     self.metric_name,
-                    finding_score,
-                    finding_description,
+                    AnalyticalFinding::new(
+                        self.rule_name.to_string(),
+                        finding_score,
+                        finding_description,
+                        self.message.to_string(),
+                        self.reference.to_string(),
+                    ),
                 );
             }
         }
