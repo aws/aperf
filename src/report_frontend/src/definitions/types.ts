@@ -90,8 +90,11 @@ export interface RunFindings {
 }
 
 export interface AnalyticalFinding {
-  readonly description: string;
+  readonly rule_name: string;
   readonly score: number;
+  readonly description: string;
+  readonly message: string;
+  readonly reference: string;
 }
 
 export interface DataPageProps {

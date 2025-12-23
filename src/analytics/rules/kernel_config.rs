@@ -6,10 +6,12 @@ use crate::data::AnalyzeData;
 impl AnalyzeData for KernelConfig {
     fn get_analytical_rules(&self) -> Vec<AnalyticalRule> {
         vec![key_value_key_expected! {
+            name: "Huge Page Disabled",
             key: "CONFIG_TRANSPARENT_HUGEPAGE",
             expected_value: "y",
-            score: Score::Bad,
-            message: "Using huge-pages should generally improve performance on all EC2 instance types, but there can be cases where using exclusively huge-pages may lead to performance degradation. Therefore, it is always recommended to fully test your application after enabling and/or allocating huge-pages.",
+            score: Score::Poor,
+            message: "Using huge-pages should reduce TLB pressure and generally improve performance on all EC2 instance types, but using exclusively huge-pages may sometime lead to performance degradation. Fully test your application after enabling and/or allocating huge-pages.",
+            reference: "https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/optimization_recommendation.md#optimizing-for-high-tlb-miss-rates",
         }]
     }
 }

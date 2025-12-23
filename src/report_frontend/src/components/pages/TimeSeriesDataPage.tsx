@@ -13,6 +13,8 @@ import MetricGraph from "../data/MetricGraph";
 import { RunHeader } from "../data/RunSystemInfo";
 import CombinedMetricGraph from "../data/CombinedMetricGraph";
 import { ShowFindingsPanelButton } from "../analytics/FindingsSplitPanel";
+import MetricStatsDisplay from "../data/MetricStatsDisplay";
+import { MetricAnalyticalFindings } from "../analytics/AnalyticalFindings";
 
 const NON_ZERO_METRIC_NAMES_CACHE = new Map<DataType, string[]>();
 
@@ -59,9 +61,9 @@ export default function (props: DataPageProps) {
       ? [
           {
             id: "combined_graphs",
-            content: (metricKey) => (
+            content: (metricName) => (
               <div style={{ paddingRight: "30px", overflowX: "hidden" }}>
-                <CombinedMetricGraph dataType={props.dataType} metricName={metricKey} key={props.dataType} />
+                <CombinedMetricGraph dataType={props.dataType} metricName={metricName} key={props.dataType} />
               </div>
             ),
           },
@@ -69,9 +71,13 @@ export default function (props: DataPageProps) {
       : RUNS.map((runName) => ({
           id: runName,
           header: <RunHeader runName={runName} />,
-          content: (metricKey) => (
+          content: (metricName) => (
             <div style={{ paddingRight: "30px", overflowX: "hidden" }}>
-              <MetricGraph dataType={props.dataType} runName={runName} metricName={metricKey} key={props.dataType} />
+              <SpaceBetween size={"xxs"}>
+                <MetricStatsDisplay dataType={props.dataType} runName={runName} metricName={metricName} />
+                <MetricGraph dataType={props.dataType} runName={runName} metricName={metricName} key={props.dataType} />
+                <MetricAnalyticalFindings dataType={props.dataType} runName={runName} metricName={metricName} />
+              </SpaceBetween>
             </div>
           ),
           width: graphWidthPercentage,
