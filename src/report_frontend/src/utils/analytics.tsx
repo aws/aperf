@@ -65,6 +65,10 @@ export interface StatisticalFinding {
    */
   readonly dataType: DataType;
   /**
+   * The APerf run that the finding belongs to
+   */
+  readonly runName: string;
+  /**
    * The time-series metric name the finding belongs to
    */
   readonly metricName: string;
@@ -170,6 +174,7 @@ export function computeAllTimeSeriesStatsDelta() {
             if (delta != 0) {
               STATISTICAL_FINDINGS[runName].push({
                 dataType,
+                runName,
                 metricName,
                 stat,
                 score,

@@ -78,19 +78,14 @@ impl<'a> AnalyticalEngine<'a> {
     }
 }
 
+/// Stores all analytical findings for a data type grouped by runs
 #[derive(Serialize, Deserialize, Default)]
 pub struct DataFindings {
     per_run_findings: HashMap<String, RunFindings>,
 }
 
 impl DataFindings {
-    pub fn insert_finding(
-        &mut self,
-        run_name: &String,
-        key: &str,
-        finding_score: f64,
-        finding_description: String,
-    ) {
+    pub fn insert_finding(&mut self, run_name: &String, key: &str, finding: AnalyticalFinding) {
         let run_findings = self
             .per_run_findings
             .entry(run_name.clone())
@@ -99,34 +94,57 @@ impl DataFindings {
             .findings
             .entry(key.to_string())
             .or_insert(Vec::new());
-        key_findings.push(AnalyticalFinding::new(finding_score, finding_description));
+        key_findings.push(finding);
     }
 }
 
+/// Stores all analytical findings of a data type within current run. All findings are
+/// grouped by the data key (such metric name or key-value key)
 #[derive(Serialize, Deserialize, Default)]
 pub struct RunFindings {
     findings: HashMap<String, Vec<AnalyticalFinding>>,
 }
 
+/// All information about an analytical finding. This data is passed to the report
+/// frontend and rendered as UI component.
 #[derive(Serialize, Deserialize)]
 pub struct AnalyticalFinding {
+    rule_name: String,
     score: f64,
     description: String,
+    message: String,
+    reference: String,
 }
 
 impl AnalyticalFinding {
-    pub fn new(score: f64, description: String) -> Self {
-        AnalyticalFinding { score, description }
+    pub fn new(
+        rule_name: String,
+        score: f64,
+        description: String,
+        message: String,
+        reference: String,
+    ) -> Self {
+        AnalyticalFinding {
+            rule_name,
+            score,
+            description,
+            message,
+            reference,
+        }
     }
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum Score {
-    VeryBad = -2,
-    Bad = -1,
+    Critical = -256,
+    Poor = -16,
+    Bad = -2,
+    Concerning = -1,
     Neutral = 0,
-    Good = 1,
-    VeryGood = 2,
+    Acceptable = 1,
+    Good = 2,
+    Great = 16,
+    Optimal = 256,
 }
 
 impl Score {
@@ -135,7 +153,19 @@ impl Score {
     }
 }
 
+/// Compute the score of a finding with the base score and how much the actual value is
+/// different from the threshold
 fn compute_finding_score(value: f64, threshold: f64, rule_score: f64) -> f64 {
+    // When the threshold is zero, raise it to 1 for computation of the final score
+    // TODO: come up with a better mechanism to handle the zero case
+    if threshold == 0.0 {
+        return if value < 1.0 {
+            rule_score
+        } else {
+            (value - 1.0) * rule_score
+        };
+    }
+
     let mut delta = value / threshold;
     if delta < 1.0 {
         delta = delta.recip();
@@ -181,6 +211,7 @@ macro_rules! analytical_rules {
     };
 }
 
+// Register all single-data-type rule templates here
 analytical_rules!(
     TimeSeriesStatRunComparisonRule,
     TimeSeriesStatThresholdRule,
@@ -211,4 +242,5 @@ macro_rules! multi_data_analytical_rules {
     };
 }
 
+// Register all multi-data-type rule templates here
 multi_data_analytical_rules!();

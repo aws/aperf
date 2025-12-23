@@ -9,16 +9,16 @@ impl AnalyzeData for SystemInfo {
     fn get_analytical_rules(&self) -> Vec<AnalyticalRule> {
         vec![
             key_value_key_run_comparison! {
-                key_group: "",
+                name: "Kernel Version Mismatch",
                 key: "Kernel Version",
-                score: Score::Bad,
-                message: "Kernel Versions between runs is different, make sure this is intended.",
+                score: Score::Critical,
+                message: "Kernel Versions between runs are different. Make sure the difference is intended.",
             },
             key_value_key_run_comparison! {
-                key_group: "",
+                name: "Inconsistent Number of CPUs",
                 key: "CPUs",
-                score: Score::Bad,
-                message: "The number of CPUs between runs is different, which may result in differing performance.",
+                score: Score::Critical,
+                message: "Different amount of CPU resources could result in significant performance discrepancy.",
             },
         ]
     }

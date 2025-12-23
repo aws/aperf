@@ -133,67 +133,67 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
     defaultUnit: "Counts",
     fieldDescriptions: {
       "data-tlb-mpki": {
-        readableName: "Data TLB Misses Per Kilo Instructions",
+        readableName: "Data TLB Misses per Thousand Instructions",
         description:
           "Translation Lookaside Buffer misses for data accesses per thousand instructions, indicating additional latency required for memory operations.",
         desired: "lower",
       },
       "data-tlb-tw-pki": {
-        readableName: "Data TLB Table Walk Per Kilo Instructions",
+        readableName: "Data TLB Table Walk per Thousand Instructions",
         description:
-          "Translation Lookaside Buffer table walks for data accesses per thousand instructions, indicates much higher latency for some memory accesses.",
+          "Translation Lookaside Buffer table walks for data accesses per thousand instructions. It is triggered upon a cache miss in the data TLB to translate virtual addresses in a load/store instruction into physical ones, and multiple traversals in the OS-build page table were required to find the correct physical address. It can lead to much higher latency for some memory accesses.",
         desired: "lower",
       },
       "l3-mpki": {
-        readableName: "L3 Cache Misses Per Kilo Instructions",
+        readableName: "L3 Cache Misses per Thousand Instructions",
         description:
-          "Level 3 cache misses per thousand instructions executed, indicating how often the CPU has to access memory beyond the L3.",
+          "Level 3 cache misses per thousand instructions executed, indicating how often the CPU has to access DRAM. A higher number means more DRAM bandwidth will be consumed.",
         desired: "lower",
       },
       "branch-mpki": {
-        readableName: "Branch Misses Per Kilo Instructions",
+        readableName: "Branch Misses per Thousand Instructions",
         description:
           "Number of branch prediction misses per thousand instructions indicating CPU pipeline efficiency and code predictability.",
         desired: "lower",
       },
       "inst-tlb-tw-pki": {
-        readableName: "Instruction TLB Table Walk Per Kilo Instructions",
+        readableName: "Instruction TLB Table Walk per Thousand Instructions",
         description:
-          "Translation Lookaside Buffer table walks for instruction fetches per thousand instructions indicating code size issues and poor code locality.",
+          "Translation Lookaside Buffer table walks for instruction fetches per thousand instructions. It is triggered upon a cache miss in the instruction TLB to translate virtual instruction addresses into physical ones, and multiple traversals in the OS-build page table were required to find the correct physical address. It indicates code size issues and poor code locality.",
         desired: "lower",
       },
       "inst-tlb-mpki": {
-        readableName: "Instruction TLB Misses Per Kilo Instructions",
+        readableName: "Instruction TLB Misses per Thousand Instructions",
         description:
-          "Instruction Translation Lookaside Buffer misses per thousand instructions indicating code locality.",
+          "Translation Lookaside Buffer misses for code instructions per thousand instructions. A large value indicates poor code locality.",
         desired: "lower",
       },
       "stall-frontend-pkc": {
-        readableName: "Frontend Stall Per Kilo Cycles",
+        readableName: "Frontend Stall per Thousand Cycles",
         description:
           "Cycle count when frontend could not send any micro-operations to the rename stage because of frontend resource stalls caused by fetch memory latency or branch prediction flow stalls per thousand cycles.",
         desired: "lower",
       },
       "data-l1-mpki": {
-        readableName: "Data L1 Cache Misses Per Kilo Instructions",
+        readableName: "Data L1 Cache Misses per Thousand Instructions",
         description:
           "Level 1 data cache misses per thousand instructions indicating data access patterns and cache efficiency for frequently accessed data.",
         desired: "lower",
       },
       "data-rd-tlb-tw-pki": {
-        readableName: "Data Read TLB Table Walk Per Kilo Instructions",
+        readableName: "Data Read TLB Table Walk per Thousand Instructions",
         description:
-          "Translation Lookaside Buffer table walks for data read operations per thousand instructions indicating memory management overhead for read accesses.",
+          "Translation Lookaside Buffer table walks for data read operations per thousand instructions. It is triggered upon a cache miss in the data TLB to translate virtual addresses in a load instruction into physical ones, and multiple traversals in the OS-build page table were required to find the correct physical address. Higher values indicate memory management overhead for read accesses.",
         desired: "lower",
       },
       "data-st-tlb-tw-pki": {
-        readableName: "Data Store TLB Table Walk Per Kilo Instructions",
+        readableName: "Data Store TLB Table Walk per Thousand Instructions",
         description:
-          "Translation Lookaside Buffer table walks for data store operations per thousand instructions indicating memory management overhead for write accesses.",
+          "Translation Lookaside Buffer table walks for data store operations per thousand instructions. It is triggered upon a cache miss in the data TLB to translate virtual addresses in a store instruction into physical ones, and multiple traversals in the OS-build page table were required to find the correct physical address. Higher values indicate memory management overhead for write accesses.",
         desired: "lower",
       },
       "inst-l1-mpki": {
-        readableName: "Instruction L1 Cache Misses Per Kilo Instructions",
+        readableName: "Instruction L1 Cache Misses per Thousand Instructions",
         description:
           "Level 1 instruction cache misses per thousand instructions indicating instruction fetch efficiency and code locality patterns.",
         desired: "lower",
@@ -205,36 +205,36 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
         desired: "higher",
       },
       "data-rd-tlb-mpki": {
-        readableName: "Data Read TLB Misses Per Kilo Instructions",
+        readableName: "Data Read TLB Misses per Thousand Instructions",
         description:
           "Translation Lookaside Buffer misses for data read operations per thousand instructions indicating memory access patterns for read operations.",
         desired: "lower",
       },
       "l2-mpki": {
-        readableName: "L2 Cache Misses Per Kilo Instructions",
+        readableName: "L2 Cache Misses per Thousand Instructions",
         description: "Number of level 2 cache accesses missed per thousand instructions executed.",
         desired: "lower",
       },
       "data-st-tlb-mpki": {
-        readableName: "Data Store TLB Misses Per Kilo Instructions",
+        readableName: "Data Store TLB Misses per Thousand Instructions",
         description:
           "Number of Translation Lookaside Buffer misses for data store operations per thousand instructions.",
         desired: "lower",
       },
       "stall-backend-pkc": {
-        readableName: "Backend Stall Per Kilo Cycles",
+        readableName: "Backend Stall per Thousand Cycles",
         description:
           "CPU backend pipeline stalls per thousand cycles caused by execution unit bottlenecks and resource constraints.",
         desired: "lower",
       },
       stall_frontend_pkc: {
-        readableName: "Frontend Stall Per Kilo Cycles",
+        readableName: "Frontend Stall per Thousand Cycles",
         description:
           "Cycle count when frontend could not send any micro-operations to the rename stage because of frontend resource stalls caused by fetch memory latency or branch prediction flow stalls per thousand cycles.",
         desired: "lower",
       },
       stall_backend_pkc: {
-        readableName: "Backend Stall Per Kilo Cycles",
+        readableName: "Backend Stall per Thousand Cycles",
         description:
           "CPU backend pipeline stalls per thousand cycles caused by execution unit bottlenecks and resource constraints on AMD processors.",
         desired: "lower",
@@ -242,7 +242,7 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       "code-sparsity": {
         readableName: "Code Sparsity",
         description:
-          "Code sparsity is a measure of how compact the instruction code is packed and how closely related code is placed. Lower sparsity helps branch prediction and the cache subsystem.",
+          "Code sparsity is a measure of how compact the instruction code is packed and how closely related code is placed. Lower sparsity helps branch prediction and the cache subsystem. It can be improved by modifying the compiler options.",
         desired: "lower",
       },
     },

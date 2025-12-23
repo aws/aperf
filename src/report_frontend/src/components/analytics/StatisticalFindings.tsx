@@ -1,13 +1,12 @@
 import React from "react";
-import { ALL_FINDING_TYPES, ALL_STATS, DataType, FindingType, Stat } from "../../definitions/types";
-import { RUNS, TIME_SERIES_DATA_TYPES } from "../../definitions/data-config";
+import { DataType, FindingType, Stat } from "../../definitions/types";
+import { RUNS } from "../../definitions/data-config";
 import { STATISTICAL_FINDINGS, StatisticalFinding } from "../../utils/analytics";
 import { useCollection } from "@cloudscape-design/collection-hooks";
 import {
   Box,
   ColumnLayout,
   Container,
-  Multiselect,
   Pagination,
   SpaceBetween,
   Table,
@@ -16,34 +15,30 @@ import {
 import { DataLink, SamePageDataLink } from "../misc/DataNavigation";
 import { ReportHelpPanelIcon, ReportHelpPanelLink } from "../misc/ReportHelpPanel";
 import Header from "@cloudscape-design/components/header";
-import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import { SelectProps } from "@cloudscape-design/components/select/interfaces";
-import {
-  formatNumber,
-  getFindingTypeIconName,
-  getFindingTypeReadableName,
-  getTimeSeriesMetricUnit,
-} from "../../utils/utils";
+import { formatNumber, getTimeSeriesMetricUnit } from "../../utils/utils";
 import { useReportState } from "../ReportStateProvider";
+import {
+  dataTypesToOptions,
+  FINDING_TYPE_OPTIONS,
+  FindingsFilter,
+  findingTypesToOptions,
+  isFindingTypeExpected,
+  STAT_OPTIONS,
+  STATISTICAL_FINDINGS_DATA_TYPE_OPTIONS,
+  statsToOptions,
+} from "./common";
+import { SingleMetricGraphPopover } from "../data/MetricGraph";
 
 /**
  * Retrieves the relative statistical findings based on the filters.
  */
 function getStatisticalFindings(
   runName: string,
+  dataTypes: DataType[],
   stats: Stat[],
   findingTypes: FindingType[],
-  dataTypes: DataType[],
 ): StatisticalFinding[] {
-  const isFindingTypeExpected = (score: number, expectedFindingTypes: FindingType[]): boolean => {
-    if (score < 0) {
-      return expectedFindingTypes.includes("negative");
-    } else if (score > 0) {
-      return expectedFindingTypes.includes("positive");
-    } else {
-      return expectedFindingTypes.includes("zero");
-    }
-  };
   return STATISTICAL_FINDINGS[runName].filter(
     (finding) =>
       stats.includes(finding.stat) &&
@@ -51,36 +46,6 @@ function getStatisticalFindings(
       isFindingTypeExpected(finding.score, findingTypes),
   );
 }
-
-/**
- * Helper functions to convert list of other types into multi-select options
- */
-function dataTypesToOptions(dataTypes: ReadonlyArray<DataType>) {
-  return dataTypes.map((dataType) => ({
-    label: DATA_DESCRIPTIONS[dataType].readableName,
-    value: dataType,
-  }));
-}
-function statsToOptions(stats: ReadonlyArray<Stat>) {
-  return stats.map((stat) => ({
-    label: stat,
-    value: stat,
-  }));
-}
-function findingTypesToOptions(findingTypes: ReadonlyArray<FindingType>) {
-  return findingTypes.map((findingType) => ({
-    label: getFindingTypeReadableName(findingType),
-    value: findingType,
-    iconName: getFindingTypeIconName(findingType),
-  }));
-}
-
-/**
- * Options to be used by the multi-select component in the statistical finding table
- */
-const DATA_TYPE_OPTIONS = dataTypesToOptions(TIME_SERIES_DATA_TYPES);
-const STAT_OPTIONS = statsToOptions(ALL_STATS);
-const FINDING_TYPE_OPTIONS = findingTypesToOptions(ALL_FINDING_TYPES);
 
 /**
  * The common column definitions to be used by the global and per-data statistical finding table.
@@ -104,16 +69,16 @@ const COMMON_COLUMN_DEFINITIONS = [
     width: 100,
   },
   {
-    id: "base_value",
-    header: "Base Value",
-    cell: (item: StatisticalFinding) => formatNumber(item.baseValue),
-    width: 100,
+    id: "stat_value",
+    header: "Value",
+    cell: (item: StatisticalFinding) => formatNumber(item.statValue),
+    width: 80,
   },
   {
-    id: "stat_value",
-    header: "Current Value",
-    cell: (item: StatisticalFinding) => formatNumber(item.statValue),
-    width: 100,
+    id: "base_value",
+    header: "Base",
+    cell: (item: StatisticalFinding) => formatNumber(item.baseValue),
+    width: 80,
   },
   {
     id: "unit",
@@ -160,21 +125,27 @@ export function GlobalStatisticalFindings(props: { runName: string }) {
 
   const findings = getStatisticalFindings(
     props.runName,
-    selectedStatOptions.map((option) => option.value as Stat),
-    selectedFindingTypeOptions.map((option) => option.value as FindingType),
-    selectedDataTypeOptions.map((option) => option.value as DataType),
+    statisticalFindingsDataTypes[props.runName],
+    statisticalFindingsStats[props.runName],
+    statisticalFindingsTypes[props.runName],
   );
 
   const columnDefinitions: TableProps.ColumnDefinition<StatisticalFinding>[] = [
     {
-      id: "data",
-      header: "Data",
+      id: "actions",
+      header: "",
       cell: (item) => (
         <div style={{ display: "inline" }}>
           <ReportHelpPanelIcon dataType={item.dataType} fieldKey={item.metricName} />
-          <DataLink dataType={item.dataType} dataKey={item.metricName} />
+          <SingleMetricGraphPopover dataType={item.dataType} runName={item.runName} metricName={item.metricName} />
         </div>
       ),
+      width: 75,
+    },
+    {
+      id: "data",
+      header: "Data",
+      cell: (item) => <DataLink dataType={item.dataType} dataKey={item.metricName} />,
       isRowHeader: true,
       width: 250,
       sortingField: "dataType",
@@ -186,7 +157,7 @@ export function GlobalStatisticalFindings(props: { runName: string }) {
     pagination: { pageSize: 20 },
     sorting: {
       defaultState: {
-        sortingColumn: columnDefinitions[2],
+        sortingColumn: columnDefinitions[3],
       },
     },
     filtering: {
@@ -208,56 +179,38 @@ export function GlobalStatisticalFindings(props: { runName: string }) {
           counter={filteredItemsCount.toString()}
           actions={
             <SpaceBetween direction={"horizontal"} size={"xxs"}>
-              <Multiselect
-                enableSelectAll
-                hideTokens
-                filteringType={"auto"}
-                options={DATA_TYPE_OPTIONS}
+              <FindingsFilter
+                options={STATISTICAL_FINDINGS_DATA_TYPE_OPTIONS}
                 selectedOptions={selectedDataTypeOptions}
-                onChange={({ detail }) =>
+                setSelectedOptions={(options) =>
                   updateStatisticalFindingsDataTypes(
                     props.runName,
-                    detail.selectedOptions.map((option) => option.value as DataType),
+                    options.map((option) => option.value as DataType),
                   )
                 }
-                placeholder={"Select data types"}
-                i18nStrings={{
-                  selectAllText: "Select all",
-                }}
+                type={"data types"}
               />
-              <Multiselect
-                enableSelectAll
-                hideTokens
-                filteringType={"auto"}
+              <FindingsFilter
                 options={STAT_OPTIONS}
                 selectedOptions={selectedStatOptions}
-                onChange={({ detail }) =>
+                setSelectedOptions={(options) =>
                   updateStatisticalFindingsStats(
                     props.runName,
-                    detail.selectedOptions.map((option) => option.value as Stat),
+                    options.map((option) => option.value as Stat),
                   )
                 }
-                placeholder={"Select stat"}
-                i18nStrings={{
-                  selectAllText: "Select all",
-                }}
+                type={"stats"}
               />
-              <Multiselect
-                enableSelectAll
-                hideTokens
-                filteringType={"auto"}
+              <FindingsFilter
                 options={FINDING_TYPE_OPTIONS}
                 selectedOptions={selectedFindingTypeOptions}
-                onChange={({ detail }) =>
+                setSelectedOptions={(options) =>
                   updateStatisticalFindingsTypes(
                     props.runName,
-                    detail.selectedOptions.map((option) => option.value as FindingType),
+                    options.map((option) => option.value as FindingType),
                   )
                 }
-                placeholder={"Select finding type"}
-                i18nStrings={{
-                  selectAllText: "Select all",
-                }}
+                type={"finding types"}
               />
             </SpaceBetween>
           }
@@ -286,9 +239,9 @@ function LocalStatisticalFindings(props: { runName: string; dataType: DataType }
 
   const findings = getStatisticalFindings(
     props.runName,
+    [props.dataType],
     selectedStatOptions.map((option) => option.value as Stat),
     selectedFindingTypeOptions.map((option) => option.value as FindingType),
-    [props.dataType],
   );
 
   const columnDefinitions: TableProps.ColumnDefinition<StatisticalFinding>[] = [
@@ -328,29 +281,17 @@ function LocalStatisticalFindings(props: { runName: string; dataType: DataType }
           counter={filteredItemsCount.toString()}
           actions={
             <SpaceBetween direction={"horizontal"} size={"xxs"}>
-              <Multiselect
-                enableSelectAll
-                hideTokens
-                filteringType={"auto"}
+              <FindingsFilter
                 options={STAT_OPTIONS}
                 selectedOptions={selectedStatOptions}
-                onChange={({ detail }) => setSelectedStatOptions(detail.selectedOptions)}
-                placeholder={"Select stat"}
-                i18nStrings={{
-                  selectAllText: "Select all",
-                }}
+                setSelectedOptions={setSelectedStatOptions}
+                type={"stats"}
               />
-              <Multiselect
-                enableSelectAll
-                hideTokens
-                filteringType={"auto"}
+              <FindingsFilter
                 options={FINDING_TYPE_OPTIONS}
                 selectedOptions={selectedFindingTypeOptions}
-                onChange={({ detail }) => setSelectedFindingTypeOptions(detail.selectedOptions)}
-                placeholder={"Select finding type"}
-                i18nStrings={{
-                  selectAllText: "Select all",
-                }}
+                setSelectedOptions={setSelectedFindingTypeOptions}
+                type={"finding types"}
               />
             </SpaceBetween>
           }

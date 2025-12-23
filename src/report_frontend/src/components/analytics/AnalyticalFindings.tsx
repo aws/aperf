@@ -1,43 +1,43 @@
 import React from "react";
+import { AnalyticalFinding, DataType, FindingType, TimeSeriesMetricProps } from "../../definitions/types";
 import {
-  ALL_FINDING_TYPES,
-  AnalyticalFinding,
-  DataType,
-  FindingType,
-  TimeSeriesMetricProps,
-} from "../../definitions/types";
-import { Icon, SpaceBetween, Button, Container, ColumnLayout } from "@cloudscape-design/components";
+  Icon,
+  SpaceBetween,
+  Container,
+  ColumnLayout,
+  Link,
+  Box,
+  TextFilter,
+  Pagination,
+  TextFilterProps,
+  PaginationProps,
+} from "@cloudscape-design/components";
 import { PER_DATA_ANALYTICAL_FINDINGS, RUNS } from "../../definitions/data-config";
 import { useReportState } from "../ReportStateProvider";
 import { DataLink, SamePageDataLink } from "../misc/DataNavigation";
-import { getFindingTypeIconName, getFindingTypeReadableName } from "../../utils/utils";
-import { ReportHelpPanelLink } from "../misc/ReportHelpPanel";
+import { getFindingTypeIconName } from "../../utils/utils";
+import { ReportHelpPanelIcon, ReportHelpPanelLink } from "../misc/ReportHelpPanel";
 import { PER_RUN_ANALYTICAL_FINDINGS, RunAnalyticalFinding } from "../../utils/analytics";
 import Header from "@cloudscape-design/components/header";
-
-function linkifyText(text: string) {
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
-  const parts = text.split(urlRegex);
-
-  return parts.map((part, index) => {
-    if (urlRegex.test(part)) {
-      return (
-        <a key={index} href={part} target="_blank" rel="noopener noreferrer">
-          Reference
-        </a>
-      );
-    }
-    return part;
-  });
-}
+import {
+  ANALYTICAL_FINDINGS_DATA_TYPE_OPTIONS,
+  dataTypesToOptions,
+  FINDING_TYPE_OPTIONS,
+  FindingsFilter,
+  findingTypesToOptions,
+  isFindingTypeExpected,
+} from "./common";
+import { SelectProps } from "@cloudscape-design/components/select/interfaces";
+import { useCollection } from "@cloudscape-design/collection-hooks";
+import { SingleMetricGraphPopover } from "../data/MetricGraph";
 
 function getFindingColor(score: number): string {
   if (score == 0 || isNaN(score)) {
-    return "rgba(125, 125, 125, 0.2)";
+    return "rgba(125, 125, 125, 0.3)";
   } else if (score > 0) {
-    return `rgba(0, ${Math.min(score * 60, 255)}, 0, 0.2)`;
+    return `rgba(0, ${Math.min(100 + score / 2, 255)}, 0, 0.3)`;
   } else {
-    return `rgba(${Math.min(Math.abs(score) * 60, 255)}, 0, 0, 0.2)`;
+    return `rgba(${Math.min(100 + Math.abs(score / 2), 255)}, 0, 0, 0.3)`;
   }
 }
 
@@ -52,12 +52,13 @@ function FindingIcon(props: { score: number }) {
 }
 
 /**
- * Check if a finding's score is covered by the expected finding types
+ * Retrieves the relative analytical findings based on the filters.
  */
-function isFindingTypeExpected(score: number, findingTypes: Set<FindingType>): boolean {
-  if (score < 0) return findingTypes.has("negative");
-  if (score === 0 || isNaN(score)) return findingTypes.has("zero");
-  if (score > 0) return findingTypes.has("positive");
+function getAnalyticalFindings(runName: string, dataTypes: DataType[], findingTypes: FindingType[]) {
+  return PER_RUN_ANALYTICAL_FINDINGS[runName].filter(
+    (findingData) =>
+      dataTypes.includes(findingData.dataType) && isFindingTypeExpected(findingData.finding.score, findingTypes),
+  );
 }
 
 /**
@@ -68,6 +69,7 @@ function isFindingTypeExpected(score: number, findingTypes: Set<FindingType>): b
  */
 interface FindingProps {
   readonly dataType?: DataType;
+  readonly runName?: string;
   readonly dataKey?: string;
   readonly finding: AnalyticalFinding;
   readonly showDataLink?: boolean;
@@ -84,17 +86,36 @@ function Finding(props: FindingProps) {
         border: "1px solid #ddd",
         backgroundColor: getFindingColor(props.finding.score),
         boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
-        display: "flex",
       }}
     >
-      <div style={{ marginRight: "10px" }}>
-        <FindingIcon score={props.finding.score} />
+      {/*The below div creates the first row that pushes the two children to the left and right end*/}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "5px",
+          width: "100%",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flex: "1" }}>
+          <FindingIcon score={props.finding.score} />
+          <Box variant={"h4"}>{props.finding.rule_name}</Box>
+        </div>
+
+        {props.showDataLink && (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
+            <ReportHelpPanelIcon dataType={props.dataType} fieldKey={props.dataKey} />
+            <SingleMetricGraphPopover dataType={props.dataType} runName={props.runName} metricName={props.dataKey} />
+          </div>
+        )}
       </div>
+
       <div style={{ display: "inline" }}>
         {props.showDataLink && (
           <>
-            <DataLink dataType={props.dataType || "systeminfo"} dataKey={props.dataKey || ""} /> (
-            {<ReportHelpPanelLink dataType={props.dataType} fieldKey={props.dataKey} />}){": "}
+            <DataLink dataType={props.dataType || "systeminfo"} dataKey={props.dataKey || ""} />
+            {": "}
           </>
         )}
         {props.showSamePageLink && (
@@ -103,7 +124,12 @@ function Finding(props: FindingProps) {
             {": "}
           </>
         )}
-        {linkifyText(props.finding.description)}{" "}
+        {props.finding.description} <b>{props.finding.message}</b>{" "}
+        {props.finding.reference && (
+          <Link variant={"info"} external href={props.finding.reference}>
+            Learn more
+          </Link>
+        )}
       </div>
     </div>
   );
@@ -134,53 +160,44 @@ export function MetricAnalyticalFindings(props: TimeSeriesMetricProps) {
 }
 
 /**
- * Helper component to render the container that contains the list of findings as well as type-filtering buttons.
+ * Defines how filtering texts (in the search bar) can be used to filter analytical findings
  */
-function FindingsContainer(props: {
-  findings: RunAnalyticalFinding[];
-  findingTypes: Set<FindingType>;
-  toggleFindingType: (findingType: FindingType) => void;
-  samePageLink?: boolean;
+function filterFindings(finding: RunAnalyticalFinding, filteringText: string) {
+  const lowerCaseFilteringText = filteringText.toLowerCase();
+  return (
+    finding.finding.rule_name.toLowerCase().includes(lowerCaseFilteringText) ||
+    finding.finding.message.toLowerCase().includes(lowerCaseFilteringText)
+  );
+}
+
+/**
+ * Helper component to render the search bar and pagination at the same row
+ */
+function FindingsSearchBarAndPagination(props: {
+  filteredItemsCount: number;
+  filterProps: TextFilterProps;
+  paginationProps: PaginationProps;
 }) {
   return (
-    <Container
-      fitHeight
-      header={
-        <Header
-          variant={"h3"}
-          info={
-            props.samePageLink ? null : <ReportHelpPanelLink dataType={"systeminfo"} fieldKey={"analyticalFinding"} />
-          }
-        >
-          Analytical Findings
-        </Header>
-      }
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: "16px",
+      }}
     >
-      <SpaceBetween size={"s"}>
-        <SpaceBetween direction="horizontal" size="xs">
-          {ALL_FINDING_TYPES.map((findingType) => (
-            <Button
-              variant={props.findingTypes.has(findingType) ? "primary" : "normal"}
-              onClick={() => props.toggleFindingType(findingType)}
-              iconName={getFindingTypeIconName(findingType)}
-            >
-              {getFindingTypeReadableName(findingType)}
-            </Button>
-          ))}
-        </SpaceBetween>
-        <SpaceBetween size={"xxxs"}>
-          {props.findings.map((findingData) => (
-            <Finding
-              dataType={findingData.dataType}
-              dataKey={findingData.dataKey}
-              finding={findingData.finding}
-              showDataLink={!props.samePageLink}
-              showSamePageLink={props.samePageLink}
-            />
-          ))}
-        </SpaceBetween>
-      </SpaceBetween>
-    </Container>
+      <div style={{ flexGrow: 1, flexShrink: 1, flexBasis: "fit-content", maxWidth: "70%" }}>
+        <TextFilter
+          {...props.filterProps}
+          filteringPlaceholder={"Search findings"}
+          countText={`${props.filteredItemsCount} findings`}
+        />
+      </div>
+      <div style={{ marginLeft: "auto" }}>
+        <Pagination {...props.paginationProps} />
+      </div>
+    </div>
   );
 }
 
@@ -190,25 +207,81 @@ function FindingsContainer(props: {
  * report home page to provide a holistic overview.
  */
 export function GlobalAnalyticalFindings(props: { runName: string }) {
-  const { analyticalFindingsTypes, setAnalyticalFindingsTypes } = useReportState();
-  const findingTypes = analyticalFindingsTypes[props.runName] || new Set(ALL_FINDING_TYPES);
+  const {
+    analyticalFindingsDataTypes,
+    analyticalFindingsTypes,
+    updateAnalyticalFindingsDataTypes,
+    updateAnalyticalFindingsTypes,
+  } = useReportState();
 
-  const filteredFindings = PER_RUN_ANALYTICAL_FINDINGS[props.runName].filter((findingData) =>
-    isFindingTypeExpected(findingData.finding.score, findingTypes),
+  const selectedDataTypeOptions = dataTypesToOptions(analyticalFindingsDataTypes[props.runName]);
+  const selectedFindingTypeOptions = findingTypesToOptions(analyticalFindingsTypes[props.runName]);
+
+  const findings = getAnalyticalFindings(
+    props.runName,
+    analyticalFindingsDataTypes[props.runName],
+    analyticalFindingsTypes[props.runName],
   );
 
-  const toggleFindingType = (filter: FindingType) => {
-    const newFilters = new Set(findingTypes);
-    if (newFilters.has(filter)) {
-      newFilters.delete(filter);
-    } else {
-      newFilters.add(filter);
-    }
-    setAnalyticalFindingsTypes(props.runName, newFilters);
-  };
+  const { items, filterProps, filteredItemsCount, paginationProps } = useCollection(findings, {
+    pagination: { pageSize: 5 },
+    filtering: {
+      filteringFunction: filterFindings,
+    },
+  });
 
   return (
-    <FindingsContainer findings={filteredFindings} findingTypes={findingTypes} toggleFindingType={toggleFindingType} />
+    <Container
+      fitHeight
+      header={
+        <Header
+          variant={"h3"}
+          counter={filteredItemsCount}
+          info={<ReportHelpPanelLink dataType={"systeminfo"} fieldKey={"analyticalFinding"} />}
+          actions={
+            <SpaceBetween direction={"horizontal"} size={"xxs"}>
+              <FindingsFilter
+                options={ANALYTICAL_FINDINGS_DATA_TYPE_OPTIONS}
+                selectedOptions={selectedDataTypeOptions}
+                setSelectedOptions={(options) =>
+                  updateAnalyticalFindingsDataTypes(
+                    props.runName,
+                    options.map((option) => option.value as DataType),
+                  )
+                }
+                type={"data types"}
+              />
+              <FindingsFilter
+                options={FINDING_TYPE_OPTIONS}
+                selectedOptions={selectedFindingTypeOptions}
+                setSelectedOptions={(options) =>
+                  updateAnalyticalFindingsTypes(
+                    props.runName,
+                    options.map((option) => option.value as FindingType),
+                  )
+                }
+                type={"finding types"}
+              />
+            </SpaceBetween>
+          }
+        >
+          Analytical Findings
+        </Header>
+      }
+    >
+      <SpaceBetween size={"xxxs"}>
+        <FindingsSearchBarAndPagination filterProps={filterProps} paginationProps={paginationProps} />
+        {items.map((findingData) => (
+          <Finding
+            dataType={findingData.dataType}
+            runName={props.runName}
+            dataKey={findingData.dataKey}
+            finding={findingData.finding}
+            showDataLink
+          />
+        ))}
+      </SpaceBetween>
+    </Container>
   );
 }
 
@@ -217,30 +290,54 @@ export function GlobalAnalyticalFindings(props: { runName: string }) {
  * data type. It is to be rendered within a data's page.
  */
 function LocalAnalyticalFindings(props: { runName: string; dataType: DataType }) {
-  const [findingTypes, setFindingTypes] = React.useState<Set<FindingType>>(new Set(ALL_FINDING_TYPES));
+  const [selectedFindingTypeOptions, setSelectedFindingTypeOptions] =
+    React.useState<Readonly<SelectProps.Option[]>>(FINDING_TYPE_OPTIONS);
+  const selectedFindingTypes = selectedFindingTypeOptions.map((option) => option.value as FindingType);
 
-  const filteredFindings = PER_RUN_ANALYTICAL_FINDINGS[props.runName].filter(
-    (findingData) =>
-      findingData.dataType == props.dataType && isFindingTypeExpected(findingData.finding.score, findingTypes),
-  );
+  const findings = getAnalyticalFindings(props.runName, [props.dataType], selectedFindingTypes);
 
-  const toggleFindingType = (findingType: FindingType) => {
-    const newFindingTypes = new Set(findingTypes);
-    if (newFindingTypes.has(findingType)) {
-      newFindingTypes.delete(findingType);
-    } else {
-      newFindingTypes.add(findingType);
-    }
-    setFindingTypes(newFindingTypes);
-  };
+  const { items, filterProps, filteredItemsCount, paginationProps } = useCollection(findings, {
+    pagination: { pageSize: 3 },
+    filtering: {
+      filteringFunction: filterFindings,
+    },
+  });
 
   return (
-    <FindingsContainer
-      findings={filteredFindings}
-      findingTypes={findingTypes}
-      toggleFindingType={toggleFindingType}
-      samePageLink
-    />
+    <Container
+      fitHeight
+      header={
+        <Header
+          variant={"h3"}
+          counter={filteredItemsCount}
+          actions={
+            <SpaceBetween direction={"horizontal"} size={"xxs"}>
+              <FindingsFilter
+                options={FINDING_TYPE_OPTIONS}
+                selectedOptions={selectedFindingTypeOptions}
+                setSelectedOptions={setSelectedFindingTypeOptions}
+                type={"finding types"}
+              />
+            </SpaceBetween>
+          }
+        >
+          {props.runName}
+        </Header>
+      }
+    >
+      <SpaceBetween size={"xxxs"}>
+        <FindingsSearchBarAndPagination filterProps={filterProps} paginationProps={paginationProps} />
+        {items.map((findingData) => (
+          <Finding
+            dataType={findingData.dataType}
+            runName={props.runName}
+            dataKey={findingData.dataKey}
+            finding={findingData.finding}
+            showSamePageLink
+          />
+        ))}
+      </SpaceBetween>
+    </Container>
   );
 }
 

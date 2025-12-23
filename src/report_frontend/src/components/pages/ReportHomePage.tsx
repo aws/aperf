@@ -1,21 +1,26 @@
 import React from "react";
 import { Container, ContentLayout, Grid, Toggle } from "@cloudscape-design/components";
 import Header from "@cloudscape-design/components/header";
-import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import { RUNS } from "../../definitions/data-config";
 import { RunSystemInfo } from "../data/RunSystemInfo";
 import { useReportState } from "../ReportStateProvider";
 import { GlobalAnalyticalFindings } from "../analytics/AnalyticalFindings";
 import { GlobalStatisticalFindings } from "../analytics/StatisticalFindings";
 import { DarkModeIcon } from "../misc/Icons";
-import {ReportHelpPanelLink} from "../misc/ReportHelpPanel";
+import { ReportHelpPanelLink } from "../misc/ReportHelpPanel";
 
 /**
  * This component renders the APerf report's home page, where users can view the system info
  * of each APerf run as well all analytical findings
  */
 export default function () {
-  const { darkMode, setDarkMode } = useReportState();
+  const { darkMode, setDarkMode, setShowSplitPanel } = useReportState();
+
+  React.useEffect(() => {
+    // We don't want to show the per-data findings in the report home since it
+    // already contains findings for all data
+    setShowSplitPanel(false);
+  });
 
   // From the definition of the Grid component: "One row equals 12 columns. After the columns
   // reach or exceed the threshold of 12, the next element wraps to create a new row".

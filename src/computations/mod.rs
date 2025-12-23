@@ -123,13 +123,13 @@ impl Comparator {
     }
 }
 
-// custom Serde serializations
-// allow f64 values to be truncated to 2 decimal places (to save spaces)
+/// Custom Serde serializations
+/// Allow f64 values to be truncated to 2 decimal places (to save spaces)
 pub fn f64_to_fixed_2(value: f64) -> f64 {
     f64::trunc(value * 100.0) / 100.0
 }
 
-// custom serializing function for Vec<f64> to truncate all elements to 2 decimal places
+/// Custom serializing function for Vec<f64> to truncate all elements to 2 decimal places
 pub fn serialize_f64_vec_fixed2<S>(values: &[f64], serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
@@ -140,7 +140,7 @@ where
         .collect::<Vec<_>>()
         .serialize(serializer)
 }
-// custom serializing function for f64 to truncate all elements to 2 decimal places
+/// Custom serializing function for f64 to truncate all elements to 2 decimal places
 pub fn serialize_f64_fixed2<S>(value: &f64, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
@@ -148,12 +148,33 @@ where
     serializer.serialize_f64(f64_to_fixed_2(*value))
 }
 
-pub fn ratio_to_percentage_string(ratio: f64) -> String {
-    let percentage = f64_to_fixed_2(ratio * 100.0);
-    format!("{:.2}%", percentage)
+/// Format a ratio number into percentage delta (e.g. 0.5 is "50% greater than")
+pub fn delta_ratio_to_percentage_string(delta_ratio: f64) -> String {
+    let abs_delta_ratio = f64_to_fixed_2(delta_ratio.abs() * 100.0);
+    if delta_ratio == 0.0 {
+        return String::from("equal to");
+    }
+    let relation_string = if delta_ratio > 0.0 {
+        "greater than"
+    } else {
+        "less than"
+    };
+    format!("{}% {}", abs_delta_ratio, relation_string)
 }
 
-pub fn ratio_to_percentage_delta_string(ratio: f64) -> String {
-    let percentage = f64_to_fixed_2(ratio * 100.0);
-    format!("{:+.2}%", percentage)
+/// Format a number into a short string
+pub fn formatted_number_string(value: f64) -> String {
+    if value.is_nan() {
+        String::from("NaN")
+    } else if value >= 1e12 {
+        format!("{}T", f64_to_fixed_2(value / 1e12))
+    } else if value >= 1e9 {
+        format!("{}G", f64_to_fixed_2(value / 1e9))
+    } else if value >= 1e6 {
+        format!("{}M", f64_to_fixed_2(value / 1e6))
+    } else if value >= 1e3 {
+        format!("{}K", f64_to_fixed_2(value / 1e3))
+    } else {
+        format!("{}", f64_to_fixed_2(value))
+    }
 }
