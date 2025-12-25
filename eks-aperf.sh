@@ -112,16 +112,30 @@ spec:
     command: ["/bin/sh", "-c"]
     args:
     - |
-      set -e 
+      set -e
+      set -o pipefail
 
-      echo -e "\nStarting Aperf recording execution..."
-      echo "Run: /usr/bin/aperf record -r aperf_record ${APERF_OPTIONS}"
-      sudo /usr/bin/aperf record -r aperf_record ${APERF_OPTIONS}
+      if [ ! -d "/tmp/aperf/async-profiler" ]; then
+        echo -e "Copy async-profiler files..."
+        cp -r /opt/async-profiler /tmp/aperf/ > /dev/null
+      else
+        echo -e "async-profiler files already exist, skipping copy"
+      fi
+      [ ! -L "/usr/bin/asprof" ] && ln -sf /tmp/aperf/async-profiler/bin/asprof /usr/bin/asprof > /dev/null
+      [ ! -L "/usr/bin/jfrconv" ] && ln -sf /tmp/aperf/async-profiler/bin/jfrconv /usr/bin/jfrconv > /dev/null
+      export LD_LIBRARY_PATH="/tmp/aperf/async-profiler/lib:${LD_LIBRARY_PATH}"
+      
+      echo -e "Starting Aperf recording execution..."
+      echo "Run: /usr/bin/aperf record --tmp-dir="/tmp/aperf/profile"  -r aperf_record ${APERF_OPTIONS}"
+      mkdir -p /tmp/aperf/profile 
+      chmod -R 777 /tmp/aperf/profile
+      /usr/bin/aperf record --tmp-dir="/tmp/aperf/profile" -r aperf_record ${APERF_OPTIONS}
+      rm -rf  /tmp/aperf/profile
       echo "APerf record completed"
 
       echo -e "\nStarting Aperf report generation..."
       echo "Run: /usr/bin/aperf report -r aperf_record -n aperf_report"
-      sudo /usr/bin/aperf report -r aperf_record -n aperf_report
+      /usr/bin/aperf report -r aperf_record -n aperf_report
       echo "APerf report generation completed"
 
       echo -e "\nWaiting for files to be copied..."
@@ -138,8 +152,8 @@ spec:
     - mountPath: /boot
       name: boot-volume
       readOnly: true 
-    - name: opt
-      mountPath: /shared
+    - name: aperf-shared
+      mountPath: /tmp/aperf
   volumes:
   - name: boot-volume
     hostPath:
@@ -148,6 +162,10 @@ spec:
   - name: opt
     hostPath:
       path: /opt
+      type: DirectoryOrCreate
+  - name: aperf-shared
+    hostPath:
+      path: /tmp/aperf
       type: DirectoryOrCreate
   hostPID: true
   hostNetwork: true
@@ -180,6 +198,14 @@ grep "$(kubectl get pods --all-namespaces --field-selector spec.nodeName=${NODE_
 
 # Create APerf pod
 echo -e "\n${BOLD}Created pod configuration for node:${NC} ${NODE_NAME}${NC}"
+
+# Delete existing pod if it exists
+if kubectl get pod ${POD_NAME} -n ${NAMESPACE} &>/dev/null; then
+  echo -e "${RED}Existing pod found. Delete it before continue.${NC}"
+  echo -e "${RED}Possilbe command to use: kubectl delete pod ${POD_NAME} -n ${NAMESPACE} --force --grace-period=0 ${NC}"
+  sleep 2
+  exit
+fi
 
 # Apply the pod directly from variable
 echo -e -n "${BOLD}Deploying pod to Kubernetes...${NC}  "
