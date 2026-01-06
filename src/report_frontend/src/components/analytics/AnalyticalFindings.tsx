@@ -173,11 +173,7 @@ function filterFindings(finding: RunAnalyticalFinding, filteringText: string) {
 /**
  * Helper component to render the search bar and pagination at the same row
  */
-function FindingsSearchBarAndPagination(props: {
-  filteredItemsCount: number;
-  filterProps: TextFilterProps;
-  paginationProps: PaginationProps;
-}) {
+function FindingsSearchBarAndPagination(props: { filterProps: TextFilterProps; paginationProps: PaginationProps }) {
   return (
     <div
       style={{
@@ -188,11 +184,7 @@ function FindingsSearchBarAndPagination(props: {
       }}
     >
       <div style={{ flexGrow: 1, flexShrink: 1, flexBasis: "fit-content", maxWidth: "70%" }}>
-        <TextFilter
-          {...props.filterProps}
-          filteringPlaceholder={"Search findings"}
-          countText={`${props.filteredItemsCount} findings`}
-        />
+        <TextFilter {...props.filterProps} filteringPlaceholder={"Search findings"} />
       </div>
       <div style={{ marginLeft: "auto" }}>
         <Pagination {...props.paginationProps} />
@@ -236,7 +228,7 @@ export function GlobalAnalyticalFindings(props: { runName: string }) {
       header={
         <Header
           variant={"h3"}
-          counter={filteredItemsCount}
+          counter={`${filteredItemsCount}`}
           info={<ReportHelpPanelLink dataType={"systeminfo"} fieldKey={"analyticalFinding"} />}
           actions={
             <SpaceBetween direction={"horizontal"} size={"xxs"}>
@@ -309,7 +301,7 @@ function LocalAnalyticalFindings(props: { runName: string; dataType: DataType })
       header={
         <Header
           variant={"h3"}
-          counter={filteredItemsCount}
+          counter={`${filteredItemsCount}`}
           actions={
             <SpaceBetween direction={"horizontal"} size={"xxs"}>
               <FindingsFilter
