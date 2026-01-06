@@ -326,6 +326,13 @@ impl ProcessData for JavaProfile {
 
         let mut profile_metrics = Vec::from(PROFILE_METRICS);
         profile_metrics.push("legacy");
+
+        // There might be multiple JVMs with the same name. Use the number of occurrences
+        // for each JVM name to dedupe
+        let mut jvm_name_counts: HashMap<String, usize> = HashMap::new();
+        // Stores the deduped JVM name of each PID
+        let mut deduped_names: HashMap<String, String> = HashMap::new();
+
         for metric in profile_metrics {
             let mut graph_group = GraphGroup::default();
             graph_group.group_name = String::from(metric);
@@ -348,12 +355,26 @@ impl ProcessData for JavaProfile {
                     &params.data_dir,
                     &params.report_dir.join(relative_path.clone()),
                 ) {
-                    let graph_name = format!(
-                        "JVM: {}, PID: {} ({})",
-                        process_names.first().map_or("unknown", |s| s.as_str()),
-                        process,
-                        metric
-                    );
+                    let jvm_name = process_names.first().map_or("unknown", |s| s.as_str());
+
+                    // Dedupe JVM names
+                    if !deduped_names.contains_key(process) {
+                        let jvm_name_count =
+                            jvm_name_counts.entry(jvm_name.to_string()).or_insert(0);
+                        *jvm_name_count += 1;
+                        deduped_names.insert(
+                            process.clone(),
+                            if *jvm_name_count > 1 {
+                                format!("{} ({})", jvm_name, *jvm_name_count - 1)
+                            } else {
+                                jvm_name.to_string()
+                            },
+                        );
+                    }
+
+                    let graph_name =
+                        format!("({}) JVM: {}", metric, deduped_names.get(process).unwrap());
+
                     graph_group.graphs.insert(
                         graph_name.clone(),
                         Graph::new(
