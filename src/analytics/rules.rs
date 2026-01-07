@@ -10,6 +10,7 @@ mod kernel_config;
 mod meminfo;
 pub mod multi_data_rules;
 mod netstat;
+mod numastat;
 mod perf_profile;
 mod perf_stat;
 mod processes;

@@ -13,6 +13,7 @@ declare let processed_perf_stat_data;
 declare let processed_processes_data;
 declare let processed_meminfo_data;
 declare let processed_netstat_data;
+declare let processed_numastat_data;
 declare let processed_perf_profile_data;
 declare let processed_flamegraphs_data;
 declare let processed_aperf_stats_data;
@@ -30,6 +31,7 @@ declare let perf_stat_findings;
 declare let processes_findings;
 declare let meminfo_findings;
 declare let netstat_findings;
+declare let numastat_findings;
 declare let perf_profile_findings;
 declare let flamegraphs_findings;
 declare let aperf_stats_findings;
@@ -47,6 +49,7 @@ export const PROCESSED_DATA: { [key in DataType]: ReportData } = {
   interrupts: processed_interrupts_data,
   diskstats: processed_diskstats_data,
   netstat: processed_netstat_data,
+  numastat: processed_numastat_data,
   kernel_config: processed_kernel_config_data,
   sysctl: processed_sysctl_data,
   flamegraphs: processed_flamegraphs_data,
@@ -67,6 +70,7 @@ export const PER_DATA_ANALYTICAL_FINDINGS: { [key in DataType]: DataFindings } =
   interrupts: interrupts_findings,
   diskstats: diskstats_findings,
   netstat: netstat_findings,
+  numastat: numastat_findings,
   kernel_config: kernel_config_findings,
   sysctl: sysctl_findings,
   flamegraphs: flamegraphs_findings,
@@ -95,7 +99,17 @@ interface NavigationConfig {
 export const NAVIGATION_CONFIGS: NavigationConfig[] = [
   {
     sectionName: "Performance Data",
-    items: ["cpu_utilization", "perf_stat", "meminfo", "vmstat", "interrupts", "diskstats", "netstat", "processes"],
+    items: [
+      "cpu_utilization",
+      "perf_stat",
+      "meminfo",
+      "vmstat",
+      "numastat",
+      "interrupts",
+      "diskstats",
+      "netstat",
+      "processes",
+    ],
   },
   {
     sectionName: "System Configurations",
