@@ -137,6 +137,15 @@ impl AnalyzeData for PerfStat {
                 message: "Upon data TLB misses, the CPUs need to traverse the OS-build page table to find the correct physical address for the virtual address in the load/store instructions, which requires extra memory references before executing them and causes CPU backend stalls.",
                 reference: "https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/optimization_recommendation.md#optimizing-for-high-tlb-miss-rates",
             ),
+            time_series_data_point_threshold! (
+                name: "Old-Style Atomic Instructions",
+                metric: "strex-spec-pki",
+                comparator: Comparator::GreaterEqual,
+                threshold: 10.0,
+                score: Score::Poor,
+                message: "STREX is an old-style atomic instruction that is less efficient than the newer LSE instructions. Consider modifying the compiler flags, such as -march, to enable LSE support.",
+                reference: "https://aws.github.io/graviton/c-c++.html#large-system-extensions-lse",
+            ),
         ]
     }
 }
