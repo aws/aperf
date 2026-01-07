@@ -198,6 +198,87 @@ Done!
 - The pod is automatically cleaned up after execution
 
 
-## Known Limitations
+## Java Profiling on EKS
 
-**Note**: The `--profile-java` option is not currently fully supported with this script.
+APerf supports profiling Java applications running in Kubernetes using [async-profiler](https://github.com/async-profiler/async-profiler). However, because APerf runs in a separate pod from your Java application, it needs a way to communicate and share profiling data with the target JVM processes.
+
+### Why a Shared Volume is Required
+
+When profiling Java applications in Kubernetes:
+- APerf runs in its own privileged pod on the host
+- Your Java application runs in a separate pod
+- async-profiler needs to attach to the JVM process and write profiling data to a location accessible by both pods
+- A shared `hostPath` volume mounted on both pods enables this communication
+
+### Step 1: Configure Your Java Application
+
+Modify your Java application's Deployment or Pod specification to include a shared volume mounted at `/tmp/aperf`:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: your-java-app
+  namespace: your-namespace
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: your-java-app
+  template:
+    metadata:
+      labels:
+        app: your-java-app
+    spec:
+      containers:
+      - name: java-container
+        image: your-java-image:latest
+        # Your existing container configuration...
+
+        # APerf shared volume settings
+        volumeMounts:
+        - name: aperf-shared
+          mountPath: /tmp/aperf
+      volumes:
+      - name: aperf-shared
+        hostPath:
+          path: /tmp/aperf
+          type: DirectoryOrCreate
+```
+
+**Important**: Apply this configuration and restart your Java application pods:
+
+```bash
+kubectl apply -f your-java-app-deployment.yaml
+kubectl rollout status deployment/your-java-app -n your-namespace
+```
+
+### Step 2: Run APerf with Java Profiling
+
+Once the shared volume is configured on your Java application, run the `eks-aperf.sh` script with the `--profile-java` option:
+
+```bash
+bash ./eks-aperf.sh \
+  --aperf_image="${APERF_ECRREPO}:latest" \
+  --node="i-0b69f09011ee404c2" \
+  --aperf_options="-p 30 --profile --profile-java"
+```
+
+**Note**: The `--node` parameter should match the node where your Java application pod is running.
+
+### Troubleshooting
+
+**Common Issues:**
+
+1. **"No Java processes found"**: Ensure your Java application pod has the shared volume mounted and is running on the same node specified in the `--node` parameter
+
+2. **Permission denied errors**: Verify that both pods have appropriate permissions to read/write to `/tmp/aperf` on the host
+
+3. **Profile data not collected**: Confirm your Java application is actively running and processing requests during the profiling period
+
+4. **Shared volume not mounted correctly**: If you see the following error in the APerf logs, it means the shared volume is not properly configured:
+   ```
+   /tmp/aperf/async-profiler/bin/../lib/libasyncProfiler.so was not loaded.
+   /tmp/aperf/async-profiler/bin/../lib/libasyncProfiler.so: cannot open shared object file: No such file or directory
+   ```
+   **Solution**: Verify that your Java application pod has the `/tmp/aperf` volume mounted correctly. Re-apply the deployment configuration from Step 1 and ensure the pods are restarted
