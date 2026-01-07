@@ -172,27 +172,27 @@ impl ProcessData for Diskstats {
 
         // Put device series into disk stat metrics
         for (disk_stat_key, per_device_series) in per_disk_stat_per_device_series {
-            let mut dist_stat_metric = TimeSeriesMetric::new(disk_stat_key.to_string());
-            dist_stat_metric.series = per_device_series.into_values().collect();
+            let mut disk_stat_metric = TimeSeriesMetric::new(disk_stat_key.to_string());
+            disk_stat_metric.series = per_device_series.into_values().collect();
             // For diskstats there is no easy way to compute or find the aggregate metric, so to assign
             // stats to a metric, we use the stats of the series with the largest avg value
             let mut max_avg = 0.0;
             // finding the max and min of all stats help us define the metric graph's range
             let mut max: f64 = 0.0;
             let mut min: f64 = f64::MAX;
-            for device_series in &dist_stat_metric.series {
+            for device_series in &disk_stat_metric.series {
                 let device_series_stats = Statistics::from_values(&device_series.values);
                 max = max.max(device_series_stats.max);
                 min = min.min(device_series_stats.min);
                 if device_series_stats.avg > max_avg {
                     max_avg = device_series_stats.avg;
-                    dist_stat_metric.stats = device_series_stats;
+                    disk_stat_metric.stats = device_series_stats;
                 }
             }
-            dist_stat_metric.value_range = (min.floor() as u64, max.ceil() as u64);
+            disk_stat_metric.value_range = (min.floor() as u64, max.ceil() as u64);
             time_series_data
                 .metrics
-                .insert(disk_stat_key.to_string(), dist_stat_metric);
+                .insert(disk_stat_key.to_string(), disk_stat_metric);
         }
         time_series_data.sorted_metric_names = DiskStatKey::iter()
             .map(|disk_stat_key| disk_stat_key.to_string())

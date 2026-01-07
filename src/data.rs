@@ -10,6 +10,7 @@ pub mod java_profile;
 pub mod kernel_config;
 pub mod meminfo;
 pub mod netstat;
+pub mod numastat;
 pub mod perf_profile;
 pub mod perf_stat;
 pub mod processes;
@@ -39,6 +40,7 @@ use log::trace;
 use meminfo::{MeminfoData, MeminfoDataRaw};
 use netstat::{Netstat, NetstatRaw};
 use nix::sys::{signal, signal::Signal};
+use numastat::{Numastat, NumastatRaw};
 use perf_profile::{PerfProfile, PerfProfileRaw};
 use perf_stat::{PerfStat, PerfStatRaw};
 use processes::{Processes, ProcessesRaw};
@@ -393,6 +395,7 @@ data!(
     ProcessesRaw,
     MeminfoDataRaw,
     NetstatRaw,
+    NumastatRaw,
     PerfProfileRaw,
     FlamegraphRaw,
     JavaProfileRaw,
@@ -411,6 +414,7 @@ report_data!(
     Processes,
     MeminfoData,
     Netstat,
+    Numastat,
     PerfProfile,
     Hotline,
     Flamegraph,

@@ -8,6 +8,7 @@ export const ALL_DATA_TYPES = [
   "interrupts",
   "diskstats",
   "netstat",
+  "numastat",
   "kernel_config",
   "sysctl",
   "flamegraphs",
