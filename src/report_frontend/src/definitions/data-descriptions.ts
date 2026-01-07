@@ -245,6 +245,12 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
           "Code sparsity is a measure of how compact the instruction code is packed and how closely related code is placed. Lower sparsity helps branch prediction and the cache subsystem. It can be improved by modifying the compiler options.",
         desired: "lower",
       },
+      "strex-spec-pki": {
+        readableName: "Store Exclusive per Thousand Instructions",
+        description:
+          "The number of store exclusive operations that have been speculatively executed per thousand instructions. STREX is an old-style atomic instruction and part of the load-store pair. It is less efficient than the newer LSE instructions, which perform atomic operations with a single instruction and hardware managed atomicity. For workloads that involve heavy lock contentions, switching to LSE instructions could lead to significant performance improvement.",
+        desired: "lower",
+      },
     },
   },
   meminfo: {

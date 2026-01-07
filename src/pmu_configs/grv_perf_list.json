@@ -232,5 +232,23 @@
       }
     ],
     "scale": 1000
+  },
+  {
+    "name": "strex-spec-pki",
+    "nrs": [
+      {
+        "perf_type": "RAW",
+        "name": "STREX-SPEC",
+        "config": 111
+      }
+    ],
+    "drs": [
+      {
+        "perf_type": "RAW",
+        "name": "Instructions",
+        "config": 8
+      }
+    ],
+    "scale": 1000
   }
 ]
