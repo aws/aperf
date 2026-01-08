@@ -11,7 +11,7 @@ impl AnalyzeData for KernelConfig {
             expected_value: "y",
             score: Score::Poor,
             message: "Using huge-pages should reduce TLB pressure and generally improve performance on all EC2 instance types, but using exclusively huge-pages may sometime lead to performance degradation. Fully test your application after enabling and/or allocating huge-pages.",
-            reference: "https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/optimization_recommendation.md#optimizing-for-high-tlb-miss-rates",
+            reference: "https://aws.github.io/graviton/perfrunbook/optimization_recommendation.html#optimizing-for-high-tlb-miss-rates",
         }]
     }
 }
