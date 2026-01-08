@@ -3,18 +3,49 @@ import { DataType } from "./types";
 type DesiredValue = "higher" | "lower" | "moderate" | "fixed" | "depends";
 
 interface DataDescription {
+  /**
+   * Human-readable name of the data type - used as the data page's title
+   */
   readonly readableName: string;
+  /**
+   * Short description of the data type
+   */
   readonly summary: string;
+  /**
+   * (For time-series data only) the default unit to be used in all metric graphs
+   */
   readonly defaultUnit?: string;
+  /**
+   * The default helpful links to be shown in all help panels
+   */
+  readonly defaultHelpfulLinks?: string[];
+  /**
+   * Configuration of every included data
+   */
   readonly fieldDescriptions: {
     [key in string]: {
+      /**
+       * Human-readable name of the data - used as the help panel's title
+       */
       readonly readableName: string;
+      /**
+       * The content of the help panel
+       */
       readonly description: string;
+      /**
+       * (For time-series data only) The unit to be used in the metric graph (overrides the data type's default unit)
+       */
       readonly unit?: string;
+      /**
+       * (For time-series data only) Whether the metric should be higher or lower for better performance
+       */
       readonly desired?: DesiredValue;
+      /**
+       * The list of helpful links to be shown in the help panel (extends the data type's default helpful links)
+       */
+      readonly helpfulLinks?: string[];
     };
   };
-  readonly helpfulLinks?: string[];
 }
 
 export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
@@ -40,6 +71,7 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
     summary:
       "CPU utilization metrics measure the percentage of CPU time spent in various CPU state. The data were collected and computed from the system pseudo-file /proc/stat. Every metric graph shows the percentage of time spent in the corresponding state for each CPU, as well as the aggregate of all CPUs. Note that since the metric values were computed using the delta between two snapshots, the first value is always zero. The statistics of a metric graph accounts for its aggregate series.",
     defaultUnit: "Utilization (%)",
+    defaultHelpfulLinks: ["https://man7.org/linux/man-pages/man5/proc_stat.5.html"],
     fieldDescriptions: {
       aggregate: {
         readableName: "Total CPU Utilization",
@@ -93,6 +125,7 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
     summary:
       "Processes metrics monitor usage of various resources for processes running on the system during APerf collection. The data were collected and computed from the system pseudo-files /proc/<pid>/stat. Every metric graph contains the top 16 processes in the highest average usage of the corresponding resource. The stats of a metric graph accounts for the process with the highest average.",
     defaultUnit: "Count",
+    defaultHelpfulLinks: ["https://man7.org/linux/man-pages/man5/proc_pid_stat.5.html"],
     fieldDescriptions: {
       user_space_time: {
         readableName: "User Space Time (utime)",
@@ -131,54 +164,87 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
     summary:
       "PMU metrics collect and compute the PMU (Performance Monitoring Unit) counters, which track hardware-level events, across all CPUs. Every graph corresponds to a metric computed using one or more PMU counters for every CPU, as well as the aggregate (average) of all CPUs. The statistics of a metric graph accounts for its aggregate series.",
     defaultUnit: "Counts",
+    defaultHelpfulLinks: ["https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html"],
     fieldDescriptions: {
       "data-tlb-mpki": {
         readableName: "Data TLB Misses per Thousand Instructions",
         description:
           "Translation Lookaside Buffer misses for data accesses per thousand instructions, indicating additional latency required for memory operations.",
         desired: "lower",
+        helpfulLinks: [
+          "https://developer.arm.com/documentation/109530/0100/Metrics-by-metric-group-in-Neoverse-N3/DTLB-Effectiveness-metrics-for-Neoverse-N3?lang=en#md544-dtlb_effectiveness_mg__l1d_tlb_mpki_m_DTLB_Effectiveness",
+          "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#drill-down-back-end-stalls",
+        ],
       },
       "data-tlb-tw-pki": {
         readableName: "Data TLB Table Walk per Thousand Instructions",
         description:
           "Translation Lookaside Buffer table walks for data accesses per thousand instructions. It is triggered upon a cache miss in the data TLB to translate virtual addresses in a load/store instruction into physical ones, and multiple traversals in the OS-build page table were required to find the correct physical address. It can lead to much higher latency for some memory accesses.",
         desired: "lower",
+        helpfulLinks: [
+          "https://developer.arm.com/documentation/109530/0100/Metrics-by-metric-group-in-Neoverse-N3/MPKI-metrics-for-Neoverse-N3?lang=en#md407-mpki_mg__dtlb_mpki_m_MPKI",
+          "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#drill-down-back-end-stalls",
+        ],
       },
       "l3-mpki": {
         readableName: "L3 Cache Misses per Thousand Instructions",
         description:
           "Level 3 cache misses per thousand instructions executed, indicating how often the CPU has to access DRAM. A higher number means more DRAM bandwidth will be consumed.",
         desired: "lower",
+        helpfulLinks: [
+          "https://developer.arm.com/documentation/109530/0100/Metrics-by-metric-group-in-Neoverse-N3/MPKI-metrics-for-Neoverse-N3?lang=en#md407-mpki_mg__ll_cache_read_mpki_m_MPKI",
+          "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html?highlight=l3-mpki#drill-down-back-end-stalls",
+        ],
       },
       "branch-mpki": {
         readableName: "Branch Misses per Thousand Instructions",
         description:
           "Number of branch prediction misses per thousand instructions indicating CPU pipeline efficiency and code predictability.",
         desired: "lower",
+        helpfulLinks: [
+          "https://developer.arm.com/documentation/109530/0100/Metrics-by-metric-group-in-Neoverse-N3/MPKI-metrics-for-Neoverse-N3?lang=en#md407-mpki_mg__branch_mpki_m_MPKI",
+          "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#drill-down-front-end-stalls",
+        ],
       },
       "inst-tlb-tw-pki": {
         readableName: "Instruction TLB Table Walk per Thousand Instructions",
         description:
           "Translation Lookaside Buffer table walks for instruction fetches per thousand instructions. It is triggered upon a cache miss in the instruction TLB to translate virtual instruction addresses into physical ones, and multiple traversals in the OS-build page table were required to find the correct physical address. It indicates code size issues and poor code locality.",
         desired: "lower",
+        helpfulLinks: [
+          "https://developer.arm.com/documentation/109530/0100/Metrics-by-metric-group-in-Neoverse-N3/MPKI-metrics-for-Neoverse-N3?lang=en#md407-mpki_mg__itlb_mpki_m_MPKI",
+          "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#drill-down-front-end-stalls",
+        ],
       },
       "inst-tlb-mpki": {
         readableName: "Instruction TLB Misses per Thousand Instructions",
         description:
           "Translation Lookaside Buffer misses for code instructions per thousand instructions. A large value indicates poor code locality.",
         desired: "lower",
+        helpfulLinks: [
+          "https://developer.arm.com/documentation/109530/0100/Metrics-by-metric-group-in-Neoverse-N3/ITLB-Effectiveness-metrics-for-Neoverse-N3?lang=en#md549-itlb_effectiveness_mg__l1i_tlb_mpki_m_ITLB_Effectiveness",
+          "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#drill-down-front-end-stalls",
+        ],
       },
       "stall-frontend-pkc": {
         readableName: "Frontend Stall per Thousand Cycles",
         description:
           "Cycle count when frontend could not send any micro-operations to the rename stage because of frontend resource stalls caused by fetch memory latency or branch prediction flow stalls per thousand cycles.",
         desired: "lower",
+        helpfulLinks: [
+          "https://developer.arm.com/documentation/109530/0100/Metrics-by-metric-group-in-Neoverse-N3/Cycle-Accounting-metrics-for-Neoverse-N3?lang=en#md523-cycle_accounting_mg__frontend_stalled_cycles_m_Cycle_Accounting",
+          "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#top-down-method-to-debug-hardware-performance",
+        ],
       },
       "data-l1-mpki": {
         readableName: "Data L1 Cache Misses per Thousand Instructions",
         description:
           "Level 1 data cache misses per thousand instructions indicating data access patterns and cache efficiency for frequently accessed data.",
         desired: "lower",
+        helpfulLinks: [
+          "https://developer.arm.com/documentation/109530/0100/Metrics-by-metric-group-in-Neoverse-N3/L1D-Cache-Effectiveness-metrics-for-Neoverse-N3?lang=en#md553-l1d_cache_effectiveness_mg__l1d_cache_mpki_m_L1D_Cache_Effectiveness",
+          "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#drill-down-back-end-stalls",
+        ],
       },
       "data-rd-tlb-tw-pki": {
         readableName: "Data Read TLB Table Walk per Thousand Instructions",
@@ -197,12 +263,20 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
         description:
           "Level 1 instruction cache misses per thousand instructions indicating instruction fetch efficiency and code locality patterns.",
         desired: "lower",
+        helpfulLinks: [
+          "https://developer.arm.com/documentation/109530/0100/Metrics-by-metric-group-in-Neoverse-N3/L1I-Cache-Effectiveness-metrics-for-Neoverse-N3?lang=en#md558-l1i_cache_effectiveness_mg__l1i_cache_mpki_m_L1I_Cache_Effectiveness",
+          "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#drill-down-front-end-stalls",
+        ],
       },
       ipc: {
         readableName: "Instructions Per Cycle",
         description:
           "Average number of instructions executed per CPU clock cycle indicating overall CPU utilization efficiency and performance.",
         desired: "higher",
+        helpfulLinks: [
+          "https://developer.arm.com/documentation/109530/0100/Metrics-by-metric-group-in-Neoverse-N3/General-metrics-for-Neoverse-N3?lang=en#md420-general_mg__ipc_m_General",
+          "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#top-down-method-to-debug-hardware-performance",
+        ],
       },
       "data-rd-tlb-mpki": {
         readableName: "Data Read TLB Misses per Thousand Instructions",
@@ -214,6 +288,10 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
         readableName: "L2 Cache Misses per Thousand Instructions",
         description: "Number of level 2 cache accesses missed per thousand instructions executed.",
         desired: "lower",
+        helpfulLinks: [
+          "https://developer.arm.com/documentation/109530/0100/Metrics-by-metric-group-in-Neoverse-N3/L2-Cache-Effectiveness-metrics-for-Neoverse-N3?lang=en#md550-l2_cache_effectiveness_mg__l2_cache_mpki_m_L2_Cache_Effectiveness",
+          "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#drill-down-back-end-stalls",
+        ],
       },
       "data-st-tlb-mpki": {
         readableName: "Data Store TLB Misses per Thousand Instructions",
@@ -226,30 +304,27 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
         description:
           "CPU backend pipeline stalls per thousand cycles caused by execution unit bottlenecks and resource constraints.",
         desired: "lower",
-      },
-      stall_frontend_pkc: {
-        readableName: "Frontend Stall per Thousand Cycles",
-        description:
-          "Cycle count when frontend could not send any micro-operations to the rename stage because of frontend resource stalls caused by fetch memory latency or branch prediction flow stalls per thousand cycles.",
-        desired: "lower",
-      },
-      stall_backend_pkc: {
-        readableName: "Backend Stall per Thousand Cycles",
-        description:
-          "CPU backend pipeline stalls per thousand cycles caused by execution unit bottlenecks and resource constraints on AMD processors.",
-        desired: "lower",
+        helpfulLinks: [
+          "https://developer.arm.com/documentation/109530/0100/Metrics-by-metric-group-in-Neoverse-N3/Cycle-Accounting-metrics-for-Neoverse-N3?lang=en#md523-cycle_accounting_mg__backend_stalled_cycles_m_Cycle_Accounting",
+          "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#top-down-method-to-debug-hardware-performance",
+        ],
       },
       "code-sparsity": {
         readableName: "Code Sparsity",
         description:
           "Code sparsity is a measure of how compact the instruction code is packed and how closely related code is placed. Lower sparsity helps branch prediction and the cache subsystem. It can be improved by modifying the compiler options.",
         desired: "lower",
+        helpfulLinks: ["https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#drill-down-front-end-stalls"],
       },
       "strex-spec-pki": {
         readableName: "Store Exclusive per Thousand Instructions",
         description:
           "The number of store exclusive operations that have been speculatively executed per thousand instructions. STREX is an old-style atomic instruction and part of the load-store pair. It is less efficient than the newer LSE instructions, which perform atomic operations with a single instruction and hardware managed atomicity. For workloads that involve heavy lock contentions, switching to LSE instructions could lead to significant performance improvement.",
         desired: "lower",
+        helpfulLinks: [
+          "https://developer.arm.com/documentation/109528/0200/PMU-events-by-functional-group-in-Neoverse-V2/Spec-Operation--SPEC-OPERATION--events-for-Neoverse-V2?lang=en#md761-spec_operation_fg__STREX_SPEC_e",
+          "https://aws.github.io/graviton/c-c++.html#large-system-extensions-lse",
+        ],
       },
     },
   },
@@ -258,6 +333,7 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
     summary:
       "Memory usage metrics measure the usage of the system's physical memory. The data were collected from the system pseudo-file /proc/meminfo.",
     defaultUnit: "Bytes",
+    defaultHelpfulLinks: ["https://man7.org/linux/man-pages/man5/proc_meminfo.5.html"],
     fieldDescriptions: {
       vmalloc_used: {
         readableName: "Virtual Memory Allocated Used",
@@ -572,6 +648,7 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
     summary:
       "Virtual memory metrics measure the usage of the system's virtual memory. The data were collected from the system pseudo-file /proc/vmstat. Note that for some metrics, the values were computed using the delta of two snapshots, so that first value is always zero.",
     defaultUnit: "Pages",
+    defaultHelpfulLinks: ["https://www.man7.org/linux/man-pages/man5/proc_vmstat.5.html"],
     fieldDescriptions: {
       thp_fault_fallback: {
         readableName: "THP Fault Fallback",
@@ -1625,6 +1702,10 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
     summary:
       "Interrupt metrics measure that number of interrupts handled by each CPU. The data were collected from the system pseudo-file /proc/interrupts. Every metric graph show the number of times a specific interrupt was handled by each CPU, as well as the aggregate (average) of all CPUs. Note that since the metric values were computed using the delta between two snapshots, the first value is always zero. The statistics of a metric graph accounts for its aggregate series.",
     defaultUnit: "Counts",
+    defaultHelpfulLinks: [
+      "https://man7.org/linux/man-pages/man5/proc_interrupts.5.html",
+      "https://developer.arm.com/documentation/198123/0302/Handling-interrupts",
+    ],
     fieldDescriptions: {
       "CAL (Function call interrupts)": {
         readableName: "Function Call Interrupts",
@@ -1819,6 +1900,7 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
     summary:
       "Disk stats metrics measure the I/O stats for each disk device and partition of the system. Note that since the metric values were computed using the delta between two snapshots, the first value is always zero. The statistics of a metric graph accounts for the device series with the highest average.",
     defaultUnit: "Counts",
+    defaultHelpfulLinks: ["https://docs.kernel.org/admin-guide/iostats.html"],
     fieldDescriptions: {
       discards: {
         readableName: "Discard Operations",
@@ -2089,6 +2171,7 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       "IpExt:OutMcastOctets": {
         readableName: "Outgoing Multicast Octets",
         description: "Total bytes transmitted in multicast packets for group communication.",
+        unit: "Bytes",
         desired: "lower",
       },
       "TcpExt:TCPAutoCorking": {
@@ -2433,6 +2516,7 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       "IpExt:InBcastOctets": {
         readableName: "IP Input Broadcast Octets",
         description: "Total bytes received from broadcast packets on the network interface.",
+        unit: "Bytes",
         desired: "depends",
       },
       "TcpExt:SyncookiesFailed": {
@@ -2483,6 +2567,7 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
         readableName: "Incoming Octets",
         description:
           "Total number of bytes received by the network interface including all protocol headers and payload data.",
+        unit: "Bytes",
         desired: "depends",
       },
       "IpExt:InMcastPkts": {
@@ -2544,6 +2629,7 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       "IpExt:OutBcastOctets": {
         readableName: "IP Output Broadcast Octets",
         description: "Total bytes transmitted in broadcast packets on the network interface.",
+        unit: "Bytes",
         desired: "depends",
       },
       "TcpExt:TCPFastOpenPassiveFail": {
@@ -2687,6 +2773,7 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       "IpExt:InMcastOctets": {
         readableName: "IP Input Multicast Octets",
         description: "Total bytes received from multicast packets on the network interface.",
+        unit: "Bytes",
         desired: "depends",
       },
       "TcpExt:TCPMD5Failure": {
@@ -2837,6 +2924,7 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
         readableName: "Outgoing Octets",
         description:
           "Total number of bytes transmitted by the network interface including all protocol headers and payload data.",
+        unit: "Bytes",
         desired: "depends",
       },
       "TcpExt:TCPFastOpenActiveFail": {
@@ -3115,6 +3203,8 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
     readableName: "NUMA Stats",
     summary:
       "NUMA Stats displays per-node NUMA hit and miss system statistics from the kernel memory allocator. Optimal performance is indicated by high numa_hit values and low numa_miss values. To debug, cross-reference per-node values with each CPU to verify process threads are running on the same node where their memory is allocated.",
+    defaultUnit: "Count",
+    defaultHelpfulLinks: ["https://docs.kernel.org/admin-guide/numastat.html"],
     fieldDescriptions: {
       numa_hit: {
         readableName: "NUMA Hit",
@@ -3154,23 +3244,27 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
     readableName: "Kernel Config",
     summary:
       'Kernel configs contain configuration options used when the running kernel was compiled. The data were collected from /boot/config* file. Value "y" means the module is compiled directly in the kernel, "not set"/"n" means the module is not compiled in the kernel, and "m" means the module is compiled as a loadable module.',
+    defaultHelpfulLinks: ["https://docs.kernel.org/admin-guide/bootconfig.html"],
     fieldDescriptions: {},
   },
   sysctl: {
     readableName: "Sysctl Config",
     summary: "Sysctl contains runtime kernel parameters.",
+    defaultHelpfulLinks: ["https://docs.kernel.org/admin-guide/sysctl/kernel.html"],
     fieldDescriptions: {},
   },
   flamegraphs: {
     readableName: "Flamegraphs",
     summary:
       "Kernel profiling flamegraphs visualize the call stack hierarchies and the amount of CPU time consumed by different functions. It supports viewing in both the normal (bottom-top) and reverse (top-bottom) order.",
+    defaultHelpfulLinks: ["https://perfwiki.github.io/main/"],
     fieldDescriptions: {},
   },
   perf_profile: {
     readableName: "Top Functions",
     summary:
       "Kernel profiling top functions are the text-based version of the flamegraphs and show the percentage of CPU time spent in each function. It only includes functions with at least 1% of CPU time.",
+    defaultHelpfulLinks: ["https://perfwiki.github.io/main/"],
     fieldDescriptions: {},
   },
   java_profile: {

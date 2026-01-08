@@ -41,8 +41,10 @@ Below are the instructions for adding or updating a data description:
    * `readableName`: the human-readable name of the data type and acts as its title in the report.
    * `summary`: the description of the data type on a high level, including which part of performance it covers, how it is collected, and how to understand all the data/graphs within. The summary will be shown in the help panel when user clicks the info button by the data page's header.
    * `defaultUnit`: (for time-series data only) the unit to be used by all the metric graphs, unless a specific metric has its own unit defined (see below).
+   * `defaultHelpfulLinks`: the list of helpful links to be rendered at the footer of the help panel for all of the included data.
    * `fieldDescriptions`: contains the description objects of every data in the data type (i.e. metric for time-series data, key for key-value data, graph for graph data, etc.):
      * `readableName`: the human-readable name of this data. It is used as the title of the data's help panel.
      * `description`: detailed information of this data, such as what the metric means, how it affects performance, and how to improve its value. **It is preferable to include as many details as possible**, so that users can learn the best about the data. The description will be shown in the data's help panel body.
      * `unit`: (for time-series data only) defines the unit to be used by the metric graph - it overrides the data type's `defaultUnit`.
      * `desired`: (for time-series data only) defines whether the values in the metric graph should be higher or lower to achieve a better performance. It is converted into a warning message in the data's help panel, and it also decides the color-coding of the report's statistical analysis.
+     * `helpfulLinks`: the list of additional helpful links that extend the data type's default helpful links.
