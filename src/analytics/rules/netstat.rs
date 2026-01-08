@@ -16,7 +16,7 @@ impl AnalyzeData for Netstat {
                 delta_ratio: 0.1,
                 score: Score::Bad,
                 message: "The average number of bytes received by the network interface is different. Verify that the load generator is providing the expected traffics, if the system is under tests." ,
-                reference: "https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/debug_system_perf.md#check-network-usage",
+                reference: "https://aws.github.io/graviton/perfrunbook/debug_system_perf.html#check-network-usage",
             ),
             time_series_stat_run_comparison! (
                 name: "Inconsistent Outbound Network Traffic",
@@ -27,7 +27,7 @@ impl AnalyzeData for Netstat {
                 delta_ratio: 0.1,
                 score: Score::Bad,
                 message: "The average number of bytes transmitted by the network interface is different. Look for heavily used connections on the system through \"watch netstat -t\".",
-                reference: "https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/debug_system_perf.md#check-network-usage",
+                reference: "https://aws.github.io/graviton/perfrunbook/debug_system_perf.html#check-network-usage",
             ),
         ]
     }

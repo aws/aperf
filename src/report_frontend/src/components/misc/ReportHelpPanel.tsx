@@ -1,4 +1,4 @@
-import { Button, HelpPanel, Link, StatusIndicator } from "@cloudscape-design/components";
+import { Button, HelpPanel, Link, List, StatusIndicator } from "@cloudscape-design/components";
 import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import React from "react";
 import { useReportState } from "../ReportStateProvider";
@@ -44,11 +44,17 @@ export function ReportHelpPanel() {
       break;
   }
 
+  const defaultHelpfulLinks = DATA_DESCRIPTIONS[helpPanelDataType].defaultHelpfulLinks ?? [];
+  const dataHelpfulLinks =
+    DATA_DESCRIPTIONS[helpPanelDataType].fieldDescriptions[helpPanelFieldKey]?.helpfulLinks ?? [];
+  const helpfulLinks = [...dataHelpfulLinks, ...defaultHelpfulLinks];
+
   return (
     <HelpPanel
       header={<h2>{metricReadableName}</h2>}
       footer={
         <div>
+          <HelpfulLinks links={helpfulLinks} />
           <h4>Need help with the metrics?</h4>
           <Link external href={"https://github.com/aws/aperf/issues"}>
             Raise a GitHub issue
@@ -65,6 +71,33 @@ export function ReportHelpPanel() {
 interface ReportHelpPanelLinkProps {
   readonly dataType: DataType;
   readonly fieldKey: string;
+}
+
+/**
+ * A helper component to render all helpful links as the footer in a help panel
+ */
+function HelpfulLinks(props: { links: string[] }) {
+  if (props.links.length == 0) return null;
+
+  return (
+    <>
+      <h4>Helpful Links</h4>
+      <List
+        items={props.links.map((link, index) => ({
+          id: index.toString(),
+          url: link,
+        }))}
+        renderItem={(item) => ({
+          id: item.id,
+          content: (
+            <Link external target={"_blank"} href={item.url}>
+              {item.url}
+            </Link>
+          ),
+        })}
+      />
+    </>
+  );
 }
 
 /**
