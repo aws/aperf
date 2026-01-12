@@ -1,9 +1,10 @@
 use anyhow::Result;
+use aperf::completions::{setup_shell_completions, SetupShellCompletions};
 use aperf::pmu::{custom_pmu, CustomPMU};
 use aperf::record::{record, Record, RECORD_DATA_RECOMMENDATION};
 use aperf::report::{report, Report};
 use aperf::{PDError, APERF_RUNLOG, APERF_TMP};
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 use log::LevelFilter;
 use log4rs::{
     append::console::ConsoleAppender,
@@ -44,6 +45,9 @@ enum Commands {
 
     /// Create a custom PMU configuration file for use with Aperf record.
     CustomPMU(CustomPMU),
+
+    /// Setup shell completions for APerf commands.
+    SetupShellCompletions(SetupShellCompletions),
 }
 
 fn init_logger(verbose: u8, runlog: &PathBuf) -> Result<()> {
@@ -104,6 +108,7 @@ fn main() -> Result<()> {
         Commands::Record(r) => record(&r, &tmp_dir_path_buf, &runlog),
         Commands::Report(r) => report(&r, &tmp_dir_path_buf),
         Commands::CustomPMU(r) => custom_pmu(&r),
+        Commands::SetupShellCompletions(r) => setup_shell_completions(&r, &mut Cli::command()),
     }?;
     fs::remove_dir_all(tmp_dir_path_buf)?;
     Ok(())
