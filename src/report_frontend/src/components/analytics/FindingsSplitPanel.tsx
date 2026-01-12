@@ -35,6 +35,7 @@ export default function () {
         )
       }
       closeBehavior={"hide"}
+      hidePreferencesButton={true}
     >
       {/*Non time-series data only show the analytical findings, while time-series data control which findings to show through the state*/}
       {(!isTimeSeriesData || splitPanelType == "analytical") && <DataTypeAnalyticalFindings dataType={dataComponent} />}

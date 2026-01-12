@@ -8,6 +8,7 @@ import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import { RunHeader } from "../data/RunSystemInfo";
 import { ReportHelpPanelLink } from "../misc/ReportHelpPanel";
 import { ShowFindingsPanelButton } from "../analytics/FindingsSplitPanel";
+import { useReportState } from "../ReportStateProvider";
 
 const NUM_KEY_VALUE_PAIRS_PER_PAGE = 50;
 
@@ -97,6 +98,8 @@ function filterItemsWithDiffs(tableItems: TableItem[]): TableItem[] {
  * across all runs will be shown at the same line.
  */
 export default function (props: DataPageProps) {
+  const { searchKey, setUpdateFilteringText } = useReportState();
+
   const { tableItems, tableColumnDefinitions } = React.useMemo(
     () => getTableItemsAndDefinitions(props.dataType),
     [props.dataType],
@@ -119,6 +122,7 @@ export default function (props: DataPageProps) {
         },
         empty: <Box variant={"p"}>{showDiffOnly ? "All keys have the same value" : "No items were collected"}</Box>,
         noMatch: <Box variant={"p"}>No items found</Box>,
+        defaultFilteringText: searchKey,
       },
       pagination: { pageSize: NUM_KEY_VALUE_PAIRS_PER_PAGE },
       selection: {},
@@ -129,6 +133,14 @@ export default function (props: DataPageProps) {
       },
     },
   );
+
+  React.useEffect(() => {
+    // Store the function to update the filtering text in the global state, so that they can be accessed
+    // by other components to change the filtering text and locate a particular metric.
+    // To be distinguished from the function argument supported by the React set state API, we need to
+    // pass in a function that returns the actual function.
+    setUpdateFilteringText(() => (text: string) => filterProps.onChange({ detail: { filteringText: text } }));
+  }, [props.dataType]);
 
   return (
     <Table
