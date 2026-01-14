@@ -228,7 +228,7 @@ impl CollectData for PerfStatRaw {
                     Err(e) => {
                         match e.kind() {
                             ErrorKind::PermissionDenied => {
-                                warn!("Set /proc/sys/kernel/perf_event_paranoid to 0")
+                                warn!("Set /proc/sys/kernel/perf_event_paranoid to -1")
                             }
                             ErrorKind::NotFound => warn!("PMU counters not available on this instance type. Refer to APerf documentation for supported instances"),
                             _ => warn!("Unknown error when trying to use Perf API"),
@@ -578,7 +578,7 @@ mod tests {
                 if let Some(os_error) = e.downcast_ref::<std::io::Error>() {
                     match os_error.kind() {
                         ErrorKind::PermissionDenied => {
-                            panic!("Set /proc/sys/kernel/perf_event_paranoid to 0")
+                            panic!("Set /proc/sys/kernel/perf_event_paranoid to -1")
                         }
                         ErrorKind::NotFound => println!("PMU counters not available on this instance type. Refer to APerf documentation for supported instances"),
                         _ => panic!("{}", os_error),

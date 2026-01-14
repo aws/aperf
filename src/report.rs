@@ -29,7 +29,9 @@ impl VersionInfo {
 #[derive(Clone, Args, Debug)]
 pub struct Report {
     /// The paths to the directories or archives of the recorded data to be included in the report.
-    #[clap(help_heading = "Basic Options", short, long, value_parser, required = true, value_names = &["RUN_NAME> <RUN_NAME"], num_args = 1..)]
+    /// If multiple runs are specified, the first run is used as the base run. The data in every
+    /// other run will be compared against the base run to generate statistical and analytical findings.
+    #[clap(help_heading = "Basic Options", verbatim_doc_comment, short, long, value_parser, required = true, value_names = &["RUN_NAME> <RUN_NAME"], num_args = 1..)]
     pub run: Vec<String>,
 
     /// The directory and archive name of the report.

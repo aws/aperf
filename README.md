@@ -125,6 +125,9 @@ You can compare the results of multiple performance record runs:
 aperf report -r <RUN1> <RUN2> ... -n <REPORT_NAME>
 ```
 
+> [!TIP]
+> If multiple runs are included in the report, the first run will be used as the base run. The data in every other run will be compared against the base run to generate all statistical findings and some analytical findings.
+
 #### Custom PMU
 
 Run the following command to create a custom PMU configuration through command-line prompts. The generated configuration can then be used for `perf_stat` data collections through `aperf record --pmu-config`.
@@ -231,9 +234,9 @@ Verify the supplied PMU file.
 ## APerf Issues?
 #### PMU Counters:
 * PMU counters are only available on [certain instance sizes](https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/debug_hw_perf.md#how-to-collect-pmu-counters) and families. Select the appropriate instance size if you need PMU stats.
-* For collecting PMU counter metrics w/o `root` or `sudo` permissions, set the `perf_event_paranoid` to `0`.
+* For collecting PMU counter metrics w/o `root` or `sudo` permissions, set the `perf_event_paranoid` to `-1`.
 ```
-sudo sysctl -w kernel.perf_event_paranoid=0
+sudo sysctl -w kernel.perf_event_paranoid=-1
 ```
 * To collect PMU counter metrics, APerf needs to open up to 50 file descriptors per vCPU. So, increase `ulimit` settings accordingly.
 * APerf preparation for PMU counter metrics may take significant time on larger instances, delaying the start of the recording period. Use `--dont-collect perf_stat` if startup time is a concern and/or PMU metrics are not necessary.

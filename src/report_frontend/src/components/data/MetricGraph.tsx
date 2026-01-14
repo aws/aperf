@@ -81,7 +81,7 @@ export default function (props: TimeSeriesMetricProps) {
         },
         yaxis: {
           title: getTimeSeriesMetricUnit(props.dataType, props.metricName),
-          tickformat: ".3s",
+          tickformat: "~s",
           range: valueRange,
           gridcolor: darkMode ? "#404040" : "#e0e0e0",
         },
