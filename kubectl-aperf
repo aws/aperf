@@ -254,6 +254,14 @@ fi
 # Create APerf pod
 echo -e "\n${BOLD}Created pod configuration for node:${NC} ${NODE_NAME}${NC}"
 
+# Delete existing pod if it exists
+if kubectl get pod ${POD_NAME} -n ${NAMESPACE} &>/dev/null; then
+  echo -e "${RED}Existing pod found. Delete it before continue.${NC}"
+  echo -e "${RED}Possible command to use: kubectl delete pod ${POD_NAME} -n ${NAMESPACE} --force --grace-period=0 ${NC}"
+  sleep 2
+  exit 1
+fi
+
 # Apply the pod directly from variable
 echo -e -n "${BOLD}Deploying pod to Kubernetes...${NC}  "
 echo "$POD_YAML" | kubectl apply -f - -n ${NAMESPACE}
