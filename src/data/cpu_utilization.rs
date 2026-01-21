@@ -6,7 +6,6 @@ use crate::visualizer::ReportParams;
 use anyhow::Result;
 use chrono::prelude::*;
 use log::trace;
-use procfs::{CpuTime, KernelStats};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
@@ -53,6 +52,46 @@ impl CpuUtilization {
     }
 }
 
+/// A helper struct that parses and holds one snapshot of /proc/stat data
+pub struct ProcKernelStat {
+    total: Vec<u64>,
+    per_cpu: Vec<Vec<u64>>,
+}
+
+impl ProcKernelStat {
+    pub fn from_raw_data(raw_data: &String) -> Self {
+        let mut kernel_stats = ProcKernelStat {
+            total: Vec::new(),
+            per_cpu: Vec::new(),
+        };
+
+        for line in raw_data.lines() {
+            let split: Vec<&str> = line.split_whitespace().collect();
+
+            if split.len() < 9 {
+                continue;
+            }
+
+            // For aggregate the label will just be "cpu"; for individual core the label
+            // will be "cpu<number>"
+            let cpu_label = split[0];
+
+            let cpu_stat: Vec<u64> = split[1..]
+                .iter()
+                .map(|&s| s.parse::<u64>().unwrap_or_default())
+                .collect();
+
+            if cpu_label == "cpu" {
+                kernel_stats.total = cpu_stat;
+            } else if cpu_label.starts_with("cpu") {
+                kernel_stats.per_cpu.push(cpu_stat);
+            }
+        }
+
+        kernel_stats
+    }
+}
+
 #[derive(EnumIter, Display, Clone, Copy, Eq, Hash, PartialEq)]
 #[strum(serialize_all = "lowercase")]
 pub enum CpuState {
@@ -66,17 +105,19 @@ pub enum CpuState {
     STEAL,
 }
 
-fn get_cpu_time(cpu_state: &CpuState, cpu_time: &CpuTime) -> u64 {
-    match cpu_state {
-        CpuState::USER => cpu_time.user,
-        CpuState::NICE => cpu_time.nice,
-        CpuState::SYSTEM => cpu_time.system,
-        CpuState::IDLE => cpu_time.idle,
-        CpuState::IOWAIT => cpu_time.iowait.unwrap_or_default(),
-        CpuState::IRQ => cpu_time.irq.unwrap_or_default(),
-        CpuState::SOFTIRQ => cpu_time.softirq.unwrap_or_default(),
-        CpuState::STEAL => cpu_time.steal.unwrap_or_default(),
-    }
+fn get_cpu_time(cpu_state: &CpuState, cpu_time: &Vec<u64>) -> u64 {
+    let index = match cpu_state {
+        CpuState::USER => 0,
+        CpuState::NICE => 1,
+        CpuState::SYSTEM => 2,
+        CpuState::IDLE => 3,
+        CpuState::IOWAIT => 4,
+        CpuState::IRQ => 5,
+        CpuState::SOFTIRQ => 6,
+        CpuState::STEAL => 7,
+    };
+
+    cpu_time.get(index).copied().unwrap_or_default()
 }
 
 impl ProcessData for CpuUtilization {
@@ -92,9 +133,9 @@ impl ProcessData for CpuUtilization {
         let mut aggregate_total_util_series = Series::new(Some("total".to_string()));
         aggregate_total_util_series.is_aggregate = true;
 
-        // memorize the previous CPU time to compute delta (the raw /proc/stat file contains
+        // memorize the previous CPU time per cpu to compute delta (the raw /proc/stat file contains
         // accumulated CPU jiffies since boot time)
-        let mut prev_cpu_time: Vec<CpuTime> = Vec::new();
+        let mut prev_cpu_time: Vec<Vec<u64>> = Vec::new();
         // initial time used to compute time diff for every series data point
         let mut time_zero: Option<TimeEnum> = None;
 
@@ -104,9 +145,9 @@ impl ProcessData for CpuUtilization {
                 _ => panic!("Invalid Data type in raw file"),
             };
 
-            let kernel_stats = KernelStats::from_reader(raw_value.data.as_bytes())?;
+            let kernel_stats = ProcKernelStat::from_raw_data(&raw_value.data);
             let aggregate_cpu_time = vec![kernel_stats.total];
-            let all_cpu_time = kernel_stats.cpu_time;
+            let all_cpu_time = kernel_stats.per_cpu;
             let num_cpus = all_cpu_time.len();
 
             let time_diff: u64 = match raw_value.time - *time_zero.get_or_insert(raw_value.time) {

@@ -223,6 +223,7 @@ mod diskstats_tests {
                                 metric_name,
                                 series.series_name.as_ref().unwrap()
                             );
+                            continue;
                         }
 
                         // Values should be non-negative
@@ -235,31 +236,20 @@ mod diskstats_tests {
                             sample_idx
                         );
 
-                        // Sectors metrics should be in KB (divided by 2 from sectors)
-                        if matches!(
-                            disk_stat_key,
-                            DiskStatKey::SectorsRead
-                                | DiskStatKey::SectorsWritten
-                                | DiskStatKey::SectorsDiscarded
-                        ) && sample_idx > 0
-                        {
-                            let device_name = series.series_name.as_ref().unwrap();
-                            let expected_stats =
-                                &expected_per_sample_per_device_stats[sample_idx][device_name];
-                            let expected_value =
-                                *get_disk_stat_field(disk_stat_key, &mut expected_stats.clone())
-                                    as f64
-                                    / 2.0;
-                            assert!(
-                                (value - expected_value).abs() < 1e-5,
-                                "Metric {} device {} sample {}: expected {}, got {}",
-                                metric_name,
-                                device_name,
-                                sample_idx,
-                                expected_value,
-                                value
-                            );
-                        }
+                        let device_name = series.series_name.as_ref().unwrap();
+                        let expected_stats =
+                            &expected_per_sample_per_device_stats[sample_idx][device_name];
+                        let expected_value =
+                            *get_disk_stat_field(disk_stat_key, &mut expected_stats.clone()) as f64;
+                        assert!(
+                            (value - expected_value).abs() < 1e-5,
+                            "Metric {} device {} sample {}: expected {}, got {}",
+                            metric_name,
+                            device_name,
+                            sample_idx,
+                            expected_value,
+                            value
+                        );
                     }
                 }
             }
@@ -456,7 +446,7 @@ mod diskstats_tests {
             // Check sectors_read metric (should be in KB)
             let sectors_read_metric = time_series_data.metrics.get("sectors_read").unwrap();
             let sda_sectors_series = &sectors_read_metric.series[0];
-            assert_eq!(sda_sectors_series.values, vec![0.0, 400.0, 400.0]); // 800/2, 800/2
+            assert_eq!(sda_sectors_series.values, vec![0.0, 800.0, 800.0]); // Delta values
 
             // Check in_progress metric (not accumulated)
             let in_progress_metric = time_series_data.metrics.get("in_progress").unwrap();

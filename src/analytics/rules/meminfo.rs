@@ -9,7 +9,7 @@ impl AnalyzeData for MeminfoData {
         vec![
             time_series_stat_run_comparison! (
                 name: "Inconsistent Physical Memory",
-                metric: "mem_total",
+                metric: "MemTotal",
                 stat: Stat::Average,
                 comparator: Comparator::GreaterEqual,
                 abs: true,
@@ -19,7 +19,7 @@ impl AnalyzeData for MeminfoData {
             ),
             time_series_stat_run_comparison! (
                 name: "Reduced Memory Availability",
-                metric: "mem_available",
+                metric: "MemAvailable",
                 stat: Stat::Average,
                 comparator: Comparator::LessEqual,
                 abs: false,
