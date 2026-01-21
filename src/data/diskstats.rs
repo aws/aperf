@@ -5,7 +5,6 @@ use crate::visualizer::ReportParams;
 use anyhow::Result;
 use chrono::prelude::*;
 use log::{error, trace};
-use procfs;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use strum::IntoEnumIterator;
@@ -45,6 +44,41 @@ impl Diskstats {
     }
 }
 
+/// A helper struct that parses and holds one snapshot of /proc/diskstats data
+pub struct ProcDiskStats {
+    device_name: String,
+    disk_stats: Vec<u64>,
+}
+
+impl ProcDiskStats {
+    pub fn from_raw_data(raw_data: &str) -> Result<Self, String> {
+        let split: Vec<&str> = raw_data.trim().split_whitespace().collect();
+
+        if split.len() < 14 {
+            return Err(format!("Cannot parse the raw data: {raw_data}"));
+        }
+
+        let device_name = match split.get(2) {
+            Some(device_name) => device_name.to_string(),
+            None => {
+                return Err(format!(
+                    "Cannot retrieve device name from the raw data: {raw_data}"
+                ));
+            }
+        };
+
+        let disk_stats: Vec<u64> = split[3..]
+            .iter()
+            .map(|&s| s.parse::<u64>().unwrap_or_default())
+            .collect();
+
+        Ok(ProcDiskStats {
+            device_name,
+            disk_stats,
+        })
+    }
+}
+
 #[derive(EnumIter, Display, Clone, Copy, Eq, Hash, PartialEq)]
 #[strum(serialize_all = "snake_case")]
 pub enum DiskStatKey {
@@ -67,26 +101,28 @@ pub enum DiskStatKey {
     TimeFlushing,
 }
 
-fn get_device_disk_stat(disk_stat_key: DiskStatKey, device_disk_stat: &procfs::DiskStat) -> u64 {
-    match disk_stat_key {
-        DiskStatKey::Reads => device_disk_stat.reads,
-        DiskStatKey::Merged => device_disk_stat.merged,
-        DiskStatKey::SectorsRead => device_disk_stat.sectors_read,
-        DiskStatKey::TimeReading => device_disk_stat.time_reading,
-        DiskStatKey::Writes => device_disk_stat.writes,
-        DiskStatKey::WritesMerged => device_disk_stat.writes_merged,
-        DiskStatKey::SectorsWritten => device_disk_stat.sectors_written,
-        DiskStatKey::TimeWriting => device_disk_stat.time_writing,
-        DiskStatKey::InProgress => device_disk_stat.in_progress,
-        DiskStatKey::TimeInProgress => device_disk_stat.time_in_progress,
-        DiskStatKey::WeightedTimeInProgress => device_disk_stat.weighted_time_in_progress,
-        DiskStatKey::Discards => device_disk_stat.discards.unwrap_or_default(),
-        DiskStatKey::DiscardsMerged => device_disk_stat.discards_merged.unwrap_or_default(),
-        DiskStatKey::SectorsDiscarded => device_disk_stat.sectors_discarded.unwrap_or_default(),
-        DiskStatKey::TimeDiscarding => device_disk_stat.time_discarding.unwrap_or_default(),
-        DiskStatKey::Flushes => device_disk_stat.flushes.unwrap_or_default(),
-        DiskStatKey::TimeFlushing => device_disk_stat.time_flushing.unwrap_or_default(),
-    }
+fn get_device_disk_stat(disk_stat_key: DiskStatKey, device_disk_stat: &Vec<u64>) -> u64 {
+    let index = match disk_stat_key {
+        DiskStatKey::Reads => 0,
+        DiskStatKey::Merged => 1,
+        DiskStatKey::SectorsRead => 2,
+        DiskStatKey::TimeReading => 3,
+        DiskStatKey::Writes => 4,
+        DiskStatKey::WritesMerged => 5,
+        DiskStatKey::SectorsWritten => 6,
+        DiskStatKey::TimeWriting => 7,
+        DiskStatKey::InProgress => 8,
+        DiskStatKey::TimeInProgress => 9,
+        DiskStatKey::WeightedTimeInProgress => 10,
+        DiskStatKey::Discards => 11,
+        DiskStatKey::DiscardsMerged => 12,
+        DiskStatKey::SectorsDiscarded => 13,
+        DiskStatKey::TimeDiscarding => 14,
+        DiskStatKey::Flushes => 15,
+        DiskStatKey::TimeFlushing => 16,
+    };
+
+    device_disk_stat.get(index).copied().unwrap_or_default()
 }
 
 impl ProcessData for Diskstats {
@@ -103,7 +139,7 @@ impl ProcessData for Diskstats {
 
         // (*Most of) the disk stats are accumulated since last boot, so memorize the previous
         // stats to compute the delta as the series value
-        let mut prev_disk_stats: HashMap<String, procfs::DiskStat> = HashMap::new();
+        let mut prev_disk_stats: HashMap<String, Vec<u64>> = HashMap::new();
         // initial time used to compute time diff for every series data point
         let mut time_zero: Option<TimeEnum> = None;
 
@@ -125,33 +161,27 @@ impl ProcessData for Diskstats {
             };
 
             for device_line in raw_value.data.lines() {
-                let device_disk_stats = match procfs::DiskStat::from_line(device_line) {
-                    Ok(device_disk_stats) => device_disk_stats,
+                let proc_disk_stats = match ProcDiskStats::from_raw_data(device_line) {
+                    Ok(proc_disk_stats) => proc_disk_stats,
                     Err(proc_error) => {
                         error!("Error parsing diskstats: {}", proc_error);
                         continue;
                     }
                 };
-                let device = &device_disk_stats.name;
+                let device = &proc_disk_stats.device_name;
+                let device_disk_stats = &proc_disk_stats.disk_stats;
                 let prev_device_disk_stats = prev_disk_stats
                     .entry(device.clone())
                     .or_insert(device_disk_stats.clone());
 
                 for disk_stat_key in DiskStatKey::iter() {
-                    let device_disk_stat = get_device_disk_stat(disk_stat_key, &device_disk_stats);
+                    let device_disk_stat = get_device_disk_stat(disk_stat_key, device_disk_stats);
                     let prev_device_disk_stat =
                         get_device_disk_stat(disk_stat_key, &prev_device_disk_stats);
                     let device_disk_stat_value = match disk_stat_key {
                         // in_progress is the only disk stat that goes to zero
                         // See https://www.kernel.org/doc/Documentation/iostats.txt
                         DiskStatKey::InProgress => device_disk_stat as f64,
-                        // We present sectors metric as the number of kilobytes. Since one sector is 512 bytes,
-                        // the series value is (num of sectors) * 512 / 1024
-                        DiskStatKey::SectorsRead
-                        | DiskStatKey::SectorsWritten
-                        | DiskStatKey::SectorsDiscarded => {
-                            (device_disk_stat - prev_device_disk_stat) as f64 / 2.0
-                        }
                         // The rests are simply delta between two timestamps
                         _ => (device_disk_stat - prev_device_disk_stat) as f64,
                     };

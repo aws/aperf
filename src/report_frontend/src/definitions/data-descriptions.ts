@@ -335,307 +335,307 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
     defaultUnit: "Bytes",
     defaultHelpfulLinks: ["https://man7.org/linux/man-pages/man5/proc_meminfo.5.html"],
     fieldDescriptions: {
-      vmalloc_used: {
+      VmallocUsed: {
         readableName: "Virtual Memory Allocated Used",
         description:
           "Amount of virtual memory currently allocated through the vmalloc interface for kernel data structures and device drivers.",
         desired: "moderate",
       },
-      cached: {
+      Cached: {
         readableName: "Page Cache Memory",
         description:
           "Memory used by the kernel to cache file system data and metadata to improve I/O performance by reducing disk access.",
         desired: "moderate",
       },
-      mem_free: {
+      MemFree: {
         readableName: "Free Memory",
         description:
           "Amount of physical memory currently available for allocation without requiring memory reclamation or swapping.",
         desired: "higher",
       },
-      file_pmd_mapped: {
+      FilePmdMapped: {
         readableName: "File PMD Mapped",
         description:
           "File-backed memory pages mapped using Page Middle Directory entries for large page optimizations in memory management.",
         desired: "lower",
       },
-      direct_map_2m: {
+      DirectMap2M: {
         readableName: "Direct Map 2M Pages",
         description: "Number of bytes of RAM linearly mapped by kernel in 2 MB pages.",
         desired: "higher",
       },
-      unevictable: {
+      Unevictable: {
         readableName: "Unevictable Memory",
         description: "Memory pages that cannot be swapped out or reclaimed including locked memory and kernel pages.",
         desired: "lower",
       },
-      per_cpu: {
+      Percpu: {
         readableName: "Per-CPU Memory",
         description:
           "Memory allocated on a per-CPU basis for CPU-local data structures to avoid cache line contention in multi-processor systems.",
         desired: "moderate",
       },
-      anon_hugepages: {
+      AnonHugePages: {
         readableName: "Anonymous Huge Pages",
         description:
           "Anonymous memory pages using huge page sizes for applications that benefit from reduced TLB overhead and improved memory performance.",
         desired: "depends",
       },
-      inactive_file: {
+      "Inactive(file)": {
         readableName: "Inactive File Pages",
         description:
           "File-backed memory pages in the inactive LRU list that are candidates for reclamation when memory pressure occurs.",
         desired: "moderate",
       },
-      cma_total: {
+      CmaTotal: {
         readableName: "CMA Total Memory",
         description:
           "Total Contiguous Memory Allocator memory reserved for devices requiring physically contiguous memory blocks.",
         desired: "higher",
       },
-      swap_free: {
+      SwapFree: {
         readableName: "Free Swap Space",
         description:
           "Available swap space that can be used when physical memory is exhausted for virtual memory management.",
         desired: "higher",
       },
-      cma_free: {
+      CmaFree: {
         readableName: "CMA Free Memory",
         description:
           "Free pages in the Contiguous Memory Allocator pool available for devices requiring physically contiguous memory blocks.",
         desired: "higher",
       },
-      committed_as: {
+      Committed_AS: {
         readableName: "Committed Memory",
         description:
           "Total amount of memory currently allocated or reserved by processes including virtual memory that may not be physically present.",
         desired: "moderate",
       },
-      inactive: {
+      Inactive: {
         readableName: "Inactive Memory",
         description:
           "Total memory pages in the inactive LRU lists that are candidates for reclamation when memory pressure occurs.",
         desired: "moderate",
       },
-      commit_limit: {
+      CommitLimit: {
         readableName: "Commit Limit",
         description:
           "Maximum amount of memory that can be allocated by processes based on available physical memory and swap space.",
         desired: "higher",
       },
-      s_unreclaim: {
+      SUnreclaim: {
         readableName: "Slab Unreclaimable",
         description:
           "Kernel slab memory that cannot be reclaimed and remains permanently allocated for kernel data structures.",
         desired: "lower",
       },
-      mem_total: {
+      MemTotal: {
         readableName: "Total Memory",
         description:
           "Total amount of physical memory available to the system including memory used by kernel and applications.",
         desired: "higher",
       },
-      slab: {
+      Slab: {
         readableName: "Slab Memory",
         description: "Total kernel slab memory used for caching frequently used kernel objects and data structures.",
         desired: "moderate",
       },
-      direct_map_4k: {
+      DirectMap4k: {
         readableName: "Direct Map 4K Pages",
         description: "Number of bytes of RAM linearly mapped by kernel in 4 kB pages.",
         desired: "moderate",
       },
-      swap_total: {
+      SwapTotal: {
         readableName: "Total Swap Space",
         description:
           "Total amount of swap space available for virtual memory management when physical memory is exhausted.",
         desired: "higher",
       },
-      shmem: {
+      Shmem: {
         readableName: "Shared Memory",
         description: "Memory used for shared memory segments including System V shared memory and tmpfs filesystems.",
         desired: "moderate",
       },
-      active_file: {
+      "Active(file)": {
         readableName: "Active File Pages",
         description:
           "File-backed memory pages in the active LRU list that are frequently accessed and less likely to be reclaimed.",
         desired: "moderate",
       },
-      mem_available: {
+      MemAvailable: {
         readableName: "Available Memory",
         description: "Estimate of memory available for starting new applications without causing excessive swapping.",
         desired: "higher",
       },
-      swap_cached: {
+      SwapCached: {
         readableName: "Swap Cache",
         description:
           "Memory that was swapped out but is now back in RAM and still cached in case it needs to be swapped out again.",
         desired: "lower",
       },
-      shmem_pmd_mapped: {
+      ShmemPmdMapped: {
         readableName: "Shared Memory PMD Mapped",
         description:
           "Shared memory pages mapped using Page Middle Directory entries for large page optimizations in shared memory segments.",
         desired: "lower",
       },
-      hugepages_total: {
+      HugePages_Total: {
         readableName: "Total Huge Pages",
         description:
           "Total number of huge pages configured in the system for applications requiring large contiguous memory blocks.",
         desired: "depends",
         unit: "Pages",
       },
-      kernel_stack: {
+      KernelStack: {
         readableName: "Kernel Stack Memory",
         description: "Memory used by kernel stacks for each thread and process in the system.",
         desired: "moderate",
       },
-      hugepages_rsvd: {
+      HugePages_Rsvd: {
         readableName: "Reserved Huge Pages",
         description: "Number of huge pages reserved but not yet allocated to applications.",
         desired: "lower",
         unit: "Pages",
       },
-      nfs_unstable: {
+      NFS_Unstable: {
         readableName: "NFS Unstable Pages",
         description: "Pages that have been written to NFS server but not yet committed to stable storage.",
         desired: "lower",
       },
-      k_reclaimable: {
+      KReclaimable: {
         readableName: "Kernel Reclaimable",
         description: "Kernel memory that can be reclaimed when the system is under memory pressure.",
         desired: "moderate",
       },
-      hugepages_surp: {
+      HugePages_Surp: {
         readableName: "Surplus Huge Pages",
         description: "Number of huge pages allocated beyond the configured pool size.",
         desired: "lower",
         unit: "Pages",
       },
-      shmem_hugepages: {
+      ShmemHugePages: {
         readableName: "Shared Memory Huge Pages",
         description: "Shared memory segments using huge pages for improved performance.",
         desired: "lower",
       },
-      hugepagesize: {
+      Hugepagesize: {
         readableName: "Huge Page Size",
         description: "Size of each huge page in the system typically 2MB or 1GB.",
         desired: "fixed",
       },
-      file_huge_pages: {
+      FileHugePages: {
         readableName: "File Huge Pages",
         description: "File-backed memory pages using huge page sizes for improved I/O performance.",
         desired: "lower",
       },
-      direct_map_1g: {
+      DirectMap1G: {
         readableName: "Direct Map 1G Pages",
         description: "Number of bytes of physical memory directly mapped using 1GB pages for maximum TLB efficiency.",
         desired: "higher",
       },
-      bounce: {
+      Bounce: {
         readableName: "Bounce Buffer Memory",
         description: "Memory used for bounce buffers when DMA cannot directly access certain memory regions.",
         desired: "lower",
       },
-      direct_map_4m: {
+      DirectMap4M: {
         readableName: "Direct Map 4M Pages",
         description:
           "Number of bytes of physical memory directly mapped using 4MB pages for improved TLB efficiency on some architectures.",
         desired: "higher",
       },
-      mlocked: {
+      Mlocked: {
         readableName: "Memory Locked",
         description: "Memory pages that have been locked in RAM and cannot be swapped out to storage.",
         desired: "lower",
       },
-      writeback: {
+      Writeback: {
         readableName: "Writeback Memory",
         description: "Memory pages currently being written back to storage devices.",
         desired: "lower",
       },
-      s_reclaimable: {
+      SReclaimable: {
         readableName: "Slab Reclaimable",
         description: "Kernel slab memory that can be reclaimed when the system is under memory pressure.",
         desired: "moderate",
       },
-      vmalloc_total: {
+      VmallocTotal: {
         readableName: "Virtual Memory Allocator Total",
         description: "Total virtual address space available for vmalloc allocations by the kernel.",
         desired: "higher",
       },
-      hardware_corrupted: {
+      HardwareCorrupted: {
         readableName: "Hardware Corrupted Memory",
         description: "Memory pages marked as corrupted due to hardware errors and excluded from use.",
         desired: "lower",
       },
-      anon_pages: {
+      AnonPages: {
         readableName: "Anonymous Pages",
         description: "Anonymous memory pages not backed by files including process heap stack and anonymous mappings.",
         desired: "depends",
       },
-      active: {
+      Active: {
         readableName: "Active Memory",
         description:
           "Total memory pages in active LRU lists that are frequently accessed and less likely to be reclaimed.",
         desired: "moderate",
       },
-      active_anon: {
+      "Active(anon)": {
         readableName: "Active Anonymous Memory",
         description: "Anonymous memory pages in the active LRU list that are frequently accessed.",
         desired: "moderate",
       },
-      inactive_anon: {
+      "Inactive(anon)": {
         readableName: "Inactive Anonymous Memory",
         description: "Anonymous memory pages in the inactive LRU list that are candidates for swapping.",
         desired: "moderate",
       },
-      mmap_copy: {
+      MmapCopy: {
         readableName: "Memory Map Copy",
         description: "Memory used for copy-on-write mappings during memory management operations.",
         desired: "lower",
       },
-      writeback_tmp: {
+      WritebackTmp: {
         readableName: "Temporary Writeback Memory",
         description: "Memory used for temporary writeback operations during I/O processing.",
         desired: "lower",
       },
-      quicklists: {
+      Quicklists: {
         readableName: "Quicklist Memory",
         description: "Memory used by quicklists for fast allocation and deallocation of kernel objects.",
         desired: "lower",
       },
-      hugetlb: {
+      Hugetlb: {
         readableName: "Huge TLB Memory",
         description: "Memory reserved for huge page TLB entries to improve virtual memory performance.",
         desired: "depends",
       },
-      buffers: {
+      Buffers: {
         readableName: "Buffer Memory",
         description: "Memory used by the kernel for buffering block device I/O operations.",
         desired: "moderate",
       },
-      dirty: {
+      Dirty: {
         readableName: "Dirty Memory",
         description: "Memory pages that have been modified but not yet written back to storage.",
         desired: "lower",
       },
-      vmalloc_chunk: {
+      VmallocChunk: {
         readableName: "Virtual Memory Allocator Chunk",
         description: "Largest contiguous chunk of virtual address space available for vmalloc allocations.",
         desired: "higher",
       },
-      page_tables: {
+      PageTables: {
         readableName: "Page Table Memory",
         description: "Memory used by page tables for virtual to physical address translation.",
         desired: "moderate",
       },
-      mapped: {
+      Mapped: {
         readableName: "Mapped Memory",
         description: "Memory pages mapped into process address spaces for files and shared libraries.",
         desired: "moderate",
       },
-      hugepages_free: {
+      HugePages_Free: {
         readableName: "Free Huge Pages",
         description: "Number of huge pages currently available for allocation.",
         desired: "higher",

@@ -4,11 +4,9 @@ use crate::data::{CollectData, CollectorParams, Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
 use chrono::prelude::*;
-use log::trace;
-use procfs::Meminfo;
+use indexmap::IndexMap;
+use log::{error, trace};
 use serde::{Deserialize, Serialize};
-use strum::IntoEnumIterator;
-use strum_macros::{Display, EnumIter};
 
 /// Gather Meminfo raw data.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -51,126 +49,45 @@ impl MeminfoData {
     }
 }
 
-#[derive(EnumIter, Display, Clone, Copy, Eq, Hash, PartialEq)]
-#[strum(serialize_all = "snake_case")]
-pub enum MeminfoType {
-    MemTotal,
-    MemFree,
-    MemAvailable,
-    Buffers,
-    Cached,
-    SwapCached,
-    Active,
-    Inactive,
-    ActiveAnon,
-    InactiveAnon,
-    ActiveFile,
-    InactiveFile,
-    Unevictable,
-    Mlocked,
-    MmapCopy,
-    SwapTotal,
-    SwapFree,
-    Dirty,
-    Writeback,
-    AnonPages,
-    Mapped,
-    Shmem,
-    KReclaimable,
-    Slab,
-    SReclaimable,
-    SUnreclaim,
-    KernelStack,
-    PageTables,
-    Quicklists,
-    NfsUnstable,
-    Bounce,
-    WritebackTmp,
-    CommitLimit,
-    CommittedAs,
-    VmallocTotal,
-    VmallocUsed,
-    VmallocChunk,
-    PerCpu,
-    HardwareCorrupted,
-    AnonHugepages,
-    ShmemHugepages,
-    ShmemPmdMapped,
-    FilePmdMapped,
-    FileHugePages,
-    CmaTotal,
-    CmaFree,
-    HugepagesTotal,
-    HugepagesFree,
-    HugepagesRsvd,
-    HugepagesSurp,
-    Hugepagesize,
-    Hugetlb,
-    DirectMap4k,
-    DirectMap4M,
-    DirectMap2M,
-    DirectMap1G,
-}
+/// Help function to parse a raw /proc/meminfo data into an IndexMap, where the
+/// insertion order is maintained and can be used to create metric name ordering
+fn parse_meminfo(raw_data: &String) -> IndexMap<String, u64> {
+    let mut meminfo_map: IndexMap<String, u64> = IndexMap::new();
 
-fn get_meminfo_data(meminfo_type: MeminfoType, meminfo: &Meminfo) -> Option<u64> {
-    match meminfo_type {
-        MeminfoType::MemTotal => Some(meminfo.mem_total),
-        MeminfoType::MemFree => Some(meminfo.mem_free),
-        MeminfoType::MemAvailable => meminfo.mem_available,
-        MeminfoType::Buffers => Some(meminfo.buffers),
-        MeminfoType::Cached => Some(meminfo.cached),
-        MeminfoType::SwapCached => Some(meminfo.swap_cached),
-        MeminfoType::Active => Some(meminfo.active),
-        MeminfoType::Inactive => Some(meminfo.inactive),
-        MeminfoType::ActiveAnon => meminfo.active_anon,
-        MeminfoType::InactiveAnon => meminfo.inactive_anon,
-        MeminfoType::ActiveFile => meminfo.active_file,
-        MeminfoType::InactiveFile => meminfo.inactive_file,
-        MeminfoType::Unevictable => meminfo.unevictable,
-        MeminfoType::Mlocked => meminfo.mlocked,
-        MeminfoType::MmapCopy => meminfo.mmap_copy,
-        MeminfoType::SwapTotal => Some(meminfo.swap_total),
-        MeminfoType::SwapFree => Some(meminfo.swap_free),
-        MeminfoType::Dirty => Some(meminfo.dirty),
-        MeminfoType::Writeback => Some(meminfo.writeback),
-        MeminfoType::AnonPages => meminfo.anon_pages,
-        MeminfoType::Mapped => Some(meminfo.mapped),
-        MeminfoType::Shmem => meminfo.shmem,
-        MeminfoType::KReclaimable => meminfo.k_reclaimable,
-        MeminfoType::Slab => Some(meminfo.slab),
-        MeminfoType::SReclaimable => meminfo.s_reclaimable,
-        MeminfoType::SUnreclaim => meminfo.s_unreclaim,
-        MeminfoType::KernelStack => meminfo.kernel_stack,
-        MeminfoType::PageTables => meminfo.page_tables,
-        MeminfoType::Quicklists => meminfo.quicklists,
-        MeminfoType::NfsUnstable => meminfo.nfs_unstable,
-        MeminfoType::Bounce => meminfo.bounce,
-        MeminfoType::WritebackTmp => meminfo.writeback_tmp,
-        MeminfoType::CommitLimit => meminfo.commit_limit,
-        MeminfoType::CommittedAs => Some(meminfo.committed_as),
-        MeminfoType::VmallocTotal => Some(meminfo.vmalloc_total),
-        MeminfoType::VmallocUsed => Some(meminfo.vmalloc_used),
-        MeminfoType::VmallocChunk => Some(meminfo.vmalloc_chunk),
-        MeminfoType::PerCpu => meminfo.per_cpu,
-        MeminfoType::HardwareCorrupted => meminfo.hardware_corrupted,
-        MeminfoType::AnonHugepages => meminfo.anon_hugepages,
-        MeminfoType::ShmemHugepages => meminfo.shmem_hugepages,
-        MeminfoType::ShmemPmdMapped => meminfo.shmem_pmd_mapped,
-        MeminfoType::FilePmdMapped => meminfo.file_pmd_mapped,
-        MeminfoType::FileHugePages => meminfo.file_huge_pages,
-        MeminfoType::CmaTotal => meminfo.cma_total,
-        MeminfoType::CmaFree => meminfo.cma_free,
-        MeminfoType::HugepagesTotal => meminfo.hugepages_total,
-        MeminfoType::HugepagesFree => meminfo.hugepages_free,
-        MeminfoType::HugepagesRsvd => meminfo.hugepages_rsvd,
-        MeminfoType::HugepagesSurp => meminfo.hugepages_surp,
-        MeminfoType::Hugepagesize => meminfo.hugepagesize,
-        MeminfoType::Hugetlb => meminfo.hugetlb,
-        MeminfoType::DirectMap4k => meminfo.direct_map_4k,
-        MeminfoType::DirectMap4M => meminfo.direct_map_4M,
-        MeminfoType::DirectMap2M => meminfo.direct_map_2M,
-        MeminfoType::DirectMap1G => meminfo.direct_map_1G,
+    for line in raw_data.lines() {
+        if line.is_empty() {
+            continue;
+        }
+        let split: Vec<&str> = line.split_whitespace().collect();
+
+        if split.len() < 2 {
+            error!("Unexpected raw data format: {}", line);
+            continue;
+        }
+
+        // the last character is a colon
+        let metric_name = split[0][..split[0].len() - 1].to_string();
+
+        let mut value: u64 = match split[1].parse() {
+            Ok(value) => value,
+            Err(_) => {
+                error!("Unexpected metric value in raw data: {}", line);
+                continue;
+            }
+        };
+        let unit = split.get(2).copied().unwrap_or("");
+
+        value = match unit {
+            "KiB" | "kiB" | "kB" | "KB" => value * 1024,
+            "MiB" | "miB" | "MB" | "mB" => value * 1024 * 1024,
+            "GiB" | "giB" | "GB" | "gB" => value * 1024 * 1024 * 1024,
+            _ => value,
+        };
+
+        meminfo_map.insert(metric_name, value);
     }
+
+    meminfo_map
 }
 
 impl ProcessData for MeminfoData {
@@ -184,6 +101,9 @@ impl ProcessData for MeminfoData {
         // initial time used to compute time diff for every series data point
         let mut time_zero: Option<TimeEnum> = None;
 
+        // The list of metric names to indicate their ordering
+        let mut metric_name_order: Vec<String> = Vec::new();
+
         for buffer in raw_data {
             let raw_value = match buffer {
                 Data::MeminfoDataRaw(ref value) => value,
@@ -195,17 +115,19 @@ impl ProcessData for MeminfoData {
                 TimeEnum::DateTime(_) => panic!("Unexpected TimeEnum diff"),
             };
 
-            let meminfo = Meminfo::from_reader(raw_value.data.as_bytes())?;
+            let meminfo = parse_meminfo(&raw_value.data);
 
-            for meminfo_type in MeminfoType::iter() {
-                let meminfo_data = match get_meminfo_data(meminfo_type, &meminfo) {
-                    Some(meminfo_data) => meminfo_data,
-                    None => continue,
-                } as f64;
+            // Only use the metric names available in the first data to decide ordering.
+            // In rare cases (if possible) where other metrics appear later, they'll be
+            // placed at last
+            if metric_name_order.is_empty() {
+                metric_name_order = meminfo.keys().cloned().collect();
+            }
 
+            for (metric_name, value) in meminfo {
                 let meminfo_metric = time_series_data
                     .metrics
-                    .entry(meminfo_type.to_string())
+                    .entry(metric_name)
                     .or_insert_with_key(|meminfo_metric_name| {
                         let mut _mem_info_metric =
                             TimeSeriesMetric::new(meminfo_metric_name.clone());
@@ -214,7 +136,7 @@ impl ProcessData for MeminfoData {
                     });
                 let meminfo_series = &mut meminfo_metric.series[0];
                 meminfo_series.time_diff.push(time_diff);
-                meminfo_series.values.push(meminfo_data);
+                meminfo_series.values.push(value as f64);
             }
         }
 
@@ -227,9 +149,16 @@ impl ProcessData for MeminfoData {
             );
             meminfo_metric.stats = metric_stats;
         }
-        time_series_data.sorted_metric_names = MeminfoType::iter()
-            .map(|meminfo_type| meminfo_type.to_string())
-            .collect();
+
+        let mut sorted_metric_names: Vec<String> =
+            time_series_data.metrics.keys().cloned().collect();
+        sorted_metric_names.sort_by_key(|metric_name| {
+            metric_name_order
+                .iter()
+                .position(|ordered_name| ordered_name == metric_name)
+                .unwrap_or(metric_name_order.len())
+        });
+        time_series_data.sorted_metric_names = sorted_metric_names;
 
         Ok(AperfData::TimeSeries(time_series_data))
     }
