@@ -184,8 +184,8 @@ impl ProcessData for Processes {
         // If the raw data is empty default ticks per second to 1, in which case it should never
         // be used to compute any series values
         let ticks_per_second = ticks_per_second_option.unwrap_or_else(|| 1.0);
-        // Track totals for filtering top processes
-        let mut process_totals_map: HashMap<ProcessKey, HashMap<String, f64>> = HashMap::new();
+        // Track total cpu time for filtering top processes
+        let mut process_cpu_time_map: HashMap<String, f64> = HashMap::new();
 
         // Convert to useful data from stats and calculate total time
         for (process_key, process_map) in per_field_per_process_series.iter_mut() {
@@ -215,12 +215,13 @@ impl ProcessData for Processes {
                         }
                     };
 
-                    // Accumulate totals for all ProcessKey types
-                    *process_totals_map
-                        .entry(*process_key)
-                        .or_insert_with(HashMap::new)
-                        .entry(process_pid_name.clone())
-                        .or_insert(0.0) += stat;
+                    if process_key == &ProcessKey::UserSpaceTime
+                        || process_key == &ProcessKey::KernelSpaceTime
+                    {
+                        *process_cpu_time_map
+                            .entry(process_pid_name.clone())
+                            .or_insert(0.0) += stat;
+                    }
 
                     series.values[i] = stat;
                     prev_value = current_value;
@@ -229,22 +230,19 @@ impl ProcessData for Processes {
             }
         }
 
-        // Add top processes to time_series_data
-        for (process_key, process_map) in per_field_per_process_series {
-            // Get top 16 processes for this ProcessKey
-            let top_processes: Vec<String> =
-                if let Some(totals) = process_totals_map.get(&process_key) {
-                    let mut ranking: Vec<(String, f64)> =
-                        totals.iter().map(|(k, v)| (k.clone(), *v)).collect();
-                    ranking.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
-                    ranking.into_iter().take(16).map(|(name, _)| name).collect()
-                } else {
-                    Vec::new()
-                };
+        let mut ranking: Vec<(String, f64)> = process_cpu_time_map
+            .iter()
+            .map(|(k, v)| (k.clone(), *v))
+            .collect();
+        ranking.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+        let top_cpu_time_processes: Vec<String> =
+            ranking.into_iter().take(16).map(|(name, _)| name).collect();
 
+        // Add top processes for each metric to time_series_data
+        for (process_key, process_map) in per_field_per_process_series {
             let mut series_vec = Vec::new();
 
-            for process_name in &top_processes {
+            for process_name in &top_cpu_time_processes {
                 if let Some(series) = process_map.get(process_name) {
                     series_vec.push(series.clone());
                 }
