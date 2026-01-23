@@ -14,7 +14,6 @@ pub struct TimeSeriesDataPointThresholdRule {
     pub threshold: f64,
     pub score: f64,
     pub message: &'static str,
-    pub reference: &'static str,
 }
 
 macro_rules! time_series_data_point_threshold {
@@ -25,7 +24,6 @@ macro_rules! time_series_data_point_threshold {
         threshold: $threshold:literal,
         score: $score:expr,
         message: $message:literal,
-        reference: $reference:literal,
     } => {
         AnalyticalRule::TimeSeriesDataPointThresholdRule(
             TimeSeriesDataPointThresholdRule{
@@ -35,27 +33,6 @@ macro_rules! time_series_data_point_threshold {
                 threshold: $threshold,
                 score: $score.as_f64(),
                 message: $message,
-                reference: $reference,
-            }
-        )
-    };
-    {
-        name: $rule_name:literal,
-        metric: $metric_name:literal,
-        comparator: $comparator:path,
-        threshold: $threshold:literal,
-        score: $score:expr,
-        message: $message:literal,
-    } => {
-        AnalyticalRule::TimeSeriesDataPointThresholdRule(
-            TimeSeriesDataPointThresholdRule{
-                rule_name: $rule_name,
-                metric_name: $metric_name,
-                comparator: $comparator,
-                threshold: $threshold,
-                score: $score.as_f64(),
-                message: $message,
-                reference: "",
             }
         )
     };
@@ -125,7 +102,6 @@ impl Analyze for TimeSeriesDataPointThresholdRule {
                         finding_score,
                         finding_description,
                         self.message.to_string(),
-                        self.reference.to_string(),
                     ),
                 );
             }

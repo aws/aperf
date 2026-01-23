@@ -6,7 +6,8 @@
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "plotly.js": "^2.33.0",
-    "react-plotly.js": "^2.6.0"
+    "react-plotly.js": "^2.6.0",
+    "react-markdown": "^10.1.0"
   },
   "devDependencies": {
     "@types/react": "^19.1.13",

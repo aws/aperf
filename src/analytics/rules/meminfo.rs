@@ -26,7 +26,6 @@ impl AnalyzeData for MeminfoData {
                 delta_ratio: -0.1,
                 score: Score::Poor,
                 message: "The system is under a higher memory pressure (if the total memory is consistent between runs).",
-                reference: "https://aws.github.io/graviton/perfrunbook/optimization_recommendation.html#optimizing-for-high-tlb-miss-rates",
             ),
         ]
     }

@@ -10,7 +10,6 @@ pub struct KeyValueKeyExpectedRule {
     pub expected_value: &'static str,
     pub score: f64,
     pub message: &'static str,
-    pub reference: &'static str,
 }
 
 macro_rules! key_value_key_expected {
@@ -20,7 +19,6 @@ macro_rules! key_value_key_expected {
         expected_value: $expected_value:literal,
         score: $score:expr,
         message: $message:literal,
-        reference: $reference:literal,
     } => {
         AnalyticalRule::KeyValueKeyExpectedRule(
             KeyValueKeyExpectedRule{
@@ -29,25 +27,6 @@ macro_rules! key_value_key_expected {
                 expected_value: $expected_value,
                 score: $score.as_f64(),
                 message: $message,
-                reference: $reference,
-            }
-        )
-    };
-    {
-        name: $rule_name:literal,
-        key: $key:literal,
-        expected_value: $expected_value:literal,
-        score: $score:expr,
-        message: $message:literal,
-    } => {
-        AnalyticalRule::KeyValueKeyExpectedRule(
-            KeyValueKeyExpectedRule{
-                rule_name: $rule_name,
-                key: $key,
-                expected_value: $expected_value,
-                score: $score.as_f64(),
-                message: $message,
-                reference: "",
             }
         )
     };
@@ -90,7 +69,6 @@ impl Analyze for KeyValueKeyExpectedRule {
                                 self.score,
                                 finding_description,
                                 self.message.to_string(),
-                                self.reference.to_string(),
                             ),
                         );
                     }
@@ -111,7 +89,6 @@ impl Analyze for KeyValueKeyExpectedRule {
                         self.score,
                         finding_description,
                         self.message.to_string(),
-                        self.reference.to_string(),
                     ),
                 );
             }

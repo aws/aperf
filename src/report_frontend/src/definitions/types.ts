@@ -95,7 +95,6 @@ export interface AnalyticalFinding {
   readonly score: number;
   readonly description: string;
   readonly message: string;
-  readonly reference: string;
 }
 
 export interface DataPageProps {

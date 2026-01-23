@@ -1,4 +1,17 @@
 import { DataType } from "./types";
+import {
+  CPU_BACKEND_STALLS_INVESTIGATION,
+  CPU_FRONTEND_STALLS_INVESTIGATION,
+  CPU_UTILIZATION_OPTIMIZATION,
+  DATA_FOOTPRINT_OPTIMIZATION,
+  INSTRUCTION_FOOTPRINT_OPTIMIZATION,
+  IOWAIT_TIME_OPTIMIZATION,
+  LOW_IPC_INVESTIGATION,
+  LSE_OPTIMIZATION,
+  MEMORY_USAGE_INVESTIGATION,
+  NETWORK_USAGE_INVESTIGATION,
+  TLB_MISS_OPTIMIZATION,
+} from "./optimization-guides";
 
 type DesiredValue = "higher" | "lower" | "moderate" | "fixed" | "depends";
 
@@ -41,6 +54,11 @@ interface DataDescription {
        */
       readonly desired?: DesiredValue;
       /**
+       * Optimization guides in markdown source - all guides will be concatenated with an empty line. Look for
+       * the appropriate optimization guides in optimization-guides.ts
+       */
+      readonly optimization?: string[];
+      /**
        * The list of helpful links to be shown in the help panel (extends the data type's default helpful links)
        */
       readonly helpfulLinks?: string[];
@@ -71,22 +89,30 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
     summary:
       "CPU utilization metrics measure the percentage of CPU time spent in various CPU state. The data were collected and computed from the system pseudo-file /proc/stat. Every metric graph shows the percentage of time spent in the corresponding state for each CPU, as well as the aggregate of all CPUs. Note that since the metric values were computed using the delta between two snapshots, the first value is always zero. The statistics of a metric graph accounts for its aggregate series.",
     defaultUnit: "Utilization (%)",
-    defaultHelpfulLinks: ["https://man7.org/linux/man-pages/man5/proc_stat.5.html"],
+    defaultHelpfulLinks: [
+      "https://aws.github.io/graviton/perfrunbook/system-load-and-compute-headroom.html",
+      "https://aws.github.io/graviton/perfrunbook/debug_system_perf.html#check-cpu-usage",
+      "https://man7.org/linux/man-pages/man5/proc_stat.5.html",
+    ],
     fieldDescriptions: {
       aggregate: {
         readableName: "Total CPU Utilization",
-        description: "Percentage of CPU time spent on all activities (across all CPUs for each type).",
+        description:
+          "Percentage of CPU time spent on all activities (across all CPUs for each type). The aggregate series represents the total CPU utilization. Note that the performance of Graviton instances increases near-linearly with CPU utilization.",
         desired: "higher",
+        optimization: [CPU_UTILIZATION_OPTIMIZATION],
       },
       idle: {
         readableName: "CPU Idle Time",
         description: "Percentage of CPU time spent idle.",
         desired: "lower",
+        optimization: [CPU_UTILIZATION_OPTIMIZATION],
       },
       iowait: {
         readableName: "CPU I/O Wait Time",
         description: "Percentage of CPU time spent waiting for I/O operations to complete.",
         desired: "lower",
+        optimization: [IOWAIT_TIME_OPTIMIZATION],
       },
       irq: {
         readableName: "Hardware Interrupt Time",
@@ -117,6 +143,7 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
         readableName: "User CPU Time",
         description: "Percentage of CPU time spent in user mode.",
         desired: "higher",
+        optimization: [CPU_UTILIZATION_OPTIMIZATION],
       },
     },
   },
@@ -169,8 +196,9 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       "data-tlb-mpki": {
         readableName: "Data TLB Misses per Thousand Instructions",
         description:
-          "Translation Lookaside Buffer misses for data accesses per thousand instructions, indicating additional latency required for memory operations.",
+          "Translation Lookaside Buffer (TLB) misses for data accesses per thousand instructions, indicating how often the CPU has to perform extra stalls to translate a virtual address into physical address before issuing a load/store to the memory system.",
         desired: "lower",
+        optimization: [TLB_MISS_OPTIMIZATION],
         helpfulLinks: [
           "https://developer.arm.com/documentation/109530/0100/Metrics-by-metric-group-in-Neoverse-N3/DTLB-Effectiveness-metrics-for-Neoverse-N3?lang=en#md544-dtlb_effectiveness_mg__l1d_tlb_mpki_m_DTLB_Effectiveness",
           "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#drill-down-back-end-stalls",
@@ -179,8 +207,9 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       "data-tlb-tw-pki": {
         readableName: "Data TLB Table Walk per Thousand Instructions",
         description:
-          "Translation Lookaside Buffer table walks for data accesses per thousand instructions. It is triggered upon a cache miss in the data TLB to translate virtual addresses in a load/store instruction into physical ones, and multiple traversals in the OS-build page table were required to find the correct physical address. It can lead to much higher latency for some memory accesses.",
+          "Translation Lookaside Buffer (TLB) table walks for data accesses per thousand instructions. It is triggered upon a cache miss in the data TLB to translate virtual addresses in a load/store instruction into physical ones, and multiple traversals in the OS-build page table were required to find the correct physical address. It can lead to much higher latency for some memory accesses.",
         desired: "lower",
+        optimization: [TLB_MISS_OPTIMIZATION],
         helpfulLinks: [
           "https://developer.arm.com/documentation/109530/0100/Metrics-by-metric-group-in-Neoverse-N3/MPKI-metrics-for-Neoverse-N3?lang=en#md407-mpki_mg__dtlb_mpki_m_MPKI",
           "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#drill-down-back-end-stalls",
@@ -191,6 +220,7 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
         description:
           "Level 3 cache misses per thousand instructions executed, indicating how often the CPU has to access DRAM. A higher number means more DRAM bandwidth will be consumed.",
         desired: "lower",
+        optimization: [DATA_FOOTPRINT_OPTIMIZATION],
         helpfulLinks: [
           "https://developer.arm.com/documentation/109530/0100/Metrics-by-metric-group-in-Neoverse-N3/MPKI-metrics-for-Neoverse-N3?lang=en#md407-mpki_mg__ll_cache_read_mpki_m_MPKI",
           "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html?highlight=l3-mpki#drill-down-back-end-stalls",
@@ -201,6 +231,7 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
         description:
           "Number of branch prediction misses per thousand instructions indicating CPU pipeline efficiency and code predictability.",
         desired: "lower",
+        optimization: [INSTRUCTION_FOOTPRINT_OPTIMIZATION],
         helpfulLinks: [
           "https://developer.arm.com/documentation/109530/0100/Metrics-by-metric-group-in-Neoverse-N3/MPKI-metrics-for-Neoverse-N3?lang=en#md407-mpki_mg__branch_mpki_m_MPKI",
           "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#drill-down-front-end-stalls",
@@ -209,8 +240,9 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       "inst-tlb-tw-pki": {
         readableName: "Instruction TLB Table Walk per Thousand Instructions",
         description:
-          "Translation Lookaside Buffer table walks for instruction fetches per thousand instructions. It is triggered upon a cache miss in the instruction TLB to translate virtual instruction addresses into physical ones, and multiple traversals in the OS-build page table were required to find the correct physical address. It indicates code size issues and poor code locality.",
+          "Translation Lookaside Buffer (TLB) table walks for instruction fetches per thousand instructions. It is triggered upon a cache miss in the instruction TLB to translate virtual instruction addresses into physical ones, and multiple traversals in the OS-built page table were required to find the correct physical address. It indicates code size issues and poor code locality.",
         desired: "lower",
+        optimization: [INSTRUCTION_FOOTPRINT_OPTIMIZATION],
         helpfulLinks: [
           "https://developer.arm.com/documentation/109530/0100/Metrics-by-metric-group-in-Neoverse-N3/MPKI-metrics-for-Neoverse-N3?lang=en#md407-mpki_mg__itlb_mpki_m_MPKI",
           "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#drill-down-front-end-stalls",
@@ -219,8 +251,9 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       "inst-tlb-mpki": {
         readableName: "Instruction TLB Misses per Thousand Instructions",
         description:
-          "Translation Lookaside Buffer misses for code instructions per thousand instructions. A large value indicates poor code locality.",
+          "Translation Lookaside Buffer (TLB) misses for code instructions per thousand instructions. When the instruction footprint is too large, the TLB is filled, and the CPU needs to query the OS-built page table in memory to translate the virtual instruction addresses to physical ones.",
         desired: "lower",
+        optimization: [INSTRUCTION_FOOTPRINT_OPTIMIZATION],
         helpfulLinks: [
           "https://developer.arm.com/documentation/109530/0100/Metrics-by-metric-group-in-Neoverse-N3/ITLB-Effectiveness-metrics-for-Neoverse-N3?lang=en#md549-itlb_effectiveness_mg__l1i_tlb_mpki_m_ITLB_Effectiveness",
           "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#drill-down-front-end-stalls",
@@ -229,8 +262,9 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       "stall-frontend-pkc": {
         readableName: "Frontend Stall per Thousand Cycles",
         description:
-          "Cycle count when frontend could not send any micro-operations to the rename stage because of frontend resource stalls caused by fetch memory latency or branch prediction flow stalls per thousand cycles.",
+          "Cycle count that were stalled due to resource constraints in the frontend unit of the processor per thousand cycles. CPU frontend is responsible for fetching, predicting, and decoding instructions into micro-operations, before they are sent to the backend for execution.",
         desired: "lower",
+        optimization: [CPU_FRONTEND_STALLS_INVESTIGATION],
         helpfulLinks: [
           "https://developer.arm.com/documentation/109530/0100/Metrics-by-metric-group-in-Neoverse-N3/Cycle-Accounting-metrics-for-Neoverse-N3?lang=en#md523-cycle_accounting_mg__frontend_stalled_cycles_m_Cycle_Accounting",
           "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#top-down-method-to-debug-hardware-performance",
@@ -239,8 +273,9 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       "data-l1-mpki": {
         readableName: "Data L1 Cache Misses per Thousand Instructions",
         description:
-          "Level 1 data cache misses per thousand instructions indicating data access patterns and cache efficiency for frequently accessed data.",
+          "Level 1 data cache misses per thousand instructions, indicating data access patterns and cache efficiency for frequently accessed data.",
         desired: "lower",
+        optimization: [DATA_FOOTPRINT_OPTIMIZATION],
         helpfulLinks: [
           "https://developer.arm.com/documentation/109530/0100/Metrics-by-metric-group-in-Neoverse-N3/L1D-Cache-Effectiveness-metrics-for-Neoverse-N3?lang=en#md553-l1d_cache_effectiveness_mg__l1d_cache_mpki_m_L1D_Cache_Effectiveness",
           "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#drill-down-back-end-stalls",
@@ -251,18 +286,21 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
         description:
           "Translation Lookaside Buffer table walks for data read operations per thousand instructions. It is triggered upon a cache miss in the data TLB to translate virtual addresses in a load instruction into physical ones, and multiple traversals in the OS-build page table were required to find the correct physical address. Higher values indicate memory management overhead for read accesses.",
         desired: "lower",
+        optimization: [TLB_MISS_OPTIMIZATION],
       },
       "data-st-tlb-tw-pki": {
         readableName: "Data Store TLB Table Walk per Thousand Instructions",
         description:
           "Translation Lookaside Buffer table walks for data store operations per thousand instructions. It is triggered upon a cache miss in the data TLB to translate virtual addresses in a store instruction into physical ones, and multiple traversals in the OS-build page table were required to find the correct physical address. Higher values indicate memory management overhead for write accesses.",
         desired: "lower",
+        optimization: [TLB_MISS_OPTIMIZATION],
       },
       "inst-l1-mpki": {
         readableName: "Instruction L1 Cache Misses per Thousand Instructions",
         description:
           "Level 1 instruction cache misses per thousand instructions indicating instruction fetch efficiency and code locality patterns.",
         desired: "lower",
+        optimization: [INSTRUCTION_FOOTPRINT_OPTIMIZATION],
         helpfulLinks: [
           "https://developer.arm.com/documentation/109530/0100/Metrics-by-metric-group-in-Neoverse-N3/L1I-Cache-Effectiveness-metrics-for-Neoverse-N3?lang=en#md558-l1i_cache_effectiveness_mg__l1i_cache_mpki_m_L1I_Cache_Effectiveness",
           "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#drill-down-front-end-stalls",
@@ -273,6 +311,7 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
         description:
           "Average number of instructions executed per CPU clock cycle indicating overall CPU utilization efficiency and performance.",
         desired: "higher",
+        optimization: [LOW_IPC_INVESTIGATION],
         helpfulLinks: [
           "https://developer.arm.com/documentation/109530/0100/Metrics-by-metric-group-in-Neoverse-N3/General-metrics-for-Neoverse-N3?lang=en#md420-general_mg__ipc_m_General",
           "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#top-down-method-to-debug-hardware-performance",
@@ -283,11 +322,13 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
         description:
           "Translation Lookaside Buffer misses for data read operations per thousand instructions indicating memory access patterns for read operations.",
         desired: "lower",
+        optimization: [TLB_MISS_OPTIMIZATION],
       },
       "l2-mpki": {
         readableName: "L2 Cache Misses per Thousand Instructions",
         description: "Number of level 2 cache accesses missed per thousand instructions executed.",
         desired: "lower",
+        optimization: [DATA_FOOTPRINT_OPTIMIZATION],
         helpfulLinks: [
           "https://developer.arm.com/documentation/109530/0100/Metrics-by-metric-group-in-Neoverse-N3/L2-Cache-Effectiveness-metrics-for-Neoverse-N3?lang=en#md550-l2_cache_effectiveness_mg__l2_cache_mpki_m_L2_Cache_Effectiveness",
           "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#drill-down-back-end-stalls",
@@ -298,12 +339,14 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
         description:
           "Number of Translation Lookaside Buffer misses for data store operations per thousand instructions.",
         desired: "lower",
+        optimization: [TLB_MISS_OPTIMIZATION],
       },
       "stall-backend-pkc": {
         readableName: "Backend Stall per Thousand Cycles",
         description:
-          "CPU backend pipeline stalls per thousand cycles caused by execution unit bottlenecks and resource constraints.",
+          "Cycle count that were stalled due to resource constraints in the backend unit of the processor per thousand cycles. CPU backend is responsible for executing the micro-operations decoded from instructions by the frontend, and producing memory side effects.",
         desired: "lower",
+        optimization: [CPU_BACKEND_STALLS_INVESTIGATION],
         helpfulLinks: [
           "https://developer.arm.com/documentation/109530/0100/Metrics-by-metric-group-in-Neoverse-N3/Cycle-Accounting-metrics-for-Neoverse-N3?lang=en#md523-cycle_accounting_mg__backend_stalled_cycles_m_Cycle_Accounting",
           "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#top-down-method-to-debug-hardware-performance",
@@ -312,15 +355,20 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       "code-sparsity": {
         readableName: "Code Sparsity",
         description:
-          "Code sparsity is a measure of how compact the instruction code is packed and how closely related code is placed. Lower sparsity helps branch prediction and the cache subsystem. It can be improved by modifying the compiler options.",
+          "Code sparsity is a measure of how compact the instruction code is packed and how closely related code is placed. Lower sparsity helps branch prediction and the cache subsystem.",
         desired: "lower",
-        helpfulLinks: ["https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#drill-down-front-end-stalls"],
+        optimization: [INSTRUCTION_FOOTPRINT_OPTIMIZATION],
+        helpfulLinks: [
+          "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#drill-down-front-end-stalls",
+          "https://aws.github.io/graviton/perfrunbook/optimization_recommendation.html#optimizing-for-large-instruction-footprint",
+        ],
       },
       "strex-spec-pki": {
         readableName: "Store Exclusive per Thousand Instructions",
         description:
           "The number of store exclusive operations that have been speculatively executed per thousand instructions. STREX is an old-style atomic instruction and part of the load-store pair. It is less efficient than the newer LSE instructions, which perform atomic operations with a single instruction and hardware managed atomicity. For workloads that involve heavy lock contentions, switching to LSE instructions could lead to significant performance improvement.",
         desired: "lower",
+        optimization: [LSE_OPTIMIZATION],
         helpfulLinks: [
           "https://developer.arm.com/documentation/109528/0200/PMU-events-by-functional-group-in-Neoverse-V2/Spec-Operation--SPEC-OPERATION--events-for-Neoverse-V2?lang=en#md761-spec_operation_fg__STREX_SPEC_e",
           "https://aws.github.io/graviton/c-c++.html#large-system-extensions-lse",
@@ -466,6 +514,7 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
         readableName: "Available Memory",
         description: "Estimate of memory available for starting new applications without causing excessive swapping.",
         desired: "higher",
+        optimization: [MEMORY_USAGE_INVESTIGATION],
       },
       SwapCached: {
         readableName: "Swap Cache",
@@ -2565,10 +2614,11 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       },
       "IpExt:InOctets": {
         readableName: "Incoming Octets",
-        description:
-          "Total number of bytes received by the network interface including all protocol headers and payload data.",
+        description: "Total number of bytes received by the network interface at the IP layer.",
         unit: "Bytes",
         desired: "depends",
+        optimization: [NETWORK_USAGE_INVESTIGATION],
+        helpfulLinks: ["https://aws.github.io/graviton/perfrunbook/debug_system_perf.html#check-network-usage"],
       },
       "IpExt:InMcastPkts": {
         readableName: "IP Multicast Packets Received",
@@ -2922,10 +2972,11 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       },
       "IpExt:OutOctets": {
         readableName: "Outgoing Octets",
-        description:
-          "Total number of bytes transmitted by the network interface including all protocol headers and payload data.",
+        description: "Total number of bytes transmitted by the network interface at the IP layer.",
         unit: "Bytes",
         desired: "depends",
+        optimization: [NETWORK_USAGE_INVESTIGATION],
+        helpfulLinks: ["https://aws.github.io/graviton/perfrunbook/debug_system_perf.html#check-network-usage"],
       },
       "TcpExt:TCPFastOpenActiveFail": {
         readableName: "TCP Fast Open Active Fail",
@@ -3245,7 +3296,17 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
     summary:
       'Kernel configs contain configuration options used when the running kernel was compiled. The data were collected from /boot/config* file. Value "y" means the module is compiled directly in the kernel, "not set"/"n" means the module is not compiled in the kernel, and "m" means the module is compiled as a loadable module.',
     defaultHelpfulLinks: ["https://docs.kernel.org/admin-guide/bootconfig.html"],
-    fieldDescriptions: {},
+    fieldDescriptions: {
+      CONFIG_TRANSPARENT_HUGEPAGE: {
+        readableName: "Transparent Hugepage Support",
+        description:
+          "Transparent Hugepages allows the kernel to use huge pages and huge tlb transparently to the applications whenever possible. This feature can improve computing performance to certain applications by speeding up page faults during memory allocation, by reducing the number of tlb misses and by speeding up the pagetable walking.",
+        optimization: [TLB_MISS_OPTIMIZATION],
+        helpfulLinks: [
+          "https://aws.github.io/graviton/perfrunbook/optimization_recommendation.html#optimizing-for-high-tlb-miss-rates",
+        ],
+      },
+    },
   },
   sysctl: {
     readableName: "Sysctl Config",

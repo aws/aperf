@@ -3,7 +3,7 @@ import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import { getFindingTypeIconName, getFindingTypeReadableName } from "../../utils/utils";
 import { OptionDefinition } from "@cloudscape-design/components/internal/components/option/interfaces";
 import { SelectProps } from "@cloudscape-design/components/select/interfaces";
-import { Multiselect } from "@cloudscape-design/components";
+import { Icon, Multiselect } from "@cloudscape-design/components";
 import React from "react";
 import { TIME_SERIES_DATA_TYPES } from "../../definitions/data-config";
 
@@ -59,6 +59,9 @@ export function isFindingTypeExpected(score: number, expectedFindingTypes: Findi
   }
 }
 
+/**
+ * A multi-select that helps filter the findings to be shown
+ */
 export function FindingsFilter(props: {
   options: SelectProps.Options;
   selectedOptions: ReadonlyArray<OptionDefinition>;
@@ -78,5 +81,21 @@ export function FindingsFilter(props: {
         selectAllText: "Select all",
       }}
     />
+  );
+}
+
+/**
+ * General guidance on how to use the findings.
+ */
+export function FindingsDescription() {
+  return (
+    <div style={{ display: "inline" }}>
+      {"Click "}
+      <Icon variant={"disabled"} name={"status-info"} />
+      {" for optimization guides and more information. "}
+      {"Click "}
+      <Icon variant={"disabled"} name={"zoom-in"} />
+      {" to preview the metric graph."}
+    </div>
   );
 }

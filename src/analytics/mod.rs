@@ -113,23 +113,15 @@ pub struct AnalyticalFinding {
     score: f64,
     description: String,
     message: String,
-    reference: String,
 }
 
 impl AnalyticalFinding {
-    pub fn new(
-        rule_name: String,
-        score: f64,
-        description: String,
-        message: String,
-        reference: String,
-    ) -> Self {
+    pub fn new(rule_name: String, score: f64, description: String, message: String) -> Self {
         AnalyticalFinding {
             rule_name,
             score,
             description,
             message,
-            reference,
         }
     }
 }
