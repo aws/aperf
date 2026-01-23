@@ -5,14 +5,13 @@ import {
   SpaceBetween,
   Container,
   ColumnLayout,
-  Link,
   Box,
   TextFilter,
   Pagination,
   TextFilterProps,
   PaginationProps,
 } from "@cloudscape-design/components";
-import { PER_DATA_ANALYTICAL_FINDINGS, RUNS } from "../../definitions/data-config";
+import { PER_DATA_ANALYTICAL_FINDINGS, RUNS, TIME_SERIES_DATA_TYPES } from "../../definitions/data-config";
 import { useReportState } from "../ReportStateProvider";
 import { DataLink, SamePageDataLink } from "../misc/DataNavigation";
 import { getFindingTypeIconName } from "../../utils/utils";
@@ -23,13 +22,14 @@ import {
   ANALYTICAL_FINDINGS_DATA_TYPE_OPTIONS,
   dataTypesToOptions,
   FINDING_TYPE_OPTIONS,
+  FindingsDescription,
   FindingsFilter,
   findingTypesToOptions,
   isFindingTypeExpected,
 } from "./common";
 import { SelectProps } from "@cloudscape-design/components/select/interfaces";
 import { useCollection } from "@cloudscape-design/collection-hooks";
-import { SingleMetricGraphPopover } from "../data/MetricGraph";
+import { MetricGraphsPopover } from "../data/MetricGraph";
 
 function getFindingColor(score: number): string {
   if (score == 0 || isNaN(score)) {
@@ -103,12 +103,12 @@ function Finding(props: FindingProps) {
           <Box variant={"h4"}>{props.finding.rule_name}</Box>
         </div>
 
-        {props.showDataLink && (
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
-            <ReportHelpPanelIcon dataType={props.dataType} fieldKey={props.dataKey} />
-            <SingleMetricGraphPopover dataType={props.dataType} runName={props.runName} metricName={props.dataKey} />
-          </div>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
+          <ReportHelpPanelIcon dataType={props.dataType} fieldKey={props.dataKey} />
+          {props.showDataLink && TIME_SERIES_DATA_TYPES.includes(props.dataType) && (
+            <MetricGraphsPopover dataType={props.dataType} runName={props.runName} metricName={props.dataKey} />
+          )}
+        </div>
       </div>
 
       <div style={{ display: "inline" }}>
@@ -125,11 +125,6 @@ function Finding(props: FindingProps) {
           </>
         )}
         {props.finding.description} <b>{props.finding.message}</b>{" "}
-        {props.finding.reference && (
-          <Link variant={"info"} external href={props.finding.reference}>
-            Learn more
-          </Link>
-        )}
       </div>
     </div>
   );
@@ -153,7 +148,7 @@ export function MetricAnalyticalFindings(props: TimeSeriesMetricProps) {
   return (
     <SpaceBetween size={"xxxs"}>
       {sortedMetricFindings.map((finding) => (
-        <Finding finding={finding} />
+        <Finding finding={finding} dataType={props.dataType} dataKey={props.metricName} />
       ))}
     </SpaceBetween>
   );
@@ -230,6 +225,7 @@ export function GlobalAnalyticalFindings(props: { runName: string }) {
           variant={"h3"}
           counter={`${filteredItemsCount}`}
           info={<ReportHelpPanelLink dataType={"systeminfo"} fieldKey={"analyticalFinding"} />}
+          description={<FindingsDescription />}
           actions={
             <SpaceBetween direction={"horizontal"} size={"xxs"}>
               <FindingsFilter

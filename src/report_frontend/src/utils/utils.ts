@@ -1,7 +1,7 @@
 import { ALL_DATA_TYPES, DataType, TimeSeriesData, FindingType } from "../definitions/types";
 import { CPU_DATA_TYPES, PROCESSED_DATA } from "../definitions/data-config";
 import { IconProps } from "@cloudscape-design/components/icon/interfaces";
-import {DATA_DESCRIPTIONS} from "../definitions/data-descriptions";
+import { DATA_DESCRIPTIONS } from "../definitions/data-descriptions";
 
 export function extractDataTypeFromFragment(fragment: string): DataType {
   if (!fragment || !fragment.startsWith("#")) {

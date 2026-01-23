@@ -21,6 +21,7 @@ import { useReportState } from "../ReportStateProvider";
 import {
   dataTypesToOptions,
   FINDING_TYPE_OPTIONS,
+  FindingsDescription,
   FindingsFilter,
   findingTypesToOptions,
   isFindingTypeExpected,
@@ -28,7 +29,7 @@ import {
   STATISTICAL_FINDINGS_DATA_TYPE_OPTIONS,
   statsToOptions,
 } from "./common";
-import { SingleMetricGraphPopover } from "../data/MetricGraph";
+import { MetricGraphsPopover } from "../data/MetricGraph";
 
 /**
  * Retrieves the relative statistical findings based on the filters.
@@ -137,7 +138,7 @@ export function GlobalStatisticalFindings(props: { runName: string }) {
       cell: (item) => (
         <div style={{ display: "inline" }}>
           <ReportHelpPanelIcon dataType={item.dataType} fieldKey={item.metricName} />
-          <SingleMetricGraphPopover dataType={item.dataType} runName={item.runName} metricName={item.metricName} />
+          <MetricGraphsPopover dataType={item.dataType} runName={item.runName} metricName={item.metricName} />
         </div>
       ),
       width: 75,
@@ -177,6 +178,7 @@ export function GlobalStatisticalFindings(props: { runName: string }) {
           variant={"h3"}
           info={<ReportHelpPanelLink dataType={"systeminfo"} fieldKey={"statisticalFinding"} />}
           counter={filteredItemsCount.toString()}
+          description={<FindingsDescription />}
           actions={
             <SpaceBetween direction={"horizontal"} size={"xxs"}>
               <FindingsFilter
