@@ -57,7 +57,10 @@ const ReportStateContext = React.createContext<ReportState | undefined>(undefine
  */
 export default function (props: { children: ReactNode }) {
   const [dataComponent, setDataComponent] = React.useState<DataType>("systeminfo");
-  const [numMetricGraphsPerPage, setNumMetricGraphsPerPage] = React.useState(NUM_METRICS_PER_PAGE);
+  const [numMetricGraphsPerPage, setNumMetricGraphsPerPage] = React.useState(() => {
+    const stored = localStorage.getItem("numMetricGraphsPerPage");
+    return stored ? parseInt(stored, 10) : NUM_METRICS_PER_PAGE;
+  });
   const [showHelpPanel, setShowHelpPanel] = React.useState(false);
   const [helpPanelDataType, setHelpPanelDataType] = React.useState<DataType>("systeminfo");
   const [helpPanelFieldKey, setHelpPanelFieldKey] = React.useState<string>("general");
@@ -99,7 +102,10 @@ export default function (props: { children: ReactNode }) {
     dataComponent,
     setDataComponent,
     numMetricGraphsPerPage,
-    setNumMetricGraphsPerPage,
+    setNumMetricGraphsPerPage: (newNumMetricGraphsPerPage: number) => {
+      setNumMetricGraphsPerPage(newNumMetricGraphsPerPage);
+      localStorage.setItem("numMetricGraphsPerPage", newNumMetricGraphsPerPage.toString());
+    },
     showHelpPanel,
     setShowHelpPanel: (newShowHelpPanel) => {
       const curShowHelpPanel = showHelpPanel;
