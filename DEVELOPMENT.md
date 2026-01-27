@@ -3,11 +3,14 @@ This document contains guidelines for making certain systematic changes.
 
 ## Add a New Data Type
 
+> [!WARNING]
+> For all dependencies and implementations that are used for record (data collection) only, use the `#[cfg(target_os = "linux")]` flag to only compile them on Linux.
+
 When APerf needs to collect data from a new source (e.g. another system pseudo file), we need to introduce a new data type. Below are the detailed steps:
 1. Identify the appropriate data format that the new data type belongs to. All data formats are defined in [src/data/data_formats.rs](./src/data/data_formats.rs).
 2. Create a new file `<data_name>.rs` in [src/data](./src/data) - the file name will be the data name and act as a key that APerf uses to refer the data.
 3. In the new data file, define and implement two structs:
-   * A struct that implements the `CollectData` trait defined in [src/data.rs](./src/data.rs). The implementation defines how the data is collected during `aperf record`. The collected raw data should be stored in the struct. The struct is serialized into a corresponding binary file at every interval, unless the data is marked as static, in which case the struct will only be written to file once.
+   * A struct that implements the `CollectData` trait defined in [src/data.rs](./src/data.rs). The implementation defines how the data is collected during `aperf record`. The collected raw data should be stored in the struct. The struct is serialized into a corresponding binary file at every interval, unless the data is marked as static, in which case the struct will only be written to file once. **All related implementations need to be configured to build on Linux only**.
    * A struct that implements the `ProcessData` trait defined in [src/data.rs](./src/data.rs). The implementation defines how the collected raw data are processed into one of the data formats during `aperf report`. APerf deserializes all raw data structs in the binary file, collects them into a vector, and passes it as an argument to the `process_raw_data` function of the trait.
 4. In [src/data.rs](./src/data.rs), 
    * Register the new data file as a module by adding `pub mod <data_name>;` at the top.

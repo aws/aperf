@@ -1,13 +1,16 @@
 use crate::computations::Statistics;
 use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
 use crate::data::utils::{get_aggregate_cpu_series_name, get_cpu_series_name};
-use crate::data::{CollectData, CollectorParams, Data, ProcessData, TimeEnum};
+use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
-use chrono::prelude::*;
-use log::trace;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+#[cfg(target_os = "linux")]
+use {
+    crate::data::{CollectData, CollectorParams},
+    chrono::prelude::*,
+};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct InterruptDataRaw {
@@ -15,6 +18,7 @@ pub struct InterruptDataRaw {
     pub data: String,
 }
 
+#[cfg(target_os = "linux")]
 impl InterruptDataRaw {
     pub fn new() -> Self {
         InterruptDataRaw {
@@ -24,12 +28,12 @@ impl InterruptDataRaw {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl CollectData for InterruptDataRaw {
     fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
         self.data = std::fs::read_to_string("/proc/interrupts")?;
-        trace!("{:#?}", self.data);
         Ok(())
     }
 }
@@ -43,9 +47,6 @@ impl InterruptData {
     }
 }
 
-// TODO: ------------------------------------------------------------------------------------------
-//       Below are the new implementation to process interrupts into uniform data format. Remove
-//       the original for the migration.
 #[derive(Clone)]
 struct Interrupt {
     pub interrupt_name: String,
@@ -256,9 +257,13 @@ impl ProcessData for InterruptData {
 
 #[cfg(test)]
 mod tests {
-    use super::InterruptDataRaw;
-    use crate::data::{CollectData, CollectorParams};
+    #[cfg(target_os = "linux")]
+    use {
+        super::InterruptDataRaw,
+        crate::data::{CollectData, CollectorParams},
+    };
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut id = InterruptDataRaw::new();

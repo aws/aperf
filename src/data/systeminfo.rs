@@ -1,12 +1,16 @@
 use crate::data::data_formats::{AperfData, KeyValueData, KeyValueGroup};
-use crate::data::{CollectData, CollectorParams, Data, ProcessData, TimeEnum};
+use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
 use chrono::prelude::*;
-use log::{trace, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use sysinfo::{System, SystemExt};
+#[cfg(target_os = "linux")]
+use {
+    crate::data::{CollectData, CollectorParams},
+    log::warn,
+    sysinfo::{System, SystemExt},
+};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SystemInfo {
@@ -31,7 +35,10 @@ impl SystemInfo {
             instance_metadata: EC2Metadata::new(),
         }
     }
+}
 
+#[cfg(target_os = "linux")]
+impl SystemInfo {
     fn set_system_name(&mut self, system_name: String) {
         self.system_name = system_name;
     }
@@ -57,6 +64,7 @@ impl SystemInfo {
     }
 }
 
+#[cfg(target_os = "linux")]
 type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -79,6 +87,7 @@ impl EC2Metadata {
         }
     }
 
+    #[cfg(target_os = "linux")]
     async fn get_instance_metadata() -> Result<EC2Metadata, BoxError> {
         use aws_config::imds;
 
@@ -102,6 +111,7 @@ impl EC2Metadata {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl CollectData for SystemInfo {
     fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
         let mut sys = System::new();
@@ -129,8 +139,6 @@ impl CollectData for SystemInfo {
                 self.set_instance_metadata(s);
             }
         };
-
-        trace!("SysInfo:\n{:#?}", self);
 
         Ok(())
     }
@@ -202,9 +210,13 @@ impl ProcessData for SystemInfo {
 
 #[cfg(test)]
 mod tests {
-    use super::SystemInfo;
-    use crate::data::{CollectData, CollectorParams};
+    #[cfg(target_os = "linux")]
+    use {
+        super::SystemInfo,
+        crate::data::{CollectData, CollectorParams},
+    };
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut systeminfo = SystemInfo::new();

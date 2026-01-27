@@ -1,17 +1,20 @@
-use super::{CollectorParams, ProcessData};
 use crate::data::data_formats::{AperfData, KeyValueData, KeyValueGroup};
-use crate::data::{CollectData, Data, TimeEnum};
+use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
-use crate::PDError;
 use anyhow::Result;
 use chrono::prelude::*;
-use log::{debug, trace};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::fs::OpenOptions;
-use std::io::{self, BufRead, BufReader};
-use std::path::Path;
+#[cfg(target_os = "linux")]
+use {
+    crate::data::{CollectData, CollectorParams},
+    crate::PDError,
+    log::debug,
+    std::fs::OpenOptions,
+    std::io::{self, BufRead, BufReader},
+    std::path::Path,
+};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Entry {
@@ -31,6 +34,7 @@ pub struct KernelConfigEntryGroup {
     pub entries: Vec<Entry>,
 }
 
+#[cfg(target_os = "linux")]
 impl KernelConfigEntryGroup {
     fn new() -> Self {
         KernelConfigEntryGroup {
@@ -58,15 +62,18 @@ impl KernelConfig {
         }
     }
 
+    #[cfg(target_os = "linux")]
     fn set_time(&mut self, time: TimeEnum) {
         self.time = time;
     }
 
+    #[cfg(target_os = "linux")]
     fn set_data(&mut self, data: Vec<KernelConfigEntryGroup>) {
         self.kernel_config_data = data;
     }
 }
 
+#[cfg(target_os = "linux")]
 fn get_kernel_config_data() -> Result<Box<dyn BufRead>> {
     /* This is the same as procfs crate. We need access to the commented out CONFIGs and
      * headings in the Config file.
@@ -90,6 +97,7 @@ fn get_kernel_config_data() -> Result<Box<dyn BufRead>> {
     Ok(reader)
 }
 
+#[cfg(target_os = "linux")]
 impl CollectData for KernelConfig {
     fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
         let time_now = Utc::now();
@@ -177,7 +185,6 @@ impl CollectData for KernelConfig {
         }
         self.set_time(TimeEnum::DateTime(time_now));
         self.set_data(kernel_data_processed);
-        trace!("KernelConfig data: {:#?}", self);
         Ok(())
     }
 
@@ -253,9 +260,13 @@ impl ProcessData for KernelConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::KernelConfig;
-    use crate::data::{CollectData, CollectorParams};
+    #[cfg(target_os = "linux")]
+    use {
+        super::KernelConfig,
+        crate::data::{CollectData, CollectorParams},
+    };
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut kernel_config = KernelConfig::new();

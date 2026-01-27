@@ -23,7 +23,7 @@ use crate::analytics::AnalyticalRule;
 use crate::data::data_formats::AperfData;
 use crate::utils::get_data_name_from_type;
 use crate::visualizer::{DataVisualizer, ReportParams};
-use crate::{noop, InitParams, PerformanceData, VisualizationData, APERF_FILE_FORMAT};
+use crate::VisualizationData;
 use anyhow::Result;
 use aperf_runlog::AperfRunlog;
 use aperf_stats::AperfStat;
@@ -36,23 +36,29 @@ use include_directory::{include_directory, Dir};
 use interrupts::{InterruptData, InterruptDataRaw};
 use java_profile::{JavaProfile, JavaProfileRaw};
 use kernel_config::KernelConfig;
-use log::trace;
 use meminfo::{MeminfoData, MeminfoDataRaw};
 use netstat::{Netstat, NetstatRaw};
-use nix::sys::{signal, signal::Signal};
 use numastat::{Numastat, NumastatRaw};
 use perf_profile::{PerfProfile, PerfProfileRaw};
 use perf_stat::{PerfStat, PerfStatRaw};
 use processes::{Processes, ProcessesRaw};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use std::fs::{File, OpenOptions};
 use std::ops::Sub;
-use std::path::PathBuf;
 use sysctl::SysctlData;
 use systeminfo::SystemInfo;
 use vmstat::{Vmstat, VmstatRaw};
 
+#[cfg(target_os = "linux")]
+use {
+    crate::PerformanceData,
+    crate::{noop, InitParams, APERF_FILE_FORMAT},
+    nix::sys::{signal, signal::Signal},
+    std::collections::{HashMap, HashSet},
+    std::fs::{File, OpenOptions},
+    std::path::PathBuf,
+};
+
+#[cfg(target_os = "linux")]
 #[derive(Clone, Debug)]
 pub struct CollectorParams {
     pub collection_time: u64,
@@ -71,6 +77,7 @@ pub struct CollectorParams {
     pub num_to_report: u32,
 }
 
+#[cfg(target_os = "linux")]
 impl CollectorParams {
     fn new() -> Self {
         CollectorParams {
@@ -92,6 +99,7 @@ impl CollectorParams {
     }
 }
 
+#[cfg(target_os = "linux")]
 pub struct DataType {
     pub data: Data,
     pub file_handle: Option<File>,
@@ -103,6 +111,7 @@ pub struct DataType {
     pub collector_params: CollectorParams,
 }
 
+#[cfg(target_os = "linux")]
 impl DataType {
     pub fn new(data: Data, file_name: String, is_static: bool, is_profile_option: bool) -> Self {
         DataType {
@@ -126,7 +135,6 @@ impl DataType {
     }
 
     pub fn init_data_type(&mut self, param: &InitParams) -> Result<()> {
-        trace!("Initializing data type...");
         let name = format!(
             "{}_{}.{}",
             self.file_name, param.time_str, APERF_FILE_FORMAT
@@ -161,32 +169,27 @@ impl DataType {
     }
 
     pub fn prepare_data_collector(&mut self) -> Result<()> {
-        trace!("Preparing data collector...");
         self.data.prepare_data_collector(&self.collector_params)?;
         Ok(())
     }
 
     pub fn collect_data(&mut self) -> Result<()> {
-        trace!("Collecting Data...");
         self.data.collect_data(&self.collector_params)?;
         Ok(())
     }
 
     pub fn write_to_file(&mut self) -> Result<()> {
-        trace!("Writing to file...");
         let file_handle = self.file_handle.as_ref().unwrap();
         bincode::serialize_into(file_handle.try_clone()?, &self.data)?;
         Ok(())
     }
 
     pub fn finish_data_collection(&mut self) -> Result<()> {
-        trace!("Finish data collection...");
         self.data.finish_data_collection(&self.collector_params)?;
         Ok(())
     }
 
     pub fn after_data_collection(&mut self) -> Result<()> {
-        trace!("Running post collection actions...");
         self.data.after_data_collection(&self.collector_params)?;
         Ok(())
     }
@@ -226,10 +229,12 @@ impl Sub for TimeEnum {
 macro_rules! data {
     ( $( $data:ident ),* ) => {
 
+        #[cfg(target_os = "linux")]
         lazy_static! {
             pub static ref DEFAULT_DATA_NAMES: Vec<&'static str> = get_default_data_names();
         }
 
+        #[cfg(target_os = "linux")]
         fn get_default_data_names() -> Vec<&'static str> {
             let mut default_data_names: Vec<&'static str> = Vec::new();
             $(
@@ -253,6 +258,7 @@ macro_rules! data {
             )*
         }
 
+        #[cfg(target_os = "linux")]
         impl Data {
             fn collect_data(&mut self, params: &CollectorParams) -> Result<()> {
                 match self {
@@ -291,6 +297,7 @@ macro_rules! data {
             }
         }
 
+        #[cfg(target_os = "linux")]
         fn add_performance_data(performance_data: &mut PerformanceData, data_name: &str, data: Data, is_static: bool, is_profile_option: bool) {
             let data_type = DataType::new(
                 data,
@@ -301,6 +308,7 @@ macro_rules! data {
             performance_data.add_datatype(data_name.to_string(), data_type);
         }
 
+        #[cfg(target_os = "linux")]
         pub fn add_all_performance_data(performance_data: &mut PerformanceData, data_names_to_collect: HashSet<String>, profile_enabled: bool, java_profile_enabled: bool) {
             $(
                 let data_name = get_data_name_from_type::<$data>();
@@ -423,6 +431,7 @@ report_data!(
     JavaProfile
 );
 
+#[cfg(target_os = "linux")]
 pub trait CollectData {
     fn prepare_data_collector(&mut self, _params: &CollectorParams) -> Result<()> {
         noop!();
@@ -479,13 +488,19 @@ pub trait AnalyzeData {
 
 #[cfg(test)]
 mod tests {
-    use super::cpu_utilization::CpuUtilizationRaw;
-    use super::{CollectorParams, Data, DataType, TimeEnum};
-    use crate::InitParams;
+    use super::TimeEnum;
     use chrono::prelude::*;
-    use std::fs;
-    use std::path::Path;
+    #[cfg(target_os = "linux")]
+    use {
+        super::cpu_utilization::CpuUtilizationRaw,
+        super::CollectorParams,
+        super::{Data, DataType},
+        crate::InitParams,
+        std::fs,
+        std::path::Path,
+    };
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_data_type_init() {
         let mut param = InitParams::new("".to_string());
@@ -514,6 +529,7 @@ mod tests {
         fs::remove_dir_all(dt.dir_name).unwrap();
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_print() {
         let mut param = InitParams::new("".to_string());

@@ -1,16 +1,21 @@
 use crate::computations::Statistics;
 use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
 use crate::data::utils::get_aggregate_cpu_series_name;
-use crate::data::{CollectData, CollectorParams, Data, ProcessData, TimeEnum};
+use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
-use chrono::prelude::*;
-use log::warn;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
-use std::fs;
-use std::path::{Path, PathBuf};
+#[cfg(target_os = "linux")]
+use {
+    crate::data::{CollectData, CollectorParams},
+    chrono::prelude::*,
+    log::warn,
+    std::fs,
+    std::path::{Path, PathBuf},
+};
 
+#[cfg(target_os = "linux")]
 lazy_static! {
     static ref NAME_PATH_MAP: HashMap<String, PathBuf> = {
         let mut name_path_map = HashMap::new();
@@ -52,6 +57,7 @@ pub struct NumastatRaw {
     pub data: String,
 }
 
+#[cfg(target_os = "linux")]
 impl NumastatRaw {
     pub fn new() -> Self {
         NumastatRaw {
@@ -61,6 +67,7 @@ impl NumastatRaw {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl CollectData for NumastatRaw {
     fn prepare_data_collector(&mut self, _params: &CollectorParams) -> Result<()> {
         let _ = &*NAME_PATH_MAP; // Force initialization before collection time
@@ -232,9 +239,13 @@ impl ProcessData for Numastat {
 
 #[cfg(test)]
 mod tests {
-    use super::NumastatRaw;
-    use crate::data::{CollectData, CollectorParams};
+    #[cfg(target_os = "linux")]
+    use {
+        super::NumastatRaw,
+        crate::data::{CollectData, CollectorParams},
+    };
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut numastat_raw = NumastatRaw::new();

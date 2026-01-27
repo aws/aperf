@@ -1,12 +1,15 @@
 use crate::data::data_formats::{AperfData, KeyValueData, KeyValueGroup};
-use crate::data::{CollectData, CollectorParams, Data, ProcessData, TimeEnum};
+use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
 use chrono::prelude::*;
-use log::trace;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use sysctl::Sysctl;
+#[cfg(target_os = "linux")]
+use {
+    crate::data::{CollectData, CollectorParams},
+    sysctl::Sysctl,
+};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SysctlData {
@@ -22,13 +25,16 @@ impl SysctlData {
         }
     }
 
+    #[cfg(target_os = "linux")]
     fn add_ctl(&mut self, name: String, value: String) {
         self.sysctl_data.insert(name, value);
     }
 }
 
+#[cfg(target_os = "linux")]
 const DONT_COLLECT: &[&str] = &["rss_key"];
 
+#[cfg(target_os = "linux")]
 fn can_collect(name: String) -> bool {
     for item in DONT_COLLECT {
         if name.contains(item) {
@@ -38,6 +44,7 @@ fn can_collect(name: String) -> bool {
     true
 }
 
+#[cfg(target_os = "linux")]
 impl CollectData for SysctlData {
     fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
         let ctls = sysctl::CtlIter::root().filter_map(Result::ok);
@@ -58,7 +65,6 @@ impl CollectData for SysctlData {
                 self.add_ctl(name, value);
             }
         }
-        trace!("{:#?}", self.sysctl_data);
         Ok(())
     }
 
@@ -102,9 +108,13 @@ impl ProcessData for SysctlData {
 
 #[cfg(test)]
 mod tests {
-    use super::{SysctlData, DONT_COLLECT};
-    use crate::data::{CollectData, CollectorParams};
+    #[cfg(target_os = "linux")]
+    use {
+        super::{SysctlData, DONT_COLLECT},
+        crate::data::{CollectData, CollectorParams},
+    };
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut sysctl = SysctlData::new();
@@ -114,6 +124,7 @@ mod tests {
         assert!(!sysctl.sysctl_data.is_empty());
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_dont_collect() {
         let mut sysctl = SysctlData::new();

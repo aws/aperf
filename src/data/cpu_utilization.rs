@@ -1,15 +1,18 @@
 use crate::computations::Statistics;
 use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
 use crate::data::utils::{get_aggregate_cpu_series_name, get_cpu_series_name};
-use crate::data::{CollectData, CollectorParams, Data, ProcessData, TimeEnum};
+use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
-use chrono::prelude::*;
-use log::trace;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
+#[cfg(target_os = "linux")]
+use {
+    crate::data::{CollectData, CollectorParams},
+    chrono::prelude::*,
+};
 
 /// Gather CPU Utilization raw data.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -18,6 +21,7 @@ pub struct CpuUtilizationRaw {
     pub data: String,
 }
 
+#[cfg(target_os = "linux")]
 impl CpuUtilizationRaw {
     pub fn new() -> Self {
         CpuUtilizationRaw {
@@ -27,18 +31,19 @@ impl CpuUtilizationRaw {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl Default for CpuUtilizationRaw {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[cfg(target_os = "linux")]
 impl CollectData for CpuUtilizationRaw {
     fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
         self.data = std::fs::read_to_string("/proc/stat")?;
-        trace!("{:#?}", self.data);
         Ok(())
     }
 }
@@ -292,9 +297,13 @@ impl ProcessData for CpuUtilization {
 
 #[cfg(test)]
 mod cpu_tests {
-    use super::CpuUtilizationRaw;
-    use crate::data::{CollectData, CollectorParams};
+    #[cfg(target_os = "linux")]
+    use {
+        super::CpuUtilizationRaw,
+        crate::data::{CollectData, CollectorParams},
+    };
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut cpu_utilization = CpuUtilizationRaw::new();

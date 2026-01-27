@@ -3,8 +3,6 @@ use crate::utils::{combine_value_ranges, topological_sort};
 use crate::{data::Data, data::ReportData, get_file};
 use anyhow::Result;
 use log::{debug, error};
-use rustix::fd::AsRawFd;
-use std::fs;
 use std::io::{Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::{collections::HashMap, fs::File};
@@ -58,7 +56,7 @@ impl DataVisualizer {
         tmp_dir: &Path,
         report_dir: &Path,
     ) -> Result<()> {
-        let file = get_file(dir.clone(), self.data_name.to_string()).or_else(|e| {
+        let (file_path, file) = get_file(dir.clone(), self.data_name.to_string()).or_else(|e| {
             // Backward compatibility: if file is not found using the data's name,
             // see if files with compatible names exist
             for compatible_name in self.data.compatible_filenames() {
@@ -76,12 +74,11 @@ impl DataVisualizer {
             self.data_available.insert(name.clone(), false);
             Err(e)
         })?;
-        let full_path = Path::new("/proc/self/fd").join(file.as_raw_fd().to_string());
         self.report_params.data_dir = PathBuf::from(dir.clone());
         self.report_params.tmp_dir = tmp_dir.to_path_buf();
         self.report_params.report_dir = report_dir.to_path_buf();
         self.report_params.run_name = name.clone();
-        self.report_params.data_file_path = fs::read_link(full_path).unwrap();
+        self.report_params.data_file_path = file_path;
         self.file_handle = Some(file);
         self.data_available.insert(name, true);
         Ok(())
