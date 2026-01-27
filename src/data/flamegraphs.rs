@@ -1,18 +1,22 @@
 use crate::data::data_formats::{AperfData, Graph, GraphData, GraphGroup};
-use crate::data::{CollectData, CollectorParams, Data, ProcessData};
+use crate::data::{Data, ProcessData};
 use crate::visualizer::ReportParams;
-use crate::{get_file_name, PDError};
 use anyhow::Result;
-use inferno::collapse::perf::Folder;
-use inferno::collapse::Collapse;
-use inferno::flamegraph::{self, Direction, Options};
-use log::{error, info, trace};
 use serde::{Deserialize, Serialize};
-use std::fs::File;
-use std::io::Write;
 use std::path::PathBuf;
-use std::process::Command;
+#[cfg(target_os = "linux")]
+use {
+    crate::data::{CollectData, CollectorParams},
+    crate::{get_file_name, PDError},
+    inferno::collapse::{perf::Folder, Collapse},
+    inferno::flamegraph::{self, Direction, Options},
+    log::{debug, error, info},
+    std::fs::File,
+    std::io::Write,
+    std::process::Command,
+};
 
+#[cfg(target_os = "linux")]
 fn write_msg_to_svg(mut file: File, msg: String) -> Result<()> {
     write!(
         file,
@@ -27,6 +31,7 @@ pub struct FlamegraphRaw {
     pub data: String,
 }
 
+#[cfg(target_os = "linux")]
 impl FlamegraphRaw {
     pub fn new() -> Self {
         FlamegraphRaw {
@@ -35,6 +40,7 @@ impl FlamegraphRaw {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl CollectData for FlamegraphRaw {
     fn prepare_data_collector(&mut self, _params: &CollectorParams) -> Result<()> {
         match Command::new("perf").args(["--version"]).output() {
@@ -53,7 +59,7 @@ impl CollectData for FlamegraphRaw {
 
         let perf_jit_loc = data_dir.join("perf.data.jit");
 
-        trace!("Running Perf inject...");
+        debug!("Running Perf inject...");
         let out_jit = Command::new("perf")
             .args([
                 "inject",

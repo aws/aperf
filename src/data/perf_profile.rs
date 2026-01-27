@@ -1,16 +1,18 @@
 use crate::data::data_formats::{AperfData, TextData};
-use crate::data::{CollectData, CollectorParams, Data, ProcessData};
+use crate::data::{Data, ProcessData};
 use crate::visualizer::ReportParams;
-use crate::PDError;
 use anyhow::Result;
-use log::{error, trace};
-use nix::{sys::signal, unistd::Pid};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::{
-    io::Write,
-    process::{Child, Command, Stdio},
-    sync::Mutex,
+use std::{process::Child, sync::Mutex};
+#[cfg(target_os = "linux")]
+use {
+    crate::data::{CollectData, CollectorParams},
+    crate::PDError,
+    log::{debug, error},
+    nix::{sys::signal, unistd::Pid},
+    std::io::Write,
+    std::process::{Command, Stdio},
 };
 
 pub const PERF_TOP_FUNCTIONS_FILE_NAME: &str = "top_functions";
@@ -24,6 +26,7 @@ pub struct PerfProfileRaw {
     pub data: String,
 }
 
+#[cfg(target_os = "linux")]
 impl PerfProfileRaw {
     pub fn new() -> Self {
         PerfProfileRaw {
@@ -32,6 +35,7 @@ impl PerfProfileRaw {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl CollectData for PerfProfileRaw {
     fn prepare_data_collector(&mut self, params: &CollectorParams) -> Result<()> {
         match Command::new("perf")
@@ -61,7 +65,7 @@ impl CollectData for PerfProfileRaw {
             ))
             .into()),
             Ok(child) => {
-                trace!("Recording Perf profiling data.");
+                debug!("Recording Perf profiling data.");
                 *PERF_CHILD.lock().unwrap() = Some(child);
                 Ok(())
             }
@@ -84,13 +88,13 @@ impl CollectData for PerfProfileRaw {
             params.signal,
         )?;
 
-        trace!("Waiting for perf profile collection to complete...");
+        debug!("Waiting for perf profile collection to complete...");
         match child.as_mut().unwrap().wait() {
             Err(e) => {
                 error!("'perf' did not exit successfully: {}", e);
                 return Ok(());
             }
-            Ok(_) => trace!("'perf record' executed successfully."),
+            Ok(_) => debug!("'perf record' executed successfully."),
         }
         let mut top_functions_file =
             fs::File::create(params.data_dir.join(PERF_TOP_FUNCTIONS_FILE_NAME))?;

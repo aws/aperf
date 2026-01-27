@@ -1,12 +1,16 @@
 use crate::computations::Statistics;
 use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
-use crate::data::{CollectData, CollectorParams, Data, ProcessData, TimeEnum};
+use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
-use chrono::prelude::*;
 use indexmap::IndexMap;
-use log::{error, trace};
+use log::error;
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "linux")]
+use {
+    crate::data::{CollectData, CollectorParams},
+    chrono::prelude::*,
+};
 
 /// Gather Meminfo raw data.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -15,12 +19,14 @@ pub struct MeminfoDataRaw {
     pub data: String,
 }
 
+#[cfg(target_os = "linux")]
 impl Default for MeminfoDataRaw {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[cfg(target_os = "linux")]
 impl MeminfoDataRaw {
     pub fn new() -> Self {
         MeminfoDataRaw {
@@ -30,12 +36,12 @@ impl MeminfoDataRaw {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl CollectData for MeminfoDataRaw {
     fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
         self.data = std::fs::read_to_string("/proc/meminfo")?;
-        trace!("{:#?}", self.data);
         Ok(())
     }
 }
@@ -166,9 +172,13 @@ impl ProcessData for MeminfoData {
 
 #[cfg(test)]
 mod tests {
-    use super::MeminfoDataRaw;
-    use crate::data::{CollectData, CollectorParams};
+    #[cfg(target_os = "linux")]
+    use {
+        super::MeminfoDataRaw,
+        crate::data::{CollectData, CollectorParams},
+    };
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut meminfodata_raw = MeminfoDataRaw::new();

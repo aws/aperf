@@ -1,5 +1,5 @@
 use aperf::data::data_formats::AperfData;
-use aperf::data::processes::{ProcessKey, Processes, ProcessesRaw, TICKS_PER_SECOND};
+use aperf::data::processes::{ProcessKey, Processes, ProcessesRaw};
 use aperf::data::ProcessData;
 use aperf::data::{Data, TimeEnum};
 use aperf::visualizer::ReportParams;
@@ -78,7 +78,6 @@ fn generate_processes_raw_data(
 #[test]
 fn test_process_processes_raw_data_complex() {
     let ticks_per_second = 100;
-    *TICKS_PER_SECOND.lock().unwrap() = ticks_per_second;
 
     let mut expected_per_sample_per_process_stats = Vec::new();
 
@@ -252,7 +251,6 @@ fn test_process_processes_raw_data_complex() {
 #[test]
 fn test_process_processes_raw_data_simple() {
     let ticks_per_second = 100;
-    *TICKS_PER_SECOND.lock().unwrap() = ticks_per_second;
 
     let mut expected_per_sample_per_process_stats = Vec::new();
 
@@ -354,7 +352,6 @@ fn test_process_processes_raw_data_simple() {
 #[test]
 fn test_process_processes_dynamic_processes() {
     let ticks_per_second = 100;
-    *TICKS_PER_SECOND.lock().unwrap() = ticks_per_second;
 
     let mut expected_per_sample_per_process_stats = Vec::new();
 
@@ -432,7 +429,6 @@ fn test_process_processes_dynamic_processes() {
 #[test]
 fn test_process_processes_top_16_ranking_simple() {
     let ticks_per_second = 100;
-    *TICKS_PER_SECOND.lock().unwrap() = ticks_per_second;
 
     let mut expected_per_sample_per_process_stats = Vec::new();
 
@@ -490,7 +486,6 @@ fn test_process_processes_top_16_ranking_simple() {
 #[test]
 fn test_process_processes_top_16_ranking_complex() {
     let ticks_per_second = 100;
-    *TICKS_PER_SECOND.lock().unwrap() = ticks_per_second;
 
     let mut expected_per_sample_per_process_stats = Vec::new();
 
@@ -599,9 +594,6 @@ fn test_process_processes_top_16_ranking_complex() {
 
 #[test]
 fn test_process_processes_empty_data() {
-    let ticks_per_second = 100;
-    *TICKS_PER_SECOND.lock().unwrap() = ticks_per_second;
-
     let raw_data = Vec::new();
 
     let mut processes = Processes::new();

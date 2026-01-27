@@ -9,7 +9,12 @@ fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=package-lock.json");
     println!("cargo:rerun-if-changed=build.rs");
 
-    match Command::new("npm").arg("install").spawn() {
+    #[cfg(windows)]
+    let npm_cmd = "npm.cmd";
+    #[cfg(not(windows))]
+    let npm_cmd = "npm";
+
+    match Command::new(npm_cmd).arg("install").spawn() {
         Err(_proc) => {
             println!("Build requires npm, but it was not found. Please install Node >= 16.16.0.");
             std::process::exit(1);
@@ -26,7 +31,7 @@ fn main() -> Result<()> {
     let report_frontend_dir = format!("{}/report_frontend", env::var("OUT_DIR")?);
     println!("cargo:rustc-env=JS_DIR={}", report_frontend_dir);
     println!("cargo:rerun-if-changed=src/report_frontend");
-    let status = Command::new("npm")
+    let status = Command::new(npm_cmd)
         .arg("exec")
         .arg("--")
         .arg("webpack")

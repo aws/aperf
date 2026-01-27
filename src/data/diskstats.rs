@@ -1,14 +1,18 @@
 use crate::computations::Statistics;
 use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
-use crate::data::{CollectData, CollectorParams, Data, ProcessData, TimeEnum};
+use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
-use chrono::prelude::*;
-use log::{error, trace};
+use log::error;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
+#[cfg(target_os = "linux")]
+use {
+    crate::data::{CollectData, CollectorParams},
+    chrono::prelude::*,
+};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DiskstatsRaw {
@@ -16,6 +20,7 @@ pub struct DiskstatsRaw {
     pub data: String,
 }
 
+#[cfg(target_os = "linux")]
 impl DiskstatsRaw {
     pub fn new() -> Self {
         DiskstatsRaw {
@@ -25,12 +30,12 @@ impl DiskstatsRaw {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl CollectData for DiskstatsRaw {
     fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
         self.data = std::fs::read_to_string("/proc/diskstats")?;
-        trace!("{:#?}", self.data);
         Ok(())
     }
 }
@@ -234,9 +239,13 @@ impl ProcessData for Diskstats {
 
 #[cfg(test)]
 mod tests {
-    use super::DiskstatsRaw;
-    use crate::data::{CollectData, CollectorParams};
+    #[cfg(target_os = "linux")]
+    use {
+        super::DiskstatsRaw,
+        crate::data::{CollectData, CollectorParams},
+    };
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut diskstats = DiskstatsRaw::new();

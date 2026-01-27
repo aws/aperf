@@ -1,3 +1,5 @@
+#![cfg(target_os = "linux")]
+
 use anyhow::Result;
 use aperf::data::DEFAULT_DATA_NAMES;
 use aperf::record::{record, Record};

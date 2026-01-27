@@ -1,12 +1,16 @@
 use crate::computations::Statistics;
 use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
-use crate::data::{CollectData, CollectorParams, Data, ProcessData, TimeEnum};
+use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
-use chrono::prelude::*;
-use log::{error, trace};
+use log::error;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+#[cfg(target_os = "linux")]
+use {
+    crate::data::{CollectData, CollectorParams},
+    chrono::prelude::*,
+};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct VmstatRaw {
@@ -14,6 +18,7 @@ pub struct VmstatRaw {
     pub data: String,
 }
 
+#[cfg(target_os = "linux")]
 impl VmstatRaw {
     pub fn new() -> Self {
         VmstatRaw {
@@ -23,12 +28,12 @@ impl VmstatRaw {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl CollectData for VmstatRaw {
     fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
         self.data = std::fs::read_to_string("/proc/vmstat")?;
-        trace!("{:#?}", self.data);
         Ok(())
     }
 }
@@ -130,9 +135,13 @@ impl ProcessData for Vmstat {
 
 #[cfg(test)]
 mod tests {
-    use super::VmstatRaw;
-    use crate::data::{CollectData, CollectorParams};
+    #[cfg(target_os = "linux")]
+    use {
+        super::VmstatRaw,
+        crate::data::{CollectData, CollectorParams},
+    };
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut vmstat = VmstatRaw::new();

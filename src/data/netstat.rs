@@ -1,12 +1,16 @@
 use crate::computations::Statistics;
 use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
-use crate::data::{CollectData, CollectorParams, Data, ProcessData, TimeEnum};
+use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
-use chrono::prelude::*;
-use log::{error, trace};
+use log::error;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+#[cfg(target_os = "linux")]
+use {
+    crate::data::{CollectData, CollectorParams},
+    chrono::prelude::*,
+};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NetstatRaw {
@@ -14,6 +18,7 @@ pub struct NetstatRaw {
     pub data: String,
 }
 
+#[cfg(target_os = "linux")]
 impl NetstatRaw {
     pub fn new() -> Self {
         NetstatRaw {
@@ -23,12 +28,12 @@ impl NetstatRaw {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl CollectData for NetstatRaw {
     fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
         self.data = std::fs::read_to_string("/proc/net/netstat")?;
-        trace!("{:#?}", self.data);
         Ok(())
     }
 }
@@ -166,9 +171,13 @@ impl ProcessData for Netstat {
 
 #[cfg(test)]
 mod tests {
-    use super::NetstatRaw;
-    use crate::data::{CollectData, CollectorParams};
+    #[cfg(target_os = "linux")]
+    use {
+        super::NetstatRaw,
+        crate::data::{CollectData, CollectorParams},
+    };
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut netstat = NetstatRaw::new();

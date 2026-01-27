@@ -2,23 +2,30 @@ extern crate lazy_static;
 
 use crate::computations::Statistics;
 use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
-use crate::data::{CollectData, CollectorParams, Data, ProcessData, TimeEnum};
+use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
-use chrono::prelude::*;
 use core::f64;
-use log::{trace, warn};
+use log::warn;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::fs;
-use std::sync::Mutex;
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
+#[cfg(target_os = "linux")]
+use {
+    crate::data::{CollectData, CollectorParams},
+    chrono::prelude::*,
+    std::fs,
+    std::sync::Mutex,
+};
 
+#[cfg(target_os = "linux")]
 pub const PROC_PID_STAT_USERSPACE_TIME_POS: usize = 11;
+#[cfg(target_os = "linux")]
 pub const PROC_PID_STAT_KERNELSPACE_TIME_POS: usize = 12;
 
+#[cfg(target_os = "linux")]
 lazy_static! {
     pub static ref TICKS_PER_SECOND: Mutex<u64> = Mutex::new(0);
 }
@@ -30,6 +37,7 @@ pub struct ProcessesRaw {
     pub data: String,
 }
 
+#[cfg(target_os = "linux")]
 impl ProcessesRaw {
     pub fn new() -> Self {
         ProcessesRaw {
@@ -40,12 +48,14 @@ impl ProcessesRaw {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl Default for ProcessesRaw {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[cfg(target_os = "linux")]
 impl CollectData for ProcessesRaw {
     fn prepare_data_collector(&mut self, _params: &CollectorParams) -> Result<()> {
         *TICKS_PER_SECOND.lock().unwrap() = procfs::ticks_per_second()? as u64;
@@ -68,8 +78,6 @@ impl CollectData for ProcessesRaw {
             }
         }
         self.ticks_per_second = ticks_per_second;
-        trace!("{:#?}", self.data);
-        trace!("{:#?}", self.ticks_per_second);
         Ok(())
     }
 }
@@ -291,9 +299,13 @@ impl ProcessData for Processes {
 
 #[cfg(test)]
 mod process_test {
-    use super::ProcessesRaw;
-    use crate::data::{CollectData, CollectorParams};
+    #[cfg(target_os = "linux")]
+    use {
+        super::ProcessesRaw,
+        crate::data::{CollectData, CollectorParams},
+    };
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut processes = ProcessesRaw::new();

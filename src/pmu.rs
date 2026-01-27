@@ -1,3 +1,5 @@
+#![cfg(target_os = "linux")]
+
 #[cfg(target_arch = "aarch64")]
 use crate::data::perf_stat::arm64_perf_list;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
