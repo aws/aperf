@@ -45,7 +45,7 @@ tokio = { version = "1.26.0", features = ["full"] }
 strum = "0.24"
 strum_macros = "0.24"
 libc = "0.2"
-flate2 = "1.0.30"
+flate2 = "1.1.5"
 tar = "0.4.40"
 infer = "0.13.0"
 inquire = "0.7.5"
