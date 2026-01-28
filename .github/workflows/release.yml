@@ -27,7 +27,7 @@ jobs:
 
       # Download and unpack all release artifacts
       - name: Download release artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
 
       # Create release tarballs
       - name: Create x86_64 artifacts
