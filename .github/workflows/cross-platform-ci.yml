@@ -1,0 +1,51 @@
+name: Cross-Platform CI
+
+on:
+  pull_request:
+    branches:
+      - "**"
+  workflow_call: # Needed to make this a reusable workflow for releasing artifacts
+  workflow_dispatch: # To allow starting the workflow manually in the web ui
+
+permissions:
+  contents: read
+
+jobs:
+  CI:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@446798f8213ac2e75931c1b0769676d927801858 # v2.10.3
+        with:
+          egress-policy: audit
+      - name: Checkout repository
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      # Tests and static analysis
+      - name: Run tests
+        run: cargo test --verbose -- --nocapture --color always
+      - name: Run clippy
+        run: cargo clippy --all-targets
+      - name: Run rustfmt
+        run: cargo fmt --all -- --check
+
+      # Build release artifacts
+      - name: Build release artifacts
+        run: cargo build --release
+
+      # Upload artifacts
+      - name: Upload Mac release artifacts
+        uses: actions/upload-artifact@v4
+        if: ${{ matrix.os == 'macos-latest' }}
+        with:
+          name: macos-release-artifacts
+          path: target/release/aperf
+      - name: Upload Windows release artifacts
+        uses: actions/upload-artifact@v4
+        if: ${{ matrix.os == 'windows-latest' }}
+        with:
+          name: windows-release-artifacts
+          path: target/release/aperf.exe
