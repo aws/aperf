@@ -15,13 +15,9 @@ use crate::data::{CollectData, CollectorParams};
 
 #[cfg(feature = "hotline")]
 use {
-    crate::visualizer::DataVisualizer,
-    ctor::ctor,
     libc::{_exit, fork, geteuid, killpg, setpgid, waitpid, SIGTERM},
     log::{info, warn},
-    std::path::Path,
     std::{
-        env,
         ffi::CString,
         os::raw::{c_char, c_int},
         panic,
@@ -305,7 +301,6 @@ impl ProcessData for Hotline {
                 <head>
                     <meta charset="UTF-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <link rel="stylesheet" href="../../index.css">
                 </head>
                 <body>
                     {}

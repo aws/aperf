@@ -65,7 +65,7 @@ vector_header* vector_realloc(vector_header* h, vec_type_t type_size) {
   return new_h;
 }
 
-bool vector_has_space(vector_header* h) { return h->capacity - h->size > 0; }
+bool vector_has_space(vector_header* h) { return h->capacity > h->size; }
 
 void* _vector_add_dst(vector* vec_addr, vec_type_t type_size) {
   vector_header* h = vector_get_header(*vec_addr);
