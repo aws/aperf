@@ -7,15 +7,18 @@ on:
 permissions: read-all
 
 jobs:
-  Build:
+  linux_build:
     uses: ./.github/workflows/ci.yml
-  Release:
+  cross_platform_build:
+    uses: ./.github/workflows/cross-platform-ci.yml
+  release:
     runs-on:
       - ubuntu-24.04
     permissions:
       contents: write
     needs:
-      - Build
+      - linux_build
+      - cross_platform_build
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895 # v2.6.1
@@ -27,31 +30,57 @@ jobs:
         uses: actions/download-artifact@v4
 
       # Create release tarballs
-      - name: Tar x86_64 artifacts
+      - name: Create x86_64 artifacts
         run: |
           name=aperf-${{ github.ref_name }}-x86_64
           mkdir "$name"
           tar -zxvf x86_64-release-artifacts/artifacts.tar.gz -C "$name"
           tar -zcvf "$name".tar.gz "$name"
-      - name: Tar aarch64 artifacts
+      - name: Create aarch64 artifacts
         run: |
           name=aperf-${{ github.ref_name }}-aarch64
           mkdir "$name"
           tar -zxvf aarch64-release-artifacts/artifacts.tar.gz -C "$name"
           tar -zcvf "$name".tar.gz "$name"
+      - name: Create MacOS artifacts
+        run: |
+          name=aperf-${{ github.ref_name }}-macos
+          mkdir "$name"
+          tar -zxvf macos-release-artifacts/aperf -C "$name"
+          tar -zcvf "$name".tar.gz "$name"
+      - name: Create Windows artifacts
+        run: |
+          name=aperf-${{ github.ref_name }}-windows
+          mkdir "$name"
+          tar -zxvf windows-release-artifacts/aperf.exe -C "$name"
+          tar -zcvf "$name".tar.gz "$name"
 
       # Attach them to the release
       - name: Upload x86_64 artifacts.
-        uses: svenstaro/upload-release-action@04733e069f2d7f7f0b4aebc4fbdbce8613b03ccd # v2
+        uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: ./aperf-${{ github.ref_name }}-x86_64.tar.gz
           tag: ${{ github.ref }}
           asset_name: aperf-${{ github.ref_name }}-x86_64.tar.gz
       - name: Upload aarch64 artifacts
-        uses: svenstaro/upload-release-action@04733e069f2d7f7f0b4aebc4fbdbce8613b03ccd # v2
+        uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: ./aperf-${{ github.ref_name }}-aarch64.tar.gz
           tag: ${{ github.ref }}
           asset_name: aperf-${{ github.ref_name }}-aarch64.tar.gz
+      - name: Upload MacOS artifacts
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ./aperf-${{ github.ref_name }}-macos.tar.gz
+          tag: ${{ github.ref }}
+          asset_name: aperf-${{ github.ref_name }}-macos.tar.gz
+      - name: Upload Windows artifacts
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ./aperf-${{ github.ref_name }}-windows.tar.gz
+          tag: ${{ github.ref }}
+          asset_name: aperf-${{ github.ref_name }}-windows.tar.gz
