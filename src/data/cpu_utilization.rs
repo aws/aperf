@@ -4,6 +4,7 @@ use crate::data::utils::{get_aggregate_cpu_series_name, get_cpu_series_name};
 use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
+use log::warn;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
@@ -176,9 +177,16 @@ impl ProcessData for CpuUtilization {
                 let mut per_cpu_state_time_delta: HashMap<CpuState, f64> = HashMap::new();
                 let mut cpu_time_delta_sum = 0.0;
                 for cpu_state in CpuState::iter() {
-                    let time_delta = (get_cpu_time(&cpu_state, cpu_time)
-                        - get_cpu_time(&cpu_state, &prev_cpu_time[cpu]))
-                        as f64;
+                    let curr_time = get_cpu_time(&cpu_state, cpu_time);
+                    let prev_time = get_cpu_time(&cpu_state, &prev_cpu_time[cpu]);
+                    if prev_time > curr_time {
+                        warn!(
+                            "Unexpected decreasing {} time on CPU {} samples.",
+                            cpu_state, cpu
+                        );
+                        continue;
+                    }
+                    let time_delta = (curr_time - prev_time) as f64;
                     per_cpu_state_time_delta.insert(cpu_state, time_delta);
                     cpu_time_delta_sum += time_delta;
                 }
