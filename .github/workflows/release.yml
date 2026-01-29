@@ -84,3 +84,51 @@ jobs:
           file: ./aperf-${{ github.ref_name }}-windows.tar.gz
           tag: ${{ github.ref }}
           asset_name: aperf-${{ github.ref_name }}-windows.tar.gz
+  notify:
+    runs-on:
+      - ubuntu-24.04
+    needs: release
+    steps:
+      - name: Notify Slack Webhook
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          RELEASE_URL: ${{ github.event.release.html_url }}
+          VERSION: ${{ github.ref_name }}
+          RELEASE_BODY: ${{ github.event.release.body }}
+        run: |
+          set -e
+
+          # Validate webhook URL exists
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "Error: SLACK_WEBHOOK_URL secret is not set"
+            exit 1
+          fi
+
+          # Build JSON payload using environment variables
+          payload=$(jq -n \
+            --arg release_url "$RELEASE_URL" \
+            --arg version "$VERSION" \
+            --arg body "$RELEASE_BODY" \
+            '{
+              release_url: $release_url,
+              version: $version,
+              body: $body
+            }')
+
+          # Send notification with error handling
+          http_code=$(curl -X POST "$SLACK_WEBHOOK_URL" \
+            -H 'Content-Type: application/json' \
+            --data "$payload" \
+            --silent \
+            --output /tmp/slack_response.txt \
+            --write-out "%{http_code}")
+
+          # Check response code
+          if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+            echo "Slack notification sent successfully (HTTP $http_code)"
+          else
+            echo "Slack notification failed with HTTP $http_code"
+            echo "Response:"
+            cat /tmp/slack_response.txt
+            exit 1
+          fi
