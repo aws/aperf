@@ -42,18 +42,17 @@ pub fn get_cpu_info() -> Result<CpuInfo> {
     Ok(cpu_info)
 }
 
-pub fn notargz_file_name(pbuf: PathBuf) -> Result<String> {
-    if pbuf.file_name().is_none() {
-        return Ok(String::new());
+pub fn no_tar_gz_file_name(path: &PathBuf) -> Option<String> {
+    if path.file_name().is_none() {
+        return None;
     }
-    notargz_string_name(pbuf.file_name().unwrap().to_str().unwrap().to_string())
-}
 
-pub fn notargz_string_name(s: String) -> Result<String> {
-    if s.ends_with(".tar.gz") {
-        return Ok(s.strip_suffix(".tar.gz").unwrap().to_string());
+    let file_name_str = path.file_name()?.to_str()?.to_string();
+
+    if file_name_str.ends_with(".tar.gz") {
+        return Some(file_name_str.strip_suffix(".tar.gz")?.to_string());
     }
-    Ok(s)
+    Some(file_name_str)
 }
 
 pub fn get_cpu_series_name(cpu: usize) -> Option<String> {

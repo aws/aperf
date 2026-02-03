@@ -1,10 +1,5 @@
-#![cfg(target_os = "linux")]
-
 use anyhow::Result;
-use aperf::data::DEFAULT_DATA_NAMES;
-use aperf::record::{record, Record};
 use aperf::report::{report, Report};
-use aperf::APERF_RUNLOG;
 use chrono::Utc;
 use flate2::read::GzDecoder;
 #[cfg(feature = "hotline")]
@@ -14,6 +9,12 @@ use std::path::{Path, PathBuf};
 use std::{fs, panic};
 use tar::Archive;
 use tempfile::TempDir;
+#[cfg(target_os = "linux")]
+use {
+    aperf::data::DEFAULT_DATA_NAMES,
+    aperf::record::{record, Record},
+    aperf::APERF_RUNLOG,
+};
 
 #[cfg(feature = "hotline")]
 extern "C" {
@@ -24,14 +25,14 @@ fn run_test<T>(test_func: T)
 where
     T: FnOnce(PathBuf, PathBuf) -> Result<()> + panic::UnwindSafe,
 {
-    let tempdir = TempDir::with_prefix("aperf").unwrap();
-    let aperf_tmp = TempDir::with_prefix("tmp_aperf").unwrap();
+    let work_dir = TempDir::with_prefix("aperf").unwrap();
+    let tmp_dir = TempDir::with_prefix("tmp_aperf").unwrap();
 
     let result = panic::catch_unwind(|| {
-        test_func(tempdir.path().to_path_buf(), aperf_tmp.path().to_path_buf())
+        test_func(work_dir.path().to_path_buf(), tmp_dir.path().to_path_buf())
     });
-    tempdir.close().unwrap();
-    aperf_tmp.close().unwrap();
+    work_dir.close().unwrap();
+    tmp_dir.close().unwrap();
     if let Err(e) = result {
         panic::resume_unwind(e);
     }
@@ -46,12 +47,13 @@ fn test_hotline() {
     }
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 #[serial]
 fn test_record() {
-    run_test(|tempdir, aperf_tmp| {
+    run_test(|work_dir, tmp_dir| {
         let run_name =
-            record_with_name("test_record".to_string(), &tempdir, &aperf_tmp, None, None).unwrap();
+            record_with_name("test_record".to_string(), &work_dir, &tmp_dir, None, None).unwrap();
 
         assert!(Path::new(&run_name).exists());
         assert!(Path::new(&(run_name.clone() + ".tar.gz")).exists());
@@ -71,10 +73,11 @@ fn test_record() {
     })
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 #[serial]
 fn test_record_dont_collect_some_data() {
-    run_test(|tempdir, aperf_tmp| {
+    run_test(|work_dir, tmp_dir| {
         let dont_collect_data_names = vec![
             String::from("netstat"),
             String::from("processes"),
@@ -84,8 +87,8 @@ fn test_record_dont_collect_some_data() {
 
         let run_name = record_with_name(
             "test_record_skip_some_data".to_string(),
-            &tempdir,
-            &aperf_tmp,
+            &work_dir,
+            &tmp_dir,
             Some(dont_collect_data_names.clone()),
             None,
         )
@@ -120,10 +123,11 @@ fn test_record_dont_collect_some_data() {
     })
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 #[serial]
 fn test_record_collect_only_some_data() {
-    run_test(|tempdir, aperf_tmp| {
+    run_test(|work_dir, tmp_dir| {
         let collect_only_data_names = vec![
             String::from("netstat"),
             String::from("vmstat"),
@@ -134,8 +138,8 @@ fn test_record_collect_only_some_data() {
 
         let run_name = record_with_name(
             "test_record_skip_some_data".to_string(),
-            &tempdir,
-            &aperf_tmp,
+            &work_dir,
+            &tmp_dir,
             None,
             Some(collect_only_data_names.clone()),
         )
@@ -177,37 +181,85 @@ fn test_record_collect_only_some_data() {
     })
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 #[serial]
-fn test_report() {
-    run_test(|tempdir, aperf_tmp| {
-        let run_dir =
-            record_with_name("record_data".to_string(), &tempdir, &aperf_tmp, None, None)?;
-        report_with_name(run_dir, tempdir, aperf_tmp)
+fn test_record_and_report() {
+    run_test(|work_dir, tmp_dir| {
+        let run_name = String::from("test_record_run");
+        let run_dir = record_with_name(run_name.clone(), &work_dir, &tmp_dir, None, None)?;
+
+        let report_name = String::from("test_report");
+        let rep = Report {
+            run: vec![run_dir],
+            name: Some(
+                work_dir
+                    .join(&report_name)
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+            ),
+        };
+        assert!(report(&rep, &tmp_dir).is_ok());
+
+        verify_report_structure(&work_dir, &report_name, vec![run_name.clone()]);
+
+        clean_dir_and_archive(&work_dir, &report_name);
+        clean_dir_and_archive(&work_dir, &run_name);
+
+        Ok(())
     })
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 #[serial]
-fn test_report_dot_in_run_name() {
-    run_test(|tempdir, aperf_tmp| {
-        let run_dir =
-            record_with_name("record.data".to_string(), &tempdir, &aperf_tmp, None, None)?;
-        report_with_name(run_dir, tempdir, aperf_tmp)
+fn test_record_and_report_dot_in_run_name() {
+    run_test(|work_dir, tmp_dir| {
+        let run_name = String::from("test.record.data");
+        let run_dir = record_with_name(run_name.clone(), &work_dir, &tmp_dir, None, None)?;
+
+        let report_name = String::from("test_report");
+        let rep = Report {
+            run: vec![run_dir],
+            name: Some(
+                work_dir
+                    .join(&report_name)
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+            ),
+        };
+        assert!(report(&rep, &tmp_dir).is_ok());
+
+        verify_report_structure(&work_dir, &report_name, vec![run_name.clone()]);
+
+        clean_dir_and_archive(&work_dir, &report_name);
+        clean_dir_and_archive(&work_dir, &run_name);
+
+        Ok(())
     })
 }
 
 #[test]
 #[serial]
 fn test_report_with_empty_data_bin() {
-    run_test(|tempdir, aperf_tmp| {
-        let run_dir_name = "empty_data_bin";
-        let run_dir = tempdir.join(run_dir_name);
+    run_test(|work_dir, tmp_dir| {
+        let run_name = String::from("empty_data_bin");
+        let run_dir = work_dir.join(run_name.clone());
         fs::create_dir(&run_dir).unwrap();
-        fs::File::create(tempdir.join(format!("{run_dir_name}.tar.gz"))).unwrap();
+        fs::File::create(work_dir.join(format!("{}.tar.gz", run_name))).unwrap();
 
         let time_str = Utc::now().format("%Y-%m-%d_%H_%M_%S").to_string();
-        for data_name in DEFAULT_DATA_NAMES.iter() {
+        let data_names = vec![
+            "cpu_utilization",
+            "diskstats",
+            "flamegraphs",
+            "interrupts",
+            "sysctl",
+            "processes",
+        ];
+        for data_name in data_names {
             let binary_file_path = run_dir.join(format!("{data_name}_{time_str}.bin"));
             fs::File::create(&binary_file_path).unwrap();
         }
@@ -215,26 +267,303 @@ fn test_report_with_empty_data_bin() {
         fs::File::create(run_dir.join("aperf_stats.bin")).unwrap();
         fs::File::create(run_dir.join("meta_data.bin")).unwrap();
 
-        report_with_name(
-            run_dir.into_os_string().into_string().unwrap(),
-            tempdir,
-            aperf_tmp,
-        )
+        let report_name = String::from("empty_data_report");
+        let rep = Report {
+            run: vec![run_dir.into_os_string().into_string().unwrap()],
+            name: Some(
+                work_dir
+                    .join(&report_name)
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+            ),
+        };
+        assert!(report(&rep, &tmp_dir).is_ok());
+
+        verify_report_structure(&work_dir, &report_name, vec![run_name.clone()]);
+
+        clean_dir_and_archive(&work_dir, &report_name);
+        clean_dir_and_archive(&work_dir, &run_name);
+
+        Ok(())
     })
 }
 
+#[test]
+#[serial]
+fn test_report_single_run() {
+    run_test(|work_dir, tmp_dir| {
+        let run_name = String::from("test_run_1");
+        let run_path = get_test_data_path(format!("{}.tar.gz", run_name));
+
+        let report_name = String::from("single_run_report");
+        let rep = Report {
+            run: vec![run_path.into_os_string().into_string().unwrap()],
+            name: Some(
+                work_dir
+                    .join(&report_name)
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+            ),
+        };
+        assert!(report(&rep, &tmp_dir).is_ok());
+
+        verify_report_structure(&work_dir, &report_name, vec![run_name]);
+
+        clean_dir_and_archive(&work_dir, &report_name);
+
+        Ok(())
+    })
+}
+
+#[test]
+#[serial]
+fn test_report_multiple_runs() {
+    run_test(|work_dir, tmp_dir| {
+        let run_name_1 = String::from("test_run_1");
+        let run_path_1 = get_test_data_path(format!("{}.tar.gz", run_name_1));
+        let run_name_2 = String::from("test_run_2");
+        let run_path_2 = get_test_data_path(format!("{}.tar.gz", run_name_2));
+
+        let report_name = String::from("multi_run_report");
+        let rep = Report {
+            run: vec![
+                run_path_1.into_os_string().into_string().unwrap(),
+                run_path_2.into_os_string().into_string().unwrap(),
+            ],
+            name: Some(
+                work_dir
+                    .join(&report_name)
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+            ),
+        };
+        assert!(report(&rep, &tmp_dir).is_ok());
+
+        verify_report_structure(&work_dir, &report_name, vec![run_name_1, run_name_2]);
+
+        clean_dir_and_archive(&work_dir, &report_name);
+
+        Ok(())
+    })
+}
+
+#[test]
+#[serial]
+fn test_report_from_report() {
+    run_test(|work_dir, tmp_dir| {
+        let input_report_path = get_test_data_path("test_report.tar.gz");
+        let run_name = String::from("test_run_3");
+        let run_path = get_test_data_path(format!("{}.tar.gz", run_name));
+
+        let report_name = String::from("report_from_report");
+        let rep = Report {
+            run: vec![
+                input_report_path.into_os_string().into_string().unwrap(),
+                run_path.into_os_string().into_string().unwrap(),
+            ],
+            name: Some(
+                work_dir
+                    .join(&report_name)
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+            ),
+        };
+        assert!(report(&rep, &tmp_dir).is_ok());
+
+        verify_report_structure(
+            &work_dir,
+            &report_name,
+            vec![
+                String::from("test_run_1"),
+                String::from("test_run_2"),
+                run_name,
+            ],
+        );
+
+        clean_dir_and_archive(&work_dir, &report_name);
+
+        Ok(())
+    })
+}
+
+#[test]
+#[serial]
+fn test_report_already_exists() {
+    run_test(|work_dir, tmp_dir| {
+        let run_name = String::from("test_run_3");
+        let run_path = get_test_data_path(format!("{}.tar.gz", run_name));
+
+        let report_name = String::from("a_report");
+        let report_path_str = work_dir
+            .join(&report_name)
+            .into_os_string()
+            .into_string()
+            .unwrap();
+        let rep = Report {
+            run: vec![run_path.into_os_string().into_string().unwrap()],
+            name: Some(report_path_str.clone()),
+        };
+        assert!(report(&rep, &tmp_dir).is_ok());
+
+        verify_report_structure(&work_dir, &report_name, vec![run_name]);
+
+        let another_run_path = get_test_data_path("test_run_1.tar.gz");
+        let rep_with_same_name = Report {
+            run: vec![another_run_path.into_os_string().into_string().unwrap()],
+            name: Some(report_path_str.clone()),
+        };
+        let error = report(&rep_with_same_name, &tmp_dir).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "The report {} already exists in current directory.",
+                report_path_str
+            )
+        );
+
+        clean_dir_and_archive(&work_dir, &report_name);
+
+        Ok(())
+    })
+}
+
+#[test]
+#[serial]
+fn test_run_data_not_exists() {
+    run_test(|work_dir, tmp_dir| {
+        let run_name = String::from("fake_run");
+        let run_path = get_test_data_path(format!("{}.tar.gz", run_name));
+
+        let report_name = String::from("the_report_never_generated");
+        let report_dir_path = work_dir.join(&report_name);
+        let report_archive_path = work_dir.join(format!("{}.tar.gz", report_name));
+        let rep = Report {
+            run: vec![run_path.clone().into_os_string().into_string().unwrap()],
+            name: Some(
+                report_dir_path
+                    .clone()
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+            ),
+        };
+        let error = report(&rep, &tmp_dir).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            format!("The run {:?} does not exist.", run_path)
+        );
+
+        assert!(!report_dir_path.exists());
+        assert!(!report_archive_path.exists());
+
+        Ok(())
+    })
+}
+
+#[test]
+#[serial]
+fn test_duplicate_run_data() {
+    run_test(|work_dir, tmp_dir| {
+        let input_report_path = get_test_data_path("test_report.tar.gz");
+        let duplicate_run_name = String::from("test_run_1");
+        let duplicate_run_path = get_test_data_path(format!("{}.tar.gz", duplicate_run_name));
+
+        let report_name = String::from("report_with_duplicate_data");
+        let report_dir_path = work_dir.join(&report_name);
+        let report_archive_path = work_dir.join(format!("{}.tar.gz", report_name));
+        let rep = Report {
+            run: vec![
+                input_report_path.into_os_string().into_string().unwrap(),
+                duplicate_run_path.into_os_string().into_string().unwrap(),
+            ],
+            name: Some(
+                report_dir_path
+                    .clone()
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+            ),
+        };
+
+        let error = report(&rep, &tmp_dir).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            format!("Multiple runs with the same name: {}", duplicate_run_name)
+        );
+
+        assert!(!report_dir_path.exists());
+        assert!(!report_archive_path.exists());
+
+        Ok(())
+    })
+}
+
+#[test]
+#[serial]
+fn test_duplicate_run_data_quick_fail() {
+    run_test(|work_dir, tmp_dir| {
+        let duplicate_run_name = String::from("test_run_2");
+        let duplicate_run_path = get_test_data_path(format!("{}.tar.gz", duplicate_run_name));
+
+        let report_name = String::from("report_not_to_be_generated");
+        let report_dir_path = work_dir.join(&report_name);
+        let report_archive_path = work_dir.join(format!("{}.tar.gz", report_name));
+        let rep = Report {
+            run: vec![
+                duplicate_run_path
+                    .clone()
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+                duplicate_run_path
+                    .clone()
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+            ],
+            name: Some(
+                report_dir_path
+                    .clone()
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+            ),
+        };
+
+        let error = report(&rep, &tmp_dir).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            format!("Multiple runs with the same name: {}", duplicate_run_name)
+        );
+
+        assert!(!report_dir_path.exists());
+        assert!(!report_archive_path.exists());
+
+        Ok(())
+    })
+}
+
+#[cfg(target_os = "linux")]
 fn record_with_name(
-    run: String,
-    tempdir: &Path,
-    aperf_tmp: &Path,
+    run_name: String,
+    work_dir: &Path,
+    tmp_dir: &Path,
     dont_collect: Option<Vec<String>>,
     collect_only: Option<Vec<String>>,
 ) -> Result<String> {
-    let run_name = tempdir.join(run).into_os_string().into_string().unwrap();
+    let run_path_str = work_dir
+        .join(run_name)
+        .into_os_string()
+        .into_string()
+        .unwrap();
 
     #[cfg(feature = "hotline")]
     let rec = Record {
-        run_name: Some(run_name.clone()),
+        run_name: Some(run_path_str.clone()),
         interval: 1,
         period: 2,
         dont_collect,
@@ -249,7 +578,7 @@ fn record_with_name(
 
     #[cfg(not(feature = "hotline"))]
     let rec = Record {
-        run_name: Some(run_name.clone()),
+        run_name: Some(run_path_str.clone()),
         interval: 1,
         period: 2,
         dont_collect,
@@ -260,37 +589,39 @@ fn record_with_name(
         pmu_config: None,
     };
 
-    let runlog = tempdir.join(*APERF_RUNLOG);
-    fs::File::create(&runlog).unwrap();
+    let runlog = work_dir.join(*APERF_RUNLOG);
+    fs::File::create(&runlog)?;
 
-    record(&rec, aperf_tmp, &runlog).unwrap();
+    record(&rec, tmp_dir, &runlog)?;
 
-    Ok(run_name)
+    Ok(run_path_str)
 }
 
-fn report_with_name(run_dir: String, tempdir: PathBuf, aperf_tmp: PathBuf) -> Result<()> {
-    let test_report_path = PathBuf::from("test_report");
-    let report_loc = tempdir
-        .join("test_report")
-        .into_os_string()
-        .into_string()
-        .unwrap();
-    let report_path = tempdir.join("test_report");
-    let rep = Report {
-        run: [run_dir.clone()].to_vec(),
-        name: Some(report_loc.clone()),
-    };
-    report(&rep, &aperf_tmp).unwrap();
+/// Verify that the report structure is as expected
+fn verify_report_structure(
+    report_root: &PathBuf,
+    report_name: &String,
+    expected_run_names: Vec<String>,
+) {
+    let report_path = report_root.join(report_name);
+    let report_archive_path = report_root.join(format!("{}.tar.gz", report_name));
 
     // Check if the directory has the proper structure
     assert!(report_path.exists());
     assert!(report_path.join("main.css").exists());
     assert!(report_path.join("bundle.js").exists());
-    assert!(report_path.join("data/archive").exists());
-    assert!(Path::new(&(report_loc.clone() + ".tar.gz")).exists());
+    assert!(report_path.join("data").join("js").join("runs.js").exists());
+    let report_run_archives_path = report_path.join("data").join("archive");
+    assert!(report_run_archives_path.exists());
+    for run_name in &expected_run_names {
+        assert!(report_run_archives_path
+            .join(format!("{}.tar.gz", run_name))
+            .exists());
+    }
+    assert!(report_archive_path.exists());
 
-    let tar_gz = fs::File::open(report_loc.clone() + ".tar.gz").unwrap();
-    let mut archive = Archive::new(GzDecoder::new(tar_gz));
+    let report_archive_file = fs::File::open(report_archive_path).unwrap();
+    let mut archive = Archive::new(GzDecoder::new(report_archive_file));
 
     let paths: Vec<PathBuf> = archive
         .entries()
@@ -304,14 +635,30 @@ fn report_with_name(run_dir: String, tempdir: PathBuf, aperf_tmp: PathBuf) -> Re
         .collect();
 
     // Check if the tarball of the directory has the proper structure
-    assert!(paths.contains(&test_report_path.join("index.html")));
-    assert!(paths.contains(&test_report_path.join("main.css")));
-    assert!(paths.contains(&test_report_path.join("bundle.js")));
-    assert!(paths.contains(&test_report_path.join("data/archive")));
+    let report_name_path_buf = PathBuf::from(report_name);
+    assert!(paths.contains(&report_name_path_buf.join("index.html")));
+    assert!(paths.contains(&report_name_path_buf.join("main.css")));
+    assert!(paths.contains(&report_name_path_buf.join("bundle.js")));
+    assert!(paths.contains(&report_name_path_buf.join("data").join("js").join("runs.js")));
+    let report_archive_run_archives_path = report_name_path_buf.join("data").join("archive");
+    for run_name in &expected_run_names {
+        assert!(
+            paths.contains(&report_archive_run_archives_path.join(format!("{}.tar.gz", run_name)))
+        );
+    }
+}
 
-    fs::remove_dir_all(&run_dir).unwrap();
-    fs::remove_dir_all(&report_loc).unwrap();
-    fs::remove_file(run_dir.clone() + ".tar.gz").unwrap();
-    fs::remove_file(report_loc.clone() + ".tar.gz").unwrap();
-    Ok(())
+/// Remove the directory and archive with the same name in the root path
+fn clean_dir_and_archive(root_path: &PathBuf, file_name: &String) {
+    let dir_path = root_path.join(file_name);
+    let archive_path = root_path.join(format!("{}.tar.gz", file_name));
+
+    fs::remove_dir_all(dir_path).unwrap();
+    fs::remove_file(archive_path).unwrap();
+}
+
+fn get_test_data_path<P: AsRef<Path>>(test_data_file_name: P) -> PathBuf {
+    PathBuf::from("tests")
+        .join("test_data")
+        .join(test_data_file_name)
 }
