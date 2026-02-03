@@ -51,36 +51,37 @@ impl DataVisualizer {
 
     pub fn init_visualizer(
         &mut self,
-        dir: String,
-        name: String,
+        run_data_dir: PathBuf,
+        run_name: String,
         tmp_dir: &Path,
         report_dir: &Path,
     ) -> Result<()> {
-        let (file_path, file) = get_file(dir.clone(), self.data_name.to_string()).or_else(|e| {
-            // Backward compatibility: if file is not found using the data's name,
-            // see if files with compatible names exist
-            for compatible_name in self.data.compatible_filenames() {
-                match get_file(dir.clone(), String::from(compatible_name)) {
-                    Ok(compatible_file) => {
-                        debug!(
-                            "Data file {} not found, use compatible file name {}",
-                            self.data_name, compatible_name
-                        );
-                        return Ok(compatible_file);
+        let (file_path, file) =
+            get_file(&run_data_dir, self.data_name.to_string()).or_else(|e| {
+                // Backward compatibility: if file is not found using the data's name,
+                // see if files with compatible names exist
+                for compatible_name in self.data.compatible_filenames() {
+                    match get_file(&run_data_dir, String::from(compatible_name)) {
+                        Ok(compatible_file) => {
+                            debug!(
+                                "Data file {} not found, use compatible file name {}",
+                                self.data_name, compatible_name
+                            );
+                            return Ok(compatible_file);
+                        }
+                        Err(_) => {}
                     }
-                    Err(_) => {}
                 }
-            }
-            self.data_available.insert(name.clone(), false);
-            Err(e)
-        })?;
-        self.report_params.data_dir = PathBuf::from(dir.clone());
+                self.data_available.insert(run_name.clone(), false);
+                Err(e)
+            })?;
+        self.report_params.data_dir = run_data_dir;
         self.report_params.tmp_dir = tmp_dir.to_path_buf();
         self.report_params.report_dir = report_dir.to_path_buf();
-        self.report_params.run_name = name.clone();
+        self.report_params.run_name = run_name.clone();
         self.report_params.data_file_path = file_path;
         self.file_handle = Some(file);
-        self.data_available.insert(name, true);
+        self.data_available.insert(run_name, true);
         Ok(())
     }
 

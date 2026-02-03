@@ -64,14 +64,14 @@ jobs:
             libzstd-devel
 
       # Tests and static analysis
+      - name: Run rustfmt
+        run: cargo fmt --all -- --check
       - name: Set perf_event_paranoid to 0
         run: echo 0 | sudo tee /proc/sys/kernel/perf_event_paranoid
       - name: Run tests
         run: cargo test --verbose -- --nocapture --color always
       - name: Run clippy
         run: cargo clippy --all-targets
-      - name: Run rustfmt
-        run: cargo fmt --all -- --check
 
       # Build and upload release artifacts
       - name: Build release artifacts

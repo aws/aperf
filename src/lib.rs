@@ -99,14 +99,23 @@ pub enum PDError {
     #[error("Visualizer Init error")]
     VisualizerInitError,
 
-    #[error("Not an archive or directory")]
-    RecordNotArchiveOrDirectory,
+    #[error("Multiple runs with the same name: {0}")]
+    DuplicateRunNames(String),
 
-    #[error("Tar.gz file name and archived directory name inside mismatch")]
-    ArchiveDirectoryMismatch,
+    #[error("The run {0:?} does not exist.")]
+    RunNotFound(PathBuf),
 
-    #[error("Invalid tar.gz file name")]
-    InvalidArchiveName,
+    #[error("The report {0} already exists in current directory.")]
+    ReportExists(String),
+
+    #[error("The directory within the archive does not have the same name as the archive: {0}")]
+    ArchiveDirectoryInvalidName(String),
+
+    #[error("Invalid directory {0:?}")]
+    InvalidDirectory(PathBuf),
+
+    #[error("Invalid archive {0:?}")]
+    InvalidArchive(PathBuf),
 
     #[error("Invalid verbose option")]
     InvalidVerboseOption,
@@ -382,11 +391,11 @@ impl Default for PerformanceData {
     }
 }
 
-pub fn get_file(dir: String, name: String) -> Result<(PathBuf, fs::File)> {
+pub fn get_file(dir: &PathBuf, name: String) -> Result<(PathBuf, fs::File)> {
     for path in fs::read_dir(dir.clone())? {
         let file_name = path?.file_name().into_string().unwrap();
         if file_name.starts_with(&name) {
-            let file_path = PathBuf::from(&dir).join(file_name.clone());
+            let file_path = dir.join(file_name.clone());
             let file = fs::OpenOptions::new()
                 .read(true)
                 .open(file_path.clone())
@@ -422,19 +431,21 @@ impl VisualizationData {
 
     pub fn init_visualizers(
         &mut self,
-        dir: String,
+        run_data_dir: PathBuf,
         tmp_dir: &Path,
         report_dir: &Path,
     ) -> Result<String> {
-        let dir_path = Path::new(&dir);
-        let dir_name = data::utils::notargz_file_name(dir_path.to_path_buf())?;
+        let run_name = data::utils::no_tar_gz_file_name(&run_data_dir).unwrap();
         let visualizers_len = self.visualizers.len();
         let mut error_count = 0;
 
         for data_visualizer in self.visualizers.values_mut() {
-            if let Err(e) =
-                data_visualizer.init_visualizer(dir.clone(), dir_name.clone(), tmp_dir, report_dir)
-            {
+            if let Err(e) = data_visualizer.init_visualizer(
+                run_data_dir.clone(),
+                run_name.clone(),
+                tmp_dir,
+                report_dir,
+            ) {
                 debug!("{:#?}", e);
                 error_count += 1;
             }
@@ -444,7 +455,7 @@ impl VisualizationData {
         if error_count == visualizers_len {
             return Err(PDError::InvalidRunData.into());
         }
-        Ok(dir_name.clone())
+        Ok(run_name.clone())
     }
 
     pub fn add_visualizer(&mut self, data_visualizer: DataVisualizer) {
