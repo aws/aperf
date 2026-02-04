@@ -26,7 +26,7 @@ jobs:
           egress-policy: audit
 
       # Download and unpack all release artifacts
-      - name: Download release artifacts
+      - name: Download built binaries
         uses: actions/download-artifact@v4
 
       # Create release tarballs
@@ -45,18 +45,14 @@ jobs:
       - name: Create MacOS artifacts
         run: |
           name=aperf-${{ github.ref_name }}-macos
-          mkdir "$name"
-          tar -zxvf macos-release-artifacts/aperf -C "$name"
-          tar -zcvf "$name".tar.gz "$name"
+          tar -zcvf "$name".tar.gz -C macos-release-artifact aperf
       - name: Create Windows artifacts
         run: |
           name=aperf-${{ github.ref_name }}-windows
-          mkdir "$name"
-          tar -zxvf windows-release-artifacts/aperf.exe -C "$name"
-          tar -zcvf "$name".tar.gz "$name"
+          tar -zcvf "$name".tar.gz -C windows-release-artifacts aperf.exe
 
       # Attach them to the release
-      - name: Upload x86_64 artifacts.
+      - name: Upload x86_64 artifacts
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
