@@ -45,7 +45,7 @@ jobs:
       - name: Create MacOS artifacts
         run: |
           name=aperf-${{ github.ref_name }}-macos
-          tar -zcvf "$name".tar.gz -C macos-release-artifact aperf
+          tar -zcvf "$name".tar.gz -C macos-release-artifacts aperf
       - name: Create Windows artifacts
         run: |
           name=aperf-${{ github.ref_name }}-windows
