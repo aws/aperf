@@ -4,14 +4,20 @@ on:
   release:
     types: [published]
 
-permissions: read-all
+permissions:
+  id-token: write
+  contents: read
+  actions: read
 
 jobs:
   linux_build:
+    name: Build Linux binaries
     uses: ./.github/workflows/ci.yml
   cross_platform_build:
+    name: Build cross-platform binaries
     uses: ./.github/workflows/cross-platform-ci.yml
   release:
+    name: Create and upload release artifacts
     runs-on:
       - ubuntu-24.04
     permissions:
@@ -80,10 +86,22 @@ jobs:
           file: ./aperf-${{ github.ref_name }}-windows.tar.gz
           tag: ${{ github.ref }}
           asset_name: aperf-${{ github.ref_name }}-windows.tar.gz
+
+  ecr-publish:
+    name: Build image and publish to ECR
+    needs: release
+    uses: ./.github/workflows/ecr-publish.yml
+    with:
+      aperf_version: ${{ github.ref_name }}
+    secrets:
+      ecr_registry_alias: ${{ secrets.ECR_REGISTRY_ALIAS }}
+      ecr_publish_role_arn: ${{ secrets.ECR_PUBLISH_ROLE_ARN }}
+
   notify:
+    name: Send release notifications
     runs-on:
       - ubuntu-24.04
-    needs: release
+    needs: ecr-publish
     steps:
       - name: Notify Slack Webhook
         env:
