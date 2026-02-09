@@ -11,7 +11,7 @@ set -o pipefail
 NAMESPACE="default"
 APERF_OPTIONS=""
 NODE_NAME=""
-APERF_IMAGE=""
+APERF_IMAGE="public.ecr.aws/aperf/aperf:latest"
 SHOW_HELP=false
 CPU_REQUEST="1.0"
 MEMORY_REQUEST="1Gi"
@@ -64,8 +64,8 @@ if [ "$SHOW_HELP" = true ]; then
   echo "   or: ./aperf_k8s.sh --aperf_image IMAGE --node NODE_NAME [--namespace NAMESPACE] [--aperf_options OPTIONS] [--help]"
   echo ""
   echo "Parameters:"
-  echo "  --aperf_image    Required. ECR image location"
   echo "  --node           Required. The name of the Kubernetes node to run aperf on"
+  echo "  --aperf_image    Optional. ECR image URI (default: '${APERF_IMAGE}')"
   echo "  --namespace      Optional. The Kubernetes namespace (default: '${NAMESPACE}')"
   echo "  --aperf_options  Optional. Options to pass to aperf (default: '${APERF_OPTIONS}')"
   echo "  --cpu-request    Optional. CPU request (default: '${CPU_REQUEST}')"
@@ -74,13 +74,6 @@ if [ "$SHOW_HELP" = true ]; then
   echo "  --memory-limit   Optional. Memory limit (default: '${MEMORY_LIMIT}')"
   echo "  --help           Show this help message"
   exit 0
-fi
-
-# Check if aperf image is provided
-if [ -z "$APERF_IMAGE" ]; then
-  echo "Error: APerf image is required. Use --aperf_image=IMAGE_URL or --aperf_image IMAGE_URL to specify the ECR image location."
-  echo "Use --help for more information."
-  exit 1
 fi
 
 # Check if node name is provided
