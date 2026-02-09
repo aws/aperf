@@ -2,80 +2,19 @@
 
 This guide explains how to run APerf on Amazon EKS (Elastic Kubernetes Service) or any Kubernetes cluster to collect performance metrics without requiring SSH access to the Kubernetes nodes.
 
-## Prerequisites
-
-Before you begin, ensure you have the following tools installed and configured on your laptop:
-
-- **Git** - To clone this repository
-- **kubectl** - Installed and connected to your EKS cluster
-- **Docker** - To build the APerf container image
-- **AWS CLI** - With AWS credentials configured for ECR access
-- **jq** - For JSON parsing (used in scripts)
-
 ## Requirements
-
-1. Clone this repository to your laptop:
+1. Verify AWS credentials are configured:
    ```bash
-   git clone https://github.com/aws/aperf 
-   cd aperf
+   aws sts get-caller-identity
    ```
-
-2. Ensure kubectl is connected to your EKS cluster:
+2. Install [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/). Then connect `kubectl` to your EKS cluster by following [this instruction](https://docs.aws.amazon.com/eks/latest/userguide/create-kubeconfig.html). To verify that `kubectl` is connected to your EKS cluster, run:
    ```bash
    kubectl get nodes
    ```
 
-3. Verify AWS credentials are configured:
-   ```bash
-   aws sts get-caller-identity
-   ```
+## Instructions
 
-## Setup Instructions
-
-### Step 1: Create ECR Repository
-
-First, create an Amazon ECR repository to contain the APerf image:
-
-```bash
-# Optional: Set your AWS region if needed
-# export AWS_REGION="us-west-2"
-
-# Optional: Set AWS profile if needed
-# export AWS_PROFILE="your-profile-name"
-
-# Create ECR repository
-aws ecr create-repository --repository-name aperf --region $AWS_REGION
-
-# Get ECR repository URL
-APERF_ECRREPO=$(aws ecr describe-repositories --repository-names aperf --region $AWS_REGION | jq -r '.repositories[0].repositoryUri')
-echo "ECR Repository URL: $APERF_ECRREPO"
-
-# Authenticate with ECR
-aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $APERF_ECRREPO
-```
-
-### Step 2: Build and Push APerf Container Image
-
-Build the multi-architecture APerf container image and push it to ECR:
-
-```bash
-# Build and push multi-architecture image (supports both AMD64 and ARM64)
-docker buildx build --push --platform linux/amd64,linux/arm64 -t ${APERF_ECRREPO}:latest -f ./Dockerfile .
-```
-
-**Note**: If you don't have `docker buildx` configured for multi-platform builds, you can build for your specific architecture:
-
-```bash
-docker build -t ${APERF_ECRREPO}:latest -f ./Dockerfile .
-docker push ${APERF_ECRREPO}:latest
-```
-
-Your APerf containerized image should now be available on the ECR registry.
-
-
-### Step 3: Run APerf on EKS
-
-#### 3a. Identify Target Node
+### Step 1: Identify Target Node
 
 Find a target Kubernetes node where you want to collect APerf metrics:
 
@@ -86,20 +25,19 @@ kubectl get pods -A -o wide
 
 Example node name: `ip-10-0-120-104.us-west-2.compute.internal` or `i-02a3f32795d5d95c2`
 
-#### 3b. Execute APerf Collection
+### Step 2: Start APerf Collection
 
-Use the provided `eks-aperf.sh` script to run APerf on the selected node:
+Use the provided `eks-aperf.sh` script to run APerf on the selected node. By default, it uses the latest official APerf image available at https://gallery.ecr.aws/aperf/aperf. To use your own APerf image, refer to the [instructions below](#optional-use-your-own-aperf-image).
 
 ```bash
 bash ./eks-aperf.sh \
-  --aperf_image="${APERF_ECRREPO}:latest" \
   --node="ip-10-0-120-104.us-west-2.compute.internal" 
 ```
 
 ##### Script Parameters
 
-- `--aperf_image`: ECR image URL for the APerf container
 - `--node`: Target Kubernetes node name
+- `--aperf_image`: ECR image URI (optional, default: `public.ecr.aws/aperf/aperf:latest`)
 - `--aperf_options`: APerf command options (optional, default: ``)
 - `--namespace`: Kubernetes namespace (optional, default: `default`)
 - `--cpu-request`: CPU request for the pod (optional, default: `1.0`)
@@ -112,7 +50,6 @@ bash ./eks-aperf.sh \
 ```bash
 # Run APerf for 60 seconds with profiling enabled
 bash ./eks-aperf.sh \
-  --aperf_image="${APERF_ECRREPO}:latest" \
   --node="ip-10-0-120-104.us-west-2.compute.internal" \
   --aperf_options="-p 60 --profile" \
   --namespace="aperf"
@@ -123,7 +60,6 @@ bash ./eks-aperf.sh \
 ```bash
 # Run APerf with custom CPU and memory settings
 bash ./eks-aperf.sh \
-  --aperf_image="${APERF_ECRREPO}:latest" \
   --node="ip-10-0-120-104.us-west-2.compute.internal" \
   --cpu-request="2.0" \
   --memory-request="2Gi" \
@@ -131,7 +67,7 @@ bash ./eks-aperf.sh \
   --memory-limit="8Gi"
 ```
 
-#### 3c. Collect Results
+### Step 3: Collect Results
 
 The `eks-aperf.sh` script will automatically run the following steps:
 
@@ -145,7 +81,7 @@ The APerf report will be downloaded as a compressed tarball file with a timestam
 
 Example of correct output execution of the script:
 ```bash
-$ bash ./eks-aperf.sh --aperf_image="${APERF_ECRREPO}:latest"  --namespace=aperf --node  ip-10-0-120-104.us-west-2.compute.internal  --aperf_options="-p 30 --profile"
+$ bash ./eks-aperf.sh  --namespace=aperf --node  ip-10-0-120-104.us-west-2.compute.internal  --aperf_options="-p 30 --profile"
 
 Tageted node instance type...   m6g.8xlarge
 Check namespace security policy...   Namespace 'aperf' has 'privileged' policy - privileged pods allowed.
@@ -189,6 +125,68 @@ Files copied to aperf_report_20250626-133204.tar.gz
 Done!
 ```
 
+## (Optional) Use your own APerf image
+If you have your own version of APerf to be used with the cluster, you can build a custom image and push it to a public ECR repo.
+
+### Step 1: Create ECR Repository
+
+First, create an Amazon ECR repository that holds the APerf image.
+
+To create the repository through CLI, ensure that you have [aws cli](https://aws.amazon.com/cli/) and the `jq` command installed, and then execute the below commands:
+
+```bash
+# Optional: Set your AWS region if needed
+# export AWS_REGION="us-west-2"
+
+# Optional: Set AWS profile if needed
+# export AWS_PROFILE="your-profile-name"
+
+# Create ECR repository
+aws ecr create-repository --repository-name aperf --region $AWS_REGION
+
+# Get ECR repository URL
+APERF_ECR_REPO=$(aws ecr describe-repositories --repository-names aperf --region $AWS_REGION | jq -r '.repositories[0].repositoryUri')
+echo "ECR Repository URL: $APERF_ECR_REPO"
+```
+
+Alternatively, you can create the repository through AWS console following [this instruction](https://docs.aws.amazon.com/AmazonECR/latest/public/public-repository-create.html).
+
+### Step 2: Build and Push APerf Container Image
+
+To build your own image, you need to have Docker installed.
+
+Login to ECR first by running the below commands. If you created the repository with other methods, manually set the `$APERF_ECR_REPO` variable first.
+
+```bash
+# Authenticate with ECR
+aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $APERF_ECR_REPO
+```
+
+Change directory to the root of your local APerf repository, build the multi-architecture APerf container image, and push it to ECR:
+
+```bash
+# Build and push multi-architecture image (supports both AMD64 and ARM64)
+docker buildx build --push --platform linux/amd64,linux/arm64 -t ${APERF_ECR_REPO}:latest -f ./Dockerfile .
+```
+
+**Note**: If you don't have `docker buildx` configured for multi-platform builds, you can build for your specific architecture:
+
+```bash
+docker build -t ${APERF_ECR_REPO}:latest -f ./Dockerfile .
+docker push ${APERF_ECR_REPO}:latest
+```
+
+Your APerf containerized image should now be available on the ECR registry.
+
+### Step 3: Use the custom image
+
+Now you can invoke the `eks-aperf.sh` script with the custom APerf image:
+
+```bash
+bash ./eks-aperf.sh \
+  --aperf_image="${APERF_ECR_REPO}:latest" \
+  --node="ip-10-0-120-104.us-west-2.compute.internal" 
+```
 
 ## Security Considerations
 
