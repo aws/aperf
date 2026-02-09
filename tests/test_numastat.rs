@@ -230,3 +230,45 @@ fn test_numastat_malformed_data() {
         panic!("Expected TimeSeries data format");
     }
 }
+
+#[test]
+fn test_decreasing_counter() {
+    use aperf::data::data_formats::AperfData;
+    use aperf::data::numastat::NumastatRaw;
+    use aperf::data::TimeEnum;
+    use chrono::Utc;
+
+    let base_time = Utc::now();
+    let raw_samples = vec![
+        NumastatRaw {
+            time: TimeEnum::DateTime(base_time),
+            data: "node0:\nnuma_hit 1000\nnuma_miss 500\n".to_string(),
+        },
+        NumastatRaw {
+            time: TimeEnum::DateTime(base_time + chrono::Duration::seconds(1)),
+            data: "node0:\nnuma_hit 500\nnuma_miss 250\n".to_string(),
+        },
+    ];
+
+    let raw_data: Vec<Data> = raw_samples
+        .into_iter()
+        .map(|s| Data::NumastatRaw(s))
+        .collect();
+
+    let mut numastat = Numastat::new();
+    let result = numastat
+        .process_raw_data(ReportParams::new(), raw_data)
+        .unwrap();
+
+    if let AperfData::TimeSeries(time_series_data) = result {
+        for metric in time_series_data.metrics.values() {
+            for series in &metric.series {
+                assert_eq!(series.values.len(), 2);
+                assert_eq!(series.values[0], 0.0);
+                assert_eq!(series.values[1], 0.0);
+            }
+        }
+    } else {
+        panic!("Expected TimeSeries data");
+    }
+}

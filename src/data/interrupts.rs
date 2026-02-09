@@ -4,6 +4,7 @@ use crate::data::utils::{get_aggregate_cpu_series_name, get_cpu_series_name};
 use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
+use log::warn;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
@@ -186,8 +187,14 @@ impl ProcessData for InterruptData {
                 let num_cpus = interrupt.per_cpu_values.len();
                 // Compute the value of every CPU series
                 for cpu in 0..num_cpus {
-                    let cur_cpu_value =
-                        interrupt.per_cpu_values[cpu] - prev_interrupt.per_cpu_values[cpu];
+                    if prev_interrupt.per_cpu_values[cpu] > interrupt.per_cpu_values[cpu] {
+                        warn!(
+                            "Unexpected decreasing {} on CPU {} samples.",
+                            interrupt_metric_name, cpu
+                        );
+                    }
+                    let cur_cpu_value = interrupt.per_cpu_values[cpu]
+                        .saturating_sub(prev_interrupt.per_cpu_values[cpu]);
                     // Keep track of the maximum value for current interrupt metric, to be used
                     // as the graph's max value range
                     if let Some(max_value) = per_interrupt_max_value.get_mut(&interrupt_metric_name)

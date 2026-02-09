@@ -3,7 +3,7 @@ use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMet
 use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
-use log::error;
+use log::{error, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
@@ -130,9 +130,12 @@ impl ProcessData for Netstat {
                 let netstat_metric = time_series_data.metrics.get_mut(netstat_name).unwrap();
                 let series = &mut netstat_metric.series[0];
                 series.time_diff.push(time_diff);
+                if prev_netstat_value > netstat_value {
+                    warn!("Unexpected decreasing {} samples.", netstat_name);
+                }
                 series
                     .values
-                    .push((netstat_value - prev_netstat_value) as f64);
+                    .push((netstat_value.saturating_sub(*prev_netstat_value)) as f64);
             }
 
             prev_netstat = netstat;

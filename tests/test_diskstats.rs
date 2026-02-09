@@ -456,4 +456,47 @@ mod diskstats_tests {
             panic!("Expected TimeSeries data");
         }
     }
+
+    #[test]
+    fn test_decreasing_counter() {
+        use aperf::data::diskstats::DiskstatsRaw;
+        use aperf::data::TimeEnum;
+        use chrono::Utc;
+
+        let base_time = Utc::now();
+        let raw_samples = vec![
+            DiskstatsRaw {
+                time: TimeEnum::DateTime(base_time),
+                data: "   8    0 sda 1000 0 8000 100 500 0 4000 50 0 150 200 0 0 0 0 0 0\n"
+                    .to_string(),
+            },
+            DiskstatsRaw {
+                time: TimeEnum::DateTime(base_time + chrono::Duration::seconds(1)),
+                data: "   8    0 sda 500 0 4000 50 250 0 2000 25 0 75 100 0 0 0 0 0 0\n"
+                    .to_string(),
+            },
+        ];
+
+        let raw_data: Vec<Data> = raw_samples
+            .into_iter()
+            .map(|s| Data::DiskstatsRaw(s))
+            .collect();
+
+        let mut diskstats = Diskstats::new();
+        let result = diskstats
+            .process_raw_data(ReportParams::new(), raw_data)
+            .unwrap();
+
+        if let AperfData::TimeSeries(time_series_data) = result {
+            for metric in time_series_data.metrics.values() {
+                for series in &metric.series {
+                    assert_eq!(series.values.len(), 2);
+                    assert_eq!(series.values[0], 0.0);
+                    assert_eq!(series.values[1], 0.0);
+                }
+            }
+        } else {
+            panic!("Expected TimeSeries data");
+        }
+    }
 }
