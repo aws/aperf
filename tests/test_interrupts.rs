@@ -377,3 +377,47 @@ fn test_process_interrupts_mis_err_only() {
         panic!("Expected TimeSeries data");
     }
 }
+
+#[test]
+fn test_decreasing_counter() {
+    use aperf::data::data_formats::AperfData;
+    use aperf::data::interrupts::InterruptDataRaw;
+    use aperf::data::TimeEnum;
+    use chrono::Utc;
+
+    let base_time = Utc::now();
+    let raw_samples = vec![
+        InterruptDataRaw {
+            time: TimeEnum::DateTime(base_time),
+            data: "           CPU0       CPU1\n  0:        100        200\n".to_string(),
+        },
+        InterruptDataRaw {
+            time: TimeEnum::DateTime(base_time + chrono::Duration::seconds(1)),
+            data: "           CPU0       CPU1\n  0:         50        100\n".to_string(),
+        },
+    ];
+
+    let raw_data: Vec<Data> = raw_samples
+        .into_iter()
+        .map(|s| Data::InterruptDataRaw(s))
+        .collect();
+
+    let mut interrupt_data = InterruptData::new();
+    let result = interrupt_data
+        .process_raw_data(ReportParams::new(), raw_data)
+        .unwrap();
+
+    if let AperfData::TimeSeries(time_series_data) = result {
+        for metric in time_series_data.metrics.values() {
+            for series in &metric.series {
+                if !series.is_aggregate {
+                    assert_eq!(series.values.len(), 2);
+                    assert_eq!(series.values[0], 0.0);
+                    assert_eq!(series.values[1], 0.0);
+                }
+            }
+        }
+    } else {
+        panic!("Expected TimeSeries data");
+    }
+}

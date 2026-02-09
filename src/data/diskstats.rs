@@ -3,7 +3,7 @@ use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMet
 use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
-use log::error;
+use log::{error, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use strum::IntoEnumIterator;
@@ -188,7 +188,15 @@ impl ProcessData for Diskstats {
                         // See https://www.kernel.org/doc/Documentation/iostats.txt
                         DiskStatKey::InProgress => device_disk_stat as f64,
                         // The rests are simply delta between two timestamps
-                        _ => (device_disk_stat - prev_device_disk_stat) as f64,
+                        _ => {
+                            if prev_device_disk_stat > device_disk_stat {
+                                warn!(
+                                    "Unexpected decreasing {} on device {} samples.",
+                                    disk_stat_key, device
+                                );
+                            }
+                            device_disk_stat.saturating_sub(prev_device_disk_stat) as f64
+                        }
                     };
 
                     let per_device_series = per_disk_stat_per_device_series

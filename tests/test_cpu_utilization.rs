@@ -153,14 +153,15 @@ mod cpu_utilization_tests {
         use aperf::data::TimeEnum;
         use chrono::Utc;
 
+        let base_time = Utc::now();
         let raw_samples = vec![
             CpuUtilizationRaw {
-                time: TimeEnum::DateTime(Utc::now()),
+                time: TimeEnum::DateTime(base_time),
                 data: "cpu  100 0 50 1000 0 0 0 0 0 0\ncpu0 100 0 50 1000 0 0 0 0 0 0\n"
                     .to_string(),
             },
             CpuUtilizationRaw {
-                time: TimeEnum::DateTime(Utc::now()),
+                time: TimeEnum::DateTime(base_time + chrono::Duration::seconds(1)),
                 data: "cpu  50 0 25 500 0 0 0 0 0 0\ncpu0 50 0 25 500 0 0 0 0 0 0\n".to_string(),
             },
         ];

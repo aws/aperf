@@ -4,13 +4,13 @@ use crate::data::utils::get_aggregate_cpu_series_name;
 use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
+use log::warn;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 #[cfg(target_os = "linux")]
 use {
     crate::data::{CollectData, CollectorParams},
     chrono::prelude::*,
-    log::warn,
     std::fs,
     std::path::{Path, PathBuf},
 };
@@ -140,10 +140,18 @@ impl ProcessData for Numastat {
                         let prev_node_stats = prev_val_map
                             .entry(metric_name.to_string())
                             .or_insert(HashMap::new());
-                        let diff_value = prev_node_stats
-                            .get(&current_node)
-                            .map(|&prev_value| current_value.saturating_sub(prev_value))
-                            .unwrap_or(0);
+                        let diff_value =
+                            if let Some(&prev_value) = prev_node_stats.get(&current_node) {
+                                if prev_value > current_value {
+                                    warn!(
+                                        "Unexpected decreasing {} on node {} samples.",
+                                        metric_name, current_node
+                                    );
+                                }
+                                current_value.saturating_sub(prev_value)
+                            } else {
+                                0
+                            };
 
                         // Keep track of the max value for each metric across all nodes
                         if let Some(max_value) = per_numa_max_value.get_mut(metric_name) {
