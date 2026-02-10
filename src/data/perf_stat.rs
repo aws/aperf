@@ -1,6 +1,6 @@
 use crate::computations::Statistics;
 use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
-use crate::data::utils::{get_aggregate_cpu_series_name, get_cpu_series_name};
+use crate::data::utils::{get_aggregate_series_name, get_cpu_series_name};
 use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
@@ -514,7 +514,7 @@ impl ProcessData for PerfStat {
                 };
                 let aggregate_series = per_pmu_stat_aggregate_series
                     .entry(pmu_stat_name)
-                    .or_insert(Series::new(get_aggregate_cpu_series_name()));
+                    .or_insert(Series::new(get_aggregate_series_name()));
                 aggregate_series.time_diff.push(time_diff);
                 aggregate_series
                     .values
