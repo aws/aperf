@@ -1,6 +1,6 @@
 use crate::computations::Statistics;
 use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
-use crate::data::utils::get_aggregate_cpu_series_name;
+use crate::data::utils::get_aggregate_series_name;
 use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
@@ -186,7 +186,7 @@ impl ProcessData for Numastat {
             for (metric_name, (sum, count)) in per_metric_sums {
                 let aggregate_series = per_numa_metric_aggregate_series
                     .entry(metric_name)
-                    .or_insert(Series::new(get_aggregate_cpu_series_name()));
+                    .or_insert(Series::new(get_aggregate_series_name()));
                 let avg = if count > 0 {
                     sum as f64 / count as f64
                 } else {

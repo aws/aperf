@@ -8,8 +8,8 @@ use std::fs;
 use std::path::PathBuf;
 #[cfg(target_os = "linux")]
 use {
+    crate::data::utils::get_data_name_from_type,
     crate::data::{CollectData, CollectorParams},
-    crate::utils::get_data_name_from_type,
     crate::PDError,
     log::{debug, error},
     nix::{sys::signal, unistd::Pid},

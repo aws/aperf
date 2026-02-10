@@ -10,12 +10,10 @@ pub mod pmu;
 #[cfg(target_os = "linux")]
 pub mod record;
 pub mod report;
-pub mod utils;
 pub mod visualizer;
 
 use crate::analytics::{AnalyticalEngine, DataFindings};
-use crate::data::aperf_runlog::AperfRunlog;
-use crate::utils::get_data_name_from_type;
+use crate::data::{aperf_runlog::AperfRunlog, utils::get_data_name_from_type};
 use crate::visualizer::DataVisualizer;
 use anyhow::Result;
 use chrono::prelude::*;

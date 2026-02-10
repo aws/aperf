@@ -20,8 +20,7 @@ pub mod utils;
 pub mod vmstat;
 
 use crate::analytics::AnalyticalRule;
-use crate::data::data_formats::AperfData;
-use crate::utils::get_data_name_from_type;
+use crate::data::{data_formats::AperfData, utils::get_data_name_from_type};
 use crate::visualizer::{DataVisualizer, ReportParams};
 use crate::VisualizationData;
 use anyhow::Result;

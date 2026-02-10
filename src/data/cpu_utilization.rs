@@ -1,6 +1,6 @@
 use crate::computations::Statistics;
 use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
-use crate::data::utils::{get_aggregate_cpu_series_name, get_cpu_series_name};
+use crate::data::utils::{get_aggregate_series_name, get_cpu_series_name};
 use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
@@ -264,7 +264,7 @@ impl ProcessData for CpuUtilization {
             if let Some(cpu_state_metric) = time_series_data.metrics.get_mut(&cpu_state.to_string())
             {
                 let mut cur_cpu_state_aggregate_series = aggregate_cpu_state_series.clone();
-                cur_cpu_state_aggregate_series.series_name = get_aggregate_cpu_series_name();
+                cur_cpu_state_aggregate_series.series_name = get_aggregate_series_name();
                 cur_cpu_state_aggregate_series.is_aggregate = true;
                 cpu_state_metric.series.push(cur_cpu_state_aggregate_series);
                 cpu_state_metric.stats =
