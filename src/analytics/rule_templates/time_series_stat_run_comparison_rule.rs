@@ -4,7 +4,7 @@ use crate::computations::{
     delta_ratio_to_percentage_string, formatted_number_string, Comparator, Stat,
 };
 use crate::data::data_formats::ProcessedData;
-use log::error;
+use log::warn;
 use std::fmt;
 use std::fmt::Formatter;
 
@@ -65,14 +65,14 @@ impl Analyze for TimeSeriesStatRunComparisonRule {
         let base_time_series_data = match processed_data.get_time_series_data(base_run_name) {
             Some(time_series_data) => time_series_data,
             None => {
-                error!("{self} failed to analyze: the base time series data does not exist");
+                warn!("{self} failed to analyze: the base time series data does not exist");
                 return;
             }
         };
         let base_metric = match base_time_series_data.metrics.get(self.metric_name) {
             Some(time_series_metric) => time_series_metric,
             None => {
-                error!("{self} failed to analyze: the base time series metric does not exist");
+                warn!("{self} failed to analyze: the base time series metric does not exist");
                 return;
             }
         };
@@ -93,13 +93,16 @@ impl Analyze for TimeSeriesStatRunComparisonRule {
             };
             let cur_stat = self.stat.get_stat(&cur_metric.stats);
 
-            let original_delta_ratio = if base_stat == 0.0 {
+            let original_delta_ratio = if cur_stat == base_stat {
+                0.0
+            } else if base_stat == 0.0 {
                 // When the base stat is zero, the delta computation cannot be performed,
                 // so treat current stat as 100% larger than the base stat
                 1.0
             } else {
                 (cur_stat - base_stat) / base_stat
             };
+
             let comparison_delta_ratio = if self.abs {
                 original_delta_ratio.abs()
             } else {
