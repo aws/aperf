@@ -10,6 +10,12 @@ use rule_templates::{
     time_series_stat_run_comparison_rule::TimeSeriesStatRunComparisonRule,
     time_series_stat_threshold_rule::TimeSeriesStatThresholdRule,
 };
+// Re-export rule types for testing
+pub use rule_templates::{
+    key_value_key_expected_rule, key_value_key_run_comparison_rule,
+    time_series_data_point_threshold_rule, time_series_stat_intra_run_comparison_rule,
+    time_series_stat_run_comparison_rule, time_series_stat_threshold_rule,
+};
 use rules::multi_data_rules::get_multi_data_rules;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Mutex};

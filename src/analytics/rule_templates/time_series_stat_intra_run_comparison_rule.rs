@@ -81,7 +81,9 @@ impl Analyze for TimeSeriesStatIntraRunComparisonRule {
             };
             let comparison_metric_stat = self.stat.get_stat(&comparison_metric.stats);
 
-            let cur_ratio = if baseline_metric_stat == 0.0 {
+            let cur_ratio = if comparison_metric_stat == baseline_metric_stat {
+                0.0
+            } else if baseline_metric_stat == 0.0 {
                 // When the baseline metric stat is zero, the delta computation cannot be performed,
                 // so treat the comparison metric stat as 100% larger than the base stat
                 1.0
