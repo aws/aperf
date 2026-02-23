@@ -32,7 +32,7 @@ ulimit -n 65535
 # 3. Record performance data every 1 second for 60 seconds
 ./aperf record -r my_run -i 1 -p 60
 
-# 4. Generate report
+# 4. Generate report, can be run another machine
 ./aperf report -r my_run -n my_report
 
 # 5. Open my_report/index.html in your browser

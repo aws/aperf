@@ -244,10 +244,13 @@ impl CollectData for PerfStatRaw {
                     Err(e) => {
                         match e.kind() {
                             ErrorKind::PermissionDenied => {
-                                warn!("Set /proc/sys/kernel/perf_event_paranoid to -1")
+                                warn!("kernel.perf_event_paranoid needs to be -1. Run `sudo sysctl -w kernel.perf_event_paranoid=-1`")
                             }
                             ErrorKind::NotFound => warn!("PMU counters not available on this instance type. Refer to APerf documentation for supported instances"),
-                            _ => warn!("Unknown error when trying to use Perf API"),
+                            _ => match e.raw_os_error().unwrap() {
+                                libc::EMFILE => warn!("Too many open files. Increase limit by running `ulimit -n 65536`"),
+                                _ => warn!("Unknown error when trying to use Perf API"),
+                            }
                         }
                         return Err(e.into());
                     }
@@ -278,7 +281,7 @@ impl CollectData for PerfStatRaw {
                                     }
                                     _ => match os_error.raw_os_error().unwrap() {
                                         libc::EMFILE => warn!(
-                                            "Too many open files. Increase limit with `ulimit -n 65536`"
+                                            "Too many open files. Increase limit with by running `ulimit -n 65536`"
                                         ),
                                         _ => warn!("Unknown error when trying to use Perf API."),
                                     },
@@ -306,7 +309,7 @@ impl CollectData for PerfStatRaw {
                                     }
                                     _ => match os_error.raw_os_error().unwrap() {
                                         libc::EMFILE => warn!(
-                                            "Too many open files. Increase limit with `ulimit -n 65536`"
+                                            "Too many open files. Increase limit with by running `ulimit -n 65536`"
                                         ),
                                         _ => warn!("Unknown error when trying to use Perf API."),
                                     },
