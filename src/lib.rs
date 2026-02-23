@@ -25,9 +25,10 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 #[cfg(target_os = "linux")]
 use {
-    crate::data::aperf_stats::AperfStat,
+    crate::data::{aperf_stats::AperfStat, utils::prompt_user_with_timeout},
     data::TimeEnum,
     flate2::{write::GzEncoder, Compression},
+    log::warn,
     nix::poll::{poll, PollFd, PollFlags, PollTimeout},
     nix::sys::{
         signal,
@@ -229,8 +230,8 @@ impl PerformanceData {
                         error!("Aperf exiting...");
                         process::exit(1);
                     }
-                    error!(
-                        "Excluding {} from collection. Error msg: {}",
+                    warn!(
+                        "{} data preparation failed. Error msg: {}",
                         name,
                         e.to_string()
                     );
@@ -240,8 +241,22 @@ impl PerformanceData {
             }
         }
 
-        for key in remove_entries {
-            self.collectors.remove_entry(&key);
+        if remove_entries.len() > 0 {
+            let message = format!(
+                "Data preparation for {} data source(s) failed.",
+                remove_entries.len()
+            );
+            if !prompt_user_with_timeout(&message, 10) {
+                std::process::exit(1);
+            }
+
+            info!(
+                "Excluding {} data source(s) from collection.",
+                remove_entries.len()
+            );
+            for key in remove_entries {
+                self.collectors.remove_entry(&key);
+            }
         }
 
         Ok(())

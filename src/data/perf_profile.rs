@@ -38,6 +38,29 @@ impl PerfProfileRaw {
 #[cfg(target_os = "linux")]
 impl CollectData for PerfProfileRaw {
     fn prepare_data_collector(&mut self, params: &CollectorParams) -> Result<()> {
+        // Check kernel.perf_event_paranoid
+        let paranoid_value = fs::read_to_string("/proc/sys/kernel/perf_event_paranoid")?
+            .trim()
+            .parse::<i32>()
+            .unwrap_or(4);
+        if paranoid_value != -1 {
+            return Err(PDError::DependencyError(format!(
+                "kernel.perf_event_paranoid is not -1. Run `sudo sysctl -w kernel.perf_event_paranoid=-1`"
+            )).into());
+        }
+
+        // Check kernel.kptr_restrict
+        let kptr_value = fs::read_to_string("/proc/sys/kernel/kptr_restrict")?
+            .trim()
+            .parse::<i32>()
+            .unwrap_or(-1);
+        if kptr_value != 0 {
+            return Err(PDError::DependencyError(format!(
+                "kernel.kptr_restrict is not 0. Run `sudo sysctl -w kernel.kptr_restrict=0`"
+            ))
+            .into());
+        }
+
         match Command::new("perf")
             .stdout(Stdio::null())
             .args([

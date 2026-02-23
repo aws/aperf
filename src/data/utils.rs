@@ -2,8 +2,11 @@ use crate::data::data_formats::TimeSeriesMetric;
 use anyhow::{Error, Result};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 pub fn get_data_name_from_type<T>() -> &'static str {
     let full_data_module_path = std::any::type_name::<T>();
@@ -176,6 +179,51 @@ pub fn combine_value_ranges(value_ranges: Vec<(u64, u64)>) -> (u64, u64) {
     }
 
     (min, max)
+}
+
+#[cfg(target_os = "linux")]
+pub fn prompt_user_with_timeout(message: &str, timeout_secs: u64) -> bool {
+    use std::io::BufRead;
+
+    eprintln!("{}", message);
+    eprintln!("Continue anyway?");
+
+    loop {
+        eprint!("(y/n, default y in {}s): ", timeout_secs);
+        std::io::stderr().flush().unwrap();
+
+        let (tx, rx) = mpsc::channel();
+
+        thread::spawn(move || {
+            let stdin = std::io::stdin();
+            let mut handle = stdin.lock();
+            let mut input = String::new();
+            if handle.read_line(&mut input).is_ok() {
+                let _ = tx.send(input.trim().to_lowercase());
+            }
+        });
+
+        match rx.recv_timeout(Duration::from_secs(timeout_secs)) {
+            Ok(response) => match response.as_str() {
+                "y" | "yes" => {
+                    eprintln!("Continuing...");
+                    return true;
+                }
+                "n" | "no" => {
+                    eprintln!("User chose to cancel");
+                    return false;
+                }
+                _ => {
+                    eprintln!("Invalid input. Please enter 'y' or 'n'");
+                    continue;
+                }
+            },
+            Err(_) => {
+                eprintln!("\nTimeout reached. Continuing...");
+                return true;
+            }
+        }
+    }
 }
 
 #[cfg(test)]

@@ -129,7 +129,7 @@ impl JavaProfileRaw {
                 Ok(jps_str)
             }
             Err(e) => Err(PDError::DependencyError(format!(
-                "Jps command failed. {}",
+                "jps command failed. Ensure JDK is installed to use Java profiling. Error msg: {}",
                 e
             ))),
         }
@@ -146,7 +146,7 @@ impl JavaProfileRaw {
                     .collect());
             }
             Err(e) => Err(PDError::DependencyError(format!(
-                "pgrep command failed. {}",
+                "pgrep command failed. Error msg: {}",
                 e
             ))),
         }
@@ -156,6 +156,15 @@ impl JavaProfileRaw {
 #[cfg(target_os = "linux")]
 impl CollectData for JavaProfileRaw {
     fn prepare_data_collector(&mut self, params: &CollectorParams) -> Result<()> {
+        // Check if asprof is installed
+        match Command::new("asprof").args(["--version"]).output() {
+            Ok(_) => {},
+            Err(e) => return Err(PDError::DependencyError(format!(
+                "'asprof' command failed. Ensure it is installed and refer to DEPENDENCIES documentation for more info. Error msg: {}",
+                e
+            )).into()),
+        }
+
         let mut jids: Vec<String> = Vec::new();
         let pgrep: Vec<String> = self.launch_pgrep()?;
         for pid in pgrep {
