@@ -92,7 +92,7 @@ fi
 
 POD_NAME="aperf-pod-${NODE_NAME//[.]/-}"
 
-echo -e "${BOLD}Verifying node exists...${NC}"
+echo -n -e "${BOLD}Verifying node exists...${NC}"
 if ! kubectl get node ${NODE_NAME} &>/dev/null; then
   echo -e "${RED}Error: Node '${NODE_NAME}' not found in the cluster.${NC}"
   echo -e "${YELLOW}Available nodes:${NC}"
