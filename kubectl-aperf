@@ -4,8 +4,8 @@ set -e
 set -o pipefail
 
 # Script to deploy a pod on a specific node, run aperf, and copy files locally
-# Usage: ./aperf_k8s.sh --node="node-name" [--namespace="namespace"] [--aperf_options="options"] [--help]
-#    or: ./aperf_k8s.sh --node "node-name" [--namespace "namespace"] [--aperf_options "options"] [--help]
+# Usage: kubectl aperf --node=NODE_NAME [--aperf_image=IMAGE] [--namespace=NAMESPACE] [--aperf_options=OPTIONS] [--report-name=NAME] [--open-browser=true|false] [--help]
+#    or: kubectl aperf --node NODE_NAME [--aperf_image IMAGE] [--namespace NAMESPACE] [--aperf_options OPTIONS] [--report-name NAME] [--open-browser true|false] [--help]
 
 # Default values
 NAMESPACE="default"
@@ -64,8 +64,8 @@ done
 
 # Show help if requested
 if [ "$SHOW_HELP" = true ]; then
-  echo "Usage: ./aperf_k8s.sh --aperf_image=IMAGE --node=NODE_NAME [--namespace=NAMESPACE] [--aperf_options=OPTIONS] [--help]"
-  echo "   or: ./aperf_k8s.sh --aperf_image IMAGE --node NODE_NAME [--namespace NAMESPACE] [--aperf_options OPTIONS] [--help]"
+  echo "Usage: kubectl aperf --node=NODE_NAME [--aperf_image=IMAGE] [--namespace=NAMESPACE] [--aperf_options=OPTIONS] [--report-name=NAME] [--open-browser=true|false] [--help]"
+  echo "   or: kubectl aperf --node NODE_NAME [--aperf_image IMAGE] [--namespace NAMESPACE] [--aperf_options OPTIONS] [--report-name NAME] [--open-browser true|false] [--help]"
   echo ""
   echo "Parameters:"
   echo "  --node           Required. The name of the Kubernetes node to run aperf on"
