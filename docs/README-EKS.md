@@ -280,3 +280,23 @@ Once the shared volume is configured on your Java application, run the `kubectl-
    /tmp/aperf/async-profiler/bin/../lib/libasyncProfiler.so: cannot open shared object file: No such file or directory
    ```
    **Solution**: Verify that your Java application pod has the `/tmp/aperf` volume mounted correctly. Re-apply the deployment configuration from Step 1 and ensure the pods are restarted
+
+
+## Installing as a kubectl Plugin
+
+You can install `kubectl-aperf` as a kubectl plugin to run it as `kubectl aperf` instead of `./kubectl-aperf`. 
+
+To do so, run the following commands:
+
+```bash
+sudo cp kubectl-aperf /usr/local/bin/
+sudo chmod +x /usr/local/bin/kubectl-aperf
+kubectl plugin list
+kubectl aperf --help
+```
+
+Now you can run it as:
+
+```bash
+kubectl aperf --node="ip-10-0-120-104.us-west-2.compute.internal"
+```

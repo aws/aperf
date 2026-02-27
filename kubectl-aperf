@@ -92,6 +92,52 @@ fi
 
 POD_NAME="aperf-pod-${NODE_NAME//[.]/-}"
 
+echo -e "${BOLD}Verifying node exists...${NC}"
+if ! kubectl get node ${NODE_NAME} &>/dev/null; then
+  echo -e "${RED}Error: Node '${NODE_NAME}' not found in the cluster.${NC}"
+  echo -e "${YELLOW}Available nodes:${NC}"
+  kubectl get nodes -o custom-columns=NAME:.metadata.name --no-headers
+  exit 1
+fi
+echo -e "${GREEN}Node '${NODE_NAME}' found${NC}"
+
+# Get node taints and generate tolerations
+echo -e "${BOLD}Checking node taints...${NC} "
+TAINTS=$(kubectl get node ${NODE_NAME} -o jsonpath='{.spec.taints[*]}' 2>/dev/null)
+
+TOLERATIONS=""
+if [ -n "$TAINTS" ]; then
+  echo -e "${YELLOW}Node has taints, adding tolerations to pod spec${NC}"
+  
+  # Parse taints and create tolerations YAML
+  TOLERATIONS="  tolerations:"
+  
+  # Get taints as JSON array and process each one
+  TAINT_COUNT=$(kubectl get node ${NODE_NAME} -o json | jq -r '.spec.taints | length' 2>/dev/null || echo "0")
+  
+  for ((i=0; i<$TAINT_COUNT; i++)); do
+    KEY=$(kubectl get node ${NODE_NAME} -o json | jq -r ".spec.taints[$i].key" 2>/dev/null)
+    VALUE=$(kubectl get node ${NODE_NAME} -o json | jq -r ".spec.taints[$i].value" 2>/dev/null)
+    EFFECT=$(kubectl get node ${NODE_NAME} -o json | jq -r ".spec.taints[$i].effect" 2>/dev/null)
+    
+    echo -e "    Taint: ${KEY}=${VALUE}:${EFFECT}"
+    
+    TOLERATIONS="${TOLERATIONS}
+  - key: \"${KEY}\""
+    
+    if [ "$VALUE" != "null" ] && [ -n "$VALUE" ]; then
+      TOLERATIONS="${TOLERATIONS}
+    value: \"${VALUE}\""
+    fi
+    
+    TOLERATIONS="${TOLERATIONS}
+    effect: \"${EFFECT}\"
+    operator: \"Equal\""
+  done
+else
+  echo -e "${GREEN}No taints found on node${NC}"
+fi
+
 # Create pod YAML as a variable
 POD_YAML=$(cat << EOF
 apiVersion: v1
@@ -103,6 +149,7 @@ metadata:
 spec:
   nodeSelector:
     kubernetes.io/hostname: "${NODE_NAME}"
+${TOLERATIONS}
   containers:
   - name: aperf-runner
     image: ${APERF_IMAGE}
