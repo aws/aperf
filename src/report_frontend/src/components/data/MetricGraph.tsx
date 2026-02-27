@@ -1,12 +1,13 @@
 import React from "react";
 import { DataType, TimeSeriesData, TimeSeriesMetricProps } from "../../definitions/types";
 import { useReportState } from "../ReportStateProvider";
-import { CPU_DATA_TYPES, PROCESSED_DATA } from "../../definitions/data-config";
+import { CPU_DATA_TYPES, PROCESSED_DATA, RUNS } from "../../definitions/data-config";
 import Plot from "react-plotly.js";
-import { Box, Button, Popover } from "@cloudscape-design/components";
+import { Box, Button, Popover, SpaceBetween } from "@cloudscape-design/components";
 import { getTimeSeriesMetricUnit, shouldShowCpuSeries } from "../../utils/utils";
 import MetricGraph from "./MetricGraph";
 import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
+import MetricStatsDisplay from "./MetricStatsDisplay";
 
 /**
  * Transform processed time series data into the format required by plotly.js.
@@ -81,7 +82,7 @@ export default function (props: TimeSeriesMetricProps) {
         },
         yaxis: {
           title: getTimeSeriesMetricUnit(props.dataType, props.metricName),
-          tickformat: ".3s",
+          tickformat: "~s",
           range: valueRange,
           gridcolor: darkMode ? "#404040" : "#e0e0e0",
         },
@@ -97,7 +98,33 @@ export default function (props: TimeSeriesMetricProps) {
   );
 }
 
-export function SingleMetricGraphPopover(props: TimeSeriesMetricProps) {
+/**
+ * This component renders a quick preview of a metric and the same metric in the base run.
+ */
+export function MetricGraphsPopover(props: TimeSeriesMetricProps) {
+  const runsInScope = [props.runName];
+  if (RUNS[0] != props.runName) {
+    runsInScope.push(RUNS[0]);
+  }
+
+  const content = (
+    <SpaceBetween size={"s"}>
+      {runsInScope.map((runName) => (
+        <SpaceBetween size={"xxs"}>
+          {runName == props.runName && <b>{runName}</b>}
+          {runName != props.runName && (
+            <span>
+              {runName}
+              {" (Base run)"}
+            </span>
+          )}
+          <MetricStatsDisplay dataType={props.dataType} runName={runName} metricName={props.metricName} />
+          <MetricGraph dataType={props.dataType} runName={runName} metricName={props.metricName} key={props.dataType} />
+        </SpaceBetween>
+      ))}
+    </SpaceBetween>
+  );
+
   return (
     <Popover
       triggerType={"custom"}
@@ -105,10 +132,12 @@ export function SingleMetricGraphPopover(props: TimeSeriesMetricProps) {
       position={"left"}
       size={"large"}
       fixedWidth
-      header={`[${DATA_DESCRIPTIONS[props.dataType].readableName}] ${props.metricName} (${props.runName})`}
-      content={<MetricGraph dataType={props.dataType} runName={props.runName} metricName={props.metricName} />}
+      header={`[${DATA_DESCRIPTIONS[props.dataType].readableName}] ${props.metricName}`}
+      content={content}
     >
-      <Button iconName={"zoom-in"} variant={"icon"} />
+      <div title={"Preview the metric graph."} style={{ display: "inline-block" }}>
+        <Button iconName={"zoom-in"} variant={"icon"} />
+      </div>
     </Popover>
   );
 }

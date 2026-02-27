@@ -5,37 +5,51 @@ pub mod analytics;
 pub mod completions;
 pub mod computations;
 pub mod data;
+#[cfg(target_os = "linux")]
 pub mod pmu;
+#[cfg(target_os = "linux")]
 pub mod record;
 pub mod report;
-pub mod utils;
 pub mod visualizer;
 
 use crate::analytics::{AnalyticalEngine, DataFindings};
-use crate::data::aperf_runlog::AperfRunlog;
-use crate::data::aperf_stats::AperfStat;
-use crate::utils::get_data_name_from_type;
+use crate::data::{aperf_runlog::AperfRunlog, utils::get_data_name_from_type};
 use crate::visualizer::DataVisualizer;
 use anyhow::Result;
 use chrono::prelude::*;
-use data::TimeEnum;
-use flate2::{write::GzEncoder, Compression};
 use log::{debug, error, info};
-use nix::poll::{poll, PollFd, PollFlags, PollTimeout};
-use nix::sys::{
-    signal,
-    signalfd::{SfdFlags, SigSet, SignalFd},
-};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::os::unix::io::AsFd;
+use std::fs;
 use std::path::{Path, PathBuf};
-use std::{fs, process, time};
 use thiserror::Error;
-use timerfd::{SetTimeFlags, TimerFd, TimerState};
+#[cfg(target_os = "linux")]
+use {
+    crate::data::{aperf_stats::AperfStat, utils::prompt_user_with_timeout},
+    data::TimeEnum,
+    flate2::{write::GzEncoder, Compression},
+    log::warn,
+    nix::poll::{poll, PollFd, PollFlags, PollTimeout},
+    nix::sys::{
+        signal,
+        signalfd::{SfdFlags, SigSet, SignalFd},
+    },
+    std::os::unix::io::AsFd,
+    std::{process, time},
+    timerfd::{SetTimeFlags, TimerFd, TimerState},
+};
 
 pub const APERF_FILE_FORMAT: &str = "bin";
+
+#[cfg(target_os = "windows")]
+pub const APERF_TMP: &str = "C:\\Temp";
+
+#[cfg(target_os = "macos")]
 pub const APERF_TMP: &str = "/tmp";
+
+#[cfg(target_os = "linux")]
+pub const APERF_TMP: &str = "/tmp";
+
 lazy_static! {
     pub static ref APERF_RUNLOG: &'static str = get_data_name_from_type::<AperfRunlog>();
 }
@@ -84,14 +98,23 @@ pub enum PDError {
     #[error("Visualizer Init error")]
     VisualizerInitError,
 
-    #[error("Not an archive or directory")]
-    RecordNotArchiveOrDirectory,
+    #[error("Multiple runs with the same name: {0}")]
+    DuplicateRunNames(String),
 
-    #[error("Tar.gz file name and archived directory name inside mismatch")]
-    ArchiveDirectoryMismatch,
+    #[error("The run {0:?} does not exist.")]
+    RunNotFound(PathBuf),
 
-    #[error("Invalid tar.gz file name")]
-    InvalidArchiveName,
+    #[error("The report {0} already exists in current directory.")]
+    ReportExists(String),
+
+    #[error("The directory within the archive does not have the same name as the archive: {0}")]
+    ArchiveDirectoryInvalidName(String),
+
+    #[error("Invalid directory {0:?}")]
+    InvalidDirectory(PathBuf),
+
+    #[error("Invalid archive {0:?}")]
+    InvalidArchive(PathBuf),
 
     #[error("Invalid verbose option")]
     InvalidVerboseOption,
@@ -129,6 +152,7 @@ macro_rules! noop {
     () => {};
 }
 
+#[cfg(target_os = "linux")]
 #[allow(missing_docs)]
 pub struct PerformanceData {
     pub collectors: HashMap<String, data::DataType>,
@@ -137,6 +161,7 @@ pub struct PerformanceData {
     pub aperf_stats_handle: Option<fs::File>,
 }
 
+#[cfg(target_os = "linux")]
 impl PerformanceData {
     pub fn new(init_params: InitParams) -> Self {
         PerformanceData {
@@ -205,8 +230,8 @@ impl PerformanceData {
                         error!("Aperf exiting...");
                         process::exit(1);
                     }
-                    error!(
-                        "Excluding {} from collection. Error msg: {}",
+                    warn!(
+                        "{} data preparation failed. Error msg: {}",
                         name,
                         e.to_string()
                     );
@@ -216,8 +241,22 @@ impl PerformanceData {
             }
         }
 
-        for key in remove_entries {
-            self.collectors.remove_entry(&key);
+        if remove_entries.len() > 0 {
+            let message = format!(
+                "Data preparation for {} data source(s) failed.",
+                remove_entries.len()
+            );
+            if !prompt_user_with_timeout(&message, 10) {
+                std::process::exit(1);
+            }
+
+            info!(
+                "Excluding {} data source(s) from collection.",
+                remove_entries.len()
+            );
+            for key in remove_entries {
+                self.collectors.remove_entry(&key);
+            }
         }
 
         Ok(())
@@ -358,22 +397,24 @@ impl PerformanceData {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl Default for PerformanceData {
     fn default() -> Self {
         Self::new(Default::default())
     }
 }
 
-pub fn get_file(dir: String, name: String) -> Result<fs::File> {
+pub fn get_file(dir: &PathBuf, name: String) -> Result<(PathBuf, fs::File)> {
     for path in fs::read_dir(dir.clone())? {
-        let mut file_name = path?.file_name().into_string().unwrap();
+        let file_name = path?.file_name().into_string().unwrap();
         if file_name.starts_with(&name) {
-            let file_path = Path::new(&dir).join(file_name.clone());
-            file_name = file_path.to_str().unwrap().to_string();
-            return Ok(fs::OpenOptions::new()
+            let file_path = dir.join(file_name.clone());
+            let file = fs::OpenOptions::new()
                 .read(true)
-                .open(file_name)
-                .expect("Could not open file"));
+                .open(file_path.clone())
+                .expect("Could not open file");
+            // file_name = file_path.to_str().unwrap().to_string();
+            return Ok((file_path, file));
         }
     }
     Err(PDError::VisualizerFileNotFound(name).into())
@@ -403,19 +444,21 @@ impl VisualizationData {
 
     pub fn init_visualizers(
         &mut self,
-        dir: String,
+        run_data_dir: PathBuf,
         tmp_dir: &Path,
         report_dir: &Path,
     ) -> Result<String> {
-        let dir_path = Path::new(&dir);
-        let dir_name = data::utils::notargz_file_name(dir_path.to_path_buf())?;
+        let run_name = data::utils::no_tar_gz_file_name(&run_data_dir).unwrap();
         let visualizers_len = self.visualizers.len();
         let mut error_count = 0;
 
         for data_visualizer in self.visualizers.values_mut() {
-            if let Err(e) =
-                data_visualizer.init_visualizer(dir.clone(), dir_name.clone(), tmp_dir, report_dir)
-            {
+            if let Err(e) = data_visualizer.init_visualizer(
+                run_data_dir.clone(),
+                run_name.clone(),
+                tmp_dir,
+                report_dir,
+            ) {
                 debug!("{:#?}", e);
                 error_count += 1;
             }
@@ -425,7 +468,7 @@ impl VisualizationData {
         if error_count == visualizers_len {
             return Err(PDError::InvalidRunData.into());
         }
-        Ok(dir_name.clone())
+        Ok(run_name.clone())
     }
 
     pub fn add_visualizer(&mut self, data_visualizer: DataVisualizer) {
@@ -545,10 +588,14 @@ impl Default for InitParams {
 
 #[cfg(test)]
 mod tests {
-    use super::{InitParams, PerformanceData, APERF_FILE_FORMAT};
-    use std::fs;
-    use std::path::Path;
+    #[cfg(target_os = "linux")]
+    use {
+        super::{InitParams, PerformanceData, APERF_FILE_FORMAT},
+        std::fs,
+        std::path::Path,
+    };
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_performance_data_new() {
         let pd: PerformanceData = Default::default();
@@ -561,6 +608,7 @@ mod tests {
         assert_eq!(pd.init_params.dir_name, dir_name);
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_performance_data_dir_creation() {
         let mut params = InitParams::new("".to_string());

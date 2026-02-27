@@ -1,15 +1,18 @@
 use crate::analytics::BASE_RUN_NAME;
+use crate::data::utils::no_tar_gz_file_name;
 use crate::data::JS_DIR;
 use crate::{data, PDError, VisualizationData};
 use anyhow::Result;
+use chrono::Utc;
 use clap::Args;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
-use log::{error, info};
+use log::info;
 use serde::Serialize;
-use std::fs;
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+use std::{env, fs};
 
 #[derive(Serialize)]
 struct VersionInfo {
@@ -26,10 +29,46 @@ impl VersionInfo {
     }
 }
 
+/// Stores the information of all runs to be included in the report
+#[derive(Default)]
+struct RunsInfo {
+    /// The list of run names (the run dir/archive file name minus the file format)
+    run_names: Vec<String>,
+    /// The list of paths to the run archives (run data tar files)
+    run_archive_paths: Vec<PathBuf>,
+    /// The list of paths to the run data directory (where data are available for read and processing)
+    run_dir_paths: Vec<PathBuf>,
+}
+
+impl RunsInfo {
+    fn new() -> Self {
+        RunsInfo::default()
+    }
+
+    fn add_run(
+        &mut self,
+        run_name: String,
+        run_archive_path: PathBuf,
+        run_dir_path: PathBuf,
+    ) -> Result<()> {
+        if self.run_names.contains(&run_name) {
+            return Err(PDError::DuplicateRunNames(run_name).into());
+        }
+
+        self.run_names.push(run_name);
+        self.run_archive_paths.push(run_archive_path);
+        self.run_dir_paths.push(run_dir_path);
+
+        Ok(())
+    }
+}
+
 #[derive(Clone, Args, Debug)]
 pub struct Report {
     /// The paths to the directories or archives of the recorded data to be included in the report.
-    #[clap(help_heading = "Basic Options", short, long, value_parser, required = true, value_names = &["RUN_NAME> <RUN_NAME"], num_args = 1..)]
+    /// If multiple runs are specified, the first run is used as the base run. The data in every
+    /// other run will be compared against the base run to generate statistical and analytical findings.
+    #[clap(help_heading = "Basic Options", verbatim_doc_comment, short, long, value_parser, required = true, value_names = &["RUN_NAME> <RUN_NAME"], num_args = 1..)]
     pub run: Vec<String>,
 
     /// The directory and archive name of the report.
@@ -37,180 +76,163 @@ pub struct Report {
     pub name: Option<String>,
 }
 
-pub fn form_and_copy_archive(loc: PathBuf, report_name: &Path, tmp_dir: &Path) -> Result<()> {
-    if loc.is_dir() {
-        let dir_name = loc.file_name().unwrap().to_str().unwrap().to_string();
-
-        /* Create a temp archive */
-        let archive_name = format!("{}.tar.gz", &dir_name);
-        let archive_path = tmp_dir.join(&archive_name);
-        let archive_dst = report_name.join(format!("data/archive/{}", archive_name));
-        info!("Creating archive {}", archive_path.display());
-        {
-            let tar_gz = fs::File::create(&archive_path)?;
-            let enc = GzEncoder::new(tar_gz, Compression::default());
-            let mut tar = tar::Builder::new(enc);
-            tar.append_dir_all(&dir_name, &loc)?;
-        }
-
-        /* Copy archive to aperf_report */
-        info!("Copying archive to {}", archive_dst.display());
-        fs::copy(&archive_path, archive_dst)?;
-        return Ok(());
-    }
-    if infer::get_from_path(&loc)?.unwrap().mime_type() == "application/gzip" {
-        let file_name = loc.file_name().unwrap().to_str().unwrap().to_string();
-
-        /* Copy archive to aperf_report */
-        let archive_dst = report_name.join(format!("data/archive/{}", file_name));
-
-        info!("Copying archive to {}", archive_dst.display());
-        fs::copy(loc, archive_dst)?;
-        return Ok(());
-    }
-    Err(PDError::RecordNotArchiveOrDirectory.into())
-}
-
-pub fn is_report_dir(dir: PathBuf) -> Option<PathBuf> {
-    /* Legacy report detection */
-    if dir.join("index.css").exists()
-        && dir.join("index.html").exists()
-        && dir.join("index.js").exists()
-        && dir.join("data").exists()
-        && dir.join("data/archive").exists()
-    {
-        return Some(dir.join("data/archive"));
-    }
-
-    /* New report detection */
-    if dir.join("main.css").exists()
-        && dir.join("index.html").exists()
-        && dir.join("bundle.js").exists()
-        && dir.join("data").exists()
-        && dir.join("data/archive").exists()
-    {
-        return Some(dir.join("data/archive"));
-    }
-
-    None
-}
-
-pub fn get_report_archives(dir: PathBuf) -> Result<Vec<PathBuf>> {
-    let mut archives = Vec::new();
-    for entry in fs::read_dir(dir)? {
-        archives.push(entry?.path());
-    }
-    Ok(archives)
-}
-
-pub fn get_dir(dir: PathBuf, tmp_dir: &PathBuf) -> Result<PathBuf> {
-    /* If dir return */
-    if dir.is_dir() {
-        return Ok(dir);
-    }
-    /* Unpack if archive */
-    if infer::get_from_path(&dir)?.unwrap().mime_type() == "application/gzip" {
-        info!("Extracting {}", dir.display());
-        let tar_gz = File::open(&dir)?;
-        let tar = GzDecoder::new(tar_gz);
-        let mut archive = tar::Archive::new(tar);
-        archive.unpack(tmp_dir)?;
-        let dir_name = dir
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .strip_suffix(".tar.gz")
-            .ok_or(PDError::InvalidArchiveName)?;
-        let out = tmp_dir.join(dir_name);
-        if !out.exists() {
-            return Err(PDError::ArchiveDirectoryMismatch.into());
-        }
-        return Ok(out);
-    }
-    Err(PDError::RecordNotArchiveOrDirectory.into())
-}
-
 pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
-    let dirs: Vec<String> = report.run.clone();
-    let mut pathbuf_dirs: Vec<PathBuf> = Vec::new();
-    let mut data_dirs: Vec<PathBuf> = Vec::new();
-    let mut dir_paths: Vec<String> = Vec::new();
-    let mut dir_names: Vec<String> = Vec::new();
-
-    /* Form PathBuf from dirs */
-    for dir in &dirs {
-        pathbuf_dirs.push(PathBuf::from(dir));
+    let report_path_str = if let Some(report_name_arg) = &report.name {
+        report_name_arg.clone()
+    } else {
+        let time_now = Utc::now();
+        let time_str = time_now.format("%Y-%m-%d_%H_%M_%S").to_string();
+        let default_report_name = format!("aperf_report_{}", time_str);
+        info!("Report name not given. Using {}", default_report_name);
+        default_report_name
+    };
+    let report_dir_path = PathBuf::from(&report_path_str);
+    let report_archive_path = PathBuf::from(format!("{}.tar.gz", report_path_str));
+    if report_dir_path.exists() || report_archive_path.exists() {
+        return Err(PDError::ReportExists(report_path_str).into());
     }
 
-    /* Check if dirs contains report */
-    for dir in pathbuf_dirs {
-        let path_dir = get_dir(dir.to_path_buf(), tmp_dir)?;
-        if let Some(archive_dir) = is_report_dir(path_dir.clone()) {
-            if report.name.is_none() {
-                return Err(PDError::VisualizerReportFromReportNoNameError.into());
-            }
-            if let Ok(archives) = get_report_archives(archive_dir) {
-                for path in archives {
-                    data_dirs.push(path);
-                }
-            }
+    check_duplicate_runs(&report.run)?;
+
+    let mut runs_info = RunsInfo::new();
+
+    for run in &report.run {
+        let run_path = PathBuf::from(run);
+
+        if !run_path.exists() {
+            return Err(PDError::RunNotFound(run_path).into());
+        }
+
+        let is_run_path_dir = run_path.is_dir();
+        // Extract the data if the input run path is an archive
+        let extracted_dir_path = if is_run_path_dir {
+            run_path.clone()
         } else {
-            data_dirs.push(path_dir);
-        }
-    }
+            extract_archive(&run_path, tmp_dir)?
+        };
 
-    /* Get dir paths, names */
-    for dir in &data_dirs {
-        let path = get_dir(dir.to_path_buf(), tmp_dir)?;
-        let dir_name = data::utils::notargz_file_name(path.clone())?;
-        if dir_names.contains(&dir_name) {
-            error!("Cannot process two runs with the same name");
-            return Ok(());
-        }
-        dir_names.push(dir_name);
-        dir_paths.push(path.to_str().unwrap().to_string());
-    }
-
-    let mut report_name = PathBuf::new();
-    match &report.name {
-        Some(n) => report_name.push(data::utils::notargz_string_name(n.to_string())?),
-        None => {
-            /* Generate report name */
-            let mut file_name = "aperf_report".to_string();
-            for dir_name in &dir_names {
-                file_name = format!("{}_{}", file_name, dir_name);
+        // If handling a report, get all run data archives in it and extract them
+        if let Some(report_run_archive_paths) = get_report_run_archive_paths(&extracted_dir_path) {
+            for report_run_archive_path in report_run_archive_paths {
+                runs_info.add_run(
+                    no_tar_gz_file_name(&report_run_archive_path).unwrap(),
+                    report_run_archive_path.clone(),
+                    extract_archive(&report_run_archive_path, tmp_dir)?,
+                )?
             }
-            report_name.push(file_name);
-            info!("Report name not given. Using '{}'", report_name.display());
+        }
+        // If handling a data directory, create an archive to be copied into the report at the end
+        else if is_run_path_dir {
+            runs_info.add_run(
+                no_tar_gz_file_name(&run_path).unwrap(),
+                create_archive(&run_path, tmp_dir)?,
+                run_path.clone(),
+            )?
+        }
+        // If handling a data archive, use the archive directly
+        else {
+            runs_info.add_run(
+                no_tar_gz_file_name(&run_path).unwrap(),
+                run_path.clone(),
+                extracted_dir_path,
+            )?
         }
     }
-    let mut report_name_tgz = PathBuf::new();
-    // If a user provided run name has a '.' in it, setting the extension as '.tar.gz'
-    // here will overwrite the run name after the '.'. To prevent that set the filename.
-    report_name_tgz.set_file_name(report_name.to_str().unwrap().to_owned() + ".tar.gz");
 
-    generate_report_files(
-        report_name.clone(),
-        &dir_names,
-        &data_dirs,
-        &dir_paths,
-        tmp_dir,
-    );
+    generate_report_files(report_dir_path, runs_info, tmp_dir);
 
     Ok(())
 }
 
-fn generate_report_files(
-    report_dir: PathBuf,
-    run_names: &Vec<String>,
-    raw_run_paths: &Vec<PathBuf>,
-    run_dir_paths: &Vec<String>,
-    tmp_dir: &PathBuf,
-) {
+/// Checks if the list of runs include duplicates
+pub fn check_duplicate_runs(run_args: &Vec<String>) -> Result<()> {
+    let mut unique_runs: HashSet<String> = HashSet::new();
+
+    for run in run_args {
+        let run_name = no_tar_gz_file_name(&PathBuf::from(run))
+            .ok_or(PDError::InvalidArchive(PathBuf::from(run)))?;
+        if !unique_runs.insert(run_name.clone()) {
+            return Err(PDError::DuplicateRunNames(run_name).into());
+        }
+    }
+
+    Ok(())
+}
+
+/// Creates (tar) an archive in the temporary directory
+pub fn create_archive(dir_path: &PathBuf, tmp_dir: &PathBuf) -> Result<PathBuf> {
+    if !dir_path.is_dir() {
+        return Err(PDError::InvalidDirectory(dir_path.clone()).into());
+    }
+
+    let dir_name = no_tar_gz_file_name(dir_path).unwrap();
+    let archive_name = format!("{}.tar.gz", &dir_name);
+    let archive_path = tmp_dir.join(archive_name);
+
+    info!("Creating archive {:?}", archive_path);
+    let archive_file = File::create(&archive_path)?;
+    let gz_encoder = GzEncoder::new(archive_file, Compression::default());
+    let mut tar = tar::Builder::new(gz_encoder);
+    tar.append_dir_all(&dir_name, &dir_path)?;
+
+    Ok(archive_path)
+}
+
+/// Extracts (untar) an archive to the temporary directory
+pub fn extract_archive(archive_path: &PathBuf, tmp_dir: &PathBuf) -> Result<PathBuf> {
+    if infer::get_from_path(&archive_path)?.unwrap().mime_type() != "application/gzip" {
+        return Err(PDError::InvalidArchive(archive_path.clone()).into());
+    }
+
+    info!("Extracting archive {:?}", archive_path);
+
+    let archive_file = File::open(&archive_path)?;
+    let gz_decoder = GzDecoder::new(archive_file);
+    let mut tar = tar::Archive::new(gz_decoder);
+    tar.unpack(tmp_dir)?;
+    let dir_name = match no_tar_gz_file_name(&archive_path) {
+        Some(dir_name) => dir_name,
+        None => return Err(PDError::InvalidArchive(archive_path.clone()).into()),
+    };
+    let extracted_dir_path = tmp_dir.join(&dir_name);
+    if !extracted_dir_path.exists() {
+        return Err(PDError::ArchiveDirectoryInvalidName(dir_name).into());
+    }
+
+    Ok(extracted_dir_path)
+}
+
+/// Checks if the given path contains an APerf report. If so, return the list of run archive paths
+/// contained in the report.
+pub fn get_report_run_archive_paths(report_path: &PathBuf) -> Option<Vec<PathBuf>> {
+    let report_data_dir_path = report_path.join("data");
+    let report_run_archives_dir_path = report_data_dir_path.join("archive");
+    let report_runs_path = report_data_dir_path.join("js").join("runs.js");
+
+    if !report_run_archives_dir_path.exists() || !report_runs_path.exists() {
+        return None;
+    }
+
+    let runs_content = fs::read_to_string(report_runs_path).unwrap();
+    let json_str = runs_content.strip_prefix("runs_raw = ").unwrap().trim();
+    let runs: Vec<String> = serde_json::from_str(json_str).unwrap();
+
+    let mut run_archive_paths = Vec::new();
+    for run_name in runs {
+        let run_archive_path = report_run_archives_dir_path.join(format!("{}.tar.gz", run_name));
+        if run_archive_path.exists() {
+            run_archive_paths.push(run_archive_path);
+        }
+    }
+
+    Some(run_archive_paths)
+}
+
+/// Processes all the raw data, executes analytical rules, and produces all required report files
+fn generate_report_files(report_dir: PathBuf, runs_info: RunsInfo, tmp_dir: &PathBuf) {
     {
         let mut base_run_name = BASE_RUN_NAME.lock().unwrap();
-        *base_run_name = run_names.get(0).unwrap().to_string();
+        *base_run_name = runs_info.run_names.get(0).unwrap().to_string();
     }
 
     info!("Creating APerf report...");
@@ -223,11 +245,11 @@ fn generate_report_files(
     let mut visualization_data = VisualizationData::new();
     data::add_all_visualization_data(&mut visualization_data);
     /* Init visualizers */
-    for run_dir in run_dir_paths {
-        let name = visualization_data
-            .init_visualizers(run_dir.to_owned(), tmp_dir, &report_dir)
+    for run_data_dir in runs_info.run_dir_paths {
+        let run_name = visualization_data
+            .init_visualizers(run_data_dir.clone(), tmp_dir, &report_dir)
             .unwrap();
-        visualization_data.process_raw_data(name).unwrap();
+        visualization_data.process_raw_data(run_name).unwrap();
     }
 
     let analytical_findings = visualization_data.run_analytics();
@@ -238,7 +260,7 @@ fn generate_report_files(
     write!(
         runs_file,
         "runs_raw = {}",
-        serde_json::to_string(run_names).unwrap()
+        serde_json::to_string(&runs_info.run_names).unwrap()
     )
     .unwrap();
 
@@ -282,9 +304,13 @@ fn generate_report_files(
         }
     }
 
-    /* Generate/copy the archives of the collected data into aperf_report */
-    for dir in raw_run_paths {
-        form_and_copy_archive(dir.to_path_buf(), &report_dir, tmp_dir).unwrap();
+    /* Copy all run archives into the report's data/archives path */
+    let report_run_archives_dir = report_data_dir.join("archive");
+    for run_archive_source_path in runs_info.run_archive_paths {
+        let run_archive_dest_path =
+            report_run_archives_dir.join(run_archive_source_path.file_name().unwrap());
+        info!("Copying archive to {:?}", run_archive_dest_path);
+        fs::copy(run_archive_source_path, run_archive_dest_path).unwrap();
     }
 
     let mut report_name_tgz = PathBuf::new();

@@ -1,16 +1,18 @@
 use crate::data::data_formats::{AperfData, TextData};
-use crate::data::{CollectData, CollectorParams, Data, ProcessData};
+use crate::data::{Data, ProcessData};
 use crate::visualizer::ReportParams;
-use crate::PDError;
 use anyhow::Result;
-use log::{error, trace};
-use nix::{sys::signal, unistd::Pid};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::{
-    io::Write,
-    process::{Child, Command, Stdio},
-    sync::Mutex,
+use std::{process::Child, sync::Mutex};
+#[cfg(target_os = "linux")]
+use {
+    crate::data::{CollectData, CollectorParams},
+    crate::PDError,
+    log::{debug, error},
+    nix::{sys::signal, unistd::Pid},
+    std::io::Write,
+    std::process::{Command, Stdio},
 };
 
 pub const PERF_TOP_FUNCTIONS_FILE_NAME: &str = "top_functions";
@@ -24,6 +26,7 @@ pub struct PerfProfileRaw {
     pub data: String,
 }
 
+#[cfg(target_os = "linux")]
 impl PerfProfileRaw {
     pub fn new() -> Self {
         PerfProfileRaw {
@@ -32,8 +35,32 @@ impl PerfProfileRaw {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl CollectData for PerfProfileRaw {
     fn prepare_data_collector(&mut self, params: &CollectorParams) -> Result<()> {
+        // Check kernel.perf_event_paranoid
+        let paranoid_value = fs::read_to_string("/proc/sys/kernel/perf_event_paranoid")?
+            .trim()
+            .parse::<i32>()
+            .unwrap_or(4);
+        if paranoid_value != -1 {
+            return Err(PDError::DependencyError(format!(
+                "kernel.perf_event_paranoid is not -1. Run `sudo sysctl -w kernel.perf_event_paranoid=-1`"
+            )).into());
+        }
+
+        // Check kernel.kptr_restrict
+        let kptr_value = fs::read_to_string("/proc/sys/kernel/kptr_restrict")?
+            .trim()
+            .parse::<i32>()
+            .unwrap_or(-1);
+        if kptr_value != 0 {
+            return Err(PDError::DependencyError(format!(
+                "kernel.kptr_restrict is not 0. Run `sudo sysctl -w kernel.kptr_restrict=0`"
+            ))
+            .into());
+        }
+
         match Command::new("perf")
             .stdout(Stdio::null())
             .args([
@@ -61,7 +88,7 @@ impl CollectData for PerfProfileRaw {
             ))
             .into()),
             Ok(child) => {
-                trace!("Recording Perf profiling data.");
+                debug!("Recording Perf profiling data.");
                 *PERF_CHILD.lock().unwrap() = Some(child);
                 Ok(())
             }
@@ -84,13 +111,13 @@ impl CollectData for PerfProfileRaw {
             params.signal,
         )?;
 
-        trace!("Waiting for perf profile collection to complete...");
+        debug!("Waiting for perf profile collection to complete...");
         match child.as_mut().unwrap().wait() {
             Err(e) => {
                 error!("'perf' did not exit successfully: {}", e);
                 return Ok(());
             }
-            Ok(_) => trace!("'perf record' executed successfully."),
+            Ok(_) => debug!("'perf record' executed successfully."),
         }
         let mut top_functions_file =
             fs::File::create(params.data_dir.join(PERF_TOP_FUNCTIONS_FILE_NAME))?;

@@ -18,7 +18,6 @@ pub struct TimeSeriesStatIntraRunComparisonRule {
     pub delta_ratio: f64,
     pub score: f64,
     pub message: &'static str,
-    pub reference: &'static str,
 }
 
 macro_rules! time_series_stat_intra_run_comparison {
@@ -32,7 +31,6 @@ macro_rules! time_series_stat_intra_run_comparison {
         delta_ratio: $delta_ratio:literal,
         score: $score:expr,
         message: $message:literal,
-        reference: $reference:literal,
     } => {
         AnalyticalRule::TimeSeriesStatIntraRunComparisonRule(
             TimeSeriesStatIntraRunComparisonRule{
@@ -45,33 +43,6 @@ macro_rules! time_series_stat_intra_run_comparison {
                 delta_ratio: $delta_ratio,
                 score: $score.as_f64(),
                 message: $message,
-                reference: $reference,
-            }
-        )
-    };
-    {
-        name: $rule_name:literal,
-        baseline_metric: $baseline_metric_name:literal,
-        comparison_metric: $comparison_metric_name:literal,
-        stat: $stat:path,
-        comparator: $comparator:path,
-        abs: $abs:literal,
-        delta_ratio: $delta_ratio:literal,
-        score: $score:expr,
-        message: $message:literal,
-    } => {
-        AnalyticalRule::TimeSeriesStatIntraRunComparisonRule(
-            TimeSeriesStatIntraRunComparisonRule{
-                rule_name: $rule_name,
-                baseline_metric_name: $baseline_metric_name,
-                comparison_metric_name: $comparison_metric_name,
-                stat: $stat,
-                comparator: $comparator,
-                abs: $abs,
-                delta_ratio: $delta_ratio,
-                score: $score.as_f64(),
-                message: $message,
-                reference: "",
             }
         )
     };
@@ -110,7 +81,9 @@ impl Analyze for TimeSeriesStatIntraRunComparisonRule {
             };
             let comparison_metric_stat = self.stat.get_stat(&comparison_metric.stats);
 
-            let cur_ratio = if baseline_metric_stat == 0.0 {
+            let cur_ratio = if comparison_metric_stat == baseline_metric_stat {
+                0.0
+            } else if baseline_metric_stat == 0.0 {
                 // When the baseline metric stat is zero, the delta computation cannot be performed,
                 // so treat the comparison metric stat as 100% larger than the base stat
                 1.0
@@ -139,13 +112,12 @@ impl Analyze for TimeSeriesStatIntraRunComparisonRule {
 
                 data_findings.insert_finding(
                     run_name,
-                    self.baseline_metric_name,
+                    self.comparison_metric_name,
                     AnalyticalFinding::new(
                         self.rule_name.to_string(),
                         finding_score,
                         finding_description,
                         self.message.to_string(),
-                        self.reference.to_string(),
                     ),
                 );
             }

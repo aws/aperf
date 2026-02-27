@@ -148,6 +148,48 @@ mod cpu_utilization_tests {
     }
 
     #[test]
+    fn test_negative_time_difference() {
+        use aperf::data::cpu_utilization::CpuUtilizationRaw;
+        use aperf::data::TimeEnum;
+        use chrono::Utc;
+
+        let base_time = Utc::now();
+        let raw_samples = vec![
+            CpuUtilizationRaw {
+                time: TimeEnum::DateTime(base_time),
+                data: "cpu  100 0 50 1000 0 0 0 0 0 0\ncpu0 100 0 50 1000 0 0 0 0 0 0\n"
+                    .to_string(),
+            },
+            CpuUtilizationRaw {
+                time: TimeEnum::DateTime(base_time + chrono::Duration::seconds(1)),
+                data: "cpu  50 0 25 500 0 0 0 0 0 0\ncpu0 50 0 25 500 0 0 0 0 0 0\n".to_string(),
+            },
+        ];
+
+        let raw_data: Vec<Data> = raw_samples
+            .into_iter()
+            .map(|s| Data::CpuUtilizationRaw(s))
+            .collect();
+
+        let mut cpu_util = CpuUtilization::new();
+        let result = cpu_util
+            .process_raw_data(ReportParams::new(), raw_data)
+            .unwrap();
+
+        if let AperfData::TimeSeries(time_series_data) = result {
+            for metric in time_series_data.metrics.values() {
+                for series in &metric.series {
+                    assert_eq!(series.values.len(), 2);
+                    assert_eq!(series.values[0], 0.0);
+                    assert_eq!(series.values[1], 0.0);
+                }
+            }
+        } else {
+            panic!("Expected TimeSeries data");
+        }
+    }
+
+    #[test]
     fn test_process_cpu_utilization_raw_data() {
         let num_cpus = 192;
         let num_samples = 2500;

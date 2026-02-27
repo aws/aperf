@@ -1,27 +1,24 @@
 extern crate ctor;
 
+use crate::data::data_formats::{AperfData, Graph, GraphData, GraphGroup};
 use crate::data::ProcessData;
-use crate::data::{CollectData, CollectorParams};
+use crate::{data::Data, visualizer::ReportParams};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::fs::File;
+use std::io::Write;
+use std::path::PathBuf;
+
+#[cfg(target_os = "linux")]
+use crate::data::{CollectData, CollectorParams};
+
 #[cfg(feature = "hotline")]
 use {
-    crate::data::data_formats::{AperfData, Graph, GraphData, GraphGroup},
-    crate::{
-        data::{Data, DataType},
-        visualizer::{DataVisualizer, ReportParams},
-    },
-    ctor::ctor,
     libc::{_exit, fork, geteuid, killpg, setpgid, waitpid, SIGTERM},
     log::{info, warn},
-    std::fs::File,
-    std::io::Write,
-    std::path::Path,
-    std::path::PathBuf,
     std::{
-        env,
         ffi::CString,
-        fs,
         os::raw::{c_char, c_int},
         panic,
     },
@@ -92,7 +89,6 @@ pub fn check_preconditions() -> Result<bool> {
     }
 }
 
-#[cfg(feature = "hotline")]
 pub mod hotline_reports {
     pub struct ReportConfig<'a> {
         pub table_id: &'a str,
@@ -129,6 +125,7 @@ pub struct HotlineRaw {
     launched: bool,
 }
 
+#[cfg(target_os = "linux")]
 impl HotlineRaw {
     pub fn new() -> Self {
         HotlineRaw {
@@ -138,6 +135,7 @@ impl HotlineRaw {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl CollectData for HotlineRaw {
     #[cfg(feature = "hotline")]
     fn prepare_data_collector(&mut self, params: &CollectorParams) -> Result<()> {
@@ -283,7 +281,6 @@ impl Hotline {
 }
 
 impl ProcessData for Hotline {
-    #[cfg(feature = "hotline")]
     fn process_raw_data(
         &mut self,
         params: ReportParams,
@@ -304,7 +301,6 @@ impl ProcessData for Hotline {
                 <head>
                     <meta charset="UTF-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <link rel="stylesheet" href="../../index.css">
                 </head>
                 <body>
                     {}

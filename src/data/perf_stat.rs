@@ -1,20 +1,25 @@
 use crate::computations::Statistics;
 use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
-use crate::data::utils::{get_aggregate_cpu_series_name, get_cpu_series_name};
-use crate::data::{CollectData, CollectorParams, Data, ProcessData, TimeEnum};
+use crate::data::utils::{get_aggregate_series_name, get_cpu_series_name};
+use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
-use crate::PDError;
 use anyhow::Result;
 use chrono::prelude::*;
-use log::{error, info, trace, warn};
-use perf_event::events::{Raw, Software};
-use perf_event::{Builder, Counter, Group, ReadFormat};
+use log::error;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::ErrorKind;
-use std::path::PathBuf;
-use std::sync::Mutex;
+#[cfg(target_os = "linux")]
+use {
+    crate::data::{CollectData, CollectorParams},
+    crate::PDError,
+    log::{info, warn},
+    perf_event::events::{Raw, Software},
+    perf_event::{Builder, Counter, Group, ReadFormat},
+    std::fs::File,
+    std::io::ErrorKind,
+    std::path::PathBuf,
+    std::sync::Mutex,
+};
 
 #[cfg(target_arch = "aarch64")]
 pub mod arm64_perf_list {
@@ -33,15 +38,18 @@ pub mod x86_perf_list {
     pub static MILAN_CTRS: &[u8] = include_bytes!("../pmu_configs/amd_milan_ctrs.json");
 }
 
+#[cfg(target_os = "linux")]
 #[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub enum PerfType {
     RAW = 4,
 }
 
+#[cfg(target_os = "linux")]
 lazy_static! {
     pub static ref CPU_CTR_GROUPS: Mutex<Vec<CpuCtrGroup>> = Mutex::new(Vec::new());
 }
 
+#[cfg(target_os = "linux")]
 #[derive(Debug)]
 pub struct Ctr {
     pub perf_type: u64,
@@ -50,6 +58,7 @@ pub struct Ctr {
     pub counter: Counter,
 }
 
+#[cfg(target_os = "linux")]
 impl Ctr {
     fn new(
         perf_type: u64,
@@ -72,6 +81,7 @@ impl Ctr {
     }
 }
 
+#[cfg(target_os = "linux")]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct NamedCtr {
     pub name: String,
@@ -80,6 +90,7 @@ pub struct NamedCtr {
     pub scale: u64,
 }
 
+#[cfg(target_os = "linux")]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct NamedTypeCtr {
     pub perf_type: PerfType,
@@ -87,6 +98,7 @@ pub struct NamedTypeCtr {
     pub config: u64,
 }
 
+#[cfg(target_os = "linux")]
 pub struct CpuCtrGroup {
     pub cpu: u64,
     pub name: String,
@@ -96,6 +108,7 @@ pub struct CpuCtrGroup {
     pub group: Group,
 }
 
+#[cfg(target_os = "linux")]
 impl CpuCtrGroup {
     fn nr_ctr_add(&mut self, ctr: Ctr) {
         self.nr_ctrs.push(ctr);
@@ -120,6 +133,7 @@ impl PerfStatRaw {
     }
 }
 
+#[cfg(target_os = "linux")]
 pub fn form_events_map(base: &[u8], plat_counters: &[u8]) -> Result<Vec<NamedCtr>> {
     let mut events_map = indexmap::IndexMap::new();
     for event in &to_events(base)? {
@@ -140,10 +154,12 @@ pub fn form_events_map(base: &[u8], plat_counters: &[u8]) -> Result<Vec<NamedCtr
     Ok(events_map.into_values().collect())
 }
 
+#[cfg(target_os = "linux")]
 pub fn to_events(data: &[u8]) -> Result<Vec<NamedCtr>> {
     Ok(serde_json::from_slice(data)?)
 }
 
+#[cfg(target_os = "linux")]
 impl CollectData for PerfStatRaw {
     fn prepare_data_collector(&mut self, params: &CollectorParams) -> Result<()> {
         let num_cpus = match unsafe { libc::sysconf(libc::_SC_NPROCESSORS_ONLN as libc::c_int) } {
@@ -228,10 +244,13 @@ impl CollectData for PerfStatRaw {
                     Err(e) => {
                         match e.kind() {
                             ErrorKind::PermissionDenied => {
-                                warn!("Set /proc/sys/kernel/perf_event_paranoid to 0")
+                                warn!("kernel.perf_event_paranoid needs to be -1. Run `sudo sysctl -w kernel.perf_event_paranoid=-1`")
                             }
                             ErrorKind::NotFound => warn!("PMU counters not available on this instance type. Refer to APerf documentation for supported instances"),
-                            _ => warn!("Unknown error when trying to use Perf API"),
+                            _ => match e.raw_os_error().unwrap() {
+                                libc::EMFILE => warn!("Too many open files. Increase limit by running `ulimit -n 65536`"),
+                                _ => warn!("Unknown error when trying to use Perf API"),
+                            }
                         }
                         return Err(e.into());
                     }
@@ -262,7 +281,7 @@ impl CollectData for PerfStatRaw {
                                     }
                                     _ => match os_error.raw_os_error().unwrap() {
                                         libc::EMFILE => warn!(
-                                            "Too many open files. Increase limit with `ulimit -n 65536`"
+                                            "Too many open files. Increase limit with by running `ulimit -n 65536`"
                                         ),
                                         _ => warn!("Unknown error when trying to use Perf API."),
                                     },
@@ -290,7 +309,7 @@ impl CollectData for PerfStatRaw {
                                     }
                                     _ => match os_error.raw_os_error().unwrap() {
                                         libc::EMFILE => warn!(
-                                            "Too many open files. Increase limit with `ulimit -n 65536`"
+                                            "Too many open files. Increase limit with by running `ulimit -n 65536`"
                                         ),
                                         _ => warn!("Unknown error when trying to use Perf API."),
                                     },
@@ -335,7 +354,6 @@ impl CollectData for PerfStatRaw {
             cpu_group.group.reset()?;
             self.data.push_str(&group_data);
         }
-        trace!("{:#?}", self.data);
         Ok(())
     }
 }
@@ -499,7 +517,7 @@ impl ProcessData for PerfStat {
                 };
                 let aggregate_series = per_pmu_stat_aggregate_series
                     .entry(pmu_stat_name)
-                    .or_insert(Series::new(get_aggregate_cpu_series_name()));
+                    .or_insert(Series::new(get_aggregate_series_name()));
                 aggregate_series.time_diff.push(time_diff);
                 aggregate_series
                     .values
@@ -564,10 +582,14 @@ impl ProcessData for PerfStat {
 
 #[cfg(test)]
 mod tests {
-    use super::PerfStatRaw;
-    use crate::data::{CollectData, CollectorParams};
-    use std::io::ErrorKind;
+    #[cfg(target_os = "linux")]
+    use {
+        super::PerfStatRaw,
+        crate::data::{CollectData, CollectorParams},
+        std::io::ErrorKind,
+    };
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut perf_stat = PerfStatRaw::new();
@@ -578,7 +600,7 @@ mod tests {
                 if let Some(os_error) = e.downcast_ref::<std::io::Error>() {
                     match os_error.kind() {
                         ErrorKind::PermissionDenied => {
-                            panic!("Set /proc/sys/kernel/perf_event_paranoid to 0")
+                            panic!("Set /proc/sys/kernel/perf_event_paranoid to -1")
                         }
                         ErrorKind::NotFound => println!("PMU counters not available on this instance type. Refer to APerf documentation for supported instances"),
                         _ => panic!("{}", os_error),

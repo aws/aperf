@@ -2,23 +2,30 @@ extern crate lazy_static;
 
 use crate::computations::Statistics;
 use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
-use crate::data::{CollectData, CollectorParams, Data, ProcessData, TimeEnum};
+use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
-use chrono::prelude::*;
 use core::f64;
-use log::{trace, warn};
+use log::warn;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::fs;
-use std::sync::Mutex;
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
+#[cfg(target_os = "linux")]
+use {
+    crate::data::{CollectData, CollectorParams},
+    chrono::prelude::*,
+    std::fs,
+    std::sync::Mutex,
+};
 
+#[cfg(target_os = "linux")]
 pub const PROC_PID_STAT_USERSPACE_TIME_POS: usize = 11;
+#[cfg(target_os = "linux")]
 pub const PROC_PID_STAT_KERNELSPACE_TIME_POS: usize = 12;
 
+#[cfg(target_os = "linux")]
 lazy_static! {
     pub static ref TICKS_PER_SECOND: Mutex<u64> = Mutex::new(0);
 }
@@ -30,6 +37,7 @@ pub struct ProcessesRaw {
     pub data: String,
 }
 
+#[cfg(target_os = "linux")]
 impl ProcessesRaw {
     pub fn new() -> Self {
         ProcessesRaw {
@@ -40,12 +48,14 @@ impl ProcessesRaw {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl Default for ProcessesRaw {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[cfg(target_os = "linux")]
 impl CollectData for ProcessesRaw {
     fn prepare_data_collector(&mut self, _params: &CollectorParams) -> Result<()> {
         *TICKS_PER_SECOND.lock().unwrap() = procfs::ticks_per_second()? as u64;
@@ -68,8 +78,6 @@ impl CollectData for ProcessesRaw {
             }
         }
         self.ticks_per_second = ticks_per_second;
-        trace!("{:#?}", self.data);
-        trace!("{:#?}", self.ticks_per_second);
         Ok(())
     }
 }
@@ -184,8 +192,8 @@ impl ProcessData for Processes {
         // If the raw data is empty default ticks per second to 1, in which case it should never
         // be used to compute any series values
         let ticks_per_second = ticks_per_second_option.unwrap_or_else(|| 1.0);
-        // Track totals for filtering top processes
-        let mut process_totals_map: HashMap<ProcessKey, HashMap<String, f64>> = HashMap::new();
+        // Track total cpu time for filtering top processes
+        let mut process_cpu_time_map: HashMap<String, f64> = HashMap::new();
 
         // Convert to useful data from stats and calculate total time
         for (process_key, process_map) in per_field_per_process_series.iter_mut() {
@@ -215,12 +223,13 @@ impl ProcessData for Processes {
                         }
                     };
 
-                    // Accumulate totals for all ProcessKey types
-                    *process_totals_map
-                        .entry(*process_key)
-                        .or_insert_with(HashMap::new)
-                        .entry(process_pid_name.clone())
-                        .or_insert(0.0) += stat;
+                    if process_key == &ProcessKey::UserSpaceTime
+                        || process_key == &ProcessKey::KernelSpaceTime
+                    {
+                        *process_cpu_time_map
+                            .entry(process_pid_name.clone())
+                            .or_insert(0.0) += stat;
+                    }
 
                     series.values[i] = stat;
                     prev_value = current_value;
@@ -229,22 +238,19 @@ impl ProcessData for Processes {
             }
         }
 
-        // Add top processes to time_series_data
-        for (process_key, process_map) in per_field_per_process_series {
-            // Get top 16 processes for this ProcessKey
-            let top_processes: Vec<String> =
-                if let Some(totals) = process_totals_map.get(&process_key) {
-                    let mut ranking: Vec<(String, f64)> =
-                        totals.iter().map(|(k, v)| (k.clone(), *v)).collect();
-                    ranking.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
-                    ranking.into_iter().take(16).map(|(name, _)| name).collect()
-                } else {
-                    Vec::new()
-                };
+        let mut ranking: Vec<(String, f64)> = process_cpu_time_map
+            .iter()
+            .map(|(k, v)| (k.clone(), *v))
+            .collect();
+        ranking.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+        let top_cpu_time_processes: Vec<String> =
+            ranking.into_iter().take(16).map(|(name, _)| name).collect();
 
+        // Add top processes for each metric to time_series_data
+        for (process_key, process_map) in per_field_per_process_series {
             let mut series_vec = Vec::new();
 
-            for process_name in &top_processes {
+            for process_name in &top_cpu_time_processes {
                 if let Some(series) = process_map.get(process_name) {
                     series_vec.push(series.clone());
                 }
@@ -293,9 +299,13 @@ impl ProcessData for Processes {
 
 #[cfg(test)]
 mod process_test {
-    use super::ProcessesRaw;
-    use crate::data::{CollectData, CollectorParams};
+    #[cfg(target_os = "linux")]
+    use {
+        super::ProcessesRaw,
+        crate::data::{CollectData, CollectorParams},
+    };
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut processes = ProcessesRaw::new();

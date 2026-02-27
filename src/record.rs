@@ -1,5 +1,6 @@
-use crate::data::java_profile::JavaProfile;
-use crate::utils::get_data_name_from_type;
+#![cfg(target_os = "linux")]
+
+use crate::data::{java_profile::JavaProfile, utils::get_data_name_from_type};
 use crate::{data, InitParams, PerformanceData};
 use anyhow::anyhow;
 use anyhow::Result;

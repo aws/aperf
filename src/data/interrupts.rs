@@ -1,13 +1,17 @@
 use crate::computations::Statistics;
 use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
-use crate::data::utils::{get_aggregate_cpu_series_name, get_cpu_series_name};
-use crate::data::{CollectData, CollectorParams, Data, ProcessData, TimeEnum};
+use crate::data::utils::{get_aggregate_series_name, get_cpu_series_name};
+use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
-use chrono::prelude::*;
-use log::trace;
+use log::warn;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+#[cfg(target_os = "linux")]
+use {
+    crate::data::{CollectData, CollectorParams},
+    chrono::prelude::*,
+};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct InterruptDataRaw {
@@ -15,6 +19,7 @@ pub struct InterruptDataRaw {
     pub data: String,
 }
 
+#[cfg(target_os = "linux")]
 impl InterruptDataRaw {
     pub fn new() -> Self {
         InterruptDataRaw {
@@ -24,12 +29,12 @@ impl InterruptDataRaw {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl CollectData for InterruptDataRaw {
     fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
         self.data = std::fs::read_to_string("/proc/interrupts")?;
-        trace!("{:#?}", self.data);
         Ok(())
     }
 }
@@ -43,9 +48,6 @@ impl InterruptData {
     }
 }
 
-// TODO: ------------------------------------------------------------------------------------------
-//       Below are the new implementation to process interrupts into uniform data format. Remove
-//       the original for the migration.
 #[derive(Clone)]
 struct Interrupt {
     pub interrupt_name: String,
@@ -185,8 +187,14 @@ impl ProcessData for InterruptData {
                 let num_cpus = interrupt.per_cpu_values.len();
                 // Compute the value of every CPU series
                 for cpu in 0..num_cpus {
-                    let cur_cpu_value =
-                        interrupt.per_cpu_values[cpu] - prev_interrupt.per_cpu_values[cpu];
+                    if prev_interrupt.per_cpu_values[cpu] > interrupt.per_cpu_values[cpu] {
+                        warn!(
+                            "Unexpected decreasing {} on CPU {} samples.",
+                            interrupt_metric_name, cpu
+                        );
+                    }
+                    let cur_cpu_value = interrupt.per_cpu_values[cpu]
+                        .saturating_sub(prev_interrupt.per_cpu_values[cpu]);
                     // Keep track of the maximum value for current interrupt metric, to be used
                     // as the graph's max value range
                     if let Some(max_value) = per_interrupt_max_value.get_mut(&interrupt_metric_name)
@@ -209,7 +217,7 @@ impl ProcessData for InterruptData {
                 // Compute the value of the aggregate series
                 let aggregate_series = per_interrupt_aggregate_series
                     .entry(interrupt_metric_name.clone())
-                    .or_insert(Series::new(get_aggregate_cpu_series_name()));
+                    .or_insert(Series::new(get_aggregate_series_name()));
                 aggregate_series.time_diff.push(time_diff);
                 aggregate_series
                     .values
@@ -256,9 +264,13 @@ impl ProcessData for InterruptData {
 
 #[cfg(test)]
 mod tests {
-    use super::InterruptDataRaw;
-    use crate::data::{CollectData, CollectorParams};
+    #[cfg(target_os = "linux")]
+    use {
+        super::InterruptDataRaw,
+        crate::data::{CollectData, CollectorParams},
+    };
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut id = InterruptDataRaw::new();

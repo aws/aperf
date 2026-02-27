@@ -17,6 +17,8 @@ This guide shows examples of using APerf to collect and view system performance 
 1. To use the `--profile` option, install the `perf` binary on the host.
 2. To use the `--profile-java` option, install JDK (ensure that the `jps` binary is available on PATH) and [async-profiler](https://github.com/async-profiler/async-profiler/tree/master) on the host.
 
+See [DEPENDENCIES.md](./DEPENDENCIES.md) for more details.
+
 ## Record Performance Data
 To start collecting performance data, run the `aperf record` command. The below example starts an APerf record run named "test_1" that runs for 10 minutes, collects data once per 5 seconds, gather perf profiles, and enables Java profiling for JVMs with PID 12345 and 23456:
 ```shell
@@ -46,16 +48,16 @@ To view an APerf report, move the report to an environment where a browser is av
 
 The report homepage contains the system information for each record run:
 
-![System info](images/system_info.png)
+![System info](../images/system_info.png)
 
 Use the navigation panel on the left side to view different data:
 
-![Navigation panel](images/navigation.png)
+![Navigation panel](../images/navigation.png)
 
 For time series data, same metric across different runs are placed together for easy comparison. The stats of each metric are shown above the graph, and for runs other than the base run, the stats are compared against those of the base run. If the delta is green, it means the stat is more desired than the base run; if the delta is red, it means the stat is less desired:
 
-![Time series](images/time_series.png)
+![Time series](../images/time_series.png)
 
 Click the info button of each metric to learn more about the metric, its desired value, and how it could impact performance:
 
-![Help panel](images/help_panel.png)
+![Help panel](../images/help_panel.png)

@@ -12,7 +12,6 @@ pub struct KeyValueKeyRunComparisonRule {
     pub key: &'static str,
     pub score: f64,
     pub message: &'static str,
-    pub reference: &'static str,
 }
 
 macro_rules! key_value_key_run_comparison {
@@ -21,7 +20,6 @@ macro_rules! key_value_key_run_comparison {
         key: $key:literal,
         score: $score:expr,
         message: $message:literal,
-        reference: $reference:literal,
     } => {
         AnalyticalRule::KeyValueKeyRunComparisonRule(
             KeyValueKeyRunComparisonRule{
@@ -29,23 +27,6 @@ macro_rules! key_value_key_run_comparison {
                 key: $key,
                 score: $score.as_f64(),
                 message: $message,
-                reference: $reference,
-            }
-        )
-    };
-    {
-        name: $rule_name:literal,
-        key: $key:literal,
-        score: $score:expr,
-        message: $message:literal,
-    } => {
-        AnalyticalRule::KeyValueKeyRunComparisonRule(
-            KeyValueKeyRunComparisonRule{
-                rule_name: $rule_name,
-                key: $key,
-                score: $score.as_f64(),
-                message: $message,
-                reference: "",
             }
         )
     };
@@ -115,7 +96,6 @@ impl Analyze for KeyValueKeyRunComparisonRule {
                                 self.score,
                                 finding_description,
                                 self.message.to_string(),
-                                self.reference.to_string(),
                             ),
                         );
                     }
@@ -137,7 +117,6 @@ impl Analyze for KeyValueKeyRunComparisonRule {
                         self.score,
                         finding_description,
                         self.message.to_string(),
-                        self.reference.to_string(),
                     ),
                 );
             }

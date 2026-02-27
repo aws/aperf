@@ -1,21 +1,27 @@
 use crate::data::data_formats::{AperfData, Graph, GraphData, GraphGroup};
-use crate::data::{CollectData, CollectorParams, Data, ProcessData};
-use crate::utils::get_data_name_from_type;
+use crate::data::{Data, ProcessData};
 use crate::visualizer::ReportParams;
-use crate::PDError;
 use anyhow::Result;
-use log::{debug, error, trace};
-use nix::{sys::signal, unistd::Pid};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::Write;
+use std::fs;
 use std::path::PathBuf;
-use std::process::{Child, Command};
-use std::sync::Mutex;
-use std::{fs, fs::File};
+#[cfg(target_os = "linux")]
+use {
+    crate::data::utils::get_data_name_from_type,
+    crate::data::{CollectData, CollectorParams},
+    crate::PDError,
+    log::{debug, error},
+    nix::{sys::signal, unistd::Pid},
+    std::fs::File,
+    std::io::Write,
+    std::process::{Child, Command},
+    std::sync::Mutex,
+};
 
 const PROFILE_METRICS: &[&str] = &["cpu", "alloc", "wall"];
 
+#[cfg(target_os = "linux")]
 lazy_static! {
     pub static ref ASPROF_CHILDREN: Mutex<Vec<Child>> = Mutex::new(Vec::new());
 }
@@ -25,12 +31,14 @@ pub struct JavaProfileRaw {
     process_map: HashMap<String, Vec<String>>,
 }
 
+#[cfg(target_os = "linux")]
 impl Default for JavaProfileRaw {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[cfg(target_os = "linux")]
 impl JavaProfileRaw {
     pub fn new() -> Self {
         JavaProfileRaw {
@@ -121,7 +129,7 @@ impl JavaProfileRaw {
                 Ok(jps_str)
             }
             Err(e) => Err(PDError::DependencyError(format!(
-                "Jps command failed. {}",
+                "jps command failed. Ensure JDK is installed to use Java profiling. Error msg: {}",
                 e
             ))),
         }
@@ -138,15 +146,25 @@ impl JavaProfileRaw {
                     .collect());
             }
             Err(e) => Err(PDError::DependencyError(format!(
-                "pgrep command failed. {}",
+                "pgrep command failed. Error msg: {}",
                 e
             ))),
         }
     }
 }
 
+#[cfg(target_os = "linux")]
 impl CollectData for JavaProfileRaw {
     fn prepare_data_collector(&mut self, params: &CollectorParams) -> Result<()> {
+        // Check if asprof is installed
+        match Command::new("asprof").args(["--version"]).output() {
+            Ok(_) => {},
+            Err(e) => return Err(PDError::DependencyError(format!(
+                "'asprof' command failed. Ensure it is installed and refer to DEPENDENCIES documentation for more info. Error msg: {}",
+                e
+            )).into()),
+        }
+
         let mut jids: Vec<String> = Vec::new();
         let pgrep: Vec<String> = self.launch_pgrep()?;
         for pid in pgrep {
@@ -219,14 +237,14 @@ impl CollectData for JavaProfileRaw {
             signal::kill(Pid::from_raw(child.id() as i32), params.signal)?;
         }
 
-        trace!("Waiting for asprof profile collection to complete...");
+        debug!("Waiting for asprof profile collection to complete...");
         while ASPROF_CHILDREN.lock().unwrap().len() > 0 {
             match ASPROF_CHILDREN.lock().unwrap().pop().unwrap().wait() {
                 Err(e) => {
                     error!("'asprof' did not exit successfully: {}", e);
                     return Ok(());
                 }
-                Ok(_) => trace!("'asprof' executed successfully."),
+                Ok(_) => debug!("'asprof' executed successfully."),
             }
         }
 
@@ -268,10 +286,9 @@ impl CollectData for JavaProfileRaw {
                                     String::from_utf8_lossy(&output.stderr)
                                 );
                             } else {
-                                trace!(
+                                debug!(
                                     "Successfully converted JFR to {} heatmap for {}",
-                                    metric,
-                                    key
+                                    metric, key
                                 );
                             }
                         }

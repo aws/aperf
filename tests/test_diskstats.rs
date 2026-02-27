@@ -223,6 +223,7 @@ mod diskstats_tests {
                                 metric_name,
                                 series.series_name.as_ref().unwrap()
                             );
+                            continue;
                         }
 
                         // Values should be non-negative
@@ -235,31 +236,20 @@ mod diskstats_tests {
                             sample_idx
                         );
 
-                        // Sectors metrics should be in KB (divided by 2 from sectors)
-                        if matches!(
-                            disk_stat_key,
-                            DiskStatKey::SectorsRead
-                                | DiskStatKey::SectorsWritten
-                                | DiskStatKey::SectorsDiscarded
-                        ) && sample_idx > 0
-                        {
-                            let device_name = series.series_name.as_ref().unwrap();
-                            let expected_stats =
-                                &expected_per_sample_per_device_stats[sample_idx][device_name];
-                            let expected_value =
-                                *get_disk_stat_field(disk_stat_key, &mut expected_stats.clone())
-                                    as f64
-                                    / 2.0;
-                            assert!(
-                                (value - expected_value).abs() < 1e-5,
-                                "Metric {} device {} sample {}: expected {}, got {}",
-                                metric_name,
-                                device_name,
-                                sample_idx,
-                                expected_value,
-                                value
-                            );
-                        }
+                        let device_name = series.series_name.as_ref().unwrap();
+                        let expected_stats =
+                            &expected_per_sample_per_device_stats[sample_idx][device_name];
+                        let expected_value =
+                            *get_disk_stat_field(disk_stat_key, &mut expected_stats.clone()) as f64;
+                        assert!(
+                            (value - expected_value).abs() < 1e-5,
+                            "Metric {} device {} sample {}: expected {}, got {}",
+                            metric_name,
+                            device_name,
+                            sample_idx,
+                            expected_value,
+                            value
+                        );
                     }
                 }
             }
@@ -456,12 +446,55 @@ mod diskstats_tests {
             // Check sectors_read metric (should be in KB)
             let sectors_read_metric = time_series_data.metrics.get("sectors_read").unwrap();
             let sda_sectors_series = &sectors_read_metric.series[0];
-            assert_eq!(sda_sectors_series.values, vec![0.0, 400.0, 400.0]); // 800/2, 800/2
+            assert_eq!(sda_sectors_series.values, vec![0.0, 800.0, 800.0]); // Delta values
 
             // Check in_progress metric (not accumulated)
             let in_progress_metric = time_series_data.metrics.get("in_progress").unwrap();
             let sda_in_progress_series = &in_progress_metric.series[0];
             assert_eq!(sda_in_progress_series.values, vec![0.0, 1.0, 0.0]); // Actual values
+        } else {
+            panic!("Expected TimeSeries data");
+        }
+    }
+
+    #[test]
+    fn test_decreasing_counter() {
+        use aperf::data::diskstats::DiskstatsRaw;
+        use aperf::data::TimeEnum;
+        use chrono::Utc;
+
+        let base_time = Utc::now();
+        let raw_samples = vec![
+            DiskstatsRaw {
+                time: TimeEnum::DateTime(base_time),
+                data: "   8    0 sda 1000 0 8000 100 500 0 4000 50 0 150 200 0 0 0 0 0 0\n"
+                    .to_string(),
+            },
+            DiskstatsRaw {
+                time: TimeEnum::DateTime(base_time + chrono::Duration::seconds(1)),
+                data: "   8    0 sda 500 0 4000 50 250 0 2000 25 0 75 100 0 0 0 0 0 0\n"
+                    .to_string(),
+            },
+        ];
+
+        let raw_data: Vec<Data> = raw_samples
+            .into_iter()
+            .map(|s| Data::DiskstatsRaw(s))
+            .collect();
+
+        let mut diskstats = Diskstats::new();
+        let result = diskstats
+            .process_raw_data(ReportParams::new(), raw_data)
+            .unwrap();
+
+        if let AperfData::TimeSeries(time_series_data) = result {
+            for metric in time_series_data.metrics.values() {
+                for series in &metric.series {
+                    assert_eq!(series.values.len(), 2);
+                    assert_eq!(series.values[0], 0.0);
+                    assert_eq!(series.values[1], 0.0);
+                }
+            }
         } else {
             panic!("Expected TimeSeries data");
         }

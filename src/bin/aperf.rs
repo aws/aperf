@@ -1,7 +1,5 @@
 use anyhow::Result;
 use aperf::completions::{setup_shell_completions, SetupShellCompletions};
-use aperf::pmu::{custom_pmu, CustomPMU};
-use aperf::record::{record, Record, RECORD_DATA_RECOMMENDATION};
 use aperf::report::{report, Report};
 use aperf::{PDError, APERF_RUNLOG, APERF_TMP};
 use clap::{CommandFactory, Parser, Subcommand};
@@ -13,8 +11,14 @@ use log4rs::{
     encode::pattern::PatternEncoder,
     filter::threshold::ThresholdFilter,
 };
-use std::{fs, os::unix::fs::PermissionsExt, path::PathBuf};
+use std::{fs, path::PathBuf};
 use tempfile::Builder as TempBuilder;
+#[cfg(target_os = "linux")]
+use {
+    aperf::pmu::{custom_pmu, CustomPMU},
+    aperf::record::{record, Record, RECORD_DATA_RECOMMENDATION},
+    std::os::unix::fs::PermissionsExt,
+};
 
 #[derive(Parser)]
 #[command(author, about, long_about = None)]
@@ -36,6 +40,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    #[cfg(target_os = "linux")]
     /// Collect performance data.
     #[command(after_help = RECORD_DATA_RECOMMENDATION.to_ascii_uppercase())]
     Record(Record),
@@ -43,6 +48,7 @@ enum Commands {
     /// Generate an HTML report based on the data collected.
     Report(Report),
 
+    #[cfg(target_os = "linux")]
     /// Create a custom PMU configuration file for use with Aperf record.
     CustomPMU(CustomPMU),
 
@@ -98,16 +104,24 @@ fn main() -> Result<()> {
     let tmp_dir = TempBuilder::new()
         .prefix("aperf-tmp-")
         .tempdir_in(&cli.tmp_dir)?;
+
+    #[cfg(target_os = "linux")]
     fs::set_permissions(&tmp_dir, fs::Permissions::from_mode(0o1777))?;
+
     let tmp_dir_path_buf = tmp_dir.path().to_path_buf();
     let runlog = tmp_dir_path_buf.join(*APERF_RUNLOG);
 
     init_logger(cli.verbose, &runlog)?;
 
     match cli.command {
+        #[cfg(target_os = "linux")]
         Commands::Record(r) => record(&r, &tmp_dir_path_buf, &runlog),
+
         Commands::Report(r) => report(&r, &tmp_dir_path_buf),
+
+        #[cfg(target_os = "linux")]
         Commands::CustomPMU(r) => custom_pmu(&r),
+
         Commands::SetupShellCompletions(r) => setup_shell_completions(&r, &mut Cli::command()),
     }?;
     fs::remove_dir_all(tmp_dir_path_buf)?;

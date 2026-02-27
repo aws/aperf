@@ -24,7 +24,6 @@ impl AnalyzeData for PerfStat {
                 delta_ratio: -0.1,
                 score: Score::Poor,
                 message: "Less instructions are being executed by the CPUs. Check the frontend and backend stall metrics to locate the bottleneck.",
-                reference: "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#top-down-method-to-debug-hardware-performance",
             ),
             time_series_stat_intra_run_comparison! (
                 name: "Frontend-Dominated CPU Stalls",
@@ -36,7 +35,6 @@ impl AnalyzeData for PerfStat {
                 delta_ratio: 0.1,
                 score: Score::Concerning,
                 message: "Higher CPU frontend stalls indicate bottlenecks on instruction fetches instead of executions, usually due to speculating the wrong destination for a branch, or getting stalled when fetching instructions from memory. Check the related misprediction metrics for instructions." ,
-                reference: "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#drill-down-front-end-stalls",
             ),
             time_series_stat_intra_run_comparison! (
                 name: "Backend-Dominated CPU Stalls",
@@ -48,7 +46,6 @@ impl AnalyzeData for PerfStat {
                 delta_ratio: 0.1,
                 score: Score::Concerning,
                 message: "Higher CPU backend stalls indicate bottlenecks on instruction executions instead of fetches, usually due to data cache misses and lacking resources to execute enough memory operations in parallel. Check the related misprediction metrics for data." ,
-                reference: "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#drill-down-back-end-stalls",
             ),
             time_series_stat_threshold! (
                 name: "High Branch Mispredictions",
@@ -58,7 +55,6 @@ impl AnalyzeData for PerfStat {
                 threshold: 10.0,
                 score: Score::Concerning,
                 message: "A large number of branch mis-predictions puts bottlenecks on the processor.",
-                reference: "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#drill-down-front-end-stalls",
             ),
             time_series_data_point_threshold!(
                 name: "High L1 Instruction Cache Misses",
@@ -67,7 +63,6 @@ impl AnalyzeData for PerfStat {
                 threshold: 20.0,
                 score: Score::Concerning,
                 message: "This indicates the working-set code footprint is large and spilling out of the fastest cache on the processor. This can cause CPU frontend stalls.",
-                reference: "https://aws.github.io/graviton/perfrunbook/optimization_recommendation.html#optimizing-for-large-instruction-footprint",
             ),
             time_series_data_point_threshold!(
                 name: "Instruction TLB Misses",
@@ -76,7 +71,6 @@ impl AnalyzeData for PerfStat {
                 threshold: 0.0,
                 score: Score::Concerning,
                 message: "This indicates the CPU has to do extra stalls to translate virtual addresses of instructions into physical addresses before fetching them. The instruction footprint might be too large and cause CPU frontend stalls.",
-                reference: "https://aws.github.io/graviton/perfrunbook/optimization_recommendation.html#optimizing-for-large-instruction-footprint",
             ),
             time_series_data_point_threshold!(
                 name: "Instruction TLB Table Walks",
@@ -85,7 +79,6 @@ impl AnalyzeData for PerfStat {
                 threshold: 0.0,
                 score: Score::Concerning,
                 message: "Upon instruction TLB misses, multiple traverses in the page table were required to find the correct physical address for an instruction. The instruction footprint might be too large and cause CPU frontend stalls.",
-                reference: "https://aws.github.io/graviton/perfrunbook/optimization_recommendation.html#optimizing-for-large-instruction-footprint",
             ),
             time_series_data_point_threshold!(
                 name: "High Code Sparsity",
@@ -94,7 +87,6 @@ impl AnalyzeData for PerfStat {
                 threshold: 0.5,
                 score: Score::Bad,
                 message: "The code being executed by the CPU is not compact enough and could increase branch mispredictions. Check the related compiler flags.",
-                reference: "https://aws.github.io/graviton/perfrunbook/optimization_recommendation.html#optimizing-for-large-instruction-footprint",
             ),
             time_series_data_point_threshold!(
                 name: "High L1 Data Cache Misses",
@@ -127,7 +119,6 @@ impl AnalyzeData for PerfStat {
                 threshold: 0.0,
                 score: Score::Concerning,
                 message: "This indicates the CPU has to do extra stalls to translate virtual addresses in the load and store instructions into physical addresses the DRAM understands, before issuing them to the memory system. It causes CPU backend stalls.",
-                reference: "https://aws.github.io/graviton/perfrunbook/optimization_recommendation.html#optimizing-for-high-tlb-miss-rates",
             ),
             time_series_data_point_threshold!(
                 name: "Data TLB Table Walks",
@@ -136,7 +127,6 @@ impl AnalyzeData for PerfStat {
                 threshold: 0.0,
                 score: Score::Concerning,
                 message: "Upon data TLB misses, the CPUs need to traverse the OS-build page table to find the correct physical address for the virtual address in the load/store instructions, which requires extra memory references before executing them and causes CPU backend stalls.",
-                reference: "https://aws.github.io/graviton/perfrunbook/optimization_recommendation.html#optimizing-for-high-tlb-miss-rates",
             ),
             time_series_data_point_threshold! (
                 name: "Old-Style Atomic Instructions",
@@ -144,8 +134,7 @@ impl AnalyzeData for PerfStat {
                 comparator: Comparator::GreaterEqual,
                 threshold: 10.0,
                 score: Score::Poor,
-                message: "STREX is an old-style atomic instruction that is less efficient than the newer LSE instructions. Consider modifying the compiler flags, such as -march, to enable LSE support.",
-                reference: "https://aws.github.io/graviton/c-c++.html#large-system-extensions-lse",
+                message: "The STREX instructions are being used extensively. It is an old-style atomic instruction less efficient than the newer LSE instructions.",
             ),
         ]
     }

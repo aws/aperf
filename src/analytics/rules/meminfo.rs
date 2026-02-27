@@ -9,7 +9,7 @@ impl AnalyzeData for MeminfoData {
         vec![
             time_series_stat_run_comparison! (
                 name: "Inconsistent Physical Memory",
-                metric: "mem_total",
+                metric: "MemTotal",
                 stat: Stat::Average,
                 comparator: Comparator::GreaterEqual,
                 abs: true,
@@ -19,14 +19,13 @@ impl AnalyzeData for MeminfoData {
             ),
             time_series_stat_run_comparison! (
                 name: "Reduced Memory Availability",
-                metric: "mem_available",
+                metric: "MemAvailable",
                 stat: Stat::Average,
                 comparator: Comparator::LessEqual,
                 abs: false,
                 delta_ratio: -0.1,
                 score: Score::Poor,
                 message: "The system is under a higher memory pressure (if the total memory is consistent between runs).",
-                reference: "https://aws.github.io/graviton/perfrunbook/optimization_recommendation.html#optimizing-for-high-tlb-miss-rates",
             ),
         ]
     }

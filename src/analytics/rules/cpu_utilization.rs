@@ -39,7 +39,6 @@ impl AnalyzeData for CpuUtilization {
                 delta_ratio: 0.1,
                 score: Score::Poor,
                 message: "The code is consuming more CPU time. The results of CPU profiling could help identify hot functions.",
-                reference: "https://aws.github.io/graviton/perfrunbook/debug_code_perf.html#on-cpu-profiling",
             },
             time_series_stat_run_comparison! {
                 name: "Decreased User-Space CPU Utilization",
@@ -50,7 +49,6 @@ impl AnalyzeData for CpuUtilization {
                 delta_ratio: -0.1,
                 score: Score::Poor,
                 message: "The code is consuming less CPU time. Some functions may be putting threads to sleep and causing the CPU to go idle more.",
-                reference: "https://aws.github.io/graviton/perfrunbook/debug_code_perf.html#off-cpu-profiling",
             },
             time_series_stat_run_comparison! {
                 name: "Increased I/O Wait Time",
@@ -61,7 +59,6 @@ impl AnalyzeData for CpuUtilization {
                 delta_ratio: 0.1,
                 score: Score::Poor,
                 message: "Higher iowait time indicates a bottleneck in disk operations. If the system uses an NFS, consider expanding the provision or switching to local storage.",
-                reference: "https://aws.github.io/graviton/perfrunbook/debug_system_perf.html#check-cpu-usage",
             },
         ]
     }

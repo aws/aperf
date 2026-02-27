@@ -444,3 +444,44 @@ fn test_process_netstat_input_validation() {
         assert_eq!(tcp_hp_acks.series[0].values[1], 150.0); // Delta: 350 - 200
     }
 }
+
+#[test]
+fn test_decreasing_counter() {
+    use aperf::data::netstat::NetstatRaw;
+    use aperf::data::TimeEnum;
+    use chrono::Utc;
+
+    let base_time = Utc::now();
+    let raw_samples = vec![
+        NetstatRaw {
+            time: TimeEnum::DateTime(base_time),
+            data: "TcpExt: TCPPureAcks TCPHPAcks\nTcpExt: 1000 2000\n".to_string(),
+        },
+        NetstatRaw {
+            time: TimeEnum::DateTime(base_time + chrono::Duration::seconds(1)),
+            data: "TcpExt: TCPPureAcks TCPHPAcks\nTcpExt: 500 1000\n".to_string(),
+        },
+    ];
+
+    let raw_data: Vec<Data> = raw_samples
+        .into_iter()
+        .map(|s| Data::NetstatRaw(s))
+        .collect();
+
+    let mut netstat = aperf::data::netstat::Netstat::new();
+    let result = netstat
+        .process_raw_data(ReportParams::new(), raw_data)
+        .unwrap();
+
+    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+        for metric in time_series_data.metrics.values() {
+            for series in &metric.series {
+                assert_eq!(series.values.len(), 2);
+                assert_eq!(series.values[0], 0.0);
+                assert_eq!(series.values[1], 0.0);
+            }
+        }
+    } else {
+        panic!("Expected TimeSeries data");
+    }
+}

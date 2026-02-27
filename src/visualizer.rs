@@ -1,10 +1,9 @@
 use crate::data::data_formats::{AperfData, DataFormat, ProcessedData};
-use crate::utils::{combine_value_ranges, topological_sort};
+use crate::data::utils::compress_all_zero_time_series_metric;
+use crate::data::utils::{combine_value_ranges, topological_sort};
 use crate::{data::Data, data::ReportData, get_file};
 use anyhow::Result;
 use log::{debug, error};
-use rustix::fd::AsRawFd;
-use std::fs;
 use std::io::{Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::{collections::HashMap, fs::File};
@@ -53,37 +52,37 @@ impl DataVisualizer {
 
     pub fn init_visualizer(
         &mut self,
-        dir: String,
-        name: String,
+        run_data_dir: PathBuf,
+        run_name: String,
         tmp_dir: &Path,
         report_dir: &Path,
     ) -> Result<()> {
-        let file = get_file(dir.clone(), self.data_name.to_string()).or_else(|e| {
-            // Backward compatibility: if file is not found using the data's name,
-            // see if files with compatible names exist
-            for compatible_name in self.data.compatible_filenames() {
-                match get_file(dir.clone(), String::from(compatible_name)) {
-                    Ok(compatible_file) => {
-                        debug!(
-                            "Data file {} not found, use compatible file name {}",
-                            self.data_name, compatible_name
-                        );
-                        return Ok(compatible_file);
+        let (file_path, file) =
+            get_file(&run_data_dir, self.data_name.to_string()).or_else(|e| {
+                // Backward compatibility: if file is not found using the data's name,
+                // see if files with compatible names exist
+                for compatible_name in self.data.compatible_filenames() {
+                    match get_file(&run_data_dir, String::from(compatible_name)) {
+                        Ok(compatible_file) => {
+                            debug!(
+                                "Data file {} not found, use compatible file name {}",
+                                self.data_name, compatible_name
+                            );
+                            return Ok(compatible_file);
+                        }
+                        Err(_) => {}
                     }
-                    Err(_) => {}
                 }
-            }
-            self.data_available.insert(name.clone(), false);
-            Err(e)
-        })?;
-        let full_path = Path::new("/proc/self/fd").join(file.as_raw_fd().to_string());
-        self.report_params.data_dir = PathBuf::from(dir.clone());
+                self.data_available.insert(run_name.clone(), false);
+                Err(e)
+            })?;
+        self.report_params.data_dir = run_data_dir;
         self.report_params.tmp_dir = tmp_dir.to_path_buf();
         self.report_params.report_dir = report_dir.to_path_buf();
-        self.report_params.run_name = name.clone();
-        self.report_params.data_file_path = fs::read_link(full_path).unwrap();
+        self.report_params.run_name = run_name.clone();
+        self.report_params.data_file_path = file_path;
         self.file_handle = Some(file);
-        self.data_available.insert(name, true);
+        self.data_available.insert(run_name, true);
         Ok(())
     }
 
@@ -151,6 +150,8 @@ impl DataVisualizer {
 ///   graphs could have the same y-axis
 /// - Consolidate sorted_metric_names across different runs, so that the frontend can know
 ///   what metric graphs to render as well the order of rendering
+/// - If all values of a metric are zero, compress the time-series values to reduce
+///   report data size
 fn post_process_time_series_data(processed_data: &mut ProcessedData) {
     let mut per_run_sorted_metric_names: Vec<&Vec<String>> = Vec::new();
     let mut per_metric_value_ranges: HashMap<String, Vec<(u64, u64)>> = HashMap::new();
@@ -196,7 +197,6 @@ fn post_process_time_series_data(processed_data: &mut ProcessedData) {
         per_metric_combined_value_range.insert(metric_name, combined_value_range);
     }
 
-    // Update the TimeSeriesData with the cross-run sorted metric names and value ranges
     for aperf_data in processed_data.runs.values_mut() {
         let time_series_data = match aperf_data {
             AperfData::TimeSeries(time_series_data) => time_series_data,
@@ -205,11 +205,16 @@ fn post_process_time_series_data(processed_data: &mut ProcessedData) {
                 return;
             }
         };
+        // Update the TimeSeriesData with the cross-run sorted metric names
         time_series_data.sorted_metric_names = sorted_metric_names.clone();
         for (metric_name, time_series_metric) in &mut time_series_data.metrics {
+            // Update every metric with cross-run combined value ranges
             if let Some(combined_value_range) = per_metric_combined_value_range.get(metric_name) {
                 time_series_metric.value_range = combined_value_range.to_owned();
             }
+            // Reduce the report data size for all-zero metrics by recreating a compressed
+            // series with only the first and last data points
+            compress_all_zero_time_series_metric(time_series_metric);
         }
     }
 }

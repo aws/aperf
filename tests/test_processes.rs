@@ -1,5 +1,5 @@
 use aperf::data::data_formats::AperfData;
-use aperf::data::processes::{ProcessKey, Processes, ProcessesRaw, TICKS_PER_SECOND};
+use aperf::data::processes::{ProcessKey, Processes, ProcessesRaw};
 use aperf::data::ProcessData;
 use aperf::data::{Data, TimeEnum};
 use aperf::visualizer::ReportParams;
@@ -78,7 +78,6 @@ fn generate_processes_raw_data(
 #[test]
 fn test_process_processes_raw_data_complex() {
     let ticks_per_second = 100;
-    *TICKS_PER_SECOND.lock().unwrap() = ticks_per_second;
 
     let mut expected_per_sample_per_process_stats = Vec::new();
 
@@ -252,7 +251,6 @@ fn test_process_processes_raw_data_complex() {
 #[test]
 fn test_process_processes_raw_data_simple() {
     let ticks_per_second = 100;
-    *TICKS_PER_SECOND.lock().unwrap() = ticks_per_second;
 
     let mut expected_per_sample_per_process_stats = Vec::new();
 
@@ -354,7 +352,6 @@ fn test_process_processes_raw_data_simple() {
 #[test]
 fn test_process_processes_dynamic_processes() {
     let ticks_per_second = 100;
-    *TICKS_PER_SECOND.lock().unwrap() = ticks_per_second;
 
     let mut expected_per_sample_per_process_stats = Vec::new();
 
@@ -430,9 +427,8 @@ fn test_process_processes_dynamic_processes() {
 }
 
 #[test]
-fn test_process_processes_top_16_ranking() {
+fn test_process_processes_top_16_ranking_simple() {
     let ticks_per_second = 100;
-    *TICKS_PER_SECOND.lock().unwrap() = ticks_per_second;
 
     let mut expected_per_sample_per_process_stats = Vec::new();
 
@@ -488,10 +484,116 @@ fn test_process_processes_top_16_ranking() {
 }
 
 #[test]
-fn test_process_processes_empty_data() {
+fn test_process_processes_top_16_ranking_complex() {
     let ticks_per_second = 100;
-    *TICKS_PER_SECOND.lock().unwrap() = ticks_per_second;
 
+    let mut expected_per_sample_per_process_stats = Vec::new();
+
+    // Generate 5 samples with 20 processes (more than top 16 limit)
+    for sample in 0..5 {
+        let mut sample_stats = HashMap::new();
+
+        for proc_id in 1..=20 {
+            let mut proc_stats = ExpectedProcessStats::default();
+            // Create mixed usage patterns using different formulas per sample
+            // Base values that vary by process
+            let user_base = match proc_id % 3 {
+                0 => proc_id * 100,
+                1 => proc_id * proc_id + 200,
+                _ => proc_id * 50 + 300,
+            };
+
+            let kernel_base = match proc_id % 4 {
+                0 => (21 - proc_id) * 80,
+                1 => proc_id * 60 + 100,
+                2 => proc_id * 40 + 200,
+                _ => proc_id * 30 + 150,
+            };
+
+            // Cumulative increases per sample
+            let user_increment = match proc_id % 3 {
+                0 => 50 + proc_id * 2,
+                1 => 30 + proc_id * 3,
+                _ => 40 + proc_id,
+            };
+
+            let kernel_increment = match proc_id % 4 {
+                0 => 25 + proc_id,
+                1 => 35 + proc_id * 2,
+                2 => 20 + proc_id * 3,
+                _ => 45 + proc_id,
+            };
+
+            proc_stats.user_space_time = user_base + sample * user_increment;
+            proc_stats.kernel_space_time = kernel_base + sample * kernel_increment;
+            sample_stats.insert(format!("{}_proc", proc_id), proc_stats);
+        }
+
+        expected_per_sample_per_process_stats.push(sample_stats);
+    }
+
+    let raw_data =
+        generate_processes_raw_data(&expected_per_sample_per_process_stats, 1, ticks_per_second);
+
+    let mut processes = Processes::new();
+    let result = processes
+        .process_raw_data(ReportParams::new(), raw_data)
+        .unwrap();
+
+    if let AperfData::TimeSeries(time_series_data) = result {
+        // Should have all process keys
+        assert_eq!(time_series_data.metrics.len(), ProcessKey::iter().count());
+
+        // Should only have top 16 processes
+        let user_space_metric = &time_series_data.metrics["user_space_time"];
+        assert_eq!(user_space_metric.series.len(), 16);
+
+        // Each series should have 5 data points
+        for series in &user_space_metric.series {
+            assert_eq!(series.values.len(), 5);
+        }
+
+        let user_space_metric = &time_series_data.metrics["user_space_time"];
+        let kernel_space_metric = &time_series_data.metrics["kernel_space_time"];
+
+        let mut process_total_cpu: Vec<(String, f64)> = Vec::new();
+        for (i, series) in user_space_metric.series.iter().enumerate() {
+            let kernel_series = &kernel_space_metric.series[i];
+            let process_name = series.series_name.as_ref().unwrap().clone();
+
+            let total_user: f64 = series.values.iter().sum();
+            let total_kernel: f64 = kernel_series.values.iter().sum();
+            let total_cpu = total_user + total_kernel;
+
+            process_total_cpu.push((process_name, total_cpu));
+        }
+
+        for i in 1..process_total_cpu.len() {
+            assert!(
+                process_total_cpu[i - 1].1 >= process_total_cpu[i].1,
+                "Processes should be ranked by total CPU usage: {} should be >= {}",
+                process_total_cpu[i - 1].1,
+                process_total_cpu[i].1
+            );
+        }
+
+        // Validate sorted metric names
+        assert_eq!(
+            time_series_data.sorted_metric_names.len(),
+            ProcessKey::iter().count()
+        );
+        for process_key in ProcessKey::iter() {
+            assert!(time_series_data
+                .sorted_metric_names
+                .contains(&process_key.to_string()));
+        }
+    } else {
+        panic!("Expected TimeSeries data");
+    }
+}
+
+#[test]
+fn test_process_processes_empty_data() {
     let raw_data = Vec::new();
 
     let mut processes = Processes::new();

@@ -1,16 +1,21 @@
 use crate::computations::Statistics;
 use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
-use crate::data::utils::get_aggregate_cpu_series_name;
-use crate::data::{CollectData, CollectorParams, Data, ProcessData, TimeEnum};
+use crate::data::utils::get_aggregate_series_name;
+use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
-use chrono::prelude::*;
 use log::warn;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
-use std::fs;
-use std::path::{Path, PathBuf};
+#[cfg(target_os = "linux")]
+use {
+    crate::data::{CollectData, CollectorParams},
+    chrono::prelude::*,
+    std::fs,
+    std::path::{Path, PathBuf},
+};
 
+#[cfg(target_os = "linux")]
 lazy_static! {
     static ref NAME_PATH_MAP: HashMap<String, PathBuf> = {
         let mut name_path_map = HashMap::new();
@@ -52,6 +57,7 @@ pub struct NumastatRaw {
     pub data: String,
 }
 
+#[cfg(target_os = "linux")]
 impl NumastatRaw {
     pub fn new() -> Self {
         NumastatRaw {
@@ -61,6 +67,7 @@ impl NumastatRaw {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl CollectData for NumastatRaw {
     fn prepare_data_collector(&mut self, _params: &CollectorParams) -> Result<()> {
         let _ = &*NAME_PATH_MAP; // Force initialization before collection time
@@ -133,10 +140,18 @@ impl ProcessData for Numastat {
                         let prev_node_stats = prev_val_map
                             .entry(metric_name.to_string())
                             .or_insert(HashMap::new());
-                        let diff_value = prev_node_stats
-                            .get(&current_node)
-                            .map(|&prev_value| current_value.saturating_sub(prev_value))
-                            .unwrap_or(0);
+                        let diff_value =
+                            if let Some(&prev_value) = prev_node_stats.get(&current_node) {
+                                if prev_value > current_value {
+                                    warn!(
+                                        "Unexpected decreasing {} on node {} samples.",
+                                        metric_name, current_node
+                                    );
+                                }
+                                current_value.saturating_sub(prev_value)
+                            } else {
+                                0
+                            };
 
                         // Keep track of the max value for each metric across all nodes
                         if let Some(max_value) = per_numa_max_value.get_mut(metric_name) {
@@ -171,7 +186,7 @@ impl ProcessData for Numastat {
             for (metric_name, (sum, count)) in per_metric_sums {
                 let aggregate_series = per_numa_metric_aggregate_series
                     .entry(metric_name)
-                    .or_insert(Series::new(get_aggregate_cpu_series_name()));
+                    .or_insert(Series::new(get_aggregate_series_name()));
                 let avg = if count > 0 {
                     sum as f64 / count as f64
                 } else {
@@ -232,9 +247,13 @@ impl ProcessData for Numastat {
 
 #[cfg(test)]
 mod tests {
-    use super::NumastatRaw;
-    use crate::data::{CollectData, CollectorParams};
+    #[cfg(target_os = "linux")]
+    use {
+        super::NumastatRaw,
+        crate::data::{CollectData, CollectorParams},
+    };
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut numastat_raw = NumastatRaw::new();

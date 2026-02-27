@@ -3,6 +3,7 @@ import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import React from "react";
 import { useReportState } from "../ReportStateProvider";
 import { DataType } from "../../definitions/types";
+import ReactMarkdown from "react-markdown";
 
 /**
  * This component renders the help panel on the right side to show metric descriptions and helpful messages.
@@ -44,17 +45,12 @@ export function ReportHelpPanel() {
       break;
   }
 
-  const defaultHelpfulLinks = DATA_DESCRIPTIONS[helpPanelDataType].defaultHelpfulLinks ?? [];
-  const dataHelpfulLinks =
-    DATA_DESCRIPTIONS[helpPanelDataType].fieldDescriptions[helpPanelFieldKey]?.helpfulLinks ?? [];
-  const helpfulLinks = [...dataHelpfulLinks, ...defaultHelpfulLinks];
-
   return (
     <HelpPanel
       header={<h2>{metricReadableName}</h2>}
       footer={
         <div>
-          <HelpfulLinks links={helpfulLinks} />
+          <HelpfulLinks dataType={helpPanelDataType} fieldKey={helpPanelFieldKey} />
           <h4>Need help with the metrics?</h4>
           <Link external href={"https://github.com/aws/aperf/issues"}>
             Raise a GitHub issue
@@ -64,26 +60,50 @@ export function ReportHelpPanel() {
     >
       <p>{metricDescription}</p>
       {desiredValueMessage && <StatusIndicator type={"warning"}>{desiredValueMessage}</StatusIndicator>}
+      <OptimizationGuides dataType={helpPanelDataType} fieldKey={helpPanelFieldKey} />
     </HelpPanel>
   );
 }
 
-interface ReportHelpPanelLinkProps {
+interface ReportHelpPanelProps {
   readonly dataType: DataType;
   readonly fieldKey: string;
 }
 
 /**
+ * A helper component to render all optimization guides in markdown
+ */
+function OptimizationGuides(props: ReportHelpPanelProps) {
+  const optimizationGuide = DATA_DESCRIPTIONS[props.dataType].fieldDescriptions[props.fieldKey]?.optimization;
+
+  const NewTabLinkRenderer = (props) => (
+    <a href={props.href} target="_blank" rel="noreferrer">
+      {props.children}
+    </a>
+  );
+
+  if (optimizationGuide && optimizationGuide.length > 0) {
+    return <ReactMarkdown components={{ a: NewTabLinkRenderer }}>{optimizationGuide.join("\n\n")}</ReactMarkdown>;
+  }
+
+  return null;
+}
+
+/**
  * A helper component to render all helpful links as the footer in a help panel
  */
-function HelpfulLinks(props: { links: string[] }) {
-  if (props.links.length == 0) return null;
+function HelpfulLinks(props: ReportHelpPanelProps) {
+  const defaultHelpfulLinks = DATA_DESCRIPTIONS[props.dataType].defaultHelpfulLinks ?? [];
+  const dataHelpfulLinks = DATA_DESCRIPTIONS[props.dataType].fieldDescriptions[props.fieldKey]?.helpfulLinks ?? [];
+  const helpfulLinks = [...dataHelpfulLinks, ...defaultHelpfulLinks];
+
+  if (helpfulLinks.length == 0) return null;
 
   return (
     <>
       <h4>Helpful Links</h4>
       <List
-        items={props.links.map((link, index) => ({
+        items={helpfulLinks.map((link, index) => ({
           id: index.toString(),
           url: link,
         }))}
@@ -103,7 +123,7 @@ function HelpfulLinks(props: { links: string[] }) {
 /**
  * This component renders an "info" link that configures and shows the help panel.
  */
-export function ReportHelpPanelLink(props: ReportHelpPanelLinkProps) {
+export function ReportHelpPanelLink(props: ReportHelpPanelProps) {
   const { setHelpPanelDataType, setHelpPanelFieldKey, setShowHelpPanel } = useReportState();
   return (
     <Link
@@ -122,19 +142,21 @@ export function ReportHelpPanelLink(props: ReportHelpPanelLinkProps) {
 /**
  * This component renders an icon that configures and shows the help panel.
  */
-export function ReportHelpPanelIcon(props: ReportHelpPanelLinkProps) {
+export function ReportHelpPanelIcon(props: ReportHelpPanelProps) {
   const { setHelpPanelDataType, setHelpPanelFieldKey, setShowHelpPanel } = useReportState();
   return (
-    <Button
-      iconName={"status-info"}
-      variant={"icon"}
-      onClick={() => {
-        setHelpPanelDataType(props.dataType);
-        setHelpPanelFieldKey(props.fieldKey);
-        setShowHelpPanel(true);
-      }}
-    >
-      info
-    </Button>
+    <div title={"View optimization guides and more information."} style={{ display: "inline-block" }}>
+      <Button
+        iconName={"status-info"}
+        variant={"icon"}
+        onClick={() => {
+          setHelpPanelDataType(props.dataType);
+          setHelpPanelFieldKey(props.fieldKey);
+          setShowHelpPanel(true);
+        }}
+      >
+        info
+      </Button>
+    </div>
   );
 }
