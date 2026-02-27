@@ -238,9 +238,13 @@ fi
 
 # Show resource usage for pods on this node
 echo -e "${BOLD}Resource usage for pods on ${NODE_NAME}:${NC}"
-kubectl top pods --all-namespaces > /tmp/allpods.out  && \
-head -n 1 /tmp/allpods.out  &&  \
-grep "$(kubectl get pods --all-namespaces --field-selector spec.nodeName=${NODE_NAME} -o jsonpath='{range .items[*]}{.metadata.name}{" "}{end}' | sed 's/[[:space:]]*$//' | sed 's/[[:space:]]/\\|/g')" /tmp/allpods.out --color=never
+if kubectl top pods --all-namespaces > /tmp/allpods.out 2>/dev/null; then
+  head -n 1 /tmp/allpods.out
+  grep "$(kubectl get pods --all-namespaces --field-selector spec.nodeName=${NODE_NAME} -o jsonpath='{range .items[*]}{.metadata.name}{" "}{end}' | sed 's/[[:space:]]*$//' | sed 's/[[:space:]]/\\|/g')" /tmp/allpods.out --color=never || echo "  No pods found on this node"
+  rm /tmp/allpods.out 2>/dev/null || true
+else
+  echo "  ${YELLOW}Note: kubectl top not available (metrics-server may not be installed)${NC}"
+fi
 
 # Create APerf pod
 echo -e "\n${BOLD}Created pod configuration for node:${NC} ${NODE_NAME}${NC}"
