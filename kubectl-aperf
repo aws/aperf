@@ -4,8 +4,8 @@ set -e
 set -o pipefail
 
 # Script to deploy a pod on a specific node, run aperf, and copy files locally
-# Usage: kubectl aperf --node=NODE_NAME [--aperf_image=IMAGE] [--namespace=NAMESPACE] [--aperf_options=OPTIONS] [--report-name=NAME] [--open-browser=true|false] [--help]
-#    or: kubectl aperf --node NODE_NAME [--aperf_image IMAGE] [--namespace NAMESPACE] [--aperf_options OPTIONS] [--report-name NAME] [--open-browser true|false] [--help]
+# Usage: kubectl aperf --node=NODE_NAME [--aperf_image=IMAGE] [--namespace=NAMESPACE] [--aperf_options=OPTIONS] [--report-name=NAME] [--open-report=true|false] [--help]
+#    or: kubectl aperf --node NODE_NAME [--aperf_image IMAGE] [--namespace NAMESPACE] [--aperf_options OPTIONS] [--report-name NAME] [--open-report true|false] [--help]
 
 # Default values
 NAMESPACE="default"
@@ -37,7 +37,7 @@ while [ $# -gt 0 ]; do
     --aperf_options) dest="APERF_OPTIONS";;
     --aperf_image) dest="APERF_IMAGE";;
     --report-name) dest="REPORT_NAME";;
-    --open-browser) dest="OPEN_BROWSER";;
+    --open-report) dest="OPEN_BROWSER";;
     --cpu-request) dest="CPU_REQUEST";;
     --memory-request) dest="MEMORY_REQUEST";;
     --cpu-limit) dest="CPU_LIMIT";;
@@ -64,8 +64,8 @@ done
 
 # Show help if requested
 if [ "$SHOW_HELP" = true ]; then
-  echo "Usage: kubectl aperf --node=NODE_NAME [--aperf_image=IMAGE] [--namespace=NAMESPACE] [--aperf_options=OPTIONS] [--report-name=NAME] [--open-browser=true|false] [--help]"
-  echo "   or: kubectl aperf --node NODE_NAME [--aperf_image IMAGE] [--namespace NAMESPACE] [--aperf_options OPTIONS] [--report-name NAME] [--open-browser true|false] [--help]"
+  echo "Usage: kubectl aperf --node=NODE_NAME [--aperf_image=IMAGE] [--namespace=NAMESPACE] [--aperf_options=OPTIONS] [--report-name=NAME] [--open-report=true|false] [--help]"
+  echo "   or: kubectl aperf --node NODE_NAME [--aperf_image IMAGE] [--namespace NAMESPACE] [--aperf_options OPTIONS] [--report-name NAME] [--open-report true|false] [--help]"
   echo ""
   echo "Parameters:"
   echo "  --node           Required. The name of the Kubernetes node to run aperf on"
@@ -73,7 +73,7 @@ if [ "$SHOW_HELP" = true ]; then
   echo "  --namespace      Optional. The Kubernetes namespace (default: '${NAMESPACE}')"
   echo "  --aperf_options  Optional. Options to pass to aperf (default: '${APERF_OPTIONS}')"
   echo "  --report-name    Optional. Name for aperf record/report (default: '${REPORT_NAME}')"
-  echo "  --open-browser   Optional. Open report in browser (default: ${OPEN_BROWSER})"
+  echo "  --open-report    Optional. Open report in browser (default: ${OPEN_BROWSER})"
   echo "  --cpu-request    Optional. CPU request (default: '${CPU_REQUEST}')"
   echo "  --memory-request Optional. Memory request (default: '${MEMORY_REQUEST}')"
   echo "  --cpu-limit      Optional. CPU limit (default: '${CPU_LIMIT}')"
@@ -99,10 +99,10 @@ if ! kubectl get node ${NODE_NAME} &>/dev/null; then
   kubectl get nodes -o custom-columns=NAME:.metadata.name --no-headers
   exit 1
 fi
-echo -e "${GREEN}Node '${NODE_NAME}' found${NC}"
+echo -e " Node '${NODE_NAME}' found"
 
 # Get node taints and generate tolerations
-echo -e "${BOLD}Checking node taints...${NC} "
+echo -n -e "${BOLD}Checking node taints...${NC} "
 TAINTS=$(kubectl get node ${NODE_NAME} -o jsonpath='{.spec.taints[*]}' 2>/dev/null)
 
 TOLERATIONS=""
@@ -135,7 +135,7 @@ if [ -n "$TAINTS" ]; then
     operator: \"Equal\""
   done
 else
-  echo -e "${GREEN}No taints found on node${NC}"
+  echo "No taints found on node"
 fi
 
 # Create pod YAML as a variable
@@ -322,7 +322,7 @@ else
   tar -xzf "${LOCAL_FILE}" -C "${EXTRACT_DIR}"
 fi
 
-echo -e "  ${GREEN}Extracted to${NC} ${BLUE}${EXTRACT_DIR}/${NC}"
+echo -n -e "  Extracted to ${BLUE}${EXTRACT_DIR}/${NC}"
 
 # Open index.html in browser if enabled
 if [ "$OPEN_BROWSER" = true ]; then
