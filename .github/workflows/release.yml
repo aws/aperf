@@ -87,6 +87,36 @@ jobs:
           tag: ${{ github.ref }}
           asset_name: aperf-${{ github.ref_name }}-windows.tar.gz
 
+      # Attach rpm and deb packages to the release
+      - name: Upload x86_64 rpm
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: x86_64-rpm/aperf-${{ github.ref_name }}-x86_64.rpm
+          tag: ${{ github.ref }}
+          asset_name: aperf-${{ github.ref_name }}-x86_64.rpm
+      - name: Upload x86_64 deb
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: x86_64-deb/aperf-${{ github.ref_name }}-amd64.deb
+          tag: ${{ github.ref }}
+          asset_name: aperf-${{ github.ref_name }}-amd64.deb
+      - name: Upload aarch64 rpm
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: aarch64-rpm/aperf-${{ github.ref_name }}-aarch64.rpm
+          tag: ${{ github.ref }}
+          asset_name: aperf-${{ github.ref_name }}-aarch64.rpm
+      - name: Upload aarch64 deb
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: aarch64-deb/aperf-${{ github.ref_name }}-arm64.deb
+          tag: ${{ github.ref }}
+          asset_name: aperf-${{ github.ref_name }}-arm64.deb
+
   ecr-publish:
     name: Build image and publish to ECR
     needs: release
