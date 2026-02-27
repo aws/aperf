@@ -1,0 +1,14 @@
+Source: aperf
+Section: utils
+Priority: optional
+Maintainer: APerf Team <aperf-github-bot@amazon.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.0
+Homepage: https://github.com/aws/aperf
+
+Package: aperf
+Architecture: any
+Description: APerf is a CLI tool used for performance monitoring and debugging.
+ It records a wide range of performance-related system metrics or data over a sampling period, such as CPU utilization, memory availability, and PMU counters, and writes them into an archive on disk.
+ APerf's recording is low overhead, and aims to utilize <5% of one CPU. To view the data, APerf processes one or more collected archives, performs analysis, and generates an HTML report.
+ In the report, users can refer to the analytical findings for potential performance issues, or they can browse through all collected data to get a holistic understanding of the systems under test.

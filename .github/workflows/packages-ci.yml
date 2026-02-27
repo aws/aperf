@@ -1,0 +1,110 @@
+name: Build RPM and DEB Packages
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: The APerf and package version
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build_packages:
+    strategy:
+      matrix:
+        platform: [ubuntu-latest, ubuntu-22.04-arm]
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895 # v2.6.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download built binaries
+        uses: actions/download-artifact@v4
+
+      - name: Install packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm debhelper devscripts build-essential
+
+      - name: Build RPM
+        run: |
+          version=${{ inputs.version }}
+          version=${version#v}
+
+          if [ $(arch) = "aarch64" ]; then
+            arch_name="aarch64"
+            artifact_dir="aarch64-release-artifacts"
+          else
+            arch_name="x86_64"
+            artifact_dir="x86_64-release-artifacts"
+          fi
+
+          build_dir=build-${arch_name}-rpm
+          mkdir -p $build_dir
+          tar -zxf ${artifact_dir}/artifacts.tar.gz -C $build_dir
+          cp aperf.spec $build_dir/
+          rpmbuild -bb $build_dir/aperf.spec \
+            --target ${arch_name} \
+            --define "_version $version" \
+            --define "_rpmdir $(pwd)/$build_dir" \
+            --define "_sourcedir $(pwd)/$build_dir" \
+            --define "_builddir $(pwd)/$build_dir" \
+            --define "_buildrootdir $(pwd)/$build_dir/buildroot"
+          mv $build_dir/${arch_name}/aperf-*.rpm aperf-${{ inputs.version }}-${arch_name}.rpm
+
+      - name: Build DEB
+        run: |
+          version=${{ inputs.version }}
+          version=${version#v}
+
+          if [ $(arch) = "aarch64" ]; then
+            artifact_dir="aarch64-release-artifacts"
+            arch_name="arm64"
+          else
+            artifact_dir="x86_64-release-artifacts"
+            arch_name="amd64"
+          fi
+
+          build_dir=build-${arch_name}-deb
+          mkdir -p $build_dir
+          tar -zxf ${artifact_dir}/artifacts.tar.gz -C $build_dir
+          cp -r debian $build_dir/
+          sed -i "s/VERSION/$version/g" $build_dir/debian/changelog
+          (cd $build_dir && dpkg-buildpackage -b -uc -us -a ${arch_name})
+          mv $build_dir/../aperf_*.deb aperf-${{ inputs.version }}-${arch_name}.deb
+
+      - name: Upload x86_64 RPM
+        uses: actions/upload-artifact@v4
+        if: ${{ matrix.platform == 'ubuntu-latest' }}
+        with:
+          name: x86_64-rpm
+          path: aperf-${{ inputs.version }}-x86_64.rpm
+
+      - name: Upload x86_64 DEB
+        uses: actions/upload-artifact@v4
+        if: ${{ matrix.platform == 'ubuntu-latest' }}
+        with:
+          name: x86_64-deb
+          path: aperf-${{ inputs.version }}-amd64.deb
+
+      - name: Upload aarch64 RPM
+        uses: actions/upload-artifact@v4
+        if: ${{ matrix.platform == 'ubuntu-22.04-arm' }}
+        with:
+          name: aarch64-rpm
+          path: aperf-${{ inputs.version }}-aarch64.rpm
+
+      - name: Upload aarch64 DEB
+        uses: actions/upload-artifact@v4
+        if: ${{ matrix.platform == 'ubuntu-22.04-arm' }}
+        with:
+          name: aarch64-deb
+          path: aperf-${{ inputs.version }}-arm64.deb

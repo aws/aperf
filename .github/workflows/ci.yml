@@ -107,3 +107,11 @@ jobs:
         with:
           name: aarch64-release-artifacts
           path: artifacts.tar.gz
+
+  # Build the RPM and DEB packages
+  Packages:
+    name: Build and upload RPM and DEB packages
+    needs: CI
+    uses: ./.github/workflows/packages-ci.yml
+    with:
+      version: ${{ github.event_name == 'pull_request' && format('0.0.{0}', github.event.pull_request.number) || github.ref_name }}
