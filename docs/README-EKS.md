@@ -49,7 +49,7 @@ bash ./eks-aperf.sh \
 
 ```bash
 # Run APerf for 60 seconds with profiling enabled
-bash ./eks-aperf.sh \
+./kubectl-aperf \
   --node="ip-10-0-120-104.us-west-2.compute.internal" \
   --aperf_options="-p 60 --profile" \
   --namespace="aperf"
@@ -59,7 +59,7 @@ bash ./eks-aperf.sh \
 
 ```bash
 # Run APerf with custom CPU and memory settings
-bash ./eks-aperf.sh \
+./kubectl-aperf \
   --node="ip-10-0-120-104.us-west-2.compute.internal" \
   --cpu-request="2.0" \
   --memory-request="2Gi" \
@@ -81,7 +81,7 @@ The APerf report will be downloaded as a compressed tarball file with a timestam
 
 Example of correct output execution of the script:
 ```bash
-$ bash ./eks-aperf.sh  --namespace=aperf --node  ip-10-0-120-104.us-west-2.compute.internal  --aperf_options="-p 30 --profile"
+$ ./kubectl-aperf  --namespace=aperf --node  ip-10-0-120-104.us-west-2.compute.internal  --aperf_options="-p 30 --profile"
 
 Tageted node instance type...   m6g.8xlarge
 Check namespace security policy...   Namespace 'aperf' has 'privileged' policy - privileged pods allowed.
@@ -180,10 +180,10 @@ Your APerf containerized image should now be available on the ECR registry.
 
 ### Step 3: Use the custom image
 
-Now you can invoke the `eks-aperf.sh` script with the custom APerf image:
+Now you can invoke the `kubectl-aperf` script with the custom APerf image:
 
 ```bash
-bash ./eks-aperf.sh \
+./kubectl-aperf \
   --aperf_image="${APERF_ECR_REPO}:latest" \
   --node="ip-10-0-120-104.us-west-2.compute.internal" 
 ```
@@ -253,10 +253,10 @@ kubectl rollout status deployment/your-java-app -n your-namespace
 
 ### Step 2: Run APerf with Java Profiling
 
-Once the shared volume is configured on your Java application, run the `eks-aperf.sh` script with the `--profile-java` option:
+Once the shared volume is configured on your Java application, run the `kubectl-aperf` script with the `--profile-java` option:
 
 ```bash
-bash ./eks-aperf.sh \
+./kubectl-aperf \
   --aperf_image="${APERF_ECRREPO}:latest" \
   --node="i-0b69f09011ee404c2" \
   --aperf_options="-p 30 --profile --profile-java"
@@ -280,3 +280,23 @@ bash ./eks-aperf.sh \
    /tmp/aperf/async-profiler/bin/../lib/libasyncProfiler.so: cannot open shared object file: No such file or directory
    ```
    **Solution**: Verify that your Java application pod has the `/tmp/aperf` volume mounted correctly. Re-apply the deployment configuration from Step 1 and ensure the pods are restarted
+
+
+## Installing as a kubectl Plugin
+
+You can install `kubectl-aperf` as a kubectl plugin to run it as `kubectl aperf` instead of `./kubectl-aperf`. 
+
+To do so, run the following commands:
+
+```bash
+sudo cp kubectl-aperf /usr/local/bin/
+sudo chmod +x /usr/local/bin/kubectl-aperf
+kubectl plugin list
+kubectl aperf --help
+```
+
+Now you can run it as:
+
+```bash
+kubectl aperf --node="ip-10-0-120-104.us-west-2.compute.internal"
+```

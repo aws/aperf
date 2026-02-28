@@ -4,14 +4,16 @@ set -e
 set -o pipefail
 
 # Script to deploy a pod on a specific node, run aperf, and copy files locally
-# Usage: ./aperf_k8s.sh --node="node-name" [--namespace="namespace"] [--aperf_options="options"] [--help]
-#    or: ./aperf_k8s.sh --node "node-name" [--namespace "namespace"] [--aperf_options "options"] [--help]
+# Usage: kubectl aperf --node=NODE_NAME [--aperf_image=IMAGE] [--namespace=NAMESPACE] [--aperf_options=OPTIONS] [--report-name=NAME] [--open-report=true|false] [--help]
+#    or: kubectl aperf --node NODE_NAME [--aperf_image IMAGE] [--namespace NAMESPACE] [--aperf_options OPTIONS] [--report-name NAME] [--open-report true|false] [--help]
 
 # Default values
 NAMESPACE="default"
 APERF_OPTIONS=""
 NODE_NAME=""
 APERF_IMAGE="public.ecr.aws/aperf/aperf:latest"
+REPORT_NAME="aperf_record"
+OPEN_BROWSER=true
 SHOW_HELP=false
 CPU_REQUEST="1.0"
 MEMORY_REQUEST="1Gi"
@@ -34,6 +36,8 @@ while [ $# -gt 0 ]; do
     --namespace) dest="NAMESPACE";;
     --aperf_options) dest="APERF_OPTIONS";;
     --aperf_image) dest="APERF_IMAGE";;
+    --report-name) dest="REPORT_NAME";;
+    --open-report) dest="OPEN_BROWSER";;
     --cpu-request) dest="CPU_REQUEST";;
     --memory-request) dest="MEMORY_REQUEST";;
     --cpu-limit) dest="CPU_LIMIT";;
@@ -60,14 +64,16 @@ done
 
 # Show help if requested
 if [ "$SHOW_HELP" = true ]; then
-  echo "Usage: ./aperf_k8s.sh --aperf_image=IMAGE --node=NODE_NAME [--namespace=NAMESPACE] [--aperf_options=OPTIONS] [--help]"
-  echo "   or: ./aperf_k8s.sh --aperf_image IMAGE --node NODE_NAME [--namespace NAMESPACE] [--aperf_options OPTIONS] [--help]"
+  echo "Usage: kubectl aperf --node=NODE_NAME [--aperf_image=IMAGE] [--namespace=NAMESPACE] [--aperf_options=OPTIONS] [--report-name=NAME] [--open-report=true|false] [--help]"
+  echo "   or: kubectl aperf --node NODE_NAME [--aperf_image IMAGE] [--namespace NAMESPACE] [--aperf_options OPTIONS] [--report-name NAME] [--open-report true|false] [--help]"
   echo ""
   echo "Parameters:"
   echo "  --node           Required. The name of the Kubernetes node to run aperf on"
   echo "  --aperf_image    Optional. ECR image URI (default: '${APERF_IMAGE}')"
   echo "  --namespace      Optional. The Kubernetes namespace (default: '${NAMESPACE}')"
   echo "  --aperf_options  Optional. Options to pass to aperf (default: '${APERF_OPTIONS}')"
+  echo "  --report-name    Optional. Name for aperf record/report (default: '${REPORT_NAME}')"
+  echo "  --open-report    Optional. Open report in browser (default: ${OPEN_BROWSER})"
   echo "  --cpu-request    Optional. CPU request (default: '${CPU_REQUEST}')"
   echo "  --memory-request Optional. Memory request (default: '${MEMORY_REQUEST}')"
   echo "  --cpu-limit      Optional. CPU limit (default: '${CPU_LIMIT}')"
@@ -86,6 +92,52 @@ fi
 
 POD_NAME="aperf-pod-${NODE_NAME//[.]/-}"
 
+echo -n -e "${BOLD}Verifying node exists...${NC}"
+if ! kubectl get node ${NODE_NAME} &>/dev/null; then
+  echo -e "${RED}Error: Node '${NODE_NAME}' not found in the cluster.${NC}"
+  echo -e "${YELLOW}Available nodes:${NC}"
+  kubectl get nodes -o custom-columns=NAME:.metadata.name --no-headers
+  exit 1
+fi
+echo -e " Node '${NODE_NAME}' found"
+
+# Get node taints and generate tolerations
+echo -n -e "${BOLD}Checking node taints...${NC} "
+TAINTS=$(kubectl get node ${NODE_NAME} -o jsonpath='{.spec.taints[*]}' 2>/dev/null)
+
+TOLERATIONS=""
+if [ -n "$TAINTS" ]; then
+  echo -e "${YELLOW}Node has taints, adding tolerations to pod spec${NC}"
+  
+  # Parse taints and create tolerations YAML
+  TOLERATIONS="  tolerations:"
+  
+  # Get taints as JSON array and process each one
+  TAINT_COUNT=$(kubectl get node ${NODE_NAME} -o json | jq -r '.spec.taints | length' 2>/dev/null || echo "0")
+  
+  for ((i=0; i<$TAINT_COUNT; i++)); do
+    KEY=$(kubectl get node ${NODE_NAME} -o json | jq -r ".spec.taints[$i].key" 2>/dev/null)
+    VALUE=$(kubectl get node ${NODE_NAME} -o json | jq -r ".spec.taints[$i].value" 2>/dev/null)
+    EFFECT=$(kubectl get node ${NODE_NAME} -o json | jq -r ".spec.taints[$i].effect" 2>/dev/null)
+    
+    echo -e "    Taint: ${KEY}=${VALUE}:${EFFECT}"
+    
+    TOLERATIONS="${TOLERATIONS}
+  - key: \"${KEY}\""
+    
+    if [ "$VALUE" != "null" ] && [ -n "$VALUE" ]; then
+      TOLERATIONS="${TOLERATIONS}
+    value: \"${VALUE}\""
+    fi
+    
+    TOLERATIONS="${TOLERATIONS}
+    effect: \"${EFFECT}\"
+    operator: \"Equal\""
+  done
+else
+  echo "No taints found on node"
+fi
+
 # Create pod YAML as a variable
 POD_YAML=$(cat << EOF
 apiVersion: v1
@@ -97,6 +149,7 @@ metadata:
 spec:
   nodeSelector:
     kubernetes.io/hostname: "${NODE_NAME}"
+${TOLERATIONS}
   containers:
   - name: aperf-runner
     image: ${APERF_IMAGE}
@@ -119,16 +172,16 @@ spec:
       export LD_LIBRARY_PATH="/tmp/aperf/async-profiler/lib:${LD_LIBRARY_PATH}"
       
       echo -e "Starting Aperf recording execution..."
-      echo "Run: /usr/bin/aperf record --tmp-dir="/tmp/aperf/profile"  -r aperf_record ${APERF_OPTIONS}"
+      echo "Run: /usr/bin/aperf record --tmp-dir="/tmp/aperf/profile"  -r ${REPORT_NAME} ${APERF_OPTIONS}"
       mkdir -p /tmp/aperf/profile 
       chmod -R 777 /tmp/aperf/profile
-      /usr/bin/aperf record --tmp-dir="/tmp/aperf/profile" -r aperf_record ${APERF_OPTIONS}
+      /usr/bin/aperf record --tmp-dir="/tmp/aperf/profile" -r ${REPORT_NAME} ${APERF_OPTIONS}
       rm -rf  /tmp/aperf/profile
       echo "APerf record completed"
 
       echo -e "\nStarting Aperf report generation..."
-      echo "Run: /usr/bin/aperf report -r aperf_record -n aperf_report"
-      /usr/bin/aperf report -r aperf_record -n aperf_report
+      echo "Run: /usr/bin/aperf report -r ${REPORT_NAME} -n ${REPORT_NAME}_report"
+      /usr/bin/aperf report -r ${REPORT_NAME} -n ${REPORT_NAME}_report
       echo "APerf report generation completed"
 
       echo -e "\nWaiting for files to be copied..."
@@ -185,9 +238,13 @@ fi
 
 # Show resource usage for pods on this node
 echo -e "${BOLD}Resource usage for pods on ${NODE_NAME}:${NC}"
-kubectl top pods --all-namespaces > /tmp/allpods.out  && \
-head -n 1 /tmp/allpods.out  &&  \
-grep "$(kubectl get pods --all-namespaces --field-selector spec.nodeName=${NODE_NAME} -o jsonpath='{range .items[*]}{.metadata.name}{" "}{end}' | sed 's/[[:space:]]*$//' | sed 's/[[:space:]]/\\|/g')" /tmp/allpods.out --color=never
+if kubectl top pods --all-namespaces > /tmp/allpods.out 2>/dev/null; then
+  head -n 1 /tmp/allpods.out
+  grep "$(kubectl get pods --all-namespaces --field-selector spec.nodeName=${NODE_NAME} -o jsonpath='{range .items[*]}{.metadata.name}{" "}{end}' | sed 's/[[:space:]]*$//' | sed 's/[[:space:]]/\\|/g')" /tmp/allpods.out --color=never || echo "  No pods found on this node"
+  rm /tmp/allpods.out 2>/dev/null || true
+else
+  echo "  ${YELLOW}Note: kubectl top not available (metrics-server may not be installed)${NC}"
+fi
 
 # Create APerf pod
 echo -e "\n${BOLD}Created pod configuration for node:${NC} ${NODE_NAME}${NC}"
@@ -233,13 +290,79 @@ done
 kill $LOGS_PID 2>/dev/null || true
 
 # Copy files from pod to local directory
-LOCAL_FILE="aperf_report_${POD_STARTTIME}.tar.gz"
+LOCAL_FILE="${REPORT_NAME}_${POD_STARTTIME}.tar.gz"
+EXTRACT_DIR="${REPORT_NAME}_${POD_STARTTIME}"
 echo -e "${NC}${BOLD}Aperf completed. Copying files from pod ${POD_NAME}...${NC}"
-kubectl cp ${NAMESPACE}/${POD_NAME}:aperf_report.tar.gz ${LOCAL_FILE}
+kubectl cp ${NAMESPACE}/${POD_NAME}:${REPORT_NAME}_report.tar.gz ${LOCAL_FILE}
 
 # Delete the pod after copying files
 echo -ne "${BOLD}Deleting pod to clean up resources...${NC}  "
 kubectl delete pod ${POD_NAME} -n ${NAMESPACE}
 
 echo -e "${BOLD}${GREEN}Files copied to${NC} ${BLUE}${LOCAL_FILE}${NC}"
+
+# Extract the tar.gz file
+echo -e "${BOLD}Extracting report files...${NC}"
+mkdir -p "${EXTRACT_DIR}"
+
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" || "$OSTYPE" == "cygwin" ]]; then
+  # Windows - use tar if available, otherwise try 7z or PowerShell
+  if command -v tar &> /dev/null; then
+    tar -xzf "${LOCAL_FILE}" -C "${EXTRACT_DIR}"
+  elif command -v 7z &> /dev/null; then
+    7z x "${LOCAL_FILE}" -so | 7z x -si -ttar -o"${EXTRACT_DIR}"
+  elif command -v powershell.exe &> /dev/null; then
+    powershell.exe -Command "Expand-Archive -Path '${LOCAL_FILE}' -DestinationPath '${EXTRACT_DIR}' -Force"
+  else
+    echo -e "  ${RED}Error: No extraction tool found. Please install tar, 7-Zip, or use PowerShell${NC}"
+    exit 1
+  fi
+else
+  # macOS/Linux
+  tar -xzf "${LOCAL_FILE}" -C "${EXTRACT_DIR}"
+fi
+
+echo -n -e "  Extracted to ${BLUE}${EXTRACT_DIR}/${NC}"
+
+# Open index.html in browser if enabled
+if [ "$OPEN_BROWSER" = true ]; then
+  INDEX_FILE="${EXTRACT_DIR}/${REPORT_NAME}_report/index.html"
+  
+  if [ -f "$INDEX_FILE" ]; then
+    echo -e "${BOLD}Opening report in browser...${NC}"
+    
+    # Detect OS and open browser accordingly
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      # macOS
+      open "$INDEX_FILE"
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+      # Linux
+      if command -v xdg-open &> /dev/null; then
+        xdg-open "$INDEX_FILE"
+      elif command -v sensible-browser &> /dev/null; then
+        sensible-browser "$INDEX_FILE"
+      else
+        echo -e "  ${YELLOW}Could not detect browser command. Please open manually:${NC} ${BLUE}${INDEX_FILE}${NC}"
+      fi
+    elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" || "$OSTYPE" == "cygwin" ]]; then
+      # Windows
+      if command -v start &> /dev/null; then
+        start "$INDEX_FILE"
+      elif command -v cmd.exe &> /dev/null; then
+        cmd.exe /c start "$INDEX_FILE"
+      elif command -v powershell.exe &> /dev/null; then
+        powershell.exe -Command "Start-Process '${INDEX_FILE}'"
+      else
+        echo -e "  ${YELLOW}Could not detect browser command. Please open manually:${NC} ${BLUE}${INDEX_FILE}${NC}"
+      fi
+    else
+      echo -e "  ${YELLOW}Unsupported OS. Please open manually:${NC} ${BLUE}${INDEX_FILE}${NC}"
+    fi
+  else
+    echo -e "  ${YELLOW}Warning: index.html not found at ${INDEX_FILE}${NC}"
+    echo -e "  ${YELLOW}Extracted contents:${NC}"
+    ls -la "${EXTRACT_DIR}/"
+  fi
+fi
+
 echo -e "${BOLD}${GREEN}Done!${NC}"
