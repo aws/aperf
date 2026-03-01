@@ -34,7 +34,7 @@ chrono = { version = "0.4", features = ["serde"] }
 rustix = { version = "0.38.28", features = ["system"] }
 serde_yaml = "0.9"
 thiserror = "1.0"
-log = "0.4.21"
+log = "0.4.28"
 lazy_static = "1.4.0"
 ctor = "0.2.6"
 anyhow = "1.0"
