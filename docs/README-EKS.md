@@ -12,6 +12,26 @@ This guide explains how to run APerf on Amazon EKS (Elastic Kubernetes Service) 
    kubectl get nodes
    ```
 
+## Installation
+
+You can install `kubectl-aperf` as a kubectl plugin to run it as `kubectl aperf`. This is the recommended approach for regular use.
+
+Download the `kubectl-aperf` script and install it to your PATH:
+
+```bash
+sudo cp kubectl-aperf /usr/local/bin/
+sudo chmod +x /usr/local/bin/kubectl-aperf
+```
+
+Verify the installation:
+
+```bash
+kubectl plugin list
+kubectl aperf --help
+```
+
+**Note**: If you prefer not to install it as a plugin or don't have sudo access, you can run the script directly using `./kubectl-aperf` instead of `kubectl aperf` in all the examples below.
+
 ## Instructions
 
 ### Step 1: Identify Target Node
@@ -27,10 +47,10 @@ Example node name: `ip-10-0-120-104.us-west-2.compute.internal` or `i-02a3f32795
 
 ### Step 2: Start APerf Collection
 
-Use the provided `eks-aperf.sh` script to run APerf on the selected node. By default, it uses the latest official APerf image available at https://gallery.ecr.aws/aperf/aperf. To use your own APerf image, refer to the [instructions below](#optional-use-your-own-aperf-image).
+Use the `kubectl aperf` plugin to run APerf on the selected node. By default, it uses the latest official APerf image available at https://gallery.ecr.aws/aperf/aperf. To use your own APerf image, refer to the [instructions below](#optional-use-your-own-aperf-image).
 
 ```bash
-bash ./eks-aperf.sh \
+kubectl aperf \
   --node="ip-10-0-120-104.us-west-2.compute.internal" 
 ```
 
@@ -49,7 +69,7 @@ bash ./eks-aperf.sh \
 
 ```bash
 # Run APerf for 60 seconds with profiling enabled
-./kubectl-aperf \
+kubectl aperf \
   --node="ip-10-0-120-104.us-west-2.compute.internal" \
   --aperf_options="-p 60 --profile" \
   --namespace="aperf"
@@ -59,7 +79,7 @@ bash ./eks-aperf.sh \
 
 ```bash
 # Run APerf with custom CPU and memory settings
-./kubectl-aperf \
+kubectl aperf \
   --node="ip-10-0-120-104.us-west-2.compute.internal" \
   --cpu-request="2.0" \
   --memory-request="2Gi" \
@@ -69,7 +89,7 @@ bash ./eks-aperf.sh \
 
 ### Step 3: Collect Results
 
-The `eks-aperf.sh` script will automatically run the following steps:
+The `kubectl aperf` plugin will automatically run the following steps:
 
 1. **Pod Deployment**: Deploy a privileged pod on the specified node
 2. **APerf Record**: Runs APerf record inside the pod with the specified options
@@ -77,11 +97,11 @@ The `eks-aperf.sh` script will automatically run the following steps:
 4. **File Transfer**: Copies the generated report from the pod to your local machine
 5. **Cleanup**: Removes the pod after successful completion
 
-The APerf report will be downloaded as a compressed tarball file with a timestamp (E.g. aperf_report_20250626-133204.tar.gz)
+The APerf report will be downloaded as a compressed tarball file with a timestamp in the format `aperf_record_YYYYMMDD-HHMMSS.tar.gz` (e.g., `aperf_record_20260302-143022.tar.gz`).
 
-Example of correct output execution of the script:
+Example of correct output execution of the plugin:
 ```bash
-$ ./kubectl-aperf  --namespace=aperf --node  ip-10-0-120-104.us-west-2.compute.internal  --aperf_options="-p 30 --profile"
+$ kubectl aperf --namespace=aperf --node ip-10-0-120-104.us-west-2.compute.internal --aperf_options="-p 30 --profile"
 
 Tageted node instance type...   m6g.8xlarge
 Check namespace security policy...   Namespace 'aperf' has 'privileged' policy - privileged pods allowed.
@@ -113,15 +133,15 @@ Run: /usr/bin/aperf record -r aperf_record -p 30 --profile
 APerf record completed
 
 Starting Aperf report generation...
-Run: /usr/bin/aperf report -r aperf_record -n aperf_report
+Run: /usr/bin/aperf report -r aperf_record -n aperf_record_report
 [2025-06-26T20:31:54Z INFO  aperf::report] Creating APerf report...
-[2025-06-26T20:32:01Z INFO  aperf::report] Generating aperf_report.tar.gz
+[2025-06-26T20:32:01Z INFO  aperf::report] Generating aperf_record_report.tar.gz
 APerf report generation completed
 
 Waiting for files to be copied...
 Aperf completed. Copying files from pod aperf-pod-ip-10-0-120-104-us-west-2-compute-internal...
 Deleting pod to clean up resources...  pod "aperf-pod-ip-10-0-120-104-us-west-2-compute-internal" deleted
-Files copied to aperf_report_20250626-133204.tar.gz
+Files copied to aperf_record_20260302-133204.tar.gz
 Done!
 ```
 
@@ -180,10 +200,10 @@ Your APerf containerized image should now be available on the ECR registry.
 
 ### Step 3: Use the custom image
 
-Now you can invoke the `kubectl-aperf` script with the custom APerf image:
+Now you can use the `kubectl aperf` plugin with the custom APerf image:
 
 ```bash
-./kubectl-aperf \
+kubectl aperf \
   --aperf_image="${APERF_ECR_REPO}:latest" \
   --node="ip-10-0-120-104.us-west-2.compute.internal" 
 ```
@@ -253,10 +273,10 @@ kubectl rollout status deployment/your-java-app -n your-namespace
 
 ### Step 2: Run APerf with Java Profiling
 
-Once the shared volume is configured on your Java application, run the `kubectl-aperf` script with the `--profile-java` option:
+Once the shared volume is configured on your Java application, run the `kubectl aperf` plugin with the `--profile-java` option:
 
 ```bash
-./kubectl-aperf \
+kubectl aperf \
   --aperf_image="${APERF_ECRREPO}:latest" \
   --node="i-0b69f09011ee404c2" \
   --aperf_options="-p 30 --profile --profile-java"
@@ -280,23 +300,3 @@ Once the shared volume is configured on your Java application, run the `kubectl-
    /tmp/aperf/async-profiler/bin/../lib/libasyncProfiler.so: cannot open shared object file: No such file or directory
    ```
    **Solution**: Verify that your Java application pod has the `/tmp/aperf` volume mounted correctly. Re-apply the deployment configuration from Step 1 and ensure the pods are restarted
-
-
-## Installing as a kubectl Plugin
-
-You can install `kubectl-aperf` as a kubectl plugin to run it as `kubectl aperf` instead of `./kubectl-aperf`. 
-
-To do so, run the following commands:
-
-```bash
-sudo cp kubectl-aperf /usr/local/bin/
-sudo chmod +x /usr/local/bin/kubectl-aperf
-kubectl plugin list
-kubectl aperf --help
-```
-
-Now you can run it as:
-
-```bash
-kubectl aperf --node="ip-10-0-120-104.us-west-2.compute.internal"
-```
