@@ -376,6 +376,490 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       },
     },
   },
+  memalloc: {
+    readableName: "Memory Allocation",
+    summary:
+      "Memory allocation metrics show buddy allocator free blocks, page type information, pageblock counts, and slab allocator statistics. BuddyInfo shows total free blocks at each order. PageType shows free blocks by migration type. PageBlocks shows aggregated pageblock counts. SlabInfo shows kernel slab allocator metrics for each slab cache. Data collected from /proc/buddyinfo, /proc/pagetypeinfo, and /proc/slabinfo.",
+    defaultUnit: "Count",
+    defaultHelpfulLinks: [
+      "https://www.kernel.org/doc/html/latest/admin-guide/mm/concepts.html#buddy-allocator",
+      "https://www.kernel.org/doc/html/latest/admin-guide/mm/concepts.html#migrate-types",
+      "https://www.kernel.org/doc/html/latest/vm/slub.html"
+    ],
+    fieldDescriptions: {
+      "BuddyInfo order_0 (4KB)": {
+        readableName: "Free 4KB Blocks",
+        description: "Number of free 4KB (2^0 pages) memory blocks available in the buddy allocator. These are the smallest allocation units and most commonly used for single-page allocations.",
+        desired: "higher",
+      },
+      "BuddyInfo order_1 (8KB)": {
+        readableName: "Free 8KB Blocks",
+        description: "Number of free 8KB (2^1 pages) contiguous memory blocks. Used for small multi-page allocations requiring physically contiguous memory.",
+        desired: "higher",
+      },
+      "BuddyInfo order_2 (16KB)": {
+        readableName: "Free 16KB Blocks",
+        description: "Number of free 16KB (2^2 pages) contiguous memory blocks. Common for kernel data structures and small DMA buffers.",
+        desired: "higher",
+      },
+      "BuddyInfo order_3 (32KB)": {
+        readableName: "Free 32KB Blocks",
+        description: "Number of free 32KB (2^3 pages) contiguous memory blocks. Used for medium-sized kernel allocations and device drivers.",
+        desired: "higher",
+      },
+      "BuddyInfo order_4 (64KB)": {
+        readableName: "Free 64KB Blocks",
+        description: "Number of free 64KB (2^4 pages) contiguous memory blocks. Important for larger DMA operations and kernel subsystems.",
+        desired: "higher",
+      },
+      "BuddyInfo order_5 (128KB)": {
+        readableName: "Free 128KB Blocks",
+        description: "Number of free 128KB (2^5 pages) contiguous memory blocks. Critical for large kernel allocations and high-performance I/O.",
+        desired: "higher",
+      },
+      "BuddyInfo order_6 (256KB)": {
+        readableName: "Free 256KB Blocks",
+        description: "Number of free 256KB (2^6 pages) contiguous memory blocks. Essential for large contiguous allocations and memory-intensive operations.",
+        desired: "higher",
+      },
+      "BuddyInfo order_7 (512KB)": {
+        readableName: "Free 512KB Blocks",
+        description: "Number of free 512KB (2^7 pages) contiguous memory blocks. Important indicator of memory fragmentation at medium scales.",
+        desired: "higher",
+      },
+      "BuddyInfo order_8 (1MB)": {
+        readableName: "Free 1MB Blocks",
+        description: "Number of free 1MB (2^8 pages) contiguous memory blocks. Key metric for large contiguous allocations and huge page support.",
+        desired: "higher",
+      },
+      "BuddyInfo order_9 (2MB)": {
+        readableName: "Free 2MB Blocks",
+        description: "Number of free 2MB (2^9 pages) contiguous memory blocks. Critical for transparent huge pages and large memory allocations.",
+        desired: "higher",
+      },
+      "BuddyInfo order_10 (4MB)": {
+        readableName: "Free 4MB Blocks",
+        description: "Number of free 4MB (2^10 pages) contiguous memory blocks. Largest buddy allocator order, indicates excellent memory contiguity and low fragmentation.",
+        desired: "higher",
+      },
+      "PageType Unmovable - order_0 (4KB)": {
+        readableName: "Free 4KB Unmovable Blocks",
+        description: "Free 4KB blocks reserved for unmovable pages that cannot be migrated or reclaimed, typically used for kernel data structures.",
+        desired: "moderate",
+      },
+      "PageType Unmovable - order_1 (8KB)": {
+        readableName: "Free 8KB Unmovable Blocks",
+        description: "Free 8KB unmovable blocks for kernel allocations that must remain at fixed physical addresses.",
+        desired: "moderate",
+      },
+      "PageType Unmovable - order_2 (16KB)": {
+        readableName: "Free 16KB Unmovable Blocks",
+        description: "Free 16KB unmovable blocks for larger kernel structures requiring fixed physical memory.",
+        desired: "moderate",
+      },
+      "PageType Unmovable - order_3 (32KB)": {
+        readableName: "Free 32KB Unmovable Blocks",
+        description: "Free 32KB unmovable blocks for substantial kernel allocations that cannot be relocated.",
+        desired: "moderate",
+      },
+      "PageType Unmovable - order_4 (64KB)": {
+        readableName: "Free 64KB Unmovable Blocks",
+        description: "Free 64KB unmovable blocks for large kernel data structures and device drivers.",
+        desired: "moderate",
+      },
+      "PageType Unmovable - order_5 (128KB)": {
+        readableName: "Free 128KB Unmovable Blocks",
+        description: "Free 128KB unmovable blocks for very large kernel allocations requiring physical address stability.",
+        desired: "moderate",
+      },
+      "PageType Unmovable - order_6 (256KB)": {
+        readableName: "Free 256KB Unmovable Blocks",
+        description: "Free 256KB unmovable blocks for substantial kernel subsystem allocations.",
+        desired: "moderate",
+      },
+      "PageType Unmovable - order_7 (512KB)": {
+        readableName: "Free 512KB Unmovable Blocks",
+        description: "Free 512KB unmovable blocks indicating availability of large contiguous kernel memory.",
+        desired: "moderate",
+      },
+      "PageType Unmovable - order_8 (1MB)": {
+        readableName: "Free 1MB Unmovable Blocks",
+        description: "Free 1MB unmovable blocks for very large kernel allocations and specialized subsystems.",
+        desired: "moderate",
+      },
+      "PageType Unmovable - order_9 (2MB)": {
+        readableName: "Free 2MB Unmovable Blocks",
+        description: "Free 2MB unmovable blocks for huge kernel allocations requiring fixed physical addresses.",
+        desired: "moderate",
+      },
+      "PageType Unmovable - order_10 (4MB)": {
+        readableName: "Free 4MB Unmovable Blocks",
+        description: "Free 4MB unmovable blocks, the largest unmovable allocation size available.",
+        desired: "moderate",
+      },
+      "PageType Movable - order_0 (4KB)": {
+        readableName: "Free 4KB Movable Blocks",
+        description: "Free 4KB blocks for movable pages that can be migrated to reduce fragmentation, typically used for user-space allocations.",
+        desired: "higher",
+      },
+      "PageType Movable - order_1 (8KB)": {
+        readableName: "Free 8KB Movable Blocks",
+        description: "Free 8KB movable blocks that can be relocated during memory compaction.",
+        desired: "higher",
+      },
+      "PageType Movable - order_2 (16KB)": {
+        readableName: "Free 16KB Movable Blocks",
+        description: "Free 16KB movable blocks available for user-space allocations and page migration.",
+        desired: "higher",
+      },
+      "PageType Movable - order_3 (32KB)": {
+        readableName: "Free 32KB Movable Blocks",
+        description: "Free 32KB movable blocks that support memory defragmentation through migration.",
+        desired: "higher",
+      },
+      "PageType Movable - order_4 (64KB)": {
+        readableName: "Free 64KB Movable Blocks",
+        description: "Free 64KB movable blocks for larger user allocations that can be compacted.",
+        desired: "higher",
+      },
+      "PageType Movable - order_5 (128KB)": {
+        readableName: "Free 128KB Movable Blocks",
+        description: "Free 128KB movable blocks critical for transparent huge page allocations.",
+        desired: "higher",
+      },
+      "PageType Movable - order_6 (256KB)": {
+        readableName: "Free 256KB Movable Blocks",
+        description: "Free 256KB movable blocks supporting large contiguous user-space allocations.",
+        desired: "higher",
+      },
+      "PageType Movable - order_7 (512KB)": {
+        readableName: "Free 512KB Movable Blocks",
+        description: "Free 512KB movable blocks indicating good memory contiguity for large allocations.",
+        desired: "higher",
+      },
+      "PageType Movable - order_8 (1MB)": {
+        readableName: "Free 1MB Movable Blocks",
+        description: "Free 1MB movable blocks essential for huge page support and large memory mappings.",
+        desired: "higher",
+      },
+      "PageType Movable - order_9 (2MB)": {
+        readableName: "Free 2MB Movable Blocks",
+        description: "Free 2MB movable blocks critical for transparent huge pages and low memory fragmentation.",
+        desired: "higher",
+      },
+      "PageType Movable - order_10 (4MB)": {
+        readableName: "Free 4MB Movable Blocks",
+        description: "Free 4MB movable blocks, the largest movable allocation size, indicating excellent memory health.",
+        desired: "higher",
+      },
+      "PageType Reclaimable - order_0 (4KB)": {
+        readableName: "Free 4KB Reclaimable Blocks",
+        description: "Free 4KB blocks for reclaimable pages that can be freed under memory pressure, such as file caches and slab caches.",
+        desired: "moderate",
+      },
+      "PageType Reclaimable - order_1 (8KB)": {
+        readableName: "Free 8KB Reclaimable Blocks",
+        description: "Free 8KB reclaimable blocks that can be reclaimed when memory is needed.",
+        desired: "moderate",
+      },
+      "PageType Reclaimable - order_2 (16KB)": {
+        readableName: "Free 16KB Reclaimable Blocks",
+        description: "Free 16KB reclaimable blocks for kernel caches that can be freed during memory pressure.",
+        desired: "moderate",
+      },
+      "PageType Reclaimable - order_3 (32KB)": {
+        readableName: "Free 32KB Reclaimable Blocks",
+        description: "Free 32KB reclaimable blocks available for cache allocations that can be reclaimed.",
+        desired: "moderate",
+      },
+      "PageType Reclaimable - order_4 (64KB)": {
+        readableName: "Free 64KB Reclaimable Blocks",
+        description: "Free 64KB reclaimable blocks for larger cache structures that can be freed when needed.",
+        desired: "moderate",
+      },
+      "PageType Reclaimable - order_5 (128KB)": {
+        readableName: "Free 128KB Reclaimable Blocks",
+        description: "Free 128KB reclaimable blocks for substantial cache allocations.",
+        desired: "moderate",
+      },
+      "PageType Reclaimable - order_6 (256KB)": {
+        readableName: "Free 256KB Reclaimable Blocks",
+        description: "Free 256KB reclaimable blocks for large kernel cache structures.",
+        desired: "moderate",
+      },
+      "PageType Reclaimable - order_7 (512KB)": {
+        readableName: "Free 512KB Reclaimable Blocks",
+        description: "Free 512KB reclaimable blocks indicating substantial reclaimable memory available.",
+        desired: "moderate",
+      },
+      "PageType Reclaimable - order_8 (1MB)": {
+        readableName: "Free 1MB Reclaimable Blocks",
+        description: "Free 1MB reclaimable blocks for very large cache allocations.",
+        desired: "moderate",
+      },
+      "PageType Reclaimable - order_9 (2MB)": {
+        readableName: "Free 2MB Reclaimable Blocks",
+        description: "Free 2MB reclaimable blocks for huge cache structures that can be freed.",
+        desired: "moderate",
+      },
+      "PageType Reclaimable - order_10 (4MB)": {
+        readableName: "Free 4MB Reclaimable Blocks",
+        description: "Free 4MB reclaimable blocks, the largest reclaimable allocation size.",
+        desired: "moderate",
+      },
+      "PageType HighAtomic - order_0 (4KB)": {
+        readableName: "Free 4KB HighAtomic Blocks",
+        description: "Free 4KB blocks reserved for high-priority atomic allocations that cannot fail or sleep, used in interrupt contexts.",
+        desired: "moderate",
+      },
+      "PageType HighAtomic - order_1 (8KB)": {
+        readableName: "Free 8KB HighAtomic Blocks",
+        description: "Free 8KB high-priority atomic blocks for critical interrupt-context allocations.",
+        desired: "moderate",
+      },
+      "PageType HighAtomic - order_2 (16KB)": {
+        readableName: "Free 16KB HighAtomic Blocks",
+        description: "Free 16KB high-priority atomic blocks for larger atomic allocations.",
+        desired: "moderate",
+      },
+      "PageType HighAtomic - order_3 (32KB)": {
+        readableName: "Free 32KB HighAtomic Blocks",
+        description: "Free 32KB high-priority atomic blocks for substantial atomic allocations.",
+        desired: "moderate",
+      },
+      "PageType HighAtomic - order_4 (64KB)": {
+        readableName: "Free 64KB HighAtomic Blocks",
+        description: "Free 64KB high-priority atomic blocks for large atomic operations.",
+        desired: "moderate",
+      },
+      "PageType HighAtomic - order_5 (128KB)": {
+        readableName: "Free 128KB HighAtomic Blocks",
+        description: "Free 128KB high-priority atomic blocks for very large atomic allocations.",
+        desired: "moderate",
+      },
+      "PageType HighAtomic - order_6 (256KB)": {
+        readableName: "Free 256KB HighAtomic Blocks",
+        description: "Free 256KB high-priority atomic blocks reserved for critical operations.",
+        desired: "moderate",
+      },
+      "PageType HighAtomic - order_7 (512KB)": {
+        readableName: "Free 512KB HighAtomic Blocks",
+        description: "Free 512KB high-priority atomic blocks for substantial atomic operations.",
+        desired: "moderate",
+      },
+      "PageType HighAtomic - order_8 (1MB)": {
+        readableName: "Free 1MB HighAtomic Blocks",
+        description: "Free 1MB high-priority atomic blocks for very large atomic allocations.",
+        desired: "moderate",
+      },
+      "PageType HighAtomic - order_9 (2MB)": {
+        readableName: "Free 2MB HighAtomic Blocks",
+        description: "Free 2MB high-priority atomic blocks for huge atomic operations.",
+        desired: "moderate",
+      },
+      "PageType HighAtomic - order_10 (4MB)": {
+        readableName: "Free 4MB HighAtomic Blocks",
+        description: "Free 4MB high-priority atomic blocks, the largest atomic allocation size.",
+        desired: "moderate",
+      },
+      "PageType CMA - order_0 (4KB)": {
+        readableName: "Free 4KB CMA Blocks",
+        description: "Free 4KB blocks in Contiguous Memory Allocator reserved for devices requiring physically contiguous memory.",
+        desired: "higher",
+      },
+      "PageType CMA - order_1 (8KB)": {
+        readableName: "Free 8KB CMA Blocks",
+        description: "Free 8KB CMA blocks for small contiguous device allocations.",
+        desired: "higher",
+      },
+      "PageType CMA - order_2 (16KB)": {
+        readableName: "Free 16KB CMA Blocks",
+        description: "Free 16KB CMA blocks for device DMA operations.",
+        desired: "higher",
+      },
+      "PageType CMA - order_3 (32KB)": {
+        readableName: "Free 32KB CMA Blocks",
+        description: "Free 32KB CMA blocks for medium-sized contiguous device memory.",
+        desired: "higher",
+      },
+      "PageType CMA - order_4 (64KB)": {
+        readableName: "Free 64KB CMA Blocks",
+        description: "Free 64KB CMA blocks for larger device DMA buffers.",
+        desired: "higher",
+      },
+      "PageType CMA - order_5 (128KB)": {
+        readableName: "Free 128KB CMA Blocks",
+        description: "Free 128KB CMA blocks for substantial device memory requirements.",
+        desired: "higher",
+      },
+      "PageType CMA - order_6 (256KB)": {
+        readableName: "Free 256KB CMA Blocks",
+        description: "Free 256KB CMA blocks for large contiguous device allocations.",
+        desired: "higher",
+      },
+      "PageType CMA - order_7 (512KB)": {
+        readableName: "Free 512KB CMA Blocks",
+        description: "Free 512KB CMA blocks for very large device memory requirements.",
+        desired: "higher",
+      },
+      "PageType CMA - order_8 (1MB)": {
+        readableName: "Free 1MB CMA Blocks",
+        description: "Free 1MB CMA blocks for huge device DMA operations.",
+        desired: "higher",
+      },
+      "PageType CMA - order_9 (2MB)": {
+        readableName: "Free 2MB CMA Blocks",
+        description: "Free 2MB CMA blocks for massive contiguous device allocations.",
+        desired: "higher",
+      },
+      "PageType CMA - order_10 (4MB)": {
+        readableName: "Free 4MB CMA Blocks",
+        description: "Free 4MB CMA blocks, the largest CMA allocation size for device memory.",
+        desired: "higher",
+      },
+      "PageType Isolate - order_0 (4KB)": {
+        readableName: "Free 4KB Isolate Blocks",
+        description: "Free 4KB blocks in isolated pageblocks used during memory compaction and page migration operations.",
+        desired: "lower",
+      },
+      "PageType Isolate - order_1 (8KB)": {
+        readableName: "Free 8KB Isolate Blocks",
+        description: "Free 8KB isolated blocks temporarily removed from normal allocation pools.",
+        desired: "lower",
+      },
+      "PageType Isolate - order_2 (16KB)": {
+        readableName: "Free 16KB Isolate Blocks",
+        description: "Free 16KB isolated blocks used during memory management operations.",
+        desired: "lower",
+      },
+      "PageType Isolate - order_3 (32KB)": {
+        readableName: "Free 32KB Isolate Blocks",
+        description: "Free 32KB isolated blocks for page migration and compaction.",
+        desired: "lower",
+      },
+      "PageType Isolate - order_4 (64KB)": {
+        readableName: "Free 64KB Isolate Blocks",
+        description: "Free 64KB isolated blocks temporarily unavailable for allocation.",
+        desired: "lower",
+      },
+      "PageType Isolate - order_5 (128KB)": {
+        readableName: "Free 128KB Isolate Blocks",
+        description: "Free 128KB isolated blocks used in memory compaction processes.",
+        desired: "lower",
+      },
+      "PageType Isolate - order_6 (256KB)": {
+        readableName: "Free 256KB Isolate Blocks",
+        description: "Free 256KB isolated blocks for large-scale memory operations.",
+        desired: "lower",
+      },
+      "PageType Isolate - order_7 (512KB)": {
+        readableName: "Free 512KB Isolate Blocks",
+        description: "Free 512KB isolated blocks during memory management operations.",
+        desired: "lower",
+      },
+      "PageType Isolate - order_8 (1MB)": {
+        readableName: "Free 1MB Isolate Blocks",
+        description: "Free 1MB isolated blocks for very large memory operations.",
+        desired: "lower",
+      },
+      "PageType Isolate - order_9 (2MB)": {
+        readableName: "Free 2MB Isolate Blocks",
+        description: "Free 2MB isolated blocks during huge page operations.",
+        desired: "lower",
+      },
+      "PageType Isolate - order_10 (4MB)": {
+        readableName: "Free 4MB Isolate Blocks",
+        description: "Free 4MB isolated blocks, the largest isolated allocation size.",
+        desired: "lower",
+      },
+      "PageBlocks - Unmovable": {
+        readableName: "Unmovable PageBlocks Count",
+        description: "Total number of pageblocks designated for unmovable pages. Each pageblock is 2MB (order-9). High counts indicate significant kernel memory allocation.",
+        desired: "moderate",
+      },
+      "PageBlocks - Movable": {
+        readableName: "Movable PageBlocks Count",
+        description: "Total number of pageblocks designated for movable pages. Each pageblock is 2MB (order-9). High counts indicate good memory available for user-space and defragmentation.",
+        desired: "higher",
+      },
+      "PageBlocks - Reclaimable": {
+        readableName: "Reclaimable PageBlocks Count",
+        description: "Total number of pageblocks designated for reclaimable pages. Each pageblock is 2MB (order-9). These can be freed under memory pressure.",
+        desired: "moderate",
+      },
+      "PageBlocks - HighAtomic": {
+        readableName: "HighAtomic PageBlocks Count",
+        description: "Total number of pageblocks reserved for high-priority atomic allocations. Each pageblock is 2MB (order-9). Should typically be zero or very low.",
+        desired: "lower",
+      },
+      "PageBlocks - CMA": {
+        readableName: "CMA PageBlocks Count",
+        description: "Total number of pageblocks in Contiguous Memory Allocator. Each pageblock is 2MB (order-9). Reserved for devices requiring large contiguous memory.",
+        desired: "depends",
+      },
+      "PageBlocks - Isolate": {
+        readableName: "Isolate PageBlocks Count",
+        description: "Total number of pageblocks currently isolated during memory operations. Each pageblock is 2MB (order-9). Should typically be zero.",
+        desired: "lower",
+      },
+      "SlabInfo active objs": {
+        readableName: "Active Objects",
+        description: "Number of objects currently in use (allocated) in this slab cache. Indicates active memory consumption by this slab type.",
+        desired: "depends",
+      },
+      "SlabInfo num objs": {
+        readableName: "Total Objects",
+        description: "Total number of objects available in this slab cache, including both active and free objects. Shows total capacity.",
+        desired: "depends",
+      },
+      "SlabInfo objsize": {
+        readableName: "Object Size",
+        description: "Size of each object in bytes in this slab cache. Fixed size for all objects in this cache type.",
+        desired: "fixed",
+        unit: "Bytes",
+      },
+      "SlabInfo objperslab": {
+        readableName: "Objects Per Slab",
+        description: "Number of objects that fit in each slab. Determines slab packing efficiency for this object size.",
+        desired: "fixed",
+      },
+      "SlabInfo pagesperslab": {
+        readableName: "Pages Per Slab",
+        description: "Number of memory pages (typically 4KB each) used by each slab. Indicates memory granularity for this cache.",
+        desired: "fixed",
+      },
+      "SlabInfo limit": {
+        readableName: "Per-CPU Limit",
+        description: "Maximum number of free objects that can be cached per CPU. Value of 0 means per-CPU caching is disabled.",
+        desired: "fixed",
+      },
+      "SlabInfo batchcount": {
+        readableName: "Batch Count",
+        description: "Number of objects to transfer at once between per-CPU cache and shared cache. Value of 0 means batching is disabled.",
+        desired: "fixed",
+      },
+      "SlabInfo sharedfactor": {
+        readableName: "Shared Factor",
+        description: "Multiplier for shared cache size. Value of 0 means no shared cache between CPUs for this slab type.",
+        desired: "fixed",
+      },
+      "SlabInfo active slabs": {
+        readableName: "Active Slabs",
+        description: "Number of slabs currently in use (containing at least one allocated object). Indicates active slab memory usage.",
+        desired: "depends",
+      },
+      "SlabInfo num slabs": {
+        readableName: "Total Slabs",
+        description: "Total number of slabs allocated for this cache, including both active and empty slabs. Shows total slab capacity.",
+        desired: "depends",
+      },
+      "SlabInfo sharedavail": {
+        readableName: "Shared Available",
+        description: "Number of objects available in the shared cache between CPUs. Indicates cross-CPU cache efficiency.",
+        desired: "depends",
+      },
+    },
+  },
   meminfo: {
     readableName: "Memory Usage",
     summary:

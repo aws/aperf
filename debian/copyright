@@ -1,0 +1,7 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: aperf
+Source: https://github.com/aws/aperf
+
+Files: *
+Copyright: Amazon.com, Inc. or its affiliates. All Rights Reserved.
+License: Apache-2.0

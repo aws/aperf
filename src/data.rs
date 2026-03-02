@@ -8,6 +8,7 @@ pub mod hotline;
 pub mod interrupts;
 pub mod java_profile;
 pub mod kernel_config;
+pub mod memalloc;
 pub mod meminfo;
 pub mod netstat;
 pub mod numastat;
@@ -35,6 +36,7 @@ use include_directory::{include_directory, Dir};
 use interrupts::{InterruptData, InterruptDataRaw};
 use java_profile::{JavaProfile, JavaProfileRaw};
 use kernel_config::KernelConfig;
+use memalloc::{MemallocData, MemallocDataRaw};
 use meminfo::{MeminfoData, MeminfoDataRaw};
 use netstat::{Netstat, NetstatRaw};
 use numastat::{Numastat, NumastatRaw};
@@ -308,7 +310,7 @@ macro_rules! data {
         }
 
         #[cfg(target_os = "linux")]
-        pub fn add_all_performance_data(performance_data: &mut PerformanceData, data_names_to_collect: HashSet<String>, profile_enabled: bool, java_profile_enabled: bool) {
+        pub fn add_all_performance_data(performance_data: &mut PerformanceData, data_names_to_collect: HashSet<String>, profile_enabled: bool, java_profile_enabled: bool, memory_allocation_enabled: bool) {
             $(
                 let data_name = get_data_name_from_type::<$data>();
 
@@ -318,6 +320,10 @@ macro_rules! data {
                     }
                 } else if $data::is_java_profile() {
                     if java_profile_enabled {
+                        add_performance_data(performance_data, data_name, Data::$data($data::new()), $data::is_static(), true);
+                    }
+                } else if $data::is_memory_allocation() {
+                    if memory_allocation_enabled {
                         add_performance_data(performance_data, data_name, Data::$data($data::new()), $data::is_static(), true);
                     }
                 } else {
@@ -406,6 +412,7 @@ data!(
     PerfProfileRaw,
     FlamegraphRaw,
     JavaProfileRaw,
+    MemallocDataRaw,
     HotlineRaw
 );
 
@@ -427,7 +434,8 @@ report_data!(
     Flamegraph,
     AperfStat,
     AperfRunlog,
-    JavaProfile
+    JavaProfile,
+    MemallocData
 );
 
 #[cfg(target_os = "linux")]
@@ -461,6 +469,10 @@ pub trait CollectData {
     }
 
     fn is_java_profile() -> bool {
+        false
+    }
+
+    fn is_memory_allocation() -> bool {
         false
     }
 }

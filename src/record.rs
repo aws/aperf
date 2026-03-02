@@ -82,6 +82,10 @@ pub struct Record {
     )]
     pub profile_java: Option<String>,
 
+    /// Collect memory allocation data (buddyinfo, pagetypeinfo, slabinfo).
+    #[clap(help_heading = "Memory Allocation", long, value_parser)]
+    pub memory_allocation: bool,
+
     /// Custom PMU config file to use.
     #[clap(help_heading = "PMU Options", long, value_parser)]
     pub pmu_config: Option<String>,
@@ -165,6 +169,7 @@ pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
             .profile_java
             .as_ref()
             .map_or(false, |j| !j.is_empty()),
+        record.memory_allocation,
     );
 
     performance_data.init_collectors()?;

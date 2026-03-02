@@ -58,6 +58,7 @@ ulimit -n 65535
 | `perf_profile` | Performance profile data (enabled through the `--profile` option and the `perf` binary) |
 | `java_profile` | JVM profile data (enabled through the `--profile-java` option and the [async-profiler](https://github.com/async-profiler/async-profiler/tree/master) binary) |
 | `hotline` | Memory and branch predictor hot spot detection (needs to be built with the Hotline feature and run on metal instance only) |
+| `memalloc`| Memory allocation data including buddyinfo, pagetypeinfo, and slabinfo (enabled through the `--memory-allocation` option) |
 | **APerf Execution Data** | |
 | `aperf_runlog` | The log messages |
 | `aperf_stats` | Execution time of each collection interval (including the total time and every data's collection time) | 
@@ -232,6 +233,10 @@ Frequency for perf profiling in Hz.
 `--profile-java [<PID/Name>,<PID/Name>,...,<PID/Name>]` [default: profiles all JVMs]
 
 Profile JVMs using async-profiler. See [async-profiler documentation](./docs/DEPENDENCIES.md#async-profiler) for more details and usage.
+
+`--memory-allocation`
+
+Collect memory allocation data (buddyinfo, pagetypeinfo, slabinfo). Root permission required for pagetypeinfo and slabinfo. Run APerf with `sudo` if you are not root.
 
 `--pmu-config <PMU_CONFIG>` 
 

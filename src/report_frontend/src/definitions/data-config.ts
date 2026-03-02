@@ -12,6 +12,7 @@ declare let processed_diskstats_data;
 declare let processed_perf_stat_data;
 declare let processed_processes_data;
 declare let processed_meminfo_data;
+declare let processed_memalloc_data;
 declare let processed_netstat_data;
 declare let processed_numastat_data;
 declare let processed_perf_profile_data;
@@ -30,6 +31,7 @@ declare let diskstats_findings;
 declare let perf_stat_findings;
 declare let processes_findings;
 declare let meminfo_findings;
+declare let memalloc_findings;
 declare let netstat_findings;
 declare let numastat_findings;
 declare let perf_profile_findings;
@@ -45,6 +47,7 @@ export const PROCESSED_DATA: { [key in DataType]: ReportData } = {
   processes: processed_processes_data,
   perf_stat: processed_perf_stat_data,
   meminfo: processed_meminfo_data,
+  memalloc: processed_memalloc_data,
   vmstat: processed_vmstat_data,
   interrupts: processed_interrupts_data,
   diskstats: processed_diskstats_data,
@@ -66,6 +69,7 @@ export const PER_DATA_ANALYTICAL_FINDINGS: { [key in DataType]: DataFindings } =
   processes: processes_findings,
   perf_stat: perf_stat_findings,
   meminfo: meminfo_findings,
+  memalloc: memalloc_findings,
   vmstat: vmstat_findings,
   interrupts: interrupts_findings,
   diskstats: diskstats_findings,
@@ -103,6 +107,7 @@ export const NAVIGATION_CONFIGS: NavigationConfig[] = [
       "cpu_utilization",
       "perf_stat",
       "meminfo",
+      "memalloc",
       "vmstat",
       "numastat",
       "interrupts",
