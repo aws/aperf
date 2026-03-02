@@ -4,6 +4,7 @@ export const ALL_DATA_TYPES = [
   "processes",
   "perf_stat",
   "meminfo",
+  "memalloc",
   "vmstat",
   "interrupts",
   "diskstats",
