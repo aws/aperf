@@ -59,12 +59,17 @@ fn test_record() {
         assert!(Path::new(&(run_name.clone() + ".tar.gz")).exists());
 
         let all_data_files = fs::read_dir(&run_name).unwrap();
-        assert_eq!(
-            all_data_files.count(),
-            // Aside from the default data, Aperf still produces 4 more files:
-            // aperf runlog, aperf stats, metadata, and pmu_config (since we are collecting perf_stat)
+        let file_count = all_data_files.count();
+        // Aside from the default data, Aperf produces 4 more files:
+        // aperf runlog, aperf stats, metadata, and pmu_config (since we are collecting perf_stat)
+        // Note: numastat may not be collected on systems without NUMA support
+        assert!(
+            file_count >= DEFAULT_DATA_NAMES.len() + 3
+                && file_count <= DEFAULT_DATA_NAMES.len() + 4,
+            "Expected {} to {} files, got {}",
+            DEFAULT_DATA_NAMES.len() + 3,
             DEFAULT_DATA_NAMES.len() + 4,
-            "The data files should only include those not skipped, plus aperf runlog, aperf stats, metadata, and pmu_config."
+            file_count
         );
 
         fs::remove_dir_all(&run_name).unwrap();
@@ -109,12 +114,14 @@ fn test_record_dont_collect_some_data() {
                 );
             }
         }
-        assert_eq!(
-            num_data_files,
-            // Aside from the data not included in dont_collect, Aperf still produces 4 more files:
-            // aperf runlog, aperf stats, metadata, and pmu_config (since we are collecting perf_stat)
-            DEFAULT_DATA_NAMES.len() - dont_collect_data_names.len() + 4,
-            "The data files should only include those not skipped, plus aperf runlog, aperf stats, metadata, and pmu_config."
+        let expected_min = DEFAULT_DATA_NAMES.len() - dont_collect_data_names.len() + 3;
+        let expected_max = DEFAULT_DATA_NAMES.len() - dont_collect_data_names.len() + 4;
+        assert!(
+            num_data_files >= expected_min && num_data_files <= expected_max,
+            "Expected {} to {} files, got {}",
+            expected_min,
+            expected_max,
+            num_data_files
         );
 
         fs::remove_dir_all(&run_name).unwrap();
@@ -571,6 +578,7 @@ fn record_with_name(
         profile: false,
         perf_frequency: 99,
         profile_java: None,
+        memory_allocation: false,
         pmu_config: None,
         hotline_frequency: 1000,
         num_to_report: 5000,
@@ -586,6 +594,7 @@ fn record_with_name(
         profile: false,
         perf_frequency: 99,
         profile_java: None,
+        memory_allocation: false,
         pmu_config: None,
     };
 
