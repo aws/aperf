@@ -42,9 +42,7 @@ jobs:
         if: ${{ matrix.os == 'macos-latest' }}
         with:
           name: macos-release-artifacts
-          path: |
-            target/release/aperf
-            kubectl-aperf
+          path: target/release/aperf
       - name: Upload Windows release artifacts
         uses: actions/upload-artifact@v4
         if: ${{ matrix.os == 'windows-latest' }}

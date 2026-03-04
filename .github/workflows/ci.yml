@@ -94,11 +94,7 @@ jobs:
         run: |
           ldd target/$(arch)-unknown-linux-musl/release/aperf 2>&1 | grep -E "not a dynamic executable|statically linked"
       - name: Archive release artifacts
-        run: |
-          mkdir -p release-artifacts
-          cp target/$(arch)-unknown-linux-musl/release/aperf release-artifacts/
-          cp kubectl-aperf release-artifacts/
-          tar -zcvf artifacts.tar.gz -C release-artifacts .
+        run: tar -zcvf artifacts.tar.gz -C target/$(arch)-unknown-linux-musl/release aperf
       - name: Upload x86_64 release artifacts
         uses: actions/upload-artifact@v4
         if: ${{ matrix.platform == 'X86' }}
