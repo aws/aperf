@@ -31,6 +31,10 @@ jobs:
         with:
           egress-policy: audit
 
+      # Checkout repository to get kubectl-aperf script
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       # Download and unpack all release artifacts
       - name: Download built binaries
         uses: actions/download-artifact@v4
@@ -86,6 +90,24 @@ jobs:
           file: ./aperf-${{ github.ref_name }}-windows.tar.gz
           tag: ${{ github.ref }}
           asset_name: aperf-${{ github.ref_name }}-windows.tar.gz
+
+      # Create Krew-specific tarball
+      - name: Create Krew kubectl plugin tarball
+        run: |
+          name=kubectl-aperf-${{ github.ref_name }}
+          mkdir "$name"
+          cp kubectl-aperf "$name/"
+          chmod +x "$name/kubectl-aperf"
+          tar -zcvf "$name".tar.gz "$name"
+
+      # Upload Krew tarball
+      - name: Upload Krew kubectl plugin tarball
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ./kubectl-aperf-${{ github.ref_name }}.tar.gz
+          tag: ${{ github.ref }}
+          asset_name: kubectl-aperf-${{ github.ref_name }}.tar.gz
 
       # Attach rpm and deb packages to the release
       - name: Upload x86_64 rpm
