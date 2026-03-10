@@ -301,6 +301,12 @@ impl ProcessData for Hotline {
                 <head>
                     <meta charset="UTF-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <style>
+                        table {{ border-collapse: collapse; width: 100%; table-layout: fixed; font-family: monospace; font-size: 12px; }}
+                        th, td {{ border: 1px solid #ccc; padding: 2px 4px; text-align: left; word-break: break-word; }}
+                        th {{ background-color: #f2f2f2; position: sticky; top: 0; }}
+                        tr:hover {{ background-color: #f5f5f5; }}
+                    </style>
                 </head>
                 <body>
                     {}
