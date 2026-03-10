@@ -94,7 +94,14 @@ Download the binary from the [Releases](https://github.com/aws/APerf/releases) p
 
 ### Optional - Building with Hotline
 
-4. The memory and branch predictor hot spot analysis tool (hotline) is not enabled by default and requires having appropriate permissions set and necessary dependencies installed. The following demonstrates how to do it on Ubuntu and Amazon Linux.
+Hotline is APerf's in-memory latency and branch hotspot analyzer. It uses [ARM Statistical Profiling Extension (SPE)](https://developer.arm.com/community/arm-community-blogs/b/architectures-and-processors-blog/posts/statistical-profile-extension) to sample micro-architectural events directly from the CPU pipeline, giving you precise, low-overhead visibility into where your workloads spend time and why.
+
+Hotline produces two categories of analysis:
+
+- **Memory latency hotspots** — identifies instructions with the highest memory access latency, broken down by execution, issue, and translation latency. A completion node view shows the cache hierarchy distribution (L1/L2/L3/DRAM) for each hot instruction, so you can see whether a load is bottlenecked on a specific cache level.
+- **Branch misprediction hotspots** — identifies instructions with the most branch samples and their misprediction rates.
+
+**Hotline can only be built and run on a baremetal Graviton instance.** For now, it is not released as a binary. To use the feature, please build from source following the below instructions:
 
    **On Ubuntu 22.04:**
 
