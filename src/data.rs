@@ -310,7 +310,7 @@ macro_rules! data {
         }
 
         #[cfg(target_os = "linux")]
-        pub fn add_all_performance_data(performance_data: &mut PerformanceData, data_names_to_collect: HashSet<String>, profile_enabled: bool, java_profile_enabled: bool, memory_allocation_enabled: bool) {
+        pub fn add_all_performance_data(performance_data: &mut PerformanceData, data_names_to_collect: HashSet<String>, profile_enabled: bool, java_profile_enabled: bool) {
             $(
                 let data_name = get_data_name_from_type::<$data>();
 
@@ -320,10 +320,6 @@ macro_rules! data {
                     }
                 } else if $data::is_java_profile() {
                     if java_profile_enabled {
-                        add_performance_data(performance_data, data_name, Data::$data($data::new()), $data::is_static(), true);
-                    }
-                } else if $data::is_memory_allocation() {
-                    if memory_allocation_enabled {
                         add_performance_data(performance_data, data_name, Data::$data($data::new()), $data::is_static(), true);
                     }
                 } else {
@@ -469,10 +465,6 @@ pub trait CollectData {
     }
 
     fn is_java_profile() -> bool {
-        false
-    }
-
-    fn is_memory_allocation() -> bool {
         false
     }
 }
