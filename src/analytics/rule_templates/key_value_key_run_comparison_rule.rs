@@ -1,7 +1,7 @@
 use crate::analytics;
 use crate::analytics::{AnalyticalFinding, Analyze, DataFindings};
 use crate::data::data_formats::ProcessedData;
-use log::error;
+use log::debug;
 use std::fmt;
 use std::fmt::Formatter;
 
@@ -50,7 +50,6 @@ impl Analyze for KeyValueKeyRunComparisonRule {
         let base_key_value_data = match processed_data.get_key_value_data(&base_run_name) {
             Some(key_value_data) => key_value_data,
             None => {
-                error!("{self} failed to analyze: the base key value data does not exist");
                 return;
             }
         };
@@ -63,7 +62,7 @@ impl Analyze for KeyValueKeyRunComparisonRule {
         }
 
         if base_value.is_none() {
-            error!("{self} failed to analyze: the base value does not exist");
+            debug!("{self} failed to analyze: the base value does not exist");
             return;
         }
         let base_value = base_value.unwrap();

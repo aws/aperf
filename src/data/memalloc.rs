@@ -4,6 +4,8 @@ use crate::data::{AnalyzeData, Data, ProcessData, TimeEnum};
 #[cfg(target_os = "linux")]
 use crate::data::{CollectData, CollectorParams};
 use crate::visualizer::ReportParams;
+#[cfg(target_os = "linux")]
+use crate::PDError;
 use anyhow::Result;
 use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -37,8 +39,17 @@ impl MemallocDataRaw {
 
 #[cfg(target_os = "linux")]
 impl CollectData for MemallocDataRaw {
-    fn is_memory_allocation() -> bool {
-        true
+    fn prepare_data_collector(&mut self, _params: &CollectorParams) -> Result<()> {
+        if std::fs::read_to_string("/proc/buddyinfo").is_err()
+            && std::fs::read_to_string("/proc/pagetypeinfo").is_err()
+            && std::fs::read_to_string("/proc/slabinfo").is_err()
+        {
+            return Err(PDError::IgnoredDataPreparationError(
+                "None of memalloc system files are readable".to_string(),
+            )
+            .into());
+        }
+        Ok(())
     }
 
     fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {

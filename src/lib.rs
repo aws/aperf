@@ -25,10 +25,9 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 #[cfg(target_os = "linux")]
 use {
-    crate::data::{aperf_stats::AperfStat, utils::prompt_user_with_timeout},
+    crate::data::aperf_stats::AperfStat,
     data::TimeEnum,
     flate2::{write::GzEncoder, Compression},
-    log::warn,
     nix::poll::{poll, PollFd, PollFlags, PollTimeout},
     nix::sys::{
         signal,
@@ -145,6 +144,9 @@ pub enum PDError {
 
     #[error("Dependency error: {}", .0)]
     DependencyError(String),
+
+    #[error("Ignored data preparation: {}", .0)]
+    IgnoredDataPreparationError(String),
 }
 
 #[macro_export]
@@ -218,45 +220,44 @@ impl PerformanceData {
     pub fn prepare_data_collectors(&mut self) -> Result<()> {
         let mut remove_entries: Vec<String> = Vec::new();
 
-        for (name, datatype) in self.collectors.iter_mut() {
-            if datatype.is_static {
-                continue;
-            }
-
-            match datatype.prepare_data_collector() {
-                Err(e) => {
-                    if datatype.is_profile_option {
-                        error!("{}", e.to_string());
-                        error!("Aperf exiting...");
-                        process::exit(1);
-                    }
-                    warn!(
-                        "{} data preparation failed. Error msg: {}",
-                        name,
-                        e.to_string()
-                    );
-                    remove_entries.push(name.clone());
+        // Prepare non-profile collectors first (e.g. perf_stat which can take significant
+        // time on large machines), then profile collectors that launch subprocesses
+        // (perf_profile, java_profile) so they start as close to collect_data_serial as
+        // possible and stay in sync with the collection period.
+        for is_profile_pass in [false, true] {
+            for (name, datatype) in self.collectors.iter_mut() {
+                if datatype.is_static || datatype.is_profile_option != is_profile_pass {
+                    continue;
                 }
-                _ => continue,
+
+                match datatype.prepare_data_collector() {
+                    Err(e) => {
+                        if datatype.is_profile_option {
+                            error!("{}", e.to_string());
+                            error!("Aperf exiting...");
+                            process::exit(1);
+                        }
+                        let msg = format!(
+                            "Excluding {} from collection, data preparation failed. Error msg: {}",
+                            name, e
+                        );
+                        if matches!(
+                            e.downcast_ref::<PDError>(),
+                            Some(PDError::IgnoredDataPreparationError(_))
+                        ) {
+                            debug!("{}", msg);
+                        } else {
+                            error!("{}", msg);
+                        }
+                        remove_entries.push(name.clone());
+                    }
+                    _ => continue,
+                }
             }
         }
 
-        if remove_entries.len() > 0 {
-            let message = format!(
-                "Data preparation for {} data source(s) failed.",
-                remove_entries.len()
-            );
-            if !prompt_user_with_timeout(&message, 10) {
-                std::process::exit(1);
-            }
-
-            info!(
-                "Excluding {} data source(s) from collection.",
-                remove_entries.len()
-            );
-            for key in remove_entries {
-                self.collectors.remove_entry(&key);
-            }
+        for key in remove_entries {
+            self.collectors.remove_entry(&key);
         }
 
         Ok(())

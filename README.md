@@ -58,7 +58,7 @@ ulimit -n 65535
 | `perf_profile` | Performance profile data (enabled through the `--profile` option and the `perf` binary) |
 | `java_profile` | JVM profile data (enabled through the `--profile-java` option and the [async-profiler](https://github.com/async-profiler/async-profiler/tree/master) binary) |
 | `hotline` | Memory and branch predictor hot spot detection (needs to be built with the Hotline feature and run on metal instance only) |
-| `memalloc`| Memory allocation data including buddyinfo, pagetypeinfo, and slabinfo (enabled through the `--memory-allocation` option) |
+| `memalloc`| Memory allocation data including buddyinfo, pagetypeinfo, and slabinfo (some data requires root privileges) |
 | **APerf Execution Data** | |
 | `aperf_runlog` | The log messages |
 | `aperf_stats` | Execution time of each collection interval (including the total time and every data's collection time) | 
@@ -241,10 +241,6 @@ Frequency for perf profiling in Hz.
 
 Profile JVMs using async-profiler. See [async-profiler documentation](./docs/DEPENDENCIES.md#async-profiler) for more details and usage.
 
-`--memory-allocation`
-
-Collect memory allocation data (buddyinfo, pagetypeinfo, slabinfo). Root permission required for pagetypeinfo and slabinfo. Run APerf with `sudo` if you are not root.
-
 `--pmu-config <PMU_CONFIG>` 
 
 Custom PMU config file to use.
@@ -322,6 +318,7 @@ sudo sysctl -w kernel.kptr_restrict=0
 * To enable function-level profiling, install the `perf` binary on your instances.
 * Download the right [APerf binary](https://github.com/aws/aperf/releases) based on the instance type (x86/Intel/AMD or aarch64/Graviton).
 * For JVM profiling ensure the [async-profiler](https://github.com/async-profiler/async-profiler/tree/master) binary is installed and the `jps` command is available (part of Java Development Kit).
+* Root permission required for pagetypeinfo and slabinfo in Memory Allocation data. Run APerf with `sudo` if you are not root.
 
 ## Documentation
 

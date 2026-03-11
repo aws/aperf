@@ -578,7 +578,6 @@ fn record_with_name(
         profile: false,
         perf_frequency: 99,
         profile_java: None,
-        memory_allocation: false,
         pmu_config: None,
         hotline_frequency: 1000,
         num_to_report: 5000,
@@ -594,7 +593,6 @@ fn record_with_name(
         profile: false,
         perf_frequency: 99,
         profile_java: None,
-        memory_allocation: false,
         pmu_config: None,
     };
 
