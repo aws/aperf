@@ -2,9 +2,7 @@ use aperf::analytics::key_value_key_run_comparison_rule::KeyValueKeyRunCompariso
 use aperf::analytics::{Analyze, DataFindings, Score, BASE_RUN_NAME};
 use aperf::data::data_formats::AperfData;
 
-use super::test_helpers::{
-    create_key_value_data, create_processed_data, create_time_series_data, DataFindingsExt,
-};
+use super::test_helpers::{create_key_value_data, create_processed_data, DataFindingsExt};
 
 fn set_base_run(name: &str) {
     *BASE_RUN_NAME.lock().unwrap() = name.to_string();

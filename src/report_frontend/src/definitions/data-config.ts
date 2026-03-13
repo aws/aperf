@@ -14,6 +14,8 @@ declare let processed_processes_data;
 declare let processed_meminfo_data;
 declare let processed_memalloc_data;
 declare let processed_netstat_data;
+declare let processed_ena_stat_data;
+declare let processed_efa_stat_data;
 declare let processed_numastat_data;
 declare let processed_perf_profile_data;
 declare let processed_flamegraphs_data;
@@ -33,6 +35,8 @@ declare let processes_findings;
 declare let meminfo_findings;
 declare let memalloc_findings;
 declare let netstat_findings;
+declare let ena_stat_findings;
+declare let efa_stat_findings;
 declare let numastat_findings;
 declare let perf_profile_findings;
 declare let flamegraphs_findings;
@@ -52,6 +56,8 @@ export const PROCESSED_DATA: { [key in DataType]: ReportData } = {
   interrupts: processed_interrupts_data,
   diskstats: processed_diskstats_data,
   netstat: processed_netstat_data,
+  ena_stat: processed_ena_stat_data,
+  efa_stat: processed_efa_stat_data,
   numastat: processed_numastat_data,
   kernel_config: processed_kernel_config_data,
   sysctl: processed_sysctl_data,
@@ -74,6 +80,8 @@ export const PER_DATA_ANALYTICAL_FINDINGS: { [key in DataType]: DataFindings } =
   interrupts: interrupts_findings,
   diskstats: diskstats_findings,
   netstat: netstat_findings,
+  ena_stat: ena_stat_findings,
+  efa_stat: efa_stat_findings,
   numastat: numastat_findings,
   kernel_config: kernel_config_findings,
   sysctl: sysctl_findings,
@@ -95,25 +103,28 @@ export const TIME_SERIES_DATA_TYPES = ALL_DATA_TYPES.filter(
   (dataType) => PROCESSED_DATA[dataType]?.data_format == "time_series",
 );
 
-interface NavigationConfig {
+export interface NavigationSection {
   readonly sectionName: string;
-  readonly items: DataType[];
+  readonly items: (DataType | NavigationSection)[];
 }
 
-export const NAVIGATION_CONFIGS: NavigationConfig[] = [
+export const NAVIGATION_SECTIONS: NavigationSection[] = [
   {
     sectionName: "Performance Data",
     items: [
       "cpu_utilization",
       "perf_stat",
-      "meminfo",
-      "memalloc",
-      "vmstat",
-      "numastat",
       "interrupts",
       "diskstats",
-      "netstat",
       "processes",
+      {
+        sectionName: "Memory Data",
+        items: ["meminfo", "memalloc", "vmstat", "numastat"],
+      },
+      {
+        sectionName: "Network Data",
+        items: ["netstat", "ena_stat", "efa_stat"],
+      },
     ],
   },
   {
@@ -122,7 +133,14 @@ export const NAVIGATION_CONFIGS: NavigationConfig[] = [
   },
   {
     sectionName: "Profiling",
-    items: ["flamegraphs", "perf_profile", "java_profile", "hotline"],
+    items: [
+      {
+        sectionName: "Perf Profile",
+        items: ["flamegraphs", "perf_profile"],
+      },
+      "java_profile",
+      "hotline",
+    ],
   },
   {
     sectionName: "APerf Execution",

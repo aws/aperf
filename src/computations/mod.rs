@@ -66,6 +66,15 @@ impl Statistics {
     }
 }
 
+/// Use this function instead of Statistics::from_values when only requiring
+/// the average, so that other heavy computations can be skipped
+pub fn get_average(values: &Vec<f64>) -> Option<f64> {
+    if values.is_empty() {
+        return None;
+    }
+    Some(values.iter().sum::<f64>() / values.len() as f64)
+}
+
 #[derive(Display, Clone, Copy)]
 #[strum(serialize_all = "lowercase")]
 pub enum Stat {

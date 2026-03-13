@@ -1,6 +1,7 @@
 use crate::data::data_formats::TimeSeriesMetric;
 use anyhow::{Error, Result};
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::fs;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -24,12 +25,14 @@ pub fn get_data_name_from_type<T>() -> &'static str {
     }
 }
 
+#[cfg(target_os = "linux")]
 #[derive(Clone, Debug)]
 pub struct CpuInfo {
     pub vendor: String,
     pub model_name: String,
 }
 
+#[cfg(target_os = "linux")]
 impl CpuInfo {
     fn new() -> Self {
         CpuInfo {
@@ -39,6 +42,7 @@ impl CpuInfo {
     }
 }
 
+#[cfg(target_os = "linux")]
 pub fn get_cpu_info() -> Result<CpuInfo> {
     let file = File::open("/proc/cpuinfo")?;
     let proc_cpuinfo = BufReader::new(file);
@@ -74,6 +78,34 @@ pub fn no_tar_gz_file_name(path: &PathBuf) -> Option<String> {
         return Some(file_name_str.strip_suffix(".tar.gz")?.to_string());
     }
     Some(file_name_str)
+}
+
+/// Collects the paths of all files in a dir and returns a map from file names to file paths,
+/// if the file system read was successful
+pub fn collect_file_paths_in_dir(dir: &PathBuf) -> Result<HashMap<String, PathBuf>> {
+    match fs::read_dir(dir) {
+        Ok(hardware_counters_entries) => {
+            let mut hardware_counter_file_paths: HashMap<String, PathBuf> = HashMap::new();
+            for hardware_counter_entry in hardware_counters_entries {
+                let hardware_counter_entry = match hardware_counter_entry {
+                    Ok(entry) => entry,
+                    Err(_) => continue,
+                };
+                if let Ok(file_type) = hardware_counter_entry.file_type() {
+                    if file_type.is_file() {
+                        let port_counter_name = hardware_counter_entry
+                            .file_name()
+                            .to_string_lossy()
+                            .into_owned();
+                        hardware_counter_file_paths
+                            .insert(port_counter_name, hardware_counter_entry.path());
+                    }
+                }
+            }
+            Ok(hardware_counter_file_paths)
+        }
+        Err(e) => Err(Error::from(e)),
+    }
 }
 
 pub fn get_cpu_series_name(cpu: usize) -> Option<String> {

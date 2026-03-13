@@ -4,8 +4,8 @@ use aperf::computations::{Comparator, Stat};
 use aperf::data::data_formats::AperfData;
 
 use super::test_helpers::{
-    create_key_value_data, create_processed_data, create_time_series_data,
-    create_time_series_data_multi_series, DataFindingsExt,
+    create_processed_data, create_time_series_data, create_time_series_data_multi_series,
+    DataFindingsExt,
 };
 
 #[test]

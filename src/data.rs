@@ -1,8 +1,11 @@
 pub mod aperf_runlog;
 pub mod aperf_stats;
+mod common;
 pub mod cpu_utilization;
 pub mod data_formats;
 pub mod diskstats;
+pub mod efa_stat;
+pub mod ena_stat;
 pub mod flamegraphs;
 pub mod hotline;
 pub mod interrupts;
@@ -30,6 +33,8 @@ use aperf_stats::AperfStat;
 use chrono::prelude::*;
 use cpu_utilization::{CpuUtilization, CpuUtilizationRaw};
 use diskstats::{Diskstats, DiskstatsRaw};
+use efa_stat::{EfaStat, EfaStatRaw};
+use ena_stat::{EnaStat, EnaStatRaw};
 use flamegraphs::{Flamegraph, FlamegraphRaw};
 use hotline::{Hotline, HotlineRaw};
 use include_directory::{include_directory, Dir};
@@ -252,7 +257,7 @@ macro_rules! data {
             default_data_names
         }
 
-        #[derive(Clone, Debug, Deserialize, Serialize)]
+        #[derive(Debug, Deserialize, Serialize)]
         pub enum Data {
             $(
                 $data($data),
@@ -392,6 +397,9 @@ macro_rules! report_data {
     };
 }
 
+// IMPORTANT: DO NOT MODIFY THE DATA ORDER HERE. NEW DATA SHOULD BE APPENDED TO THE END.
+// The order decides each data's index within the Data enum, which is used in serialization.
+// Changing the order leads to indices changes and deserialization failures for previous run data.
 data!(
     CpuUtilizationRaw,
     VmstatRaw,
@@ -408,8 +416,10 @@ data!(
     PerfProfileRaw,
     FlamegraphRaw,
     JavaProfileRaw,
+    HotlineRaw,
     MemallocDataRaw,
-    HotlineRaw
+    EnaStatRaw,
+    EfaStatRaw
 );
 
 report_data!(
@@ -431,7 +441,9 @@ report_data!(
     AperfStat,
     AperfRunlog,
     JavaProfile,
-    MemallocData
+    MemallocData,
+    EnaStat,
+    EfaStat
 );
 
 #[cfg(target_os = "linux")]

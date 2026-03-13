@@ -136,6 +136,12 @@ pub enum PDError {
     #[error("PMU config file is invalid.")]
     PMUFileInvalid,
 
+    #[error("Failed to detect network interfaces: {}", .0)]
+    NetworkInterfaceDetectionFailure(String),
+
+    #[error("Failed to create ioctl socket for ethtool stats collection")]
+    EthToolSocketCreationFailure,
+
     #[error("Run data not available")]
     InvalidRunData,
 

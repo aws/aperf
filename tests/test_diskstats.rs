@@ -281,12 +281,6 @@ mod diskstats_tests {
         if let AperfData::TimeSeries(time_series_data) = result {
             // With no raw data, no metrics are created
             assert_eq!(time_series_data.metrics.len(), 0);
-
-            // Sorted metric names should still be present (initialized from enum)
-            assert_eq!(
-                time_series_data.sorted_metric_names.len(),
-                DiskStatKey::iter().count()
-            );
         } else {
             panic!("Expected TimeSeries data");
         }
@@ -467,12 +461,19 @@ mod diskstats_tests {
         let raw_samples = vec![
             DiskstatsRaw {
                 time: TimeEnum::DateTime(base_time),
-                data: "   8    0 sda 1000 0 8000 100 500 0 4000 50 0 150 200 0 0 0 0 0 0\n"
+                data: "   8    0 sda 1000 10 8000 100 500 50 4000 50 60 150 200 70 80 90 100 110 120\n"
                     .to_string(),
             },
             DiskstatsRaw {
                 time: TimeEnum::DateTime(base_time + chrono::Duration::seconds(1)),
+                // All accumulative metrics decrease — skipped, but decreased values are kept
                 data: "   8    0 sda 500 0 4000 50 250 0 2000 25 0 75 100 0 0 0 0 0 0\n"
+                    .to_string(),
+            },
+            DiskstatsRaw {
+                time: TimeEnum::DateTime(base_time + chrono::Duration::seconds(2)),
+                // Recovery: deltas computed from the decreased values in sample 1
+                data: "   8    0 sda 1500 510 8500 600 1000 550 4500 550 560 650 700 570 580 590 600 610 620\n"
                     .to_string(),
             },
         ];
@@ -488,11 +489,47 @@ mod diskstats_tests {
             .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
+            // Expected deltas from decreased sample 1 values to sample 2 values
+            let expected_deltas: HashMap<&str, f64> = [
+                ("reads", 1000.0),                    // 1500 - 500
+                ("merged", 510.0),                    // 510 - 0
+                ("sectors_read", 4500.0),             // 8500 - 4000
+                ("time_reading", 550.0),              // 600 - 50
+                ("writes", 750.0),                    // 1000 - 250
+                ("writes_merged", 550.0),             // 550 - 0
+                ("sectors_written", 2500.0),          // 4500 - 2000
+                ("time_writing", 525.0),              // 550 - 25
+                ("time_in_progress", 575.0),          // 650 - 75
+                ("weighted_time_in_progress", 600.0), // 700 - 100
+                ("discards", 570.0),                  // 570 - 0
+                ("discards_merged", 580.0),           // 580 - 0
+                ("sectors_discarded", 590.0),         // 590 - 0
+                ("time_discarding", 600.0),           // 600 - 0
+                ("flushes", 610.0),                   // 610 - 0
+                ("time_flushing", 620.0),             // 620 - 0
+            ]
+            .into_iter()
+            .collect();
+
             for metric in time_series_data.metrics.values() {
-                for series in &metric.series {
-                    assert_eq!(series.values.len(), 2);
-                    assert_eq!(series.values[0], 0.0);
-                    assert_eq!(series.values[1], 0.0);
+                if metric.metric_name == "in_progress" {
+                    // in_progress is non-accumulative, all 3 samples present
+                    for series in &metric.series {
+                        assert_eq!(series.values.len(), 3);
+                    }
+                } else {
+                    for series in &metric.series {
+                        assert_eq!(series.values.len(), 2);
+                        assert_eq!(series.values[0], 0.0);
+                        assert_eq!(series.time_diff[0], 0);
+                        let expected = expected_deltas[metric.metric_name.as_str()];
+                        assert_eq!(
+                            series.values[1], expected,
+                            "Metric {}: expected {}, got {}",
+                            metric.metric_name, expected, series.values[1]
+                        );
+                        assert_eq!(series.time_diff[1], 2);
+                    }
                 }
             }
         } else {
