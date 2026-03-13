@@ -40,28 +40,30 @@ ulimit -n 65535
 
 ## What data does APerf collect?
 
-| Data Type | Description |
-|-----------|-------------|
-| **Metadata** | |
-| `systeminfo` | System information and EC2 metadata if running on EC2 instances |
-| `kernel_config` | Kernel Configuration (/boot/config) |
-| `sysctl` | Sysctl variable configuration settings |
-| **Performance Data** | |
-| `cpu_utilization` | CPU Utilization, both per CPU and aggregate CPU utilization |
-| `vmstat` | Virtual Memory Utilization |
-| `diskstats` | Disk Utilization per Disk |
-| `interrupts` | Interrupt Data per Interrupt Line per CPU |
-| `perf_stat` | CPU Performance Counters |
-| `processes` | CPU utilization of running processes |
-| `netstat` | Network stats |
-| `meminfo` | Memory usage information |
-| `perf_profile` | Performance profile data (enabled through the `--profile` option and the `perf` binary) |
-| `java_profile` | JVM profile data (enabled through the `--profile-java` option and the [async-profiler](https://github.com/async-profiler/async-profiler/tree/master) binary) |
-| `hotline` | Memory and branch predictor hot spot detection (needs to be built with the Hotline feature and run on metal instance only) |
-| `memalloc`| Memory allocation data including buddyinfo, pagetypeinfo, and slabinfo (some data requires root privileges) |
-| **APerf Execution Data** | |
-| `aperf_runlog` | The log messages |
-| `aperf_stats` | Execution time of each collection interval (including the total time and every data's collection time) | 
+| Data Type                | Description                                                                                                                                                  |
+|--------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Metadata**             |                                                                                                                                                              |
+| `systeminfo`             | System information and EC2 metadata if running on EC2 instances                                                                                              |
+| `kernel_config`          | Kernel Configuration (/boot/config)                                                                                                                          |
+| `sysctl`                 | Sysctl variable configuration settings                                                                                                                       |
+| **Performance Data**     |                                                                                                                                                              |
+| `cpu_utilization`        | CPU Utilization, both per CPU and aggregate CPU utilization                                                                                                  |
+| `vmstat`                 | Virtual Memory Utilization                                                                                                                                   |
+| `diskstats`              | Disk Utilization per Disk                                                                                                                                    |
+| `interrupts`             | Interrupt Data per Interrupt Line per CPU                                                                                                                    |
+| `perf_stat`              | CPU Performance Counters                                                                                                                                     |
+| `processes`              | CPU utilization of running processes                                                                                                                         |
+| `netstat`                | TCP/IP stats                                                                                                                                                 |
+| `ena_stat`               | ENA (ethtool) stats                                                                                                                                          |
+| `efa_stat`               | [EFA](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/efa.html) stats                                                                                    |
+| `meminfo`                | Memory usage information                                                                                                                                     |
+| `perf_profile`           | Performance profile data (enabled through the `--profile` option and the `perf` binary)                                                                      |
+| `java_profile`           | JVM profile data (enabled through the `--profile-java` option and the [async-profiler](https://github.com/async-profiler/async-profiler/tree/master) binary) |
+| `hotline`                | Memory and branch predictor hot spot detection (needs to be built with the Hotline feature and run on metal instance only)                                   |
+| `memalloc`               | Memory allocation data including buddyinfo, pagetypeinfo, and slabinfo (some data requires root privileges)                                                  |
+| **APerf Execution Data** |                                                                                                                                                              |
+| `aperf_runlog`           | The log messages                                                                                                                                             |
+| `aperf_stats`            | Execution time of each collection interval (including the total time and every data's collection time)                                                       | 
 
 ## Installation
 Download the binary from the [Releases](https://github.com/aws/APerf/releases) page. APerf record and report are fully supported on Linux. Only report generation (`aperf report`) is supported on macOS and Windows.

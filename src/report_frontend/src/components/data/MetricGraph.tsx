@@ -91,6 +91,7 @@ export default function (props: TimeSeriesMetricProps) {
         plot_bgcolor: darkMode ? "#171D25" : "#ffffff",
         font: { color: darkMode ? "#ffffff" : "#000000" },
         margin: { t: 30, b: 50 },
+        showlegend: true,
       }}
       style={{ width: "100%", height: "100%" }}
       useResizeHandler

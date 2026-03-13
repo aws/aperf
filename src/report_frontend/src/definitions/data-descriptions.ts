@@ -4,6 +4,10 @@ import {
   CPU_FRONTEND_STALLS_INVESTIGATION,
   CPU_UTILIZATION_OPTIMIZATION,
   DATA_FOOTPRINT_OPTIMIZATION,
+  EC2_NETWORK_BANDWIDTH_ALLOWANCE_RECOMMENDATIONS,
+  EC2_NETWORK_LINK_LOCAL_ALLOWANCE_RECOMMENDATIONS,
+  EC2_NETWORK_PPS_ALLOWANCE_RECOMMENDATIONS,
+  EC2_NETWORK_TRACKED_CONNECTIONS_ALLOWANCE_RECOMMENDATIONS,
   INSTRUCTION_FOOTPRINT_OPTIMIZATION,
   IOWAIT_TIME_OPTIMIZATION,
   LOW_IPC_INVESTIGATION,
@@ -384,67 +388,79 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
     defaultHelpfulLinks: [
       "https://www.kernel.org/doc/html/latest/admin-guide/mm/concepts.html#buddy-allocator",
       "https://www.kernel.org/doc/html/latest/admin-guide/mm/concepts.html#migrate-types",
-      "https://www.kernel.org/doc/html/latest/vm/slub.html"
+      "https://www.kernel.org/doc/html/latest/vm/slub.html",
     ],
     fieldDescriptions: {
       "BuddyInfo order_0 (4KB)": {
         readableName: "Free 4KB Blocks",
-        description: "Number of free 4KB (2^0 pages) memory blocks available in the buddy allocator. These are the smallest allocation units and most commonly used for single-page allocations.",
+        description:
+          "Number of free 4KB (2^0 pages) memory blocks available in the buddy allocator. These are the smallest allocation units and most commonly used for single-page allocations.",
         desired: "higher",
       },
       "BuddyInfo order_1 (8KB)": {
         readableName: "Free 8KB Blocks",
-        description: "Number of free 8KB (2^1 pages) contiguous memory blocks. Used for small multi-page allocations requiring physically contiguous memory.",
+        description:
+          "Number of free 8KB (2^1 pages) contiguous memory blocks. Used for small multi-page allocations requiring physically contiguous memory.",
         desired: "higher",
       },
       "BuddyInfo order_2 (16KB)": {
         readableName: "Free 16KB Blocks",
-        description: "Number of free 16KB (2^2 pages) contiguous memory blocks. Common for kernel data structures and small DMA buffers.",
+        description:
+          "Number of free 16KB (2^2 pages) contiguous memory blocks. Common for kernel data structures and small DMA buffers.",
         desired: "higher",
       },
       "BuddyInfo order_3 (32KB)": {
         readableName: "Free 32KB Blocks",
-        description: "Number of free 32KB (2^3 pages) contiguous memory blocks. Used for medium-sized kernel allocations and device drivers.",
+        description:
+          "Number of free 32KB (2^3 pages) contiguous memory blocks. Used for medium-sized kernel allocations and device drivers.",
         desired: "higher",
       },
       "BuddyInfo order_4 (64KB)": {
         readableName: "Free 64KB Blocks",
-        description: "Number of free 64KB (2^4 pages) contiguous memory blocks. Important for larger DMA operations and kernel subsystems.",
+        description:
+          "Number of free 64KB (2^4 pages) contiguous memory blocks. Important for larger DMA operations and kernel subsystems.",
         desired: "higher",
       },
       "BuddyInfo order_5 (128KB)": {
         readableName: "Free 128KB Blocks",
-        description: "Number of free 128KB (2^5 pages) contiguous memory blocks. Critical for large kernel allocations and high-performance I/O.",
+        description:
+          "Number of free 128KB (2^5 pages) contiguous memory blocks. Critical for large kernel allocations and high-performance I/O.",
         desired: "higher",
       },
       "BuddyInfo order_6 (256KB)": {
         readableName: "Free 256KB Blocks",
-        description: "Number of free 256KB (2^6 pages) contiguous memory blocks. Essential for large contiguous allocations and memory-intensive operations.",
+        description:
+          "Number of free 256KB (2^6 pages) contiguous memory blocks. Essential for large contiguous allocations and memory-intensive operations.",
         desired: "higher",
       },
       "BuddyInfo order_7 (512KB)": {
         readableName: "Free 512KB Blocks",
-        description: "Number of free 512KB (2^7 pages) contiguous memory blocks. Important indicator of memory fragmentation at medium scales.",
+        description:
+          "Number of free 512KB (2^7 pages) contiguous memory blocks. Important indicator of memory fragmentation at medium scales.",
         desired: "higher",
       },
       "BuddyInfo order_8 (1MB)": {
         readableName: "Free 1MB Blocks",
-        description: "Number of free 1MB (2^8 pages) contiguous memory blocks. Key metric for large contiguous allocations and huge page support.",
+        description:
+          "Number of free 1MB (2^8 pages) contiguous memory blocks. Key metric for large contiguous allocations and huge page support.",
         desired: "higher",
       },
       "BuddyInfo order_9 (2MB)": {
         readableName: "Free 2MB Blocks",
-        description: "Number of free 2MB (2^9 pages) contiguous memory blocks. Critical for transparent huge pages and large memory allocations.",
+        description:
+          "Number of free 2MB (2^9 pages) contiguous memory blocks. Critical for transparent huge pages and large memory allocations.",
         desired: "higher",
       },
       "BuddyInfo order_10 (4MB)": {
         readableName: "Free 4MB Blocks",
-        description: "Number of free 4MB (2^10 pages) contiguous memory blocks. Largest buddy allocator order, indicates excellent memory contiguity and low fragmentation.",
+        description:
+          "Number of free 4MB (2^10 pages) contiguous memory blocks. Largest buddy allocator order, indicates excellent memory contiguity and low fragmentation.",
         desired: "higher",
       },
       "PageType Unmovable - order_0 (4KB)": {
         readableName: "Free 4KB Unmovable Blocks",
-        description: "Free 4KB blocks reserved for unmovable pages that cannot be migrated or reclaimed, typically used for kernel data structures.",
+        description:
+          "Free 4KB blocks reserved for unmovable pages that cannot be migrated or reclaimed, typically used for kernel data structures.",
         desired: "moderate",
       },
       "PageType Unmovable - order_1 (8KB)": {
@@ -469,7 +485,8 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       },
       "PageType Unmovable - order_5 (128KB)": {
         readableName: "Free 128KB Unmovable Blocks",
-        description: "Free 128KB unmovable blocks for very large kernel allocations requiring physical address stability.",
+        description:
+          "Free 128KB unmovable blocks for very large kernel allocations requiring physical address stability.",
         desired: "moderate",
       },
       "PageType Unmovable - order_6 (256KB)": {
@@ -499,7 +516,8 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       },
       "PageType Movable - order_0 (4KB)": {
         readableName: "Free 4KB Movable Blocks",
-        description: "Free 4KB blocks for movable pages that can be migrated to reduce fragmentation, typically used for user-space allocations.",
+        description:
+          "Free 4KB blocks for movable pages that can be migrated to reduce fragmentation, typically used for user-space allocations.",
         desired: "higher",
       },
       "PageType Movable - order_1 (8KB)": {
@@ -549,12 +567,14 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       },
       "PageType Movable - order_10 (4MB)": {
         readableName: "Free 4MB Movable Blocks",
-        description: "Free 4MB movable blocks, the largest movable allocation size, indicating excellent memory health.",
+        description:
+          "Free 4MB movable blocks, the largest movable allocation size, indicating excellent memory health.",
         desired: "higher",
       },
       "PageType Reclaimable - order_0 (4KB)": {
         readableName: "Free 4KB Reclaimable Blocks",
-        description: "Free 4KB blocks for reclaimable pages that can be freed under memory pressure, such as file caches and slab caches.",
+        description:
+          "Free 4KB blocks for reclaimable pages that can be freed under memory pressure, such as file caches and slab caches.",
         desired: "moderate",
       },
       "PageType Reclaimable - order_1 (8KB)": {
@@ -609,7 +629,8 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       },
       "PageType HighAtomic - order_0 (4KB)": {
         readableName: "Free 4KB HighAtomic Blocks",
-        description: "Free 4KB blocks reserved for high-priority atomic allocations that cannot fail or sleep, used in interrupt contexts.",
+        description:
+          "Free 4KB blocks reserved for high-priority atomic allocations that cannot fail or sleep, used in interrupt contexts.",
         desired: "moderate",
       },
       "PageType HighAtomic - order_1 (8KB)": {
@@ -664,7 +685,8 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       },
       "PageType CMA - order_0 (4KB)": {
         readableName: "Free 4KB CMA Blocks",
-        description: "Free 4KB blocks in Contiguous Memory Allocator reserved for devices requiring physically contiguous memory.",
+        description:
+          "Free 4KB blocks in Contiguous Memory Allocator reserved for devices requiring physically contiguous memory.",
         desired: "higher",
       },
       "PageType CMA - order_1 (8KB)": {
@@ -719,7 +741,8 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       },
       "PageType Isolate - order_0 (4KB)": {
         readableName: "Free 4KB Isolate Blocks",
-        description: "Free 4KB blocks in isolated pageblocks used during memory compaction and page migration operations.",
+        description:
+          "Free 4KB blocks in isolated pageblocks used during memory compaction and page migration operations.",
         desired: "lower",
       },
       "PageType Isolate - order_1 (8KB)": {
@@ -774,42 +797,50 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       },
       "PageBlocks - Unmovable": {
         readableName: "Unmovable PageBlocks Count",
-        description: "Total number of pageblocks designated for unmovable pages. Each pageblock is 2MB (order-9). High counts indicate significant kernel memory allocation.",
+        description:
+          "Total number of pageblocks designated for unmovable pages. Each pageblock is 2MB (order-9). High counts indicate significant kernel memory allocation.",
         desired: "moderate",
       },
       "PageBlocks - Movable": {
         readableName: "Movable PageBlocks Count",
-        description: "Total number of pageblocks designated for movable pages. Each pageblock is 2MB (order-9). High counts indicate good memory available for user-space and defragmentation.",
+        description:
+          "Total number of pageblocks designated for movable pages. Each pageblock is 2MB (order-9). High counts indicate good memory available for user-space and defragmentation.",
         desired: "higher",
       },
       "PageBlocks - Reclaimable": {
         readableName: "Reclaimable PageBlocks Count",
-        description: "Total number of pageblocks designated for reclaimable pages. Each pageblock is 2MB (order-9). These can be freed under memory pressure.",
+        description:
+          "Total number of pageblocks designated for reclaimable pages. Each pageblock is 2MB (order-9). These can be freed under memory pressure.",
         desired: "moderate",
       },
       "PageBlocks - HighAtomic": {
         readableName: "HighAtomic PageBlocks Count",
-        description: "Total number of pageblocks reserved for high-priority atomic allocations. Each pageblock is 2MB (order-9). Should typically be zero or very low.",
+        description:
+          "Total number of pageblocks reserved for high-priority atomic allocations. Each pageblock is 2MB (order-9). Should typically be zero or very low.",
         desired: "lower",
       },
       "PageBlocks - CMA": {
         readableName: "CMA PageBlocks Count",
-        description: "Total number of pageblocks in Contiguous Memory Allocator. Each pageblock is 2MB (order-9). Reserved for devices requiring large contiguous memory.",
+        description:
+          "Total number of pageblocks in Contiguous Memory Allocator. Each pageblock is 2MB (order-9). Reserved for devices requiring large contiguous memory.",
         desired: "depends",
       },
       "PageBlocks - Isolate": {
         readableName: "Isolate PageBlocks Count",
-        description: "Total number of pageblocks currently isolated during memory operations. Each pageblock is 2MB (order-9). Should typically be zero.",
+        description:
+          "Total number of pageblocks currently isolated during memory operations. Each pageblock is 2MB (order-9). Should typically be zero.",
         desired: "lower",
       },
       "SlabInfo active objs": {
         readableName: "Active Objects",
-        description: "Number of objects currently in use (allocated) in this slab cache. Indicates active memory consumption by this slab type.",
+        description:
+          "Number of objects currently in use (allocated) in this slab cache. Indicates active memory consumption by this slab type.",
         desired: "depends",
       },
       "SlabInfo num objs": {
         readableName: "Total Objects",
-        description: "Total number of objects available in this slab cache, including both active and free objects. Shows total capacity.",
+        description:
+          "Total number of objects available in this slab cache, including both active and free objects. Shows total capacity.",
         desired: "depends",
       },
       "SlabInfo objsize": {
@@ -820,42 +851,50 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       },
       "SlabInfo objperslab": {
         readableName: "Objects Per Slab",
-        description: "Number of objects that fit in each slab. Determines slab packing efficiency for this object size.",
+        description:
+          "Number of objects that fit in each slab. Determines slab packing efficiency for this object size.",
         desired: "fixed",
       },
       "SlabInfo pagesperslab": {
         readableName: "Pages Per Slab",
-        description: "Number of memory pages (typically 4KB each) used by each slab. Indicates memory granularity for this cache.",
+        description:
+          "Number of memory pages (typically 4KB each) used by each slab. Indicates memory granularity for this cache.",
         desired: "fixed",
       },
       "SlabInfo limit": {
         readableName: "Per-CPU Limit",
-        description: "Maximum number of free objects that can be cached per CPU. Value of 0 means per-CPU caching is disabled.",
+        description:
+          "Maximum number of free objects that can be cached per CPU. Value of 0 means per-CPU caching is disabled.",
         desired: "fixed",
       },
       "SlabInfo batchcount": {
         readableName: "Batch Count",
-        description: "Number of objects to transfer at once between per-CPU cache and shared cache. Value of 0 means batching is disabled.",
+        description:
+          "Number of objects to transfer at once between per-CPU cache and shared cache. Value of 0 means batching is disabled.",
         desired: "fixed",
       },
       "SlabInfo sharedfactor": {
         readableName: "Shared Factor",
-        description: "Multiplier for shared cache size. Value of 0 means no shared cache between CPUs for this slab type.",
+        description:
+          "Multiplier for shared cache size. Value of 0 means no shared cache between CPUs for this slab type.",
         desired: "fixed",
       },
       "SlabInfo active slabs": {
         readableName: "Active Slabs",
-        description: "Number of slabs currently in use (containing at least one allocated object). Indicates active slab memory usage.",
+        description:
+          "Number of slabs currently in use (containing at least one allocated object). Indicates active slab memory usage.",
         desired: "depends",
       },
       "SlabInfo num slabs": {
         readableName: "Total Slabs",
-        description: "Total number of slabs allocated for this cache, including both active and empty slabs. Shows total slab capacity.",
+        description:
+          "Total number of slabs allocated for this cache, including both active and empty slabs. Shows total slab capacity.",
         desired: "depends",
       },
       "SlabInfo sharedavail": {
         readableName: "Shared Available",
-        description: "Number of objects available in the shared cache between CPUs. Indicates cross-CPU cache efficiency.",
+        description:
+          "Number of objects available in the shared cache between CPUs. Indicates cross-CPU cache efficiency.",
         desired: "depends",
       },
     },
@@ -2532,9 +2571,9 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
     },
   },
   netstat: {
-    readableName: "Network Stats",
+    readableName: "TCP/IP Stats",
     summary:
-      "Network stats metrics measure various networking stats for different protocols (TCP, IP, etc.). Note that since the metric values were computed using the delta between two snapshots, the first value is always zero.",
+      "Network stats metrics measure various networking stats at the TCP/IP layer. Note that since the metric values were computed using the delta between two snapshots, the first value is always zero.",
     defaultUnit: "Counts",
     fieldDescriptions: {
       "TcpExt:ArpFilter": {
@@ -3734,6 +3773,818 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       },
     },
   },
+  ena_stat: {
+    readableName: "ENA Stats",
+    summary:
+      "ENA (Elastic Network Adapter) stats metrics measure network performance and health for AWS EC2 instances using ENA drivers. The data is collected from ethtool statistics and provides insights into packet processing, errors, and resource utilization. Per-queue metrics (queue_N_tx_* and queue_N_rx_*) are aggregated into their base metric name with per-queue series.",
+    defaultUnit: "Count",
+    defaultHelpfulLinks: [
+      "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/monitoring-network-performance-ena.html",
+      "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ena-nitro-perf.html",
+    ],
+    fieldDescriptions: {
+      bw_in_allowance_exceeded: {
+        readableName: "Inbound Bandwidth Allowance Exceeded",
+        description:
+          "Number of packets queued or dropped because the inbound aggregate bandwidth exceeded the maximum for the instance.",
+        desired: "lower",
+        optimization: [EC2_NETWORK_BANDWIDTH_ALLOWANCE_RECOMMENDATIONS],
+      },
+      bw_out_allowance_exceeded: {
+        readableName: "Outbound Bandwidth Allowance Exceeded",
+        description:
+          "Number of packets queued or dropped because the outbound aggregate bandwidth exceeded the maximum for the instance.",
+        desired: "lower",
+        optimization: [EC2_NETWORK_BANDWIDTH_ALLOWANCE_RECOMMENDATIONS],
+      },
+      conntrack_allowance_exceeded: {
+        readableName: "Connection Tracking Allowance Exceeded",
+        description:
+          "Number of packets dropped because the number of tracked connection exceeded the maximum for the instance and new connections could not be established. This can result in packet loss for traffic to or from the instance. The security group tracks each connection established to ensure that return packets are delivered as expected. There is a maximum number of connections that can be tracked per instance.",
+        desired: "lower",
+        optimization: [EC2_NETWORK_TRACKED_CONNECTIONS_ALLOWANCE_RECOMMENDATIONS],
+      },
+      linklocal_allowance_exceeded: {
+        readableName: "Link Local Service Allowance Exceeded",
+        description:
+          "Number of packets dropped because the PPS of the traffic to local proxy services exceeded the maximum for the network interface. This impacts traffic to the DNS service, the Instance Metadata Service, and the Amazon Time Sync Service, but does not impact traffic to custom DNS resolvers.",
+        desired: "lower",
+        optimization: [EC2_NETWORK_LINK_LOCAL_ALLOWANCE_RECOMMENDATIONS],
+      },
+      pps_allowance_exceeded: {
+        readableName: "Packet-per-second Allowance Exceeded",
+        description:
+          "Number of packets queued or dropped because the bidirectional Packet-per-second (PPS) exceeded the maximum for the instance. PPS allowance is enforced separately to the overall bandwidth allowance and, while the instance may still be under overall bandwidth allowance, the PPS allowance may exceed if the mean packet size is small",
+        desired: "lower",
+        optimization: [EC2_NETWORK_PPS_ALLOWANCE_RECOMMENDATIONS],
+      },
+      conntrack_allowance_available: {
+        readableName: "Connection Tracking Allowance Available",
+        description:
+          "The number of tracked connections that can be established by the instance before hitting the Connections Tracked allowance of that instance type. The security group tracks certain connections established to ensure that return packets are delivered as expected. There is a maximum number of connections that can be tracked per instance.",
+        desired: "higher",
+        optimization: [EC2_NETWORK_TRACKED_CONNECTIONS_ALLOWANCE_RECOMMENDATIONS],
+      },
+      ena_srd_mode: {
+        readableName: "ENA Express Mode",
+        description:
+          "Indicates whether ENA Express is configured. 0 = ENA Express off, UDP off; 1 = ENA Express on, UDP off; 2 = ENA Express off, UDP on (only happens after disabling the previously enabled ENA Express with UDP); 3 = ENA Express on, UDP on.",
+        desired: "fixed",
+      },
+      ena_srd_eligible_tx_pkts: {
+        readableName: "ENA Express Eligible SRD TX Packets",
+        description:
+          "Number of transmitted packets that were eligible for SRD. If the metric's value is much larger than ena_srd_tx_pkts (the number of packages actually transmitted with SRD), eligible packets are not able to transmit via SRD and falling back to standard ENA transmission. This could happen when the network card attached to the instance has used up its maximum resources, or if packets are over the MTU limit. Packets can also fall into this gap during live migrations or live server updates. Additional troubleshooting is required to determine the root cause.",
+        desired: "higher",
+      },
+      ena_srd_tx_pkts: {
+        readableName: "ENA Express SRD TX Packets",
+        description:
+          "The number of SRD packets transmitted within a given time period. ENA Express is powered by AWS Scalable Reliable Datagram (SRD) technology, a high performance network transport protocol that uses dynamic routing to increase throughput and minimize tail latency.",
+        desired: "higher",
+      },
+      ena_srd_rx_pkts: {
+        readableName: "ENA Express SRD RX Packets",
+        description:
+          "The number of SRD packets received within a given time period. ENA Express is powered by AWS Scalable Reliable Datagram (SRD) technology, a high performance network transport protocol that uses dynamic routing to increase throughput and minimize tail latency.",
+        desired: "higher",
+      },
+      ena_srd_resource_utilization: {
+        readableName: "ENA Express SRD Resource Utilization",
+        description:
+          "The percentage of the maximum allowed memory utilization for concurrent SRD connections that the instance has consumed. As utilization approaches 100%, you can expect to see performance issues. ENA Express falls back from SRD to standard ENA transmission, and the possibility of dropped packets increases. High resource utilization is a sign that it’s time to scale the instance out to improve network performance.",
+        desired: "lower",
+        unit: "Utilization (%)",
+      },
+      total_resets: {
+        readableName: "Total Resets",
+        description:
+          "Total number of ENA driver resets. A reset reinitializes the driver and temporarily disrupts network connectivity. Frequent resets indicate driver or hardware instability that should be investigated.",
+        desired: "lower",
+      },
+      reset_fail: {
+        readableName: "Reset Failures",
+        description:
+          "Number of ENA driver reset attempts that failed. A failed reset means the driver could not recover from an error state, potentially leaving the network interface in a degraded or non-functional state.",
+        desired: "lower",
+      },
+      tx_timeout: {
+        readableName: "TX Timeout",
+        description:
+          "Number of transmit timeout events where the kernel's TX watchdog detected that a transmit queue has not made progress within the expected time. This typically triggers a driver reset to recover.",
+        desired: "lower",
+      },
+      wd_expired: {
+        readableName: "Watchdog Expired",
+        description:
+          "Number of ENA driver watchdog timer expirations. The watchdog monitors driver health and triggers a reset when the device becomes unresponsive. Frequent expirations suggest device or driver issues.",
+        desired: "lower",
+      },
+      admin_q_pause: {
+        readableName: "Admin Queue Pause",
+        description:
+          "Number of times the ENA admin queue was paused. The admin queue handles control-plane operations such as queue creation and configuration. Pauses indicate the device is temporarily unable to process admin commands.",
+        desired: "lower",
+      },
+      bad_tx_req_id: {
+        readableName: "Bad TX Request ID",
+        description:
+          "Number of transmit completions received with an invalid request ID. This indicates a mismatch between the driver and device state, typically a sign of a firmware or driver bug.",
+        desired: "lower",
+      },
+      bad_rx_req_id: {
+        readableName: "Bad RX Request ID",
+        description:
+          "Number of receive completions with an invalid request ID. This indicates a mismatch between the driver and device state for receive operations.",
+        desired: "lower",
+      },
+      bad_rx_desc_num: {
+        readableName: "Bad RX Descriptor Number",
+        description:
+          "Number of receive completions referencing an invalid descriptor number. This indicates corruption or a bug in the driver-device communication for the receive path.",
+        desired: "lower",
+      },
+      missing_intr: {
+        readableName: "Missing Interrupt",
+        description:
+          "Number of expected hardware interrupts that were not received. The driver uses a watchdog mechanism to detect and recover from missed interrupts, which can cause temporary latency spikes.",
+        desired: "lower",
+      },
+      suspected_poll_starvation: {
+        readableName: "Suspected Poll Starvation",
+        description:
+          "Number of times the driver suspected that NAPI polling was not being scheduled frequently enough to keep up with incoming traffic. This can occur when CPU resources are contended or interrupt affinity is misconfigured.",
+        desired: "lower",
+      },
+      missing_tx_cmpl: {
+        readableName: "Missing TX Completion",
+        description:
+          "Number of transmit completions that were expected but not received within the timeout period. Missing completions can cause transmit queue stalls and may trigger a driver reset.",
+        desired: "lower",
+      },
+      rx_desc_malformed: {
+        readableName: "RX Descriptor Malformed",
+        description:
+          "Number of receive descriptors that were malformed or contained invalid data. This indicates a device firmware issue or memory corruption in the receive descriptor ring.",
+        desired: "lower",
+      },
+      tx_desc_malformed: {
+        readableName: "TX Descriptor Malformed",
+        description:
+          "Number of transmit descriptors that were malformed or contained invalid data. This indicates a device firmware issue or memory corruption in the transmit descriptor ring.",
+        desired: "lower",
+      },
+      invalid_state: {
+        readableName: "Invalid State",
+        description:
+          "Number of times the ENA driver detected an invalid internal state. This is a catch-all error counter for unexpected conditions that may require a driver reset to recover.",
+        desired: "lower",
+      },
+      os_netdev_wd: {
+        readableName: "OS Network Device Watchdog",
+        description:
+          "Number of times the Linux kernel's network device watchdog fired for this interface. The kernel watchdog monitors transmit queue activity and triggers when a queue appears hung.",
+        desired: "lower",
+      },
+      missing_admin_interrupt: {
+        readableName: "Missing Admin Interrupt",
+        description:
+          "Number of expected admin queue completion interrupts that were not received. The admin queue handles control-plane operations, and missing interrupts can delay queue management.",
+        desired: "lower",
+      },
+      admin_to: {
+        readableName: "Admin Timeout",
+        description:
+          "Number of admin queue command timeouts. An admin command timeout means the device did not respond to a control-plane request within the expected time, which may trigger a driver reset.",
+        desired: "lower",
+      },
+      device_request_reset: {
+        readableName: "Device Request Reset",
+        description:
+          "Number of reset requests initiated by the ENA device itself. The device may request a reset when it detects an internal error that requires reinitialization to recover.",
+        desired: "lower",
+      },
+      missing_first_intr: {
+        readableName: "Missing First Interrupt",
+        description:
+          "Number of times the first interrupt after queue creation was not received. This can indicate an interrupt configuration issue during queue initialization.",
+        desired: "lower",
+      },
+      suspend: {
+        readableName: "Suspend Events",
+        description:
+          "Number of times the ENA driver entered a suspended state, typically during system power management transitions such as hibernation or live migration.",
+        desired: "lower",
+      },
+      resume: {
+        readableName: "Resume Events",
+        description:
+          "Number of times the ENA driver resumed from a suspended state. Each resume should correspond to a prior suspend event.",
+        desired: "lower",
+      },
+      interface_down: {
+        readableName: "Interface Down",
+        description:
+          "Number of times the network interface was administratively brought down (e.g., via ifconfig down or ip link set down).",
+        desired: "lower",
+      },
+      interface_up: {
+        readableName: "Interface Up",
+        description:
+          "Number of times the network interface was administratively brought up (e.g., via ifconfig up or ip link set up).",
+        desired: "lower",
+      },
+      ena_admin_q_aborted_cmd: {
+        readableName: "Admin Queue Aborted Commands",
+        description:
+          "Number of admin queue commands that were aborted before completion. Aborted commands indicate the driver cancelled a pending control-plane operation, possibly due to a timeout or reset.",
+        desired: "lower",
+      },
+      ena_admin_q_submitted_cmd: {
+        readableName: "Admin Queue Submitted Commands",
+        description:
+          "Total number of commands submitted to the ENA admin queue. This reflects control-plane activity such as queue creation, destruction, and configuration changes.",
+        desired: "depends",
+      },
+      ena_admin_q_completed_cmd: {
+        readableName: "Admin Queue Completed Commands",
+        description:
+          "Total number of admin queue commands that completed successfully. Comparing this with submitted commands can reveal how many commands were lost or aborted.",
+        desired: "depends",
+      },
+      ena_admin_q_out_of_space: {
+        readableName: "Admin Queue Out of Space",
+        description:
+          "Number of times the admin queue ran out of space for new commands. This means the driver attempted to submit a control-plane command but the queue was full.",
+        desired: "lower",
+      },
+      ena_admin_q_no_completion: {
+        readableName: "Admin Queue No Completion",
+        description:
+          "Number of admin queue commands that received no completion from the device. This typically indicates a device hang or communication failure on the control plane.",
+        desired: "lower",
+      },
+      num_of_active_io_queues: {
+        readableName: "Number of Active I/O Queues",
+        description:
+          "Current number of active I/O queue pairs (TX + RX). This reflects the level of parallelism available for packet processing and is typically equal to the number of vCPUs or a configured maximum.",
+        desired: "higher",
+      },
+      num_of_xdp_tx_queues: {
+        readableName: "Number of XDP TX Queues",
+        description:
+          "Current number of dedicated XDP (eXpress Data Path) transmit queues. XDP queues are used for high-performance packet processing that bypasses the normal kernel networking stack.",
+        desired: "higher",
+      },
+      // =====================================================================
+      // ENA per-queue TX metrics (from ethtool -S, queue_N_tx_* transformed)
+      // =====================================================================
+      tx_bytes: {
+        readableName: "TX Bytes",
+        description:
+          "Number of bytes transmitted per queue. This is the raw byte count from the ENA device, reflecting the total data volume sent through each transmit queue.",
+        desired: "depends",
+        unit: "Bytes",
+      },
+      tx_cnt: {
+        readableName: "TX Packet Count",
+        description:
+          "Number of packets transmitted per queue. This is the raw packet count from the ENA device, reflecting transmit throughput at the queue level.",
+        desired: "depends",
+      },
+      tx_tx_poll: {
+        readableName: "TX Poll",
+        description:
+          "Number of times the transmit completion routine was invoked per queue. Each poll processes completed transmit descriptors and frees the associated buffers. A high poll count relative to packet count may indicate small batch sizes.",
+        desired: "depends",
+      },
+      tx_doorbells: {
+        readableName: "TX Doorbells",
+        description:
+          "Number of doorbell writes to the ENA device per transmit queue. A doorbell notifies the device that new transmit descriptors are ready for processing. Fewer doorbells relative to packets indicates efficient batching.",
+        desired: "lower",
+      },
+      tx_unmask_interrupt: {
+        readableName: "TX Unmask Interrupt",
+        description:
+          "Number of times the transmit interrupt was unmasked per queue. After NAPI polling completes, the driver unmasks the interrupt to receive the next completion notification.",
+        desired: "depends",
+      },
+      tx_lost_interrupt: {
+        readableName: "TX Lost Interrupt",
+        description:
+          "Number of times a software workaround was triggered to handle a lost hardware interrupt during transmission per queue. The driver detects this via a watchdog and re-polls for completions.",
+        desired: "lower",
+      },
+      tx_queue_stop: {
+        readableName: "TX Queue Stop",
+        description:
+          "Number of times a transmit queue was stopped because it ran out of descriptors. When stopped, the kernel queues packets in the qdisc layer until descriptors are freed by completions. Frequent stops indicate the queue depth is insufficient for the workload.",
+        desired: "lower",
+      },
+      tx_queue_wakeup: {
+        readableName: "TX Queue Wakeup",
+        description:
+          "Number of times a previously stopped transmit queue was restarted after descriptors became available. Each wakeup corresponds to a prior queue stop.",
+        desired: "lower",
+      },
+      tx_dma_mapping_err: {
+        readableName: "TX DMA Mapping Error",
+        description:
+          "Number of DMA mapping failures for transmit buffers per queue. A DMA mapping error means the driver could not map a packet buffer for device access, causing the packet to be dropped.",
+        desired: "lower",
+      },
+      tx_linearize: {
+        readableName: "TX Linearize",
+        description:
+          "Number of transmit packets that required linearization (copying scattered data into a single contiguous buffer) per queue. Linearization adds CPU overhead and indicates the packet layout was incompatible with the device's scatter-gather capabilities.",
+        desired: "lower",
+      },
+      tx_linearize_failed: {
+        readableName: "TX Linearize Failed",
+        description:
+          "Number of transmit packet linearization attempts that failed per queue, causing the packet to be dropped. This typically occurs due to memory allocation failure during the copy.",
+        desired: "lower",
+      },
+      tx_napi_comp: {
+        readableName: "TX NAPI Completions",
+        description:
+          "Number of times NAPI polling completed for a transmit queue, meaning all pending completions were processed and the driver returned to interrupt-driven mode.",
+        desired: "depends",
+      },
+      tx_prepare_ctx_err: {
+        readableName: "TX Prepare Context Error",
+        description:
+          "Number of transmit context preparation errors per queue. The driver prepares a context descriptor for each packet with offload information; a failure here drops the packet.",
+        desired: "lower",
+      },
+      tx_bad_req_id: {
+        readableName: "TX Bad Request ID",
+        description:
+          "Number of transmit completions with an invalid request ID per queue. This indicates a mismatch between the driver's descriptor tracking and the device's completion reports.",
+        desired: "lower",
+      },
+      tx_llq_buffer_copy: {
+        readableName: "TX LLQ Buffer Copy",
+        description:
+          "Number of packets copied into the Low Latency Queue (LLQ) push buffer per transmit queue. LLQ mode copies packet headers directly to device memory to reduce transmit latency.",
+        desired: "depends",
+      },
+      tx_missed_tx: {
+        readableName: "TX Missed TX",
+        description:
+          "Number of missed transmit opportunities per queue, where the driver had packets ready but could not submit them to the device in time.",
+        desired: "lower",
+      },
+      tx_pending_timedout_pkt: {
+        readableName: "TX Pending Timed Out Packets",
+        description:
+          "Number of transmit packets that timed out while pending in the queue. These packets were submitted to the device but never completed within the expected time.",
+        desired: "lower",
+      },
+      tx_pending_timedout_pk: {
+        readableName: "TX Pending Timed Out Packets (Legacy)",
+        description:
+          "Legacy counter for transmit packets that timed out while pending. This is an older variant of tx_pending_timedout_pkt found in some ENA driver versions.",
+        desired: "lower",
+      },
+      tx_xdp_frags_exceeded: {
+        readableName: "TX XDP Fragments Exceeded",
+        description:
+          "Number of XDP transmit operations that failed because the packet had more fragments than the device supports. The packet is dropped when this limit is exceeded.",
+        desired: "lower",
+      },
+      tx_xdp_short_linear_par: {
+        readableName: "TX XDP Short Linear Part",
+        description:
+          "Number of XDP transmit operations where the linear (non-fragmented) portion of the packet was too short for the device to process. This can occur when XDP modifies packet headers.",
+        desired: "lower",
+      },
+      tx_xdp_short_linear_pa: {
+        readableName: "TX XDP Short Linear Part (Legacy)",
+        description:
+          "Legacy counter for XDP transmit operations with a short linear part. This is an older variant of tx_xdp_short_linear_par found in some ENA driver versions.",
+        desired: "lower",
+      },
+      tx_xsk_cnt: {
+        readableName: "TX XSK Packet Count",
+        description:
+          "Number of packets transmitted through XDP sockets (AF_XDP) per queue. XDP sockets provide a high-performance zero-copy path for user-space packet processing.",
+        desired: "depends",
+      },
+      tx_xsk_bytes: {
+        readableName: "TX XSK Bytes",
+        description: "Number of bytes transmitted through XDP sockets (AF_XDP) per queue.",
+        desired: "depends",
+        unit: "Bytes",
+      },
+      tx_xsk_need_wakeup_set: {
+        readableName: "TX XSK Need Wakeup Set",
+        description:
+          "Number of times the XDP socket need-wakeup flag was set for a transmit queue, indicating the kernel needs to be woken up to process pending XSK transmit requests.",
+        desired: "depends",
+      },
+      tx_xsk_wakeup_request: {
+        readableName: "TX XSK Wakeup Request",
+        description:
+          "Number of wakeup requests issued for XDP socket transmit processing per queue. User-space sends a wakeup when it has new packets to transmit via AF_XDP.",
+        desired: "depends",
+      },
+      // =====================================================================
+      // ENA per-queue RX metrics (from ethtool -S, queue_N_rx_* transformed)
+      // =====================================================================
+      rx_bytes: {
+        readableName: "RX Bytes",
+        description:
+          "Number of bytes received per queue. This is the raw byte count from the ENA device, reflecting the total data volume received through each receive queue.",
+        desired: "depends",
+        unit: "Bytes",
+      },
+      rx_cnt: {
+        readableName: "RX Packet Count",
+        description:
+          "Number of packets received per queue. This is the raw packet count from the ENA device, reflecting receive throughput at the queue level.",
+        desired: "depends",
+      },
+      rx_rx_copybreak_pkt: {
+        readableName: "RX Copybreak Packets",
+        description:
+          "Number of received packets that were smaller than the copybreak threshold and were copied into a new smaller buffer per queue. This trades a memory copy for reduced memory usage on small packets.",
+        desired: "depends",
+      },
+      rx_csum_good: {
+        readableName: "RX Checksum Good",
+        description:
+          "Number of received packets where the hardware verified the checksum as correct per queue. Hardware checksum offload avoids redundant CPU-based checksum computation.",
+        desired: "higher",
+      },
+      rx_refil_partial: {
+        readableName: "RX Refill Partial",
+        description:
+          "Number of times the receive buffer ring could not be fully refilled per queue. Partial refills mean fewer buffers are available for incoming packets, which can lead to drops under high load.",
+        desired: "lower",
+      },
+      rx_csum_bad: {
+        readableName: "RX Checksum Bad",
+        description:
+          "Number of received packets where the hardware detected an invalid checksum per queue. These packets are passed to the kernel with a bad checksum flag and are typically dropped by the network stack.",
+        desired: "lower",
+      },
+      rx_page_alloc_fail: {
+        readableName: "RX Page Allocation Failure",
+        description:
+          "Number of memory page allocation failures when refilling the receive buffer ring per queue. Allocation failures reduce the number of available receive buffers and can cause packet drops under memory pressure.",
+        desired: "lower",
+      },
+      rx_skb_alloc_fail: {
+        readableName: "RX SKB Allocation Failure",
+        description:
+          "Number of socket buffer (sk_buff) allocation failures during receive processing per queue. An SKB allocation failure means the driver could not create the kernel data structure needed to pass the packet up the network stack.",
+        desired: "lower",
+      },
+      rx_bad_desc_num: {
+        readableName: "RX Bad Descriptor Number",
+        description:
+          "Number of receive completions referencing an invalid descriptor number per queue. This indicates corruption or a bug in the driver-device communication for the receive path.",
+        desired: "lower",
+      },
+      rx_bad_req_id: {
+        readableName: "RX Bad Request ID",
+        description:
+          "Number of receive completions with an invalid request ID per queue. This indicates a mismatch between the driver's descriptor tracking and the device's completion reports.",
+        desired: "lower",
+      },
+      rx_empty_rx_ring: {
+        readableName: "RX Empty Ring",
+        description:
+          "Number of times the receive ring was found completely empty per queue. An empty ring means no buffers were available for incoming packets, causing all arriving packets to be dropped by the device.",
+        desired: "lower",
+      },
+      rx_csum_unchecked: {
+        readableName: "RX Checksum Unchecked",
+        description:
+          "Number of received packets where the hardware did not perform checksum verification per queue. The kernel's software checksum path handles these packets instead.",
+        desired: "depends",
+      },
+      rx_dma_mapping_err: {
+        readableName: "RX DMA Mapping Error",
+        description:
+          "Number of DMA mapping failures for receive buffers per queue. A DMA mapping error means the driver could not map a buffer for device access, reducing the number of available receive slots.",
+        desired: "lower",
+      },
+      rx_xdp_aborted: {
+        readableName: "RX XDP Aborted",
+        description:
+          "Number of packets for which the XDP program returned XDP_ABORTED per queue. This typically indicates a bug in the XDP program and the packet is dropped with a trace event.",
+        desired: "lower",
+      },
+      rx_xdp_drop: {
+        readableName: "RX XDP Drop",
+        description:
+          "Number of packets intentionally dropped by the XDP program (XDP_DROP verdict) per queue. This is the expected fast-path drop mechanism for XDP-based filtering.",
+        desired: "depends",
+      },
+      rx_xdp_pass: {
+        readableName: "RX XDP Pass",
+        description:
+          "Number of packets passed by the XDP program to the normal kernel networking stack (XDP_PASS verdict) per queue.",
+        desired: "depends",
+      },
+      rx_xdp_tx: {
+        readableName: "RX XDP TX",
+        description:
+          "Number of packets transmitted back out the same interface by the XDP program (XDP_TX verdict) per queue. This enables hairpin forwarding without going through the kernel stack.",
+        desired: "depends",
+      },
+      rx_xdp_invalid: {
+        readableName: "RX XDP Invalid",
+        description:
+          "Number of packets for which the XDP program returned an unrecognized verdict per queue. Invalid verdicts are treated as errors and the packet is dropped.",
+        desired: "lower",
+      },
+      rx_xdp_redirect: {
+        readableName: "RX XDP Redirect",
+        description:
+          "Number of packets redirected by the XDP program to another interface, CPU, or XDP socket (XDP_REDIRECT verdict) per queue.",
+        desired: "depends",
+      },
+      rx_lpc_warm_up: {
+        readableName: "RX LPC Warm Up",
+        description:
+          "Number of Local Page Cache (LPC) warm-up operations per receive queue. The LPC caches recently freed pages for reuse in the same NUMA node, and warm-up populates this cache.",
+        desired: "depends",
+      },
+      rx_lpc_full: {
+        readableName: "RX LPC Full",
+        description:
+          "Number of times the Local Page Cache was full when the driver attempted to return a page per receive queue. A full LPC means the page must be freed back to the kernel allocator instead of being cached for reuse.",
+        desired: "lower",
+      },
+      rx_lpc_wrong_numa: {
+        readableName: "RX LPC Wrong NUMA",
+        description:
+          "Number of times a page from the Local Page Cache belonged to a different NUMA node than the one processing the receive queue. Cross-NUMA memory access adds latency to packet processing.",
+        desired: "lower",
+      },
+      rx_zc_queue_pkt_copy: {
+        readableName: "RX Zero Copy Queue Packet Copy",
+        description:
+          "Number of packets that required a copy in zero-copy (AF_XDP) receive mode per queue. Ideally zero-copy mode avoids copies, so this counter indicates fallback to the copy path.",
+        desired: "lower",
+      },
+      rx_xsk_need_wakeup_set: {
+        readableName: "RX XSK Need Wakeup Set",
+        description:
+          "Number of times the XDP socket need-wakeup flag was set for a receive queue, indicating the kernel needs to be woken up to process pending XSK receive completions.",
+        desired: "depends",
+      },
+    },
+  },
+  efa_stat: {
+    readableName: "EFA Stats",
+    summary:
+      "EFA (Elastic Fabric Adapter) stats metrics measure network performance for high-performance computing workloads using RDMA. The data is collected from EFA driver hardware counters and provides cumulative counts of packets, bytes, and operations since instance launch or driver reset. Metrics are collected per EFA device.",
+    defaultUnit: "Count",
+    defaultHelpfulLinks: ["https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/efa-working-monitor.html"],
+    fieldDescriptions: {
+      tx_bytes: {
+        readableName: "Transmitted Bytes",
+        description: "The number of bytes transmitted from the EFA driver.",
+        desired: "depends",
+        unit: "Bytes",
+      },
+      rx_bytes: {
+        readableName: "Received Bytes",
+        description: "The number of bytes received by the EFA driver.",
+        desired: "depends",
+        unit: "Bytes",
+      },
+      tx_pkts: {
+        readableName: "Transmitted Packets",
+        description: "The number of packets transmitted from the EFA driver.",
+        desired: "depends",
+      },
+      rx_pkts: {
+        readableName: "Received Packets",
+        description: "The number of packets received by the EFA driver.",
+        desired: "depends",
+      },
+      rx_drops: {
+        readableName: "Received Packets Dropped",
+        description: "The number of packets that were received by the EFA driver and then dropped.",
+        desired: "lower",
+      },
+      send_bytes: {
+        readableName: "Send Operation Bytes",
+        description: "The number of bytes sent using send operations from the EFA driver.",
+        desired: "depends",
+        unit: "Bytes",
+      },
+      recv_bytes: {
+        readableName: "Receive Operation Bytes",
+        description: "The number of bytes received by send operations by the EFA driver.",
+        desired: "depends",
+        unit: "Bytes",
+      },
+      send_wrs: {
+        readableName: "Send Working Requests",
+        description: "The number of packets sent using send working requests from the EFA driver.",
+        desired: "depends",
+      },
+      recv_wrs: {
+        readableName: "Receive Working Requests",
+        description: "The number of packets received by send working requests by the EFA driver.",
+        desired: "depends",
+      },
+      avg_bytes_per_send_wr: {
+        readableName: "Average Bytes Sent per Send Working Requests",
+        description: "The average number of bytes sent from the EFA driver per send working request.",
+        unit: "Bytes",
+        desired: "depends",
+      },
+      avg_bytes_per_recv_wr: {
+        readableName: "Average Bytes Received per Send Working Requests",
+        description: "The average number of bytes received by the EFA driver per send working request.",
+        unit: "Bytes",
+        desired: "depends",
+      },
+      rdma_write_wrs: {
+        readableName: "RDMA Write Working Requests",
+        description: "The number of completed RDMA write working requests.",
+        desired: "depends",
+      },
+      rdma_read_wrs: {
+        readableName: "RDMA Read Working Requests",
+        description: "The number of completed RDMA read working requests.",
+        desired: "depends",
+      },
+      rdma_write_bytes: {
+        readableName: "RDMA Write Bytes",
+        description: "The number of bytes written to it by other instances using RDMA write working requests.",
+        desired: "depends",
+        unit: "Bytes",
+      },
+      rdma_read_bytes: {
+        readableName: "RDMA Read Bytes",
+        description: "The number of bytes received using RDMA read working requests.",
+        desired: "depends",
+        unit: "Bytes",
+      },
+      avg_bytes_per_rdma_write_wr: {
+        readableName: "Average Bytes per RDMA Write Working Requests",
+        description: "The average number of bytes per RDMA write working request.",
+        unit: "Bytes",
+        desired: "depends",
+      },
+      avg_bytes_per_rdma_read_wr: {
+        readableName: "Average Bytes per RDMA Read Working Requests",
+        description: "The average number of bytes per RDMA read working request.",
+        unit: "Bytes",
+        desired: "depends",
+      },
+      rdma_write_wr_err: {
+        readableName: "RDMA Write Errors",
+        description: "The number of RDMA write operations that had local or remote errors.",
+        desired: "lower",
+      },
+      rdma_read_wr_err: {
+        readableName: "RDMA Read Errors",
+        description: "The number of RDMA read operations that had local or remote errors.",
+        desired: "lower",
+      },
+      rdma_read_resp_bytes: {
+        readableName: "RDMA Read Response Bytes",
+        description: "The number of bytes sent in response to RDMA read operations.",
+        desired: "depends",
+        unit: "Bytes",
+      },
+      rdma_write_recv_bytes: {
+        readableName: "RDMA Write Received Bytes",
+        description: "The number of bytes received by RDMA write operations.",
+        desired: "depends",
+        unit: "Bytes",
+      },
+      retrans_bytes: {
+        readableName: "Retransmitted Bytes",
+        description: "The number of EFA SRD bytes retransmitted. Available on Nitro v4 and later instances.",
+        desired: "lower",
+        unit: "Bytes",
+      },
+      retrans_pkts: {
+        readableName: "Retransmitted Packets",
+        description: "The number of EFA SRD packets retransmitted. Available on Nitro v4 and later instances.",
+        desired: "lower",
+      },
+      retrans_timeout_events: {
+        readableName: "Retransmission Timeout Events",
+        description:
+          "The number of times EFA SRD traffic timed out and resulted in a network path change. Available on Nitro v4 and later instances.",
+        desired: "lower",
+      },
+      impaired_remote_conn_events: {
+        readableName: "Impaired Remote Connection Events",
+        description:
+          "The number of times EFA SRD connections entered an impaired state, resulting in a reduced throughput rate limit. Available on Nitro v4 and later instances.",
+        desired: "lower",
+      },
+      unresponsive_remote_events: {
+        readableName: "Unresponsive Remote Events",
+        description:
+          "The number of times an EFA SRD remote connection was unresponsive. Available on Nitro v4 and later instances.",
+        desired: "lower",
+      },
+      lifespan: {
+        readableName: "Device Lifespan",
+        description: "The time in seconds since the EFA device was initialized or last reset.",
+        desired: "depends",
+        unit: "Seconds",
+      },
+      submitted_cmds: {
+        readableName: "Submitted Commands",
+        description:
+          "Total number of admin commands submitted to the EFA device. Admin commands handle control-plane operations such as queue pair creation, memory registration, and device configuration.",
+        desired: "depends",
+      },
+      completed_cmds: {
+        readableName: "Completed Commands",
+        description:
+          "Total number of admin commands that completed successfully on the EFA device. Comparing this with submitted_cmds reveals how many commands were lost or timed out.",
+        desired: "depends",
+      },
+      no_completion_cmds: {
+        readableName: "No Completion Commands",
+        description:
+          "Number of admin commands that were submitted but never received a completion from the EFA device. This typically indicates a device hang or communication failure on the control plane.",
+        desired: "lower",
+      },
+      cmds_err: {
+        readableName: "Command Errors",
+        description:
+          "Number of admin commands that completed with an error status. Command errors indicate the EFA device rejected or failed to execute a control-plane operation such as resource allocation or configuration.",
+        desired: "lower",
+      },
+      keep_alive_rcvd: {
+        readableName: "Keep Alive Received",
+        description:
+          "Number of keep-alive messages received from the EFA device. The driver uses keep-alive messages to monitor device health; a gap in these messages triggers a device reset.",
+        desired: "depends",
+      },
+      alloc_pd_err: {
+        readableName: "Allocate Protection Domain Errors",
+        description:
+          "Number of failed protection domain (PD) allocation attempts. A PD groups related RDMA resources for access control; allocation failures prevent creation of new queue pairs and memory regions.",
+        desired: "lower",
+      },
+      alloc_mr_err: {
+        readableName: "Allocate Memory Region Errors",
+        description:
+          "Number of failed memory region (MR) allocation attempts. Memory regions must be registered with the EFA device before they can be used for RDMA operations; failures here block data transfer setup.",
+        desired: "lower",
+      },
+      reg_mr_err: {
+        readableName: "Register Memory Region Errors",
+        description:
+          "Number of failed memory region registration attempts. Registration maps user-space memory for direct device access; failures prevent the application from using that memory buffer for RDMA.",
+        desired: "lower",
+      },
+      get_dma_mr_err: {
+        readableName: "Get DMA Memory Region Errors",
+        description:
+          "Number of failed DMA memory region acquisition attempts. DMA memory regions are used for kernel-level RDMA operations; failures indicate the device could not set up the required DMA mappings.",
+        desired: "lower",
+      },
+      alloc_ucontext_err: {
+        readableName: "Allocate User Context Errors",
+        description:
+          "Number of failed user context allocation attempts. A user context is created when an application opens the EFA device; failures prevent the application from accessing EFA resources.",
+        desired: "lower",
+      },
+      create_qp_err: {
+        readableName: "Create Queue Pair Errors",
+        description:
+          "Number of failed queue pair (QP) creation attempts. Queue pairs are the fundamental communication endpoints for RDMA; creation failures prevent establishing new RDMA connections.",
+        desired: "lower",
+      },
+      create_cq_err: {
+        readableName: "Create Completion Queue Errors",
+        description:
+          "Number of failed completion queue (CQ) creation attempts. Completion queues receive notifications when RDMA operations finish; creation failures prevent setting up the completion notification path.",
+        desired: "lower",
+      },
+      create_ah_err: {
+        readableName: "Create Address Handle Errors",
+        description:
+          "Number of failed address handle (AH) creation attempts. Address handles store the routing information needed to reach a remote EFA endpoint; failures prevent establishing communication with that peer.",
+        desired: "lower",
+      },
+      mmap_err: {
+        readableName: "Memory Map Errors",
+        description:
+          "Number of failed mmap operations on the EFA device. The driver uses mmap to map device registers and queues into user-space; failures prevent the application from directly accessing EFA hardware resources.",
+        desired: "lower",
+      },
+    },
+  },
   numastat: {
     readableName: "NUMA Stats",
     summary:
@@ -3877,6 +4728,11 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
         description: "The total time in us for APerf to collect the virtual memory stats data during one interval.",
         desired: "lower",
       },
+      memalloc: {
+        readableName: "Memory allocation stats collection time",
+        description: "The total time in us for APerf to collect the memory allocation stats data during one interval.",
+        desired: "lower",
+      },
       interrupts: {
         readableName: "Interrupts collection time",
         description: "The total time in us for APerf to collect the interrupts data during one interval.",
@@ -3890,6 +4746,16 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       netstat: {
         readableName: "Network stats collection time",
         description: "The total time in us for APerf to collect the network stats data during one interval.",
+        desired: "lower",
+      },
+      ena_stat: {
+        readableName: "ENA stats collection time",
+        description: "The total time in us for APerf to collect the ENA stats during one interval.",
+        desired: "lower",
+      },
+      efa_stat: {
+        readableName: "EFA stats collection time",
+        description: "The total time in us for APerf to collect the EFA stats data during one interval.",
         desired: "lower",
       },
       numastat: {

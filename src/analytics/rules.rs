@@ -2,6 +2,8 @@ mod aperf_runlog;
 mod aperf_stats;
 mod cpu_utilization;
 mod diskstats;
+mod efa_stat;
+mod ena_stat;
 mod flamegraphs;
 mod hotline;
 mod interrupts;

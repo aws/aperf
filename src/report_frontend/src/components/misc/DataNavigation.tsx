@@ -1,12 +1,34 @@
 import React from "react";
 import { SideNavigation, SideNavigationProps, Box, Link } from "@cloudscape-design/components";
 import { APERF_SERVICE_NAME } from "../../definitions/constants";
-import { NAVIGATION_CONFIGS, VERSION_INFO } from "../../definitions/data-config";
+import { NAVIGATION_SECTIONS, NavigationSection, VERSION_INFO } from "../../definitions/data-config";
 import { DataType } from "../../definitions/types";
 import { useReportState } from "../ReportStateProvider";
 import { extractDataTypeFromFragment } from "../../utils/utils";
 import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
-import { ReportHelpPanelIcon } from "./ReportHelpPanel";
+
+/**
+ * A helper function to recursively parse a navigation section configuration into the props
+ * required by the SideNavigation component.
+ */
+function getNavigationPropsItem(navigationSection: NavigationSection): SideNavigationProps.Section {
+  return {
+    type: "section",
+    text: navigationSection.sectionName,
+    items: navigationSection.items.map((item) => {
+      if ((item as NavigationSection).sectionName !== undefined) {
+        return getNavigationPropsItem(item as NavigationSection);
+      } else {
+        const dataType = item as DataType;
+        return {
+          type: "link",
+          text: DATA_DESCRIPTIONS[dataType].readableName,
+          href: `#${dataType}`,
+        };
+      }
+    }),
+  };
+}
 
 /**
  * This component renders the navigation panel on the left side that allows users to navigate between
@@ -18,22 +40,18 @@ export default function () {
   const items: SideNavigationProps.Item[] = [
     { type: "link", text: DATA_DESCRIPTIONS["systeminfo"].readableName, href: "#systeminfo" },
   ];
-  NAVIGATION_CONFIGS.forEach((section) => {
-    const sectionItems = section.items.map(
-      (dataType: DataType) =>
-        ({
-          type: "link",
-          text: DATA_DESCRIPTIONS[dataType].readableName,
-          href: `#${dataType}`,
-        }) as SideNavigationProps.Link,
-    );
+
+  NAVIGATION_SECTIONS.forEach((section) => {
+    const propsItem = getNavigationPropsItem(section);
+    // The top level sections should be made into section groups to other subsections
     items.push({
-      type: "section",
-      text: section.sectionName,
-      items: sectionItems,
-    } as SideNavigationProps.Section);
+      type: "section-group",
+      title: propsItem.text,
+      items: propsItem.items as (SideNavigationProps.Link | SideNavigationProps.Section)[],
+    });
+    items.push({ type: "divider" });
   });
-  items.push({ type: "divider" });
+
   items.push({ type: "link", text: "GitHub Repository", href: "https://github.com/aws/aperf", external: true });
   items.push({
     type: "link",

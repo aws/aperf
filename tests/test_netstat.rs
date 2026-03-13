@@ -447,19 +447,52 @@ fn test_process_netstat_input_validation() {
 
 #[test]
 fn test_decreasing_counter() {
-    use aperf::data::netstat::NetstatRaw;
-    use aperf::data::TimeEnum;
-    use chrono::Utc;
-
+    // Simulate a realistic scenario: counters increase steadily, then one metric
+    // decreases (e.g., a counter reset due to driver reload), then resumes increasing.
+    // The processor should skip the data point where the decrease occurs.
     let base_time = Utc::now();
     let raw_samples = vec![
+        // Sample 0: initial values
         NetstatRaw {
             time: TimeEnum::DateTime(base_time),
-            data: "TcpExt: TCPPureAcks TCPHPAcks\nTcpExt: 1000 2000\n".to_string(),
+            data: "TcpExt: TCPPureAcks TCPTimeouts\nTcpExt: 10000 500\n\
+                   IpExt: InOctets\nIpExt: 1000000\n"
+                .to_string(),
         },
+        // Sample 1: normal increase for all metrics
         NetstatRaw {
             time: TimeEnum::DateTime(base_time + chrono::Duration::seconds(1)),
-            data: "TcpExt: TCPPureAcks TCPHPAcks\nTcpExt: 500 1000\n".to_string(),
+            data: "TcpExt: TCPPureAcks TCPTimeouts\nTcpExt: 10200 502\n\
+                   IpExt: InOctets\nIpExt: 1050000\n"
+                .to_string(),
+        },
+        // Sample 2: TCPPureAcks decreases (counter reset), others keep increasing
+        NetstatRaw {
+            time: TimeEnum::DateTime(base_time + chrono::Duration::seconds(2)),
+            data: "TcpExt: TCPPureAcks TCPTimeouts\nTcpExt: 8000 505\n\
+                   IpExt: InOctets\nIpExt: 1100000\n"
+                .to_string(),
+        },
+        // Sample 3: all metrics increase normally from their current values
+        NetstatRaw {
+            time: TimeEnum::DateTime(base_time + chrono::Duration::seconds(3)),
+            data: "TcpExt: TCPPureAcks TCPTimeouts\nTcpExt: 10450 508\n\
+                   IpExt: InOctets\nIpExt: 1150000\n"
+                .to_string(),
+        },
+        // Sample 4: InOctets also decreases (e.g., interface reset), others keep going
+        NetstatRaw {
+            time: TimeEnum::DateTime(base_time + chrono::Duration::seconds(4)),
+            data: "TcpExt: TCPPureAcks TCPTimeouts\nTcpExt: 10700 510\n\
+                   IpExt: InOctets\nIpExt: 50000\n"
+                .to_string(),
+        },
+        // Sample 5: everything resumes normal increase
+        NetstatRaw {
+            time: TimeEnum::DateTime(base_time + chrono::Duration::seconds(5)),
+            data: "TcpExt: TCPPureAcks TCPTimeouts\nTcpExt: 11000 513\n\
+                   IpExt: InOctets\nIpExt: 100000\n"
+                .to_string(),
         },
     ];
 
@@ -474,13 +507,46 @@ fn test_decreasing_counter() {
         .unwrap();
 
     if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
-        for metric in time_series_data.metrics.values() {
-            for series in &metric.series {
-                assert_eq!(series.values.len(), 2);
-                assert_eq!(series.values[0], 0.0);
-                assert_eq!(series.values[1], 0.0);
-            }
-        }
+        assert_eq!(time_series_data.metrics.len(), 3);
+
+        // TCPPureAcks: 10000 -> 10200 -> 8000(skip) -> 10450 -> 10700 -> 11000
+        // Deltas:       0       200      [skipped]    2450    250    300
+        // After decrease, 8000 is kept so next delta is 10450-8000=2450
+        let pure_acks = &time_series_data.metrics["TcpExt:TCPPureAcks"];
+        assert_eq!(pure_acks.series.len(), 1);
+        assert_eq!(pure_acks.series[0].values.len(), 5); // 6 samples minus 1 skipped
+        assert_eq!(pure_acks.series[0].values[0], 0.0); // sample 0: first, no delta
+        assert_eq!(pure_acks.series[0].values[1], 200.0); // sample 1: 10200 - 10000
+                                                          // sample 2 skipped (10200 -> 8000 is a decrease)
+        assert_eq!(pure_acks.series[0].values[2], 2450.0); // sample 3: 10450 - 8000
+        assert_eq!(pure_acks.series[0].values[3], 250.0); // sample 4: 10700 - 10450
+        assert_eq!(pure_acks.series[0].values[4], 300.0); // sample 5: 11000 - 10700
+
+        // TCPTimeouts: 500 -> 502 -> 505 -> 508 -> 510 -> 513
+        // No decreases, all 6 samples present
+        // Deltas:       0     2      3      3      2      3
+        let timeouts = &time_series_data.metrics["TcpExt:TCPTimeouts"];
+        assert_eq!(timeouts.series.len(), 1);
+        assert_eq!(timeouts.series[0].values.len(), 6);
+        assert_eq!(timeouts.series[0].values[0], 0.0); // sample 0
+        assert_eq!(timeouts.series[0].values[1], 2.0); // 502 - 500
+        assert_eq!(timeouts.series[0].values[2], 3.0); // 505 - 502
+        assert_eq!(timeouts.series[0].values[3], 3.0); // 508 - 505
+        assert_eq!(timeouts.series[0].values[4], 2.0); // 510 - 508
+        assert_eq!(timeouts.series[0].values[5], 3.0); // 513 - 510
+
+        // InOctets: 1000000 -> 1050000 -> 1100000 -> 1150000 -> 50000(skip) -> 100000
+        // After decrease, 50000 is kept so next delta is 100000-50000=50000
+        // Deltas:    0         50000      50000      50000      [skipped]      50000
+        let in_octets = &time_series_data.metrics["IpExt:InOctets"];
+        assert_eq!(in_octets.series.len(), 1);
+        assert_eq!(in_octets.series[0].values.len(), 5); // 6 samples minus 1 skipped
+        assert_eq!(in_octets.series[0].values[0], 0.0); // sample 0
+        assert_eq!(in_octets.series[0].values[1], 50000.0); // 1050000 - 1000000
+        assert_eq!(in_octets.series[0].values[2], 50000.0); // 1100000 - 1050000
+        assert_eq!(in_octets.series[0].values[3], 50000.0); // 1150000 - 1100000
+                                                            // sample 4 skipped (1150000 -> 50000 is a decrease)
+        assert_eq!(in_octets.series[0].values[4], 50000.0); // sample 5: 100000 - 50000
     } else {
         panic!("Expected TimeSeries data");
     }

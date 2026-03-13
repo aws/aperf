@@ -1,11 +1,12 @@
-use crate::computations::Statistics;
-use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
+use crate::data::common::time_series_data_processor::{
+    time_series_data_processor_with_max_series_aggregate, TimeSeriesDataProcessor,
+};
+use crate::data::data_formats::AperfData;
 use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
-use log::{error, warn};
+use log::error;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
 #[cfg(target_os = "linux")]
@@ -140,30 +141,17 @@ impl ProcessData for Diskstats {
         _params: ReportParams,
         raw_data: Vec<Data>,
     ) -> Result<AperfData> {
-        let mut time_series_data = TimeSeriesData::default();
-
-        // (*Most of) the disk stats are accumulated since last boot, so memorize the previous
-        // stats to compute the delta as the series value
-        let mut prev_disk_stats: HashMap<String, Vec<u64>> = HashMap::new();
-        // initial time used to compute time diff for every series data point
-        let mut time_zero: Option<TimeEnum> = None;
-
-        // For every disk stat metric, maintain an ordered map between devices and their series in the
-        // metric, so that at the end of processing, all device series can be added to the corresponding
-        // metric sorted by the device name
-        let mut per_disk_stat_per_device_series: HashMap<DiskStatKey, BTreeMap<String, Series>> =
-            HashMap::new();
+        // For diskstats there is no easy way to compute or find the aggregate metric, so to assign
+        // stats to a metric, we use the stats of the series with the largest average value
+        let mut time_series_data_processor =
+            time_series_data_processor_with_max_series_aggregate!();
 
         for buffer in raw_data {
             let raw_value = match buffer {
                 Data::DiskstatsRaw(ref value) => value,
                 _ => panic!("Invalid Data type in raw file"),
             };
-
-            let time_diff: u64 = match raw_value.time - *time_zero.get_or_insert(raw_value.time) {
-                TimeEnum::TimeDiff(_time_diff) => _time_diff,
-                TimeEnum::DateTime(_) => panic!("Unexpected TimeEnum diff"),
-            };
+            time_series_data_processor.proceed_to_time(raw_value.time);
 
             for device_line in raw_value.data.lines() {
                 let proc_disk_stats = match ProcDiskStats::from_raw_data(device_line) {
@@ -173,74 +161,35 @@ impl ProcessData for Diskstats {
                         continue;
                     }
                 };
-                let device = &proc_disk_stats.device_name;
-                let device_disk_stats = &proc_disk_stats.disk_stats;
-                let prev_device_disk_stats = prev_disk_stats
-                    .entry(device.clone())
-                    .or_insert(device_disk_stats.clone());
-
                 for disk_stat_key in DiskStatKey::iter() {
-                    let device_disk_stat = get_device_disk_stat(disk_stat_key, device_disk_stats);
-                    let prev_device_disk_stat =
-                        get_device_disk_stat(disk_stat_key, &prev_device_disk_stats);
-                    let device_disk_stat_value = match disk_stat_key {
+                    let device_disk_stat =
+                        get_device_disk_stat(disk_stat_key, &proc_disk_stats.disk_stats);
+                    match disk_stat_key {
                         // in_progress is the only disk stat that goes to zero
                         // See https://www.kernel.org/doc/Documentation/iostats.txt
-                        DiskStatKey::InProgress => device_disk_stat as f64,
+                        DiskStatKey::InProgress => time_series_data_processor.add_data_point(
+                            &disk_stat_key.to_string(),
+                            &proc_disk_stats.device_name,
+                            device_disk_stat as f64,
+                        ),
                         // The rests are simply delta between two timestamps
-                        _ => {
-                            if prev_device_disk_stat > device_disk_stat {
-                                warn!(
-                                    "Unexpected decreasing {} on device {} samples.",
-                                    disk_stat_key, device
-                                );
-                            }
-                            device_disk_stat.saturating_sub(prev_device_disk_stat) as f64
-                        }
+                        _ => time_series_data_processor.add_accumulative_data_point(
+                            &disk_stat_key.to_string(),
+                            &proc_disk_stats.device_name,
+                            device_disk_stat as f64,
+                        ),
                     };
-
-                    let per_device_series = per_disk_stat_per_device_series
-                        .entry(disk_stat_key)
-                        .or_insert(BTreeMap::new());
-                    let device_series = per_device_series
-                        .entry(device.clone())
-                        .or_insert(Series::new(Some(device.clone())));
-                    device_series.time_diff.push(time_diff);
-                    device_series.values.push(device_disk_stat_value);
                 }
-
-                prev_disk_stats.insert(device.clone(), device_disk_stats.clone());
             }
         }
 
-        // Put device series into disk stat metrics
-        for (disk_stat_key, per_device_series) in per_disk_stat_per_device_series {
-            let mut disk_stat_metric = TimeSeriesMetric::new(disk_stat_key.to_string());
-            disk_stat_metric.series = per_device_series.into_values().collect();
-            // For diskstats there is no easy way to compute or find the aggregate metric, so to assign
-            // stats to a metric, we use the stats of the series with the largest avg value
-            let mut max_avg = 0.0;
-            // finding the max and min of all stats help us define the metric graph's range
-            let mut max: f64 = 0.0;
-            let mut min: f64 = f64::MAX;
-            for device_series in &disk_stat_metric.series {
-                let device_series_stats = Statistics::from_values(&device_series.values);
-                max = max.max(device_series_stats.max);
-                min = min.min(device_series_stats.min);
-                if device_series_stats.avg > max_avg {
-                    max_avg = device_series_stats.avg;
-                    disk_stat_metric.stats = device_series_stats;
-                }
-            }
-            disk_stat_metric.value_range = (min.floor() as u64, max.ceil() as u64);
-            time_series_data
-                .metrics
-                .insert(disk_stat_key.to_string(), disk_stat_metric);
-        }
-        time_series_data.sorted_metric_names = DiskStatKey::iter()
+        let disk_stats_order: Vec<String> = DiskStatKey::iter()
             .map(|disk_stat_key| disk_stat_key.to_string())
             .collect();
-
+        let time_series_data = time_series_data_processor
+            .get_time_series_data_with_metric_name_order(
+                disk_stats_order.iter().map(AsRef::as_ref).collect(),
+            );
         Ok(AperfData::TimeSeries(time_series_data))
     }
 }
