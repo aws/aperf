@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod aperf_stats_tests {
     use aperf::data::aperf_stats::AperfStat;
-    use aperf::data::data_formats::AperfData;
+    use aperf::data::common::data_formats::AperfData;
     use aperf::data::{ProcessData, TimeEnum};
     use aperf::visualizer::ReportParams;
     use chrono::Utc;

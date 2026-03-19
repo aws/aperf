@@ -1,8 +1,8 @@
-use crate::computations::Statistics;
-use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
-use crate::data::{AnalyzeData, Data, ProcessData, TimeEnum};
+use crate::data::common::data_formats::AperfData;
+use crate::data::common::time_series_data_processor::time_series_data_processor_with_average_aggregate;
 #[cfg(target_os = "linux")]
 use crate::data::{CollectData, CollectorParams};
+use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 #[cfg(target_os = "linux")]
 use crate::PDError;
@@ -71,37 +71,6 @@ impl MemallocData {
 }
 
 impl MemallocData {
-    fn add_metric_value(
-        time_series_data: &mut TimeSeriesData,
-        metric_name: String,
-        series_name: String,
-        time_diff: u64,
-        value: f64,
-    ) {
-        let metric = time_series_data
-            .metrics
-            .entry(metric_name.clone())
-            .or_insert_with_key(|name| TimeSeriesMetric::new(name.clone()));
-
-        let series_idx = metric
-            .series
-            .iter()
-            .position(|s| {
-                s.series_name
-                    .as_ref()
-                    .map(|n| n == &series_name)
-                    .unwrap_or(false)
-            })
-            .unwrap_or_else(|| {
-                metric.series.push(Series::new(Some(series_name.clone())));
-                metric.series.len() - 1
-            });
-
-        let series = &mut metric.series[series_idx];
-        series.time_diff.push(time_diff);
-        series.values.push(value);
-    }
-
     fn format_metric_name(name: &str) -> String {
         if let Some(order_str) = name.strip_prefix("buddyinfo_order_") {
             if let Ok(order) = order_str.parse::<u32>() {
@@ -152,19 +121,14 @@ impl ProcessData for MemallocData {
         _params: ReportParams,
         raw_data: Vec<Data>,
     ) -> Result<AperfData> {
-        let mut time_series_data = TimeSeriesData::default();
-        let mut time_zero: Option<TimeEnum> = None;
+        let mut time_series_data_processor = time_series_data_processor_with_average_aggregate!();
 
         for buffer in raw_data {
             let raw_value = match buffer {
                 Data::MemallocDataRaw(ref value) => value,
                 _ => panic!("Invalid Data type in raw file"),
             };
-
-            let time_diff: u64 = match raw_value.time - *time_zero.get_or_insert(raw_value.time) {
-                TimeEnum::TimeDiff(_time_diff) => _time_diff,
-                TimeEnum::DateTime(_) => panic!("Unexpected TimeEnum diff"),
-            };
+            time_series_data_processor.proceed_to_time(raw_value.time);
 
             // Process buddyinfo data
             for line in raw_value.buddyinfo_data.lines() {
@@ -178,11 +142,11 @@ impl ProcessData for MemallocData {
 
                 for (order, value_str) in parts[4..].iter().enumerate() {
                     if let Ok(value) = value_str.parse::<f64>() {
-                        Self::add_metric_value(
-                            &mut time_series_data,
-                            format!("buddyinfo_order_{}", order),
-                            format!("node_{}_zone_{}", node, zone),
-                            time_diff,
+                        let metric_name = format!("buddyinfo_order_{}", order);
+                        let series_name = format!("node_{}_zone_{}", node, zone);
+                        time_series_data_processor.add_data_point(
+                            &metric_name,
+                            &series_name,
                             value,
                         );
                     }
@@ -201,11 +165,12 @@ impl ProcessData for MemallocData {
 
                     for (order, value_str) in parts[6..].iter().enumerate() {
                         if let Ok(value) = value_str.parse::<f64>() {
-                            Self::add_metric_value(
-                                &mut time_series_data,
-                                format!("pagetype_order_{}_type_{}", order, migrate_type),
-                                format!("node_{}_zone_{}", node, zone),
-                                time_diff,
+                            let metric_name =
+                                format!("pagetype_order_{}_type_{}", order, migrate_type);
+                            let series_name = format!("node_{}_zone_{}", node, zone);
+                            time_series_data_processor.add_data_point(
+                                &metric_name,
+                                &series_name,
                                 value,
                             );
                         }
@@ -227,11 +192,11 @@ impl ProcessData for MemallocData {
                     for (idx, migrate_type) in migrate_types.iter().enumerate() {
                         if let Some(value_str) = parts.get(4 + idx) {
                             if let Ok(value) = value_str.parse::<f64>() {
-                                Self::add_metric_value(
-                                    &mut time_series_data,
-                                    format!("pageblocks_type_{}", migrate_type),
-                                    format!("zone_{}", zone),
-                                    time_diff,
+                                let metric_name = format!("pageblocks_type_{}", migrate_type);
+                                let series_name = format!("zone_{}", zone);
+                                time_series_data_processor.add_data_point(
+                                    &metric_name,
+                                    &series_name,
                                     value,
                                 );
                             }
@@ -273,11 +238,9 @@ impl ProcessData for MemallocData {
                 for (metric_type, value_opt) in metrics {
                     if let Some(value_str) = value_opt {
                         if let Ok(value) = value_str.parse::<f64>() {
-                            Self::add_metric_value(
-                                &mut time_series_data,
-                                format!("slabinfo_{}", metric_type),
-                                slab_name.to_string(),
-                                time_diff,
+                            time_series_data_processor.add_data_point(
+                                &format!("slabinfo_{}", metric_type),
+                                slab_name,
                                 value,
                             );
                         }
@@ -286,18 +249,9 @@ impl ProcessData for MemallocData {
             }
         }
 
-        for metric in time_series_data.metrics.values_mut() {
-            let mut all_values = Vec::new();
-            for series in &metric.series {
-                all_values.extend(&series.values);
-            }
-            let stats = Statistics::from_values(&all_values);
-            metric.value_range = (stats.min.floor() as u64, stats.max.ceil() as u64);
-            metric.stats = stats;
-        }
+        let mut time_series_data = time_series_data_processor.get_time_series_data();
 
-        let mut sorted_names: Vec<String> = time_series_data.metrics.keys().cloned().collect();
-        sorted_names.sort_by(|a, b| {
+        time_series_data.sorted_metric_names.sort_by(|a, b| {
             let a_is_buddy = a.starts_with("buddyinfo_");
             let b_is_buddy = b.starts_with("buddyinfo_");
             let a_is_pageblocks = a.starts_with("pageblocks_");
@@ -369,7 +323,6 @@ impl ProcessData for MemallocData {
                 a.cmp(b)
             }
         });
-        time_series_data.sorted_metric_names = sorted_names;
 
         // Update metric names to include size
         let mut renamed_metrics = std::collections::HashMap::new();
@@ -390,5 +343,3 @@ impl ProcessData for MemallocData {
         Ok(AperfData::TimeSeries(time_series_data))
     }
 }
-
-impl AnalyzeData for MemallocData {}

@@ -1,7 +1,7 @@
 extern crate lazy_static;
 
 use crate::computations::Statistics;
-use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
+use crate::data::common::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
 use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
@@ -281,6 +281,7 @@ impl ProcessData for Processes {
                 let metric = TimeSeriesMetric {
                     metric_name: process_key.to_string(),
                     series: series_vec,
+                    stats_series_idx: 0,
                     value_range,
                     stats: final_stats,
                 };

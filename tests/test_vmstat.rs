@@ -43,7 +43,7 @@ fn generate_vmstat_raw_data(
 #[cfg(test)]
 mod vmstat_tests {
     use crate::{generate_vmstat_raw_data, ExpectedVmstatStats};
-    use aperf::data::data_formats::AperfData;
+    use aperf::data::common::data_formats::AperfData;
     use aperf::data::vmstat::Vmstat;
     use aperf::data::{Data, ProcessData};
     use aperf::visualizer::ReportParams;

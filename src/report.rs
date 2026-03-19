@@ -1,5 +1,5 @@
 use crate::analytics::BASE_RUN_NAME;
-use crate::data::utils::no_tar_gz_file_name;
+use crate::data::common::utils::no_tar_gz_file_name;
 use crate::data::JS_DIR;
 use crate::{data, PDError, VisualizationData};
 use anyhow::Result;

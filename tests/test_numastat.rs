@@ -85,15 +85,14 @@ fn test_numastat_process_raw_data_single_node() {
     assert!(result.is_ok());
 
     let aperf_data = result.unwrap();
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = aperf_data {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = aperf_data {
         // Check that we have metrics for each stat type
         assert!(time_series_data.metrics.contains_key("numa_hit"));
         assert!(time_series_data.metrics.contains_key("numa_miss"));
         assert!(time_series_data.metrics.contains_key("numa_foreign"));
 
-        // Check numa_hit metric has both node0 series and aggregate series
         let numa_hit_metric = &time_series_data.metrics["numa_hit"];
-        assert_eq!(numa_hit_metric.series.len(), 2); // node0 + aggregate
+        assert_eq!(numa_hit_metric.series.len(), 1);
 
         // Find node0 series
         let node0_series = numa_hit_metric
@@ -105,17 +104,6 @@ fn test_numastat_process_raw_data_single_node() {
         assert_eq!(node0_series.values[0], 0.0); // First sample, no previous value
         assert_eq!(node0_series.values[1], 500.0); // 1500 - 1000
         assert_eq!(node0_series.values[2], 500.0); // 2000 - 1500
-
-        // Find aggregate series
-        let aggregate_series = numa_hit_metric
-            .series
-            .iter()
-            .find(|s| s.is_aggregate)
-            .expect("Should have aggregate series");
-        assert_eq!(aggregate_series.values.len(), 3);
-        assert_eq!(aggregate_series.values[0], 0.0);
-        assert_eq!(aggregate_series.values[1], 500.0); // Same as node0 since only one node
-        assert_eq!(aggregate_series.values[2], 500.0);
     } else {
         panic!("Expected TimeSeries data format");
     }
@@ -145,7 +133,7 @@ fn test_numastat_process_raw_data_multiple_nodes() {
     assert!(result.is_ok());
 
     let aperf_data = result.unwrap();
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = aperf_data {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = aperf_data {
         // Check that we have metrics for each stat type
         assert!(time_series_data.metrics.contains_key("numa_hit"));
         assert!(time_series_data.metrics.contains_key("numa_miss"));
@@ -202,7 +190,7 @@ fn test_numastat_empty_data() {
     assert!(result.is_ok());
 
     let aperf_data = result.unwrap();
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = aperf_data {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = aperf_data {
         assert!(time_series_data.metrics.is_empty());
     } else {
         panic!("Expected TimeSeries data format");
@@ -223,7 +211,7 @@ fn test_numastat_malformed_data() {
     assert!(result.is_ok());
 
     let aperf_data = result.unwrap();
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = aperf_data {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = aperf_data {
         // Should handle malformed data gracefully
         assert!(time_series_data.metrics.is_empty());
     } else {
@@ -233,7 +221,7 @@ fn test_numastat_malformed_data() {
 
 #[test]
 fn test_decreasing_counter() {
-    use aperf::data::data_formats::AperfData;
+    use aperf::data::common::data_formats::AperfData;
     use aperf::data::numastat::NumastatRaw;
     use aperf::data::TimeEnum;
     use chrono::Utc;
@@ -263,9 +251,8 @@ fn test_decreasing_counter() {
     if let AperfData::TimeSeries(time_series_data) = result {
         for metric in time_series_data.metrics.values() {
             for series in &metric.series {
-                assert_eq!(series.values.len(), 2);
+                assert_eq!(series.values.len(), 1);
                 assert_eq!(series.values[0], 0.0);
-                assert_eq!(series.values[1], 0.0);
             }
         }
     } else {

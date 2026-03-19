@@ -1,4 +1,4 @@
-use aperf::data::data_formats::AperfData;
+use aperf::data::common::data_formats::AperfData;
 use aperf::data::java_profile::JavaProfile;
 use aperf::data::ProcessData;
 use aperf::visualizer::ReportParams;

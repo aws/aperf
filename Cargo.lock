@@ -117,6 +117,7 @@ dependencies = [
  "log",
  "log4rs",
  "nix",
+ "numeric-sort",
  "perf-event2",
  "procfs",
  "rustix 0.38.28",
@@ -1638,6 +1639,12 @@ checksum = "2819ce041d2ee131036f4fc9d6ae7ae125a3a40e97ba64d04fe799ad9dabbb44"
 dependencies = [
  "libc",
 ]
+
+[[package]]
+name = "numeric-sort"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f2dcb6053ab98da45585315f79932c5c9821fab8efa4301c0d7b637c91630eb7"
 
 [[package]]
 name = "once_cell"

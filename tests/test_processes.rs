@@ -1,4 +1,4 @@
-use aperf::data::data_formats::AperfData;
+use aperf::data::common::data_formats::AperfData;
 use aperf::data::processes::{ProcessKey, Processes, ProcessesRaw};
 use aperf::data::ProcessData;
 use aperf::data::{Data, TimeEnum};

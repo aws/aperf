@@ -1,4 +1,4 @@
-use aperf::data::data_formats::AperfData;
+use aperf::data::common::data_formats::AperfData;
 use aperf::data::systeminfo::{EC2Metadata, SystemInfo};
 use aperf::data::{Data, ProcessData, TimeEnum};
 use aperf::visualizer::ReportParams;

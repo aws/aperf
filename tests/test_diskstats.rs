@@ -123,7 +123,7 @@ fn generate_diskstats_raw_data(
 #[cfg(test)]
 mod diskstats_tests {
     use crate::{generate_diskstats_raw_data, get_disk_stat_field, ExpectedDiskStats};
-    use aperf::data::data_formats::AperfData;
+    use aperf::data::common::data_formats::AperfData;
     use aperf::data::diskstats::{DiskStatKey, Diskstats};
     use aperf::data::{Data, ProcessData};
     use aperf::visualizer::ReportParams;

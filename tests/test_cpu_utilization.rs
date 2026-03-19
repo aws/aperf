@@ -118,8 +118,8 @@ mod cpu_utilization_tests {
     use crate::{
         generate_cpu_utilization_raw_data, get_expected_utilization, ExpectedCpuStateUtilization,
     };
+    use aperf::data::common::data_formats::AperfData;
     use aperf::data::cpu_utilization::{CpuState, CpuUtilization};
-    use aperf::data::data_formats::AperfData;
     use aperf::data::{Data, ProcessData};
     use aperf::visualizer::ReportParams;
     use strum::IntoEnumIterator;
@@ -136,12 +136,6 @@ mod cpu_utilization_tests {
         if let AperfData::TimeSeries(time_series_data) = result {
             // With no raw data, no metrics are created (including aggregate)
             assert_eq!(time_series_data.metrics.len(), 0);
-
-            // Sorted metric names should still be present (initialized from enum)
-            assert_eq!(
-                time_series_data.sorted_metric_names.len(),
-                CpuState::iter().count() + 1
-            ); // +1 for aggregate
         } else {
             panic!("Expected TimeSeries data");
         }
@@ -260,20 +254,25 @@ mod cpu_utilization_tests {
                 // Series should have all CPUs + 1 aggregate series
                 assert_eq!(metric.series.len(), num_cpus + 1);
 
-                for (cpu, series) in metric.series.iter().enumerate() {
+                let mut cur_cpu = 0;
+                for series in &metric.series {
                     // Each series should have all data points
                     assert_eq!(series.values.len(), num_samples);
                     if series.is_aggregate {
                         assert_eq!(
                             series.series_name.as_ref().unwrap(),
                             "Aggregate",
-                            "Unexpected aggregate series for CPU {} {}",
-                            cpu,
+                            "Unexpected aggregate series for metric {} {}",
+                            metric.metric_name,
                             cpu_state
                         );
                     } else {
                         // Series name should indicate the corresponding CPU number
-                        assert_eq!(series.series_name.as_ref().unwrap(), &format!("CPU{}", cpu));
+                        assert_eq!(
+                            series.series_name.as_ref().unwrap(),
+                            &format!("CPU{}", cur_cpu)
+                        );
+                        cur_cpu += 1;
                     }
                     // Verify that series values are as expected
                     for (sample_idx, &value) in series.values.iter().enumerate() {
@@ -282,7 +281,13 @@ mod cpu_utilization_tests {
                         } else {
                             get_expected_utilization(
                                 cpu_state,
-                                &expected_per_sample_per_cpu_utils[sample_idx][cpu],
+                                &expected_per_sample_per_cpu_utils[sample_idx][if series
+                                    .is_aggregate
+                                {
+                                    num_cpus
+                                } else {
+                                    cur_cpu - 1
+                                }],
                             )
                         };
                         assert!(

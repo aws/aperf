@@ -1,5 +1,5 @@
 use aperf::computations::Statistics;
-use aperf::data::data_formats::{
+use aperf::data::common::data_formats::{
     AperfData, KeyValueData, KeyValueGroup, ProcessedData, Series, TimeSeriesData, TimeSeriesMetric,
 };
 

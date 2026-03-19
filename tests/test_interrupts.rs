@@ -176,7 +176,7 @@ fn test_process_interrupts_raw_data_complex() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         let mut expected_metric_names: HashMap<&str, &str> = HashMap::new();
         expected_metric_names.insert("5", "(Some info about irq 5 ACPI:Ged)");
         expected_metric_names.insert("10", "(Some info about irq 10 ACPI:Ged)");
@@ -291,7 +291,7 @@ fn test_process_interrupts_raw_data_simple() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         assert_eq!(time_series_data.metrics.len(), 2);
 
         let irq_11_metric = &time_series_data.metrics["(Some info about irq 11 ACPI:Ged)"];
@@ -317,7 +317,7 @@ fn test_process_interrupts_empty_data() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         assert_eq!(time_series_data.metrics.len(), 0);
         assert_eq!(time_series_data.sorted_metric_names.len(), 0);
     } else {
@@ -354,7 +354,7 @@ fn test_process_interrupts_mis_err_only() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         assert_eq!(time_series_data.metrics.len(), 2);
 
         // Verify MIS and ERR are at the end of sorted names
@@ -380,7 +380,7 @@ fn test_process_interrupts_mis_err_only() {
 
 #[test]
 fn test_decreasing_counter() {
-    use aperf::data::data_formats::AperfData;
+    use aperf::data::common::data_formats::AperfData;
     use aperf::data::interrupts::InterruptDataRaw;
     use aperf::data::TimeEnum;
     use chrono::Utc;
@@ -389,11 +389,15 @@ fn test_decreasing_counter() {
     let raw_samples = vec![
         InterruptDataRaw {
             time: TimeEnum::DateTime(base_time),
-            data: "           CPU0       CPU1\n  0:        100        200\n".to_string(),
+            data: "           CPU0       CPU1\n  10:        100        200\n".to_string(),
         },
         InterruptDataRaw {
             time: TimeEnum::DateTime(base_time + chrono::Duration::seconds(1)),
             data: "           CPU0       CPU1\n  0:         50        100\n".to_string(),
+        },
+        InterruptDataRaw {
+            time: TimeEnum::DateTime(base_time + chrono::Duration::seconds(1)),
+            data: "           CPU0       CPU1\n  40:         80        130\n".to_string(),
         },
     ];
 
@@ -413,7 +417,7 @@ fn test_decreasing_counter() {
                 if !series.is_aggregate {
                     assert_eq!(series.values.len(), 2);
                     assert_eq!(series.values[0], 0.0);
-                    assert_eq!(series.values[1], 0.0);
+                    assert_eq!(series.values[1], 30.0);
                 }
             }
         }

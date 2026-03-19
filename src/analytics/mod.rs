@@ -1,7 +1,7 @@
 mod rule_templates;
 mod rules;
 
-use crate::data::data_formats::ProcessedData;
+use crate::data::common::data_formats::ProcessedData;
 use rule_templates::{
     key_value_key_expected_rule::KeyValueKeyExpectedRule,
     key_value_key_run_comparison_rule::KeyValueKeyRunComparisonRule,

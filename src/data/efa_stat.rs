@@ -1,10 +1,10 @@
 use crate::data::common::common_raw_data::{
     parse_common_raw_time_series_data, TimeSeriesDataBuilder,
 };
-use crate::data::common::time_series_data_processor::{
-    time_series_data_processor_with_average_aggregate, TimeSeriesDataProcessor,
-};
-use crate::data::data_formats::AperfData;
+use crate::data::common::data_formats::AperfData;
+use crate::data::common::time_series_data_processor::time_series_data_processor_with_average_aggregate;
+#[cfg(target_os = "linux")]
+use crate::data::common::utils::collect_file_paths_in_dir;
 use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
@@ -13,7 +13,6 @@ use std::collections::HashMap;
 use std::fs::File;
 #[cfg(target_os = "linux")]
 use {
-    crate::data::utils::collect_file_paths_in_dir,
     crate::data::{CollectData, CollectorParams},
     crate::PDError,
     chrono::Utc,

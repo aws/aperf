@@ -1,7 +1,5 @@
-use crate::data::common::time_series_data_processor::{
-    time_series_data_processor_with_custom_aggregate, TimeSeriesDataProcessor,
-};
-use crate::data::data_formats::AperfData;
+use crate::data::common::data_formats::AperfData;
+use crate::data::common::time_series_data_processor::time_series_data_processor_with_custom_aggregate;
 use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;

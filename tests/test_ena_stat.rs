@@ -1,4 +1,4 @@
-use aperf::data::data_formats::AperfData;
+use aperf::data::common::data_formats::AperfData;
 use aperf::data::ena_stat::{EnaStat, EnaStatRaw};
 use aperf::data::{Data, ProcessData, TimeEnum};
 use aperf::visualizer::ReportParams;
@@ -44,22 +44,18 @@ fn make_ena_raw_data(
         .collect()
 }
 
-fn unwrap_time_series(result: AperfData) -> aperf::data::data_formats::TimeSeriesData {
+fn unwrap_time_series(result: AperfData) -> aperf::data::common::data_formats::TimeSeriesData {
     match result {
         AperfData::TimeSeries(ts) => ts,
         _ => panic!("Expected TimeSeries data"),
     }
 }
 
-/// Helper: filter out the "aggregate" series and return the rest sorted by name.
+/// Helper: filter out the aggregate series and return the rest sorted by name.
 fn data_series(
-    metric: &aperf::data::data_formats::TimeSeriesMetric,
-) -> Vec<&aperf::data::data_formats::Series> {
-    let mut v: Vec<_> = metric
-        .series
-        .iter()
-        .filter(|s| s.series_name.as_deref() != Some("aggregate"))
-        .collect();
+    metric: &aperf::data::common::data_formats::TimeSeriesMetric,
+) -> Vec<&aperf::data::common::data_formats::Series> {
+    let mut v: Vec<_> = metric.series.iter().filter(|s| !s.is_aggregate).collect();
     v.sort_by_key(|s| s.series_name.clone());
     v
 }
@@ -188,7 +184,7 @@ fn test_ena_three_interfaces_aggregate() {
     let agg = rx
         .series
         .iter()
-        .find(|s| s.series_name.as_deref() == Some("aggregate"))
+        .find(|s| s.is_aggregate)
         .expect("Expected aggregate series with 3 interfaces");
     assert_eq!(agg.values[0], 0.0); // first sample average of all zeros
     assert_eq!(agg.values[1], 200.0); // (100+200+300)/3

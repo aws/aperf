@@ -2,7 +2,7 @@ use crate::analytics::{AnalyticalFinding, Analyze, DataFindings};
 use crate::computations::{
     delta_ratio_to_percentage_string, formatted_number_string, Comparator, Stat,
 };
-use crate::data::data_formats::ProcessedData;
+use crate::data::common::data_formats::ProcessedData;
 use std::fmt;
 use std::fmt::Formatter;
 

@@ -1,7 +1,7 @@
 use crate::analytics;
 use crate::analytics::{AnalyticalFinding, Analyze, DataFindings};
 use crate::computations::{formatted_number_string, Comparator};
-use crate::data::data_formats::ProcessedData;
+use crate::data::common::data_formats::ProcessedData;
 use std::fmt;
 use std::fmt::Formatter;
 

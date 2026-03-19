@@ -13,10 +13,12 @@ pub mod report;
 pub mod visualizer;
 
 use crate::analytics::{AnalyticalEngine, DataFindings};
-use crate::data::{aperf_runlog::AperfRunlog, utils::get_data_name_from_type};
+use crate::data::aperf_runlog::AperfRunlog;
 use crate::visualizer::DataVisualizer;
 use anyhow::Result;
 use chrono::prelude::*;
+use data::common;
+use data::common::utils::get_data_name_from_type;
 use log::{debug, error, info};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -455,7 +457,7 @@ impl VisualizationData {
         tmp_dir: &Path,
         report_dir: &Path,
     ) -> Result<String> {
-        let run_name = data::utils::no_tar_gz_file_name(&run_data_dir).unwrap();
+        let run_name = common::utils::no_tar_gz_file_name(&run_data_dir).unwrap();
         let visualizers_len = self.visualizers.len();
         let mut error_count = 0;
 

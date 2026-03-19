@@ -1,4 +1,6 @@
-use crate::data::data_formats::{AperfData, Graph, GraphData, GraphGroup};
+use crate::data::common::data_formats::{AperfData, Graph, GraphData, GraphGroup};
+#[cfg(target_os = "linux")]
+use crate::data::common::utils::get_data_name_from_type;
 use crate::data::{Data, ProcessData};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
@@ -8,7 +10,6 @@ use std::fs;
 use std::path::PathBuf;
 #[cfg(target_os = "linux")]
 use {
-    crate::data::utils::get_data_name_from_type,
     crate::data::{CollectData, CollectorParams},
     crate::PDError,
     log::{debug, error},

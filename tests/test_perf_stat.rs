@@ -1,4 +1,4 @@
-use aperf::data::data_formats::AperfData;
+use aperf::data::common::data_formats::AperfData;
 use aperf::data::perf_stat::{PerfStat, PerfStatRaw};
 use aperf::data::ProcessData;
 use aperf::data::{Data, TimeEnum};
@@ -161,7 +161,7 @@ fn test_process_pmu_stat_raw_data_complex() {
 
                 // Check each CPU series value
                 for cpu in 0..4 {
-                    let cpu_series = &metric.series[cpu];
+                    let cpu_series = &metric.series[cpu + 1];
                     let expected_stats = &expected_data[sample][&cpu][stat_name];
                     let expected_value = expected_stats.calculate_value();
 
@@ -184,7 +184,7 @@ fn test_process_pmu_stat_raw_data_complex() {
                 }
 
                 // Check aggregate series value
-                let aggregate_series = &metric.series[4];
+                let aggregate_series = &metric.series[0];
                 let expected_aggregate_value = aggregate_numerator_sum / aggregate_denominator_sum;
                 assert!(
                     (aggregate_series.values[sample] - expected_aggregate_value).abs() < 1e-5,
@@ -199,7 +199,7 @@ fn test_process_pmu_stat_raw_data_complex() {
 
         // Validate aggregate series is marked correctly
         for metric in time_series_data.metrics.values() {
-            let aggregate_series = &metric.series[4]; // Last series should be aggregate
+            let aggregate_series = &metric.series[0];
             assert!(aggregate_series.is_aggregate);
             assert_eq!(aggregate_series.series_name, Some("Aggregate".to_string()));
         }
@@ -258,7 +258,7 @@ fn test_process_pmu_stat_raw_data_simple() {
 
             // Check each CPU series value
             for cpu in 0..2 {
-                let cpu_series = &metric.series[cpu];
+                let cpu_series = &metric.series[cpu + 1];
                 let expected_stats = &expected_data[sample][&cpu]["simple_stat"];
                 let expected_value = expected_stats.calculate_value();
 
@@ -279,7 +279,7 @@ fn test_process_pmu_stat_raw_data_simple() {
             }
 
             // Check aggregate series value
-            let aggregate_series = &metric.series[2];
+            let aggregate_series = &metric.series[0];
             let expected_aggregate_value = aggregate_numerator_sum / aggregate_denominator_sum;
             assert!(
                 (aggregate_series.values[sample] - expected_aggregate_value).abs() < 1e-5,
@@ -413,11 +413,9 @@ fn test_process_pmu_stat_zero_denominator_data_point_skipped() {
         assert_eq!(time_series_data.metrics.len(), 1);
         assert_eq!(time_series_data.sorted_metric_names.len(), 1);
         let metric = &time_series_data.metrics["some_stat"];
-        assert_eq!(metric.series.len(), 3);
-        // The series for CPU should be created but not contain any values
-        assert_eq!(metric.series[0].values.len(), 0);
+        assert_eq!(metric.series.len(), 2);
+        assert_eq!(metric.series[0].values[0], 0.7);
         assert_eq!(metric.series[1].values[0], 0.7);
-        assert_eq!(metric.series[2].values[0], 0.7);
     } else {
         panic!("Expected TimeSeries data");
     }
@@ -451,11 +449,11 @@ fn test_process_pmu_stat_zero_nonzero_metric_skipped() {
         assert_eq!(metric.series.len(), 3);
 
         // Verify the values are calculated correctly for valid denominators
-        assert_eq!(metric.series[0].values[0], 0.5); // CPU 0: 1000/2000 * 1 = 0.5
-        assert_eq!(metric.series[1].values[0], 0.75); // CPU 1: 3000/4000 * 1 = 0.75
+        assert_eq!(metric.series[1].values[0], 0.5); // CPU 0: 1000/2000 * 1 = 0.5
+        assert_eq!(metric.series[2].values[0], 0.75); // CPU 1: 3000/4000 * 1 = 0.75
 
         // Aggregate: (1000*1 + 3000*1) / (2000 + 4000) = 4000/6000 = 0.6667
-        assert!((metric.series[2].values[0] - (4000.0 / 6000.0)).abs() < 1e-5);
+        assert!((metric.series[0].values[0] - (4000.0 / 6000.0)).abs() < 1e-5);
     } else {
         panic!("Expected TimeSeries data");
     }

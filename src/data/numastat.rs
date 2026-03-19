@@ -1,12 +1,12 @@
-use crate::computations::Statistics;
-use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
-use crate::data::utils::get_aggregate_series_name;
+use crate::data::common::common_raw_data::parse_common_raw_time_series_data;
+use crate::data::common::data_formats::AperfData;
+use crate::data::common::time_series_data_processor::time_series_data_processor_with_average_aggregate;
 use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
 use log::warn;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 #[cfg(target_os = "linux")]
 use {
     crate::data::{CollectData, CollectorParams},
@@ -104,126 +104,31 @@ impl ProcessData for Numastat {
         _params: ReportParams,
         raw_data: Vec<Data>,
     ) -> Result<AperfData> {
-        let mut time_series_data = TimeSeriesData::default();
-        let mut time_zero: Option<TimeEnum> = None;
-        let mut prev_val_map: HashMap<String, HashMap<String, u64>> = HashMap::new();
-
-        let mut per_numa_metric_aggregate_series: HashMap<String, Series> = HashMap::new();
-        let mut per_numa_max_value: HashMap<String, u64> = HashMap::new();
-        let mut per_numastat_per_node_series: HashMap<String, BTreeMap<String, Series>> =
-            HashMap::new();
+        let mut time_series_data_processor = time_series_data_processor_with_average_aggregate!();
 
         for buffer in raw_data {
             let raw_value = match buffer {
                 Data::NumastatRaw(ref value) => value,
                 _ => panic!("Invalid Data type in raw file"),
             };
+            time_series_data_processor.proceed_to_time(raw_value.time);
 
-            let time_diff: u64 = match raw_value.time - *time_zero.get_or_insert(raw_value.time) {
-                TimeEnum::TimeDiff(_time_diff) => _time_diff,
-                TimeEnum::DateTime(_) => panic!("Unexpected TimeEnum diff"),
-            };
-
-            let mut per_metric_sums: HashMap<String, (u64, u64)> = HashMap::new();
-            let mut current_node: String = String::new();
-            for line in raw_value.data.lines() {
-                if line.ends_with(':') {
-                    current_node = line.trim_end_matches(':').to_string();
-                } else if !current_node.is_empty() && !line.trim().is_empty() {
-                    let mut parts = line.split_whitespace();
-                    if let (Some(metric_name), Some(value_str)) = (parts.next(), parts.next()) {
-                        let current_value = match value_str.parse::<u64>() {
-                            Ok(val) => val,
-                            Err(_) => continue,
-                        };
-
-                        let prev_node_stats = prev_val_map
-                            .entry(metric_name.to_string())
-                            .or_insert(HashMap::new());
-                        let diff_value =
-                            if let Some(&prev_value) = prev_node_stats.get(&current_node) {
-                                if prev_value > current_value {
-                                    warn!(
-                                        "Unexpected decreasing {} on node {} samples.",
-                                        metric_name, current_node
-                                    );
-                                }
-                                current_value.saturating_sub(prev_value)
-                            } else {
-                                0
-                            };
-
-                        // Keep track of the max value for each metric across all nodes
-                        if let Some(max_value) = per_numa_max_value.get_mut(metric_name) {
-                            *max_value = (*max_value).max(diff_value);
-                        } else {
-                            per_numa_max_value.insert(metric_name.to_string(), diff_value);
-                        }
-
-                        // Create per-node series
-                        let metric = per_numastat_per_node_series
-                            .entry(metric_name.to_string())
-                            .or_insert(BTreeMap::new());
-                        let series = metric
-                            .entry(current_node.clone())
-                            .or_insert(Series::new(Some(current_node.clone())));
-
-                        series.time_diff.push(time_diff);
-                        series.values.push(diff_value as f64);
-
-                        // Update aggregate sums and counts
-                        let (sum, count) = per_metric_sums
-                            .entry(metric_name.to_string())
-                            .or_insert((0, 0));
-                        *sum += diff_value;
-                        *count += 1;
-
-                        prev_node_stats.insert(current_node.clone(), current_value);
-                    }
+            // Although the raw data was not built through CommonRawDataBuilder, its format
+            // is the same
+            let numa_data = parse_common_raw_time_series_data(&raw_value.data);
+            for (numa_metric_name, per_node_metric_value) in numa_data {
+                for (numa_node, metric_value) in per_node_metric_value {
+                    time_series_data_processor.add_accumulative_data_point(
+                        &numa_metric_name,
+                        &numa_node,
+                        metric_value,
+                    );
                 }
             }
-
-            for (metric_name, (sum, count)) in per_metric_sums {
-                let aggregate_series = per_numa_metric_aggregate_series
-                    .entry(metric_name)
-                    .or_insert(Series::new(get_aggregate_series_name()));
-                let avg = if count > 0 {
-                    sum as f64 / count as f64
-                } else {
-                    0.0
-                };
-                aggregate_series.time_diff.push(time_diff);
-                aggregate_series.values.push(avg);
-            }
-        }
-
-        // Compute the stats of every aggregate series and add them to the corresponding metric
-        for (numa_metric_name, per_node_series) in per_numastat_per_node_series {
-            let mut numa_metric = TimeSeriesMetric::new(numa_metric_name.clone());
-            numa_metric.series = per_node_series.into_values().collect();
-
-            if let Some(aggregate_series) =
-                per_numa_metric_aggregate_series.get_mut(&numa_metric_name)
-            {
-                let aggregate_stats = Statistics::from_values(&aggregate_series.values);
-                numa_metric.value_range = (
-                    0,
-                    *per_numa_max_value
-                        .get(&numa_metric_name)
-                        .unwrap_or(&(aggregate_stats.max.ceil() as u64)),
-                );
-                numa_metric.stats = aggregate_stats;
-                aggregate_series.is_aggregate = true;
-                numa_metric.series.push(aggregate_series.clone());
-            }
-
-            time_series_data
-                .metrics
-                .insert(numa_metric_name, numa_metric);
         }
 
         // Sort by numastat display order
-        let preferred_order = [
+        let preferred_order = vec![
             "numa_hit",
             "numa_miss",
             "numa_foreign",
@@ -231,15 +136,8 @@ impl ProcessData for Numastat {
             "local_node",
             "other_node",
         ];
-        let mut sorted_metric_names: Vec<String> =
-            time_series_data.metrics.keys().cloned().collect();
-        sorted_metric_names.sort_by_key(|name| {
-            preferred_order
-                .iter()
-                .position(|&order_name| order_name == name)
-                .unwrap_or(preferred_order.len())
-        });
-        time_series_data.sorted_metric_names = sorted_metric_names;
+        let time_series_data =
+            time_series_data_processor.get_time_series_data_with_metric_name_order(preferred_order);
 
         Ok(AperfData::TimeSeries(time_series_data))
     }
