@@ -1,5 +1,5 @@
-use crate::computations::Statistics;
-use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
+use crate::data::common::data_formats::AperfData;
+use crate::data::common::time_series_data_processor::time_series_data_processor_with_sum_aggregate;
 use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
@@ -46,7 +46,8 @@ impl ProcessData for AperfStat {
         params: ReportParams,
         _raw_data: Vec<Data>,
     ) -> Result<AperfData> {
-        let mut time_series_data = TimeSeriesData::default();
+        let mut time_series_data_processor = time_series_data_processor_with_sum_aggregate!();
+        time_series_data_processor.set_aggregate_series_name("total");
 
         let mut values = Vec::new();
         let file: Result<fs::File> = Ok(fs::OpenOptions::new()
@@ -66,15 +67,8 @@ impl ProcessData for AperfStat {
             };
         }
 
-        let mut time_zero: Option<TimeEnum> = None;
-        // Keep track of the minimum value for each metric to set the value range
-        let mut per_metric_min_value: HashMap<String, u64> = HashMap::new();
-
         for value in values {
-            let time_diff: u64 = match value.time - *time_zero.get_or_insert(value.time) {
-                TimeEnum::TimeDiff(_time_diff) => _time_diff,
-                TimeEnum::DateTime(_) => panic!("Unexpected TimeEnum diff"),
-            };
+            time_series_data_processor.proceed_to_time(value.time);
 
             for (name, stat) in value.data {
                 let datatype: Vec<&str> = name.split('-').collect();
@@ -86,87 +80,11 @@ impl ProcessData for AperfStat {
                     series_name = "write".to_string();
                 }
 
-                let metric = time_series_data
-                    .metrics
-                    .entry(metric_name.to_string())
-                    .or_insert(TimeSeriesMetric::new(metric_name.to_string()));
-
-                let series = if metric_name == "aperf" {
-                    if metric.series.is_empty() {
-                        metric.series.push(Series::new(Some(series_name)));
-                    }
-                    &mut metric.series[0]
-                } else {
-                    match metric
-                        .series
-                        .iter_mut()
-                        .find(|s| s.series_name == Some(series_name.clone()))
-                    {
-                        Some(s) => s,
-                        None => {
-                            metric.series.push(Series::new(Some(series_name)));
-                            metric.series.last_mut().unwrap()
-                        }
-                    }
-                };
-
-                // Keep track of the global min value for the metric
-                if let Some(min_value) = per_metric_min_value.get_mut(metric_name) {
-                    *min_value = (*min_value).min(stat);
-                } else {
-                    per_metric_min_value.insert(metric_name.to_string(), stat);
-                }
-
-                series.values.push(stat as f64);
-                series.time_diff.push(time_diff);
+                time_series_data_processor.add_data_point(metric_name, &series_name, stat as f64);
             }
         }
 
-        let mut metrics_with_avg = Vec::new();
-
-        for (metric_name, metric) in &mut time_series_data.metrics {
-            let series = if metric_name == "aperf" {
-                &mut metric.series[0]
-            } else {
-                // sort the series first to make the order consistent across different runs
-                metric
-                    .series
-                    .sort_by(|a, b| a.series_name.cmp(&b.series_name));
-
-                // create new series that is the sum of all series
-                let mut total_series = Series::new(Some("total".to_string()));
-                if !metric.series.is_empty() {
-                    let mut time_value_map: HashMap<u64, f64> = HashMap::new();
-
-                    for series in &metric.series {
-                        for (i, &time_diff) in series.time_diff.iter().enumerate() {
-                            *time_value_map.entry(time_diff).or_insert(0.0) += series.values[i];
-                        }
-                    }
-
-                    let mut sorted_times: Vec<_> = time_value_map.keys().cloned().collect();
-                    sorted_times.sort();
-
-                    total_series.time_diff = sorted_times.clone();
-                    total_series.values =
-                        sorted_times.iter().map(|&t| time_value_map[&t]).collect();
-                }
-                metric.series.push(total_series);
-                metric.series.last_mut().unwrap()
-            };
-
-            metric.stats = Statistics::from_values(&series.values);
-            metric.value_range = (
-                *per_metric_min_value.get(metric_name).unwrap_or(&0),
-                metric.stats.max.ceil() as u64,
-            );
-            metrics_with_avg.push((metric_name.clone(), metric.stats.avg));
-        }
-
-        metrics_with_avg.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        time_series_data.sorted_metric_names =
-            metrics_with_avg.into_iter().map(|(name, _)| name).collect();
-
+        let time_series_data = time_series_data_processor.get_time_series_data_sorted_by_average();
         Ok(AperfData::TimeSeries(time_series_data))
     }
 }

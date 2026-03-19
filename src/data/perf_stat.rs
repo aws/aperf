@@ -1,6 +1,6 @@
-use crate::computations::Statistics;
-use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
-use crate::data::utils::{get_aggregate_series_name, get_cpu_series_name};
+use crate::data::common::data_formats::AperfData;
+use crate::data::common::time_series_data_processor::time_series_data_processor_with_custom_aggregate;
+use crate::data::common::utils::{get_aggregate_series_name, get_cpu_series_name};
 use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
@@ -175,7 +175,7 @@ impl CollectData for PerfStatRaw {
             if #[cfg(target_arch = "aarch64")] {
                 let mut perf_list = to_events(arm64_perf_list::GRV_EVENTS)?;
             } else if #[cfg(any(target_arch = "x86", target_arch = "x86_64"))] {
-                let cpu_info = crate::data::utils::get_cpu_info()?;
+                let cpu_info = crate::data::common::utils::get_cpu_info()?;
                 let platform_specific_counter: &[u8];
                 let base: &[u8];
 
@@ -433,27 +433,14 @@ impl ProcessData for PerfStat {
         _params: ReportParams,
         raw_data: Vec<Data>,
     ) -> Result<AperfData> {
-        let mut time_series_data = TimeSeriesData::default();
-        // the aggregate series to be inserted into all PMU stat metrics
-        let mut per_pmu_stat_aggregate_series: HashMap<String, Series> = HashMap::new();
-
-        // initial time used to compute time diff for every series data point
-        let mut time_zero: Option<TimeEnum> = None;
-        // Keep track of the largest series value for each metric to compute its value range
-        let mut per_pmu_stat_min_value: HashMap<String, f64> = HashMap::new();
-        // Keep track of the least series value for each metric to compute its value range
-        let mut per_pmu_stat_max_value: HashMap<String, f64> = HashMap::new();
+        let mut time_series_data_processor = time_series_data_processor_with_custom_aggregate!();
 
         for buffer in raw_data {
             let raw_value = match buffer {
                 Data::PerfStatRaw(ref value) => value,
                 _ => panic!("Invalid Data type in raw file"),
             };
-
-            let time_diff: u64 = match raw_value.time - *time_zero.get_or_insert(raw_value.time) {
-                TimeEnum::TimeDiff(_time_diff) => _time_diff,
-                TimeEnum::DateTime(_) => panic!("Unexpected TimeEnum diff"),
-            };
+            time_series_data_processor.proceed_to_time(raw_value.time);
 
             // To count the sum of every PMU stat's numerator and denominator across all CPUs,
             // for the computation of the aggregate PMU stats, which is
@@ -474,6 +461,11 @@ impl ProcessData for PerfStat {
                     continue;
                 }
                 let pmu_stat_value = numerator / denominator * scale;
+                time_series_data_processor.add_data_point(
+                    &pmu_stat_name,
+                    &get_cpu_series_name(cpu),
+                    pmu_stat_value,
+                );
 
                 // For the computation of aggregate PMU stats
                 per_pmu_stat_numerator_sums
@@ -484,29 +476,6 @@ impl ProcessData for PerfStat {
                     .entry(pmu_stat_name.clone())
                     .and_modify(|denominator_sum| *denominator_sum += denominator)
                     .or_insert(denominator);
-                // Update min and max series values
-                per_pmu_stat_min_value
-                    .entry(pmu_stat_name.clone())
-                    .and_modify(|min_value| *min_value = (*min_value).min(pmu_stat_value))
-                    .or_insert(pmu_stat_value);
-                per_pmu_stat_max_value
-                    .entry(pmu_stat_name.clone())
-                    .and_modify(|max_value| *max_value = (*max_value).max(pmu_stat_value))
-                    .or_insert(pmu_stat_value);
-
-                let pmu_stat_metric = time_series_data
-                    .metrics
-                    .entry(pmu_stat_name.clone())
-                    .or_insert(TimeSeriesMetric::new(pmu_stat_name.clone()));
-
-                while cpu >= pmu_stat_metric.series.len() {
-                    pmu_stat_metric
-                        .series
-                        .push(Series::new(get_cpu_series_name(cpu)));
-                }
-                let cpu_series = &mut pmu_stat_metric.series[cpu];
-                cpu_series.time_diff.push(time_diff);
-                cpu_series.values.push(pmu_stat_value);
             }
 
             // Insert average values into aggregate series
@@ -515,38 +484,16 @@ impl ProcessData for PerfStat {
                     Some(denominator_sum) => *denominator_sum,
                     None => continue,
                 };
-                let aggregate_series = per_pmu_stat_aggregate_series
-                    .entry(pmu_stat_name)
-                    .or_insert(Series::new(get_aggregate_series_name()));
-                aggregate_series.time_diff.push(time_diff);
-                aggregate_series
-                    .values
-                    .push(numerator_sum / denominator_sum);
+                time_series_data_processor.add_aggregate_data_point(
+                    &pmu_stat_name,
+                    &get_aggregate_series_name(),
+                    numerator_sum / denominator_sum,
+                );
             }
         }
 
-        // Compute the stats of every aggregate series and add them to the corresponding metric;
-        // also set every metric's value range
-        for (pmu_stat_name, pmu_stat_metric) in &mut time_series_data.metrics {
-            if let Some(aggregate_series) = per_pmu_stat_aggregate_series.get_mut(pmu_stat_name) {
-                let aggregate_stats = Statistics::from_values(&aggregate_series.values);
-                pmu_stat_metric.value_range = (
-                    per_pmu_stat_min_value
-                        .get(pmu_stat_name)
-                        .unwrap_or(&aggregate_stats.min)
-                        .floor() as u64,
-                    per_pmu_stat_max_value
-                        .get(pmu_stat_name)
-                        .unwrap_or(&aggregate_stats.max)
-                        .ceil() as u64,
-                );
-                pmu_stat_metric.stats = aggregate_stats;
-                aggregate_series.is_aggregate = true;
-                pmu_stat_metric.series.push(aggregate_series.clone());
-            }
-        }
         // The metric order is defined by top down debug method https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/debug_hw_perf.md#how-to-collect-pmu-counters
-        let top_down_order = [
+        let top_down_order = vec![
             "ipc",
             "stall-frontend-pkc",
             "stall-backend-pkc",
@@ -566,15 +513,8 @@ impl ProcessData for PerfStat {
             "data-rd-tlb-mpki",
             "data-rd-tlb-tw-pki",
         ];
-
-        let mut pmu_stat_names: Vec<String> = time_series_data.metrics.keys().cloned().collect();
-        pmu_stat_names.sort_by_key(|name| {
-            top_down_order
-                .iter()
-                .position(|&order_name| order_name == name)
-                .unwrap_or(top_down_order.len())
-        });
-        time_series_data.sorted_metric_names = pmu_stat_names;
+        let time_series_data =
+            time_series_data_processor.get_time_series_data_with_metric_name_order(top_down_order);
 
         Ok(AperfData::TimeSeries(time_series_data))
     }

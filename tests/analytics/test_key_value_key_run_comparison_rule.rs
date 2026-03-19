@@ -1,6 +1,6 @@
 use aperf::analytics::key_value_key_run_comparison_rule::KeyValueKeyRunComparisonRule;
 use aperf::analytics::{Analyze, DataFindings, Score, BASE_RUN_NAME};
-use aperf::data::data_formats::AperfData;
+use aperf::data::common::data_formats::AperfData;
 
 use super::test_helpers::{create_key_value_data, create_processed_data, DataFindingsExt};
 

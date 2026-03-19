@@ -1,5 +1,5 @@
 use crate::analytics::{AnalyticalFinding, Analyze, DataFindings};
-use crate::data::data_formats::ProcessedData;
+use crate::data::common::data_formats::ProcessedData;
 use std::fmt;
 use std::fmt::Formatter;
 

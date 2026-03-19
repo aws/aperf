@@ -1,4 +1,4 @@
-use aperf::data::data_formats::AperfData;
+use aperf::data::common::data_formats::AperfData;
 #[cfg(target_os = "linux")]
 use aperf::data::efa_stat::collect_efa_metrics_file_paths;
 use aperf::data::efa_stat::{EfaStat, EfaStatRaw};
@@ -46,23 +46,18 @@ fn make_efa_raw_data(
         .collect()
 }
 
-fn unwrap_time_series(result: AperfData) -> aperf::data::data_formats::TimeSeriesData {
+fn unwrap_time_series(result: AperfData) -> aperf::data::common::data_formats::TimeSeriesData {
     match result {
         AperfData::TimeSeries(ts) => ts,
         _ => panic!("Expected TimeSeries data"),
     }
 }
 
-/// Helper: filter out the "aggregate" series and return the rest sorted by name.
+/// Helper: filter out the aggregate series and return the rest sorted by name.
 fn data_series(
-    metric: &aperf::data::data_formats::TimeSeriesMetric,
-) -> Vec<&aperf::data::data_formats::Series> {
-    let mut v: Vec<_> = metric
-        .series
-        .iter()
-        .filter(|s| s.series_name.as_deref() != Some("aggregate"))
-        .collect();
-    v.sort_by_key(|s| s.series_name.clone());
+    metric: &aperf::data::common::data_formats::TimeSeriesMetric,
+) -> Vec<&aperf::data::common::data_formats::Series> {
+    let mut v: Vec<_> = metric.series.iter().filter(|s| !s.is_aggregate).collect();
     v
 }
 
@@ -184,7 +179,7 @@ fn test_efa_three_drivers_aggregate() {
     let agg = tx
         .series
         .iter()
-        .find(|s| s.series_name.as_deref() == Some("aggregate"))
+        .find(|s| s.is_aggregate)
         .expect("Expected aggregate series with 3 drivers");
     // Deltas: efa0=100, efa1=300, efa2=300 → average = 233.33...
     assert_eq!(agg.values[0], 0.0);

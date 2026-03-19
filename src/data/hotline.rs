@@ -1,6 +1,6 @@
 extern crate ctor;
 
-use crate::data::data_formats::{AperfData, Graph, GraphData, GraphGroup};
+use crate::data::common::data_formats::{AperfData, Graph, GraphData, GraphGroup};
 use crate::data::ProcessData;
 use crate::{data::Data, visualizer::ReportParams};
 use anyhow::Result;

@@ -1,6 +1,6 @@
 use aperf::analytics::key_value_key_expected_rule::KeyValueKeyExpectedRule;
 use aperf::analytics::{Analyze, DataFindings, Score};
-use aperf::data::data_formats::AperfData;
+use aperf::data::common::data_formats::AperfData;
 
 use super::test_helpers::{create_key_value_data, create_processed_data, DataFindingsExt};
 

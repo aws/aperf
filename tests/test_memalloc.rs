@@ -152,7 +152,7 @@ fn test_process_memalloc_empty_data() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         assert_eq!(time_series_data.metrics.len(), 0);
         assert_eq!(time_series_data.sorted_metric_names.len(), 0);
     } else {
@@ -178,7 +178,7 @@ fn test_process_buddyinfo_simple() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         assert!(time_series_data
             .metrics
             .contains_key("BuddyInfo order_0 (4KB)"));
@@ -187,7 +187,7 @@ fn test_process_buddyinfo_simple() {
             .contains_key("BuddyInfo order_1 (8KB)"));
 
         let order_0 = &time_series_data.metrics["BuddyInfo order_0 (4KB)"];
-        assert_eq!(order_0.series.len(), 2); // DMA and Normal zones
+        assert_eq!(order_0.series.len(), 3); // DMA and Normal zones + aggregate
 
         let dma_series = order_0
             .series
@@ -226,7 +226,7 @@ fn test_process_buddyinfo_complex() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         for order in 0..11 {
             let size_kb = 4 * (1 << order);
             let metric_name = if size_kb >= 1024 {
@@ -237,7 +237,7 @@ fn test_process_buddyinfo_complex() {
             assert!(time_series_data.metrics.contains_key(&metric_name));
 
             let metric = &time_series_data.metrics[&metric_name];
-            assert_eq!(metric.series.len(), 2);
+            assert_eq!(metric.series.len(), 3);
 
             for series in &metric.series {
                 assert_eq!(series.values.len(), 50);
@@ -269,7 +269,7 @@ fn test_process_pageblocks() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         assert!(time_series_data
             .metrics
             .contains_key("PageBlocks - Unmovable"));
@@ -307,7 +307,7 @@ fn test_process_pagetype() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         assert!(time_series_data
             .metrics
             .contains_key("PageType Unmovable - order_0 (4KB)"));
@@ -349,14 +349,14 @@ fn test_process_slabinfo_simple() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         assert!(time_series_data
             .metrics
             .contains_key("SlabInfo active objs"));
         assert!(time_series_data.metrics.contains_key("SlabInfo num objs"));
 
         let active_objs = &time_series_data.metrics["SlabInfo active objs"];
-        assert_eq!(active_objs.series.len(), 2); // dentry and inode_cache
+        assert_eq!(active_objs.series.len(), 3); // dentry and inode_cache + aggregate
 
         let dentry_series = active_objs
             .series
@@ -392,9 +392,9 @@ fn test_process_slabinfo_complex() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         let active_objs = &time_series_data.metrics["SlabInfo active objs"];
-        assert_eq!(active_objs.series.len(), 4);
+        assert_eq!(active_objs.series.len(), 5);
 
         for series in &active_objs.series {
             assert_eq!(series.values.len(), 50);
@@ -426,6 +426,10 @@ fn test_process_all_data_types() {
         // PageBlocks
         expected_stats.set_pageblock("Normal", "Unmovable", (200 + sample_idx * 5) as f64);
         expected_stats.set_pageblock("Normal", "Movable", (300 + sample_idx * 10) as f64);
+        expected_stats.set_pageblock("Normal", "Reclaimable", (300 + sample_idx * 10) as f64);
+        expected_stats.set_pageblock("Normal", "HighAtomic", (300 + sample_idx * 10) as f64);
+        expected_stats.set_pageblock("Normal", "CMA", (300 + sample_idx * 10) as f64);
+        expected_stats.set_pageblock("Normal", "Isolate", (300 + sample_idx * 10) as f64);
 
         // PageType
         expected_stats.set_pagetype("Normal", "Unmovable", 0, (50 + sample_idx * 2) as f64);
@@ -434,6 +438,15 @@ fn test_process_all_data_types() {
         // SlabInfo
         expected_stats.set_slabinfo("dentry", "active_objs", (1000 + sample_idx * 50) as f64);
         expected_stats.set_slabinfo("dentry", "num_objs", (2000 + sample_idx * 100) as f64);
+        expected_stats.set_slabinfo("dentry", "objsize", (2000 + sample_idx * 100) as f64);
+        expected_stats.set_slabinfo("dentry", "objperslab", (2000 + sample_idx * 100) as f64);
+        expected_stats.set_slabinfo("dentry", "pagesperslab", (2000 + sample_idx * 100) as f64);
+        expected_stats.set_slabinfo("dentry", "limit", (2000 + sample_idx * 100) as f64);
+        expected_stats.set_slabinfo("dentry", "batchcount", (2000 + sample_idx * 100) as f64);
+        expected_stats.set_slabinfo("dentry", "sharedfactor", (2000 + sample_idx * 100) as f64);
+        expected_stats.set_slabinfo("dentry", "active_slabs", (2000 + sample_idx * 100) as f64);
+        expected_stats.set_slabinfo("dentry", "num_slabs", (2000 + sample_idx * 100) as f64);
+        expected_stats.set_slabinfo("dentry", "sharedavail", (2000 + sample_idx * 100) as f64);
 
         expected_per_sample_stats.push(expected_stats);
     }
@@ -444,7 +457,7 @@ fn test_process_all_data_types() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         // Verify all data types are present
         assert!(time_series_data
             .metrics
@@ -489,7 +502,7 @@ fn test_metric_name_formatting() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         assert!(time_series_data
             .metrics
             .contains_key("BuddyInfo order_0 (4KB)"));
@@ -519,7 +532,7 @@ fn test_sorted_metric_names() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         let sorted_names = &time_series_data.sorted_metric_names;
 
         // BuddyInfo should come first, then PageBlocks

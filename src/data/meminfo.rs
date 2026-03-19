@@ -1,5 +1,5 @@
-use crate::computations::Statistics;
-use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
+use crate::data::common::data_formats::AperfData;
+use crate::data::common::time_series_data_processor::time_series_data_processor_with_custom_aggregate;
 use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
@@ -102,12 +102,8 @@ impl ProcessData for MeminfoData {
         _params: ReportParams,
         raw_data: Vec<Data>,
     ) -> Result<AperfData> {
-        let mut time_series_data = TimeSeriesData::default();
+        let mut time_series_data_processor = time_series_data_processor_with_custom_aggregate!();
 
-        // initial time used to compute time diff for every series data point
-        let mut time_zero: Option<TimeEnum> = None;
-
-        // The list of metric names to indicate their ordering
         let mut metric_name_order: Vec<String> = Vec::new();
 
         for buffer in raw_data {
@@ -115,11 +111,7 @@ impl ProcessData for MeminfoData {
                 Data::MeminfoDataRaw(ref value) => value,
                 _ => panic!("Invalid Data type in raw file"),
             };
-
-            let time_diff: u64 = match raw_value.time - *time_zero.get_or_insert(raw_value.time) {
-                TimeEnum::TimeDiff(_time_diff) => _time_diff,
-                TimeEnum::DateTime(_) => panic!("Unexpected TimeEnum diff"),
-            };
+            time_series_data_processor.proceed_to_time(raw_value.time);
 
             let meminfo = parse_meminfo(&raw_value.data);
 
@@ -131,41 +123,14 @@ impl ProcessData for MeminfoData {
             }
 
             for (metric_name, value) in meminfo {
-                let meminfo_metric = time_series_data
-                    .metrics
-                    .entry(metric_name)
-                    .or_insert_with_key(|meminfo_metric_name| {
-                        let mut _mem_info_metric =
-                            TimeSeriesMetric::new(meminfo_metric_name.clone());
-                        _mem_info_metric.series.push(Series::new(None));
-                        _mem_info_metric
-                    });
-                let meminfo_series = &mut meminfo_metric.series[0];
-                meminfo_series.time_diff.push(time_diff);
-                meminfo_series.values.push(value as f64);
+                time_series_data_processor.add_data_point(&metric_name, "value", value as f64);
             }
         }
 
-        // Compute metric stats and set value range
-        for meminfo_metric in time_series_data.metrics.values_mut() {
-            let metric_stats = Statistics::from_values(&meminfo_metric.series[0].values);
-            meminfo_metric.value_range = (
-                metric_stats.min.floor() as u64,
-                metric_stats.max.ceil() as u64,
+        let time_series_data = time_series_data_processor
+            .get_time_series_data_with_metric_name_order(
+                metric_name_order.iter().map(AsRef::as_ref).collect(),
             );
-            meminfo_metric.stats = metric_stats;
-        }
-
-        let mut sorted_metric_names: Vec<String> =
-            time_series_data.metrics.keys().cloned().collect();
-        sorted_metric_names.sort_by_key(|metric_name| {
-            metric_name_order
-                .iter()
-                .position(|ordered_name| ordered_name == metric_name)
-                .unwrap_or(metric_name_order.len())
-        });
-        time_series_data.sorted_metric_names = sorted_metric_names;
-
         Ok(AperfData::TimeSeries(time_series_data))
     }
 }

@@ -1,6 +1,5 @@
-use crate::data::data_formats::{AperfData, DataFormat, ProcessedData};
-use crate::data::utils::compress_all_zero_time_series_metric;
-use crate::data::utils::{combine_value_ranges, topological_sort};
+use crate::data::common::data_formats::{AperfData, DataFormat, ProcessedData};
+use crate::data::common::utils::{combine_value_ranges, topological_sort};
 use crate::{data::Data, data::ReportData, get_file};
 use anyhow::Result;
 use log::{debug, error};
@@ -212,9 +211,6 @@ fn post_process_time_series_data(processed_data: &mut ProcessedData) {
             if let Some(combined_value_range) = per_metric_combined_value_range.get(metric_name) {
                 time_series_metric.value_range = combined_value_range.to_owned();
             }
-            // Reduce the report data size for all-zero metrics by recreating a compressed
-            // series with only the first and last data points
-            compress_all_zero_time_series_metric(time_series_metric);
         }
     }
 }

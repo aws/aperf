@@ -1,4 +1,4 @@
-use crate::data::data_formats::{AperfData, Graph, GraphData, GraphGroup};
+use crate::data::common::data_formats::{AperfData, Graph, GraphData, GraphGroup};
 use crate::data::{Data, ProcessData};
 use crate::visualizer::ReportParams;
 use anyhow::Result;

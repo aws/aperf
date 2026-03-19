@@ -92,12 +92,16 @@ pub struct TimeSeriesData {
 }
 
 /// Contents of a metric, which is to be rendered as a graph in the report.
-#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TimeSeriesMetric {
     /// Name of the metric.
     pub metric_name: String,
     /// A list of all time series included in the metric.
     pub series: Vec<Series>,
+    /// For quick access of the series responsible for the statistic computation of the metric.
+    /// Skip serialization since it is not used by the frontend.
+    #[serde(skip)]
+    pub stats_series_idx: usize,
     /// The minimum and maximum data point values across all series. It offloads the computation
     /// from frontend and help decide the y-axis range of the graphs.
     pub value_range: (u64, u64),
@@ -111,6 +115,7 @@ impl TimeSeriesMetric {
         TimeSeriesMetric {
             metric_name,
             series: Default::default(),
+            stats_series_idx: 0,
             value_range: Default::default(),
             stats: Default::default(),
         }

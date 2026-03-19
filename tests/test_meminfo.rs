@@ -104,7 +104,7 @@ fn test_process_meminfo_raw_data_complex() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         // Check that we have metrics for the expected fields that have data
         let expected_metrics = vec![
             "MemTotal",
@@ -197,7 +197,7 @@ fn test_process_meminfo_raw_data_simple() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         // Should have metrics for the fields we set
         assert!(time_series_data.metrics.len() >= 2);
         assert!(time_series_data.sorted_metric_names.len() >= 2);
@@ -245,7 +245,7 @@ fn test_process_meminfo_hugepages_no_conversion() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         // Check hugepages metrics are not converted (should equal original values)
         let hugepages_total = &time_series_data.metrics["HugePages_Total"];
         assert_eq!(hugepages_total.series[0].values[0], 100.0); // Not divided by 1024
@@ -272,7 +272,7 @@ fn test_process_meminfo_empty_data() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         assert_eq!(time_series_data.metrics.len(), 0);
         // Sorted metric names should be empty for empty data
         assert_eq!(time_series_data.sorted_metric_names.len(), 0);
@@ -304,7 +304,7 @@ fn test_process_meminfo_missing_optional_fields() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         // Should have metrics for the fields we set
         let expected_metrics = vec![
             "MemTotal",

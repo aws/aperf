@@ -1,7 +1,7 @@
 use aperf::analytics::time_series_data_point_threshold_rule::TimeSeriesDataPointThresholdRule;
 use aperf::analytics::{Analyze, DataFindings, Score};
 use aperf::computations::Comparator;
-use aperf::data::data_formats::AperfData;
+use aperf::data::common::data_formats::AperfData;
 
 use super::test_helpers::{create_processed_data, create_time_series_data, DataFindingsExt};
 

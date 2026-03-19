@@ -1,8 +1,7 @@
 pub mod aperf_runlog;
 pub mod aperf_stats;
-mod common;
+pub mod common;
 pub mod cpu_utilization;
-pub mod data_formats;
 pub mod diskstats;
 pub mod efa_stat;
 pub mod ena_stat;
@@ -20,17 +19,16 @@ pub mod perf_stat;
 pub mod processes;
 pub mod sysctl;
 pub mod systeminfo;
-pub mod utils;
 pub mod vmstat;
 
 use crate::analytics::AnalyticalRule;
-use crate::data::{data_formats::AperfData, utils::get_data_name_from_type};
 use crate::visualizer::{DataVisualizer, ReportParams};
 use crate::VisualizationData;
 use anyhow::Result;
 use aperf_runlog::AperfRunlog;
 use aperf_stats::AperfStat;
 use chrono::prelude::*;
+use common::data_formats::AperfData;
 use cpu_utilization::{CpuUtilization, CpuUtilizationRaw};
 use diskstats::{Diskstats, DiskstatsRaw};
 use efa_stat::{EfaStat, EfaStatRaw};
@@ -54,6 +52,7 @@ use sysctl::SysctlData;
 use systeminfo::SystemInfo;
 use vmstat::{Vmstat, VmstatRaw};
 
+use common::utils::get_data_name_from_type;
 #[cfg(target_os = "linux")]
 use {
     crate::PerformanceData,

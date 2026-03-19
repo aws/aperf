@@ -1,11 +1,10 @@
-use crate::computations::Statistics;
-use crate::data::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
+use crate::data::common::data_formats::AperfData;
+use crate::data::common::time_series_data_processor::time_series_data_processor_with_custom_aggregate;
 use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
 use log::error;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 #[cfg(target_os = "linux")]
 use {
     crate::data::{CollectData, CollectorParams},
@@ -53,20 +52,15 @@ impl ProcessData for Vmstat {
         _params: ReportParams,
         raw_data: Vec<Data>,
     ) -> Result<AperfData> {
-        let mut time_series_data = TimeSeriesData::default();
-
-        let mut time_zero: Option<TimeEnum> = None;
-        let mut prev_val_map: HashMap<String, i64> = HashMap::new();
+        let mut time_series_data_processor = time_series_data_processor_with_custom_aggregate!();
 
         for buffer in raw_data {
             let raw_value = match buffer {
                 Data::VmstatRaw(ref value) => value,
                 _ => panic!("Invalid Data type in raw file"),
             };
-            let time_diff: u64 = match raw_value.time - *time_zero.get_or_insert(raw_value.time) {
-                TimeEnum::TimeDiff(_time_diff) => _time_diff,
-                TimeEnum::DateTime(_) => panic!("Unexpected TimeEnum diff"),
-            };
+            time_series_data_processor.proceed_to_time(raw_value.time);
+
             for line in raw_value.data.lines() {
                 let mut split = line.split_whitespace();
                 let name = match split.next() {
@@ -85,49 +79,16 @@ impl ProcessData for Vmstat {
                 };
                 let val = val_str.parse::<i64>()?;
 
-                let prev_val = prev_val_map.entry(name.to_string()).or_insert(val);
-
-                let mut v = val;
-                if !name.contains("nr_") {
-                    v -= *prev_val;
+                if name.contains("nr_") {
+                    time_series_data_processor.add_data_point(&name, "values", val as f64);
+                } else {
+                    time_series_data_processor
+                        .add_accumulative_data_point(&name, "values", val as f64);
                 }
-
-                let metric = time_series_data
-                    .metrics
-                    .entry(name.to_string())
-                    .or_insert_with(|| TimeSeriesMetric::new(name.to_string()));
-                let series = match metric.series.get_mut(0) {
-                    Some(s) => s,
-                    None => {
-                        metric.series.push(Series::new(None));
-                        &mut metric.series[0]
-                    }
-                };
-
-                *prev_val = val;
-                series.values.push(v as f64);
-                series.time_diff.push(time_diff);
             }
         }
 
-        for (metric_name, metric) in &mut time_series_data.metrics {
-            let series = match metric.series.get_mut(0) {
-                Some(s) => s,
-                None => continue,
-            };
-            let skip = !metric_name.contains("nr_") as usize;
-            metric.stats = Statistics::from_values(&series.values[skip..].to_vec());
-            metric.value_range = (
-                metric.stats.min.floor() as u64,
-                metric.stats.max.ceil() as u64,
-            );
-        }
-
-        // The metrics should be sorted alphabetically by their names
-        let mut vmstat_metric_names: Vec<String> =
-            time_series_data.metrics.keys().cloned().collect();
-        vmstat_metric_names.sort();
-        time_series_data.sorted_metric_names = vmstat_metric_names;
+        let time_series_data = time_series_data_processor.get_time_series_data();
 
         Ok(AperfData::TimeSeries(time_series_data))
     }

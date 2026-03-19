@@ -1,7 +1,7 @@
 use aperf::analytics::time_series_stat_run_comparison_rule::TimeSeriesStatRunComparisonRule;
 use aperf::analytics::{Analyze, DataFindings, Score, BASE_RUN_NAME};
 use aperf::computations::{Comparator, Stat};
-use aperf::data::data_formats::AperfData;
+use aperf::data::common::data_formats::AperfData;
 
 use super::test_helpers::{create_processed_data, create_time_series_data, DataFindingsExt};
 

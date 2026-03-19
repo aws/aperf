@@ -120,7 +120,7 @@ fn test_process_netstat_raw_data_complex() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         // Check each metric exists and has correct structure
         let expected_metrics = vec![
             "IpExt:InMcastPkts",
@@ -226,7 +226,7 @@ fn test_process_netstat_raw_data_simple() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         assert_eq!(time_series_data.metrics.len(), 2);
         assert_eq!(time_series_data.sorted_metric_names.len(), 2);
         assert_eq!(
@@ -289,7 +289,7 @@ fn test_process_netstat_dynamic_stats() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         assert_eq!(time_series_data.metrics.len(), 3);
         assert_eq!(time_series_data.sorted_metric_names.len(), 3);
         assert_eq!(
@@ -340,7 +340,7 @@ fn test_process_netstat_single_prefix() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         assert_eq!(time_series_data.metrics.len(), 3);
         assert_eq!(time_series_data.sorted_metric_names.len(), 3);
         assert_eq!(
@@ -380,7 +380,7 @@ fn test_process_netstat_empty_data() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         assert_eq!(time_series_data.metrics.len(), 0);
         assert_eq!(time_series_data.sorted_metric_names.len(), 0);
     } else {
@@ -426,7 +426,7 @@ fn test_process_netstat_input_validation() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         // Should have 2 metrics from the valid samples
         assert_eq!(time_series_data.metrics.len(), 2);
         assert!(time_series_data.metrics.contains_key("TcpExt:TCPPureAcks"));
@@ -506,7 +506,7 @@ fn test_decreasing_counter() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::TimeSeries(time_series_data) = result {
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
         assert_eq!(time_series_data.metrics.len(), 3);
 
         // TCPPureAcks: 10000 -> 10200 -> 8000(skip) -> 10450 -> 10700 -> 11000

@@ -1,4 +1,4 @@
-use crate::data::data_formats::{AperfData, KeyValueData, KeyValueGroup};
+use crate::data::common::data_formats::{AperfData, KeyValueData, KeyValueGroup};
 use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;

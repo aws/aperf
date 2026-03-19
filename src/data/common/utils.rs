@@ -1,4 +1,3 @@
-use crate::data::data_formats::TimeSeriesMetric;
 use anyhow::{Error, Result};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
@@ -108,33 +107,12 @@ pub fn collect_file_paths_in_dir(dir: &PathBuf) -> Result<HashMap<String, PathBu
     }
 }
 
-pub fn get_cpu_series_name(cpu: usize) -> Option<String> {
-    Some(format!("CPU{cpu}"))
+pub fn get_cpu_series_name(cpu: usize) -> String {
+    format!("CPU{cpu}")
 }
 
-pub fn get_aggregate_series_name() -> Option<String> {
-    Some("Aggregate".to_string())
-}
-
-/// If a time series metric only has zero values, compress the data by only showing the
-/// first and last data points of every series
-pub fn compress_all_zero_time_series_metric(time_series_metric: &mut TimeSeriesMetric) {
-    if time_series_metric.stats.min == 0.0 && time_series_metric.stats.max == 0.0 {
-        for series in &mut time_series_metric.series {
-            let time_diff_len = series.time_diff.len();
-            if time_diff_len == 0 {
-                continue;
-            }
-            let mut compressed_time_diffs: Vec<u64> = vec![series.time_diff[0]];
-            let mut compressed_values: Vec<f64> = vec![0.0];
-            if time_diff_len > 1 {
-                compressed_time_diffs.push(series.time_diff[time_diff_len - 1]);
-                compressed_values.push(0.0);
-            }
-            series.time_diff = compressed_time_diffs;
-            series.values = compressed_values;
-        }
-    }
+pub fn get_aggregate_series_name() -> String {
+    "Aggregate".to_string()
 }
 
 /// Perform topological sort on a list of vectors and produce an ordered vector. Every input vector
@@ -212,9 +190,7 @@ pub fn combine_value_ranges(value_ranges: Vec<(u64, u64)>) -> (u64, u64) {
 
 #[cfg(test)]
 mod utils_test {
-    use super::{combine_value_ranges, compress_all_zero_time_series_metric, topological_sort};
-    use crate::computations::Statistics;
-    use crate::data::data_formats::{Series, TimeSeriesMetric};
+    use super::{combine_value_ranges, topological_sort};
 
     #[test]
     fn test_topological_sort_fixed_result() {
@@ -384,111 +360,5 @@ mod utils_test {
 
         let ranges = vec![(5, 5), (5, 5), (5, 5)];
         assert_eq!(combine_value_ranges(ranges), (5, 5));
-    }
-
-    #[test]
-    fn test_compress_all_zero_time_series_metric_with_zeros() {
-        let mut metric = TimeSeriesMetric {
-            metric_name: "test_metric".to_string(),
-            series: vec![
-                Series {
-                    series_name: Some("series1".to_string()),
-                    time_diff: vec![0, 1, 2, 3, 4],
-                    values: vec![0.0, 0.0, 0.0, 0.0, 0.0],
-                    is_aggregate: false,
-                },
-                Series {
-                    series_name: Some("series2".to_string()),
-                    time_diff: vec![0, 1, 2],
-                    values: vec![0.0, 0.0, 0.0],
-                    is_aggregate: false,
-                },
-            ],
-            value_range: (0, 0),
-            stats: Statistics {
-                min: 0.0,
-                max: 0.0,
-                ..Default::default()
-            },
-        };
-
-        compress_all_zero_time_series_metric(&mut metric);
-
-        assert_eq!(metric.series[0].time_diff, vec![0, 4]);
-        assert_eq!(metric.series[0].values, vec![0.0, 0.0]);
-        assert_eq!(metric.series[1].time_diff, vec![0, 2]);
-        assert_eq!(metric.series[1].values, vec![0.0, 0.0]);
-    }
-
-    #[test]
-    fn test_compress_all_zero_time_series_metric_with_non_zeros() {
-        let mut metric = TimeSeriesMetric {
-            metric_name: "test_metric".to_string(),
-            series: vec![Series {
-                series_name: Some("series1".to_string()),
-                time_diff: vec![0, 1, 2, 3, 4],
-                values: vec![0.0, 1.0, 2.0, 3.0, 4.0],
-                is_aggregate: false,
-            }],
-            value_range: (0, 4),
-            stats: Statistics {
-                min: 0.0,
-                max: 4.0,
-                ..Default::default()
-            },
-        };
-
-        compress_all_zero_time_series_metric(&mut metric);
-
-        assert_eq!(metric.series[0].time_diff, vec![0, 1, 2, 3, 4]);
-        assert_eq!(metric.series[0].values, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
-    }
-
-    #[test]
-    fn test_compress_all_zero_time_series_metric_single_point() {
-        let mut metric = TimeSeriesMetric {
-            metric_name: "test_metric".to_string(),
-            series: vec![Series {
-                series_name: Some("series1".to_string()),
-                time_diff: vec![0],
-                values: vec![0.0],
-                is_aggregate: false,
-            }],
-            value_range: (0, 0),
-            stats: Statistics {
-                min: 0.0,
-                max: 0.0,
-                ..Default::default()
-            },
-        };
-
-        compress_all_zero_time_series_metric(&mut metric);
-
-        assert_eq!(metric.series[0].time_diff, vec![0]);
-        assert_eq!(metric.series[0].values, vec![0.0]);
-    }
-
-    #[test]
-    fn test_compress_all_zero_time_series_metric_empty_series() {
-        let mut metric = TimeSeriesMetric {
-            metric_name: "test_metric".to_string(),
-            series: vec![Series {
-                series_name: Some("series1".to_string()),
-                time_diff: vec![],
-                values: vec![],
-                is_aggregate: false,
-            }],
-            value_range: (0, 0),
-            stats: Statistics {
-                min: 0.0,
-                max: 0.0,
-                ..Default::default()
-            },
-        };
-
-        compress_all_zero_time_series_metric(&mut metric);
-
-        assert_eq!(metric.series[0].time_diff, Vec::<u64>::new());
-        assert_eq!(metric.series[0].values, Vec::<f64>::new());
     }
 }

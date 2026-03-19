@@ -40,7 +40,7 @@ fn test_process_sysctl_raw_data_complex() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::KeyValue(key_value_data) = result {
+    if let aperf::data::common::data_formats::AperfData::KeyValue(key_value_data) = result {
         assert_eq!(key_value_data.key_value_groups.len(), 1);
         assert!(key_value_data.key_value_groups.contains_key(""));
 
@@ -72,7 +72,7 @@ fn test_process_sysctl_raw_data_simple() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::KeyValue(key_value_data) = result {
+    if let aperf::data::common::data_formats::AperfData::KeyValue(key_value_data) = result {
         assert_eq!(key_value_data.key_value_groups.len(), 1);
 
         let default_group = &key_value_data.key_value_groups[""];
@@ -116,7 +116,7 @@ fn test_process_sysctl_raw_data_special_values() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::KeyValue(key_value_data) = result {
+    if let aperf::data::common::data_formats::AperfData::KeyValue(key_value_data) = result {
         let default_group = &key_value_data.key_value_groups[""];
         assert_eq!(default_group.key_values.len(), 5);
 
@@ -155,7 +155,7 @@ fn test_process_sysctl_raw_data_empty_data() {
         .process_raw_data(ReportParams::new(), raw_data)
         .unwrap();
 
-    if let aperf::data::data_formats::AperfData::KeyValue(key_value_data) = result {
+    if let aperf::data::common::data_formats::AperfData::KeyValue(key_value_data) = result {
         assert_eq!(key_value_data.key_value_groups.len(), 1);
 
         let default_group = &key_value_data.key_value_groups[""];
