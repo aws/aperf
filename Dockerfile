@@ -32,10 +32,15 @@ RUN source /root/.bashrc && \
     chmod -R a+x /opt/async-profiler/bin/* /opt/async-profiler/lib/* 
 
 # Install aperf with architecture detection
+ARG APERF_VERSION=latest
 RUN source /root/.bashrc && \
-    export APERF_VERSION="$(curl -s https://api.github.com/repos/aws/aperf/releases/latest | jq -r .tag_name)" && \
-    echo https://github.com/aws/aperf/releases/download/$APERF_VERSION/aperf-$APERF_VERSION-$ARCH.tar.gz && \
-    curl -s -L -o /opt/aperf.tar.gz https://github.com/aws/aperf/releases/download/$APERF_VERSION/aperf-$APERF_VERSION-$ARCH.tar.gz && \
+    if [ "$APERF_VERSION" = "latest" ]; then \
+      export RESOLVED_VERSION="$(curl -s https://api.github.com/repos/aws/aperf/releases/latest | jq -r .tag_name)"; \
+    else \
+      export RESOLVED_VERSION="$APERF_VERSION"; \
+    fi && \
+    echo https://github.com/aws/aperf/releases/download/$RESOLVED_VERSION/aperf-$RESOLVED_VERSION-$ARCH.tar.gz && \
+    curl -s -L -o /opt/aperf.tar.gz https://github.com/aws/aperf/releases/download/$RESOLVED_VERSION/aperf-$RESOLVED_VERSION-$ARCH.tar.gz && \
     tar zxf /opt/aperf.tar.gz -C /opt/ --strip-components=1 && \
     rm /opt/aperf.tar.gz && \
     mv /opt/aperf /usr/bin/ && \
