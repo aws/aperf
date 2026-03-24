@@ -6,6 +6,10 @@ on:
       aperf_version:
         description: The APerf version to be used as image tag.
         type: string
+      update_latest:
+        description: Whether to update the "latest" tag. Set to false for nightly/dev builds.
+        type: boolean
+        default: true
     secrets:
         ecr_registry_alias:
           description: The alias of the public ECR registry that the repository belongs to.
@@ -58,7 +62,7 @@ jobs:
           fi
           ARCH_TAG=$REGISTRY/$REGISTRY_ALIAS/aperf:$IMAGE_TAG-${ARCH}
           echo "Building and pushing image ${ARCH_TAG}"
-          docker build -t ${ARCH_TAG} .
+          docker build --build-arg APERF_VERSION=$IMAGE_TAG -t ${ARCH_TAG} .
           docker push ${ARCH_TAG}
 
   # Create Docker manifest for the multi-architecture image
@@ -83,6 +87,7 @@ jobs:
           REGISTRY: ${{ steps.login-ecr-public.outputs.registry }}
           REGISTRY_ALIAS: ${{ secrets.ecr_registry_alias }}
           IMAGE_TAG: ${{ inputs.aperf_version }}
+          UPDATE_LATEST: ${{ inputs.update_latest }}
         run: |
           IMAGE_PATH=$REGISTRY/$REGISTRY_ALIAS/aperf
           TAG=${IMAGE_PATH}:$IMAGE_TAG
@@ -91,7 +96,11 @@ jobs:
           docker manifest create ${TAG} ${TAG}-arm64 ${TAG}-amd64
           docker manifest inspect ${TAG}
           docker manifest push ${TAG}
-          echo "Creating manifest ${LATEST_TAG}"
-          docker manifest create ${LATEST_TAG} ${TAG}-arm64 ${TAG}-amd64
-          docker manifest inspect ${LATEST_TAG}
-          docker manifest push ${LATEST_TAG}
+          if [ "$UPDATE_LATEST" = "true" ]; then
+            echo "Creating manifest ${LATEST_TAG}"
+            docker manifest create ${LATEST_TAG} ${TAG}-arm64 ${TAG}-amd64
+            docker manifest inspect ${LATEST_TAG}
+            docker manifest push ${LATEST_TAG}
+          else
+            echo "Skipping latest tag update"
+          fi

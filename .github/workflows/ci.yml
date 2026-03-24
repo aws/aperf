@@ -5,6 +5,12 @@ on:
     branches:
       - "**"
   workflow_call: # Needed to make this a reusable workflow for releasing artifacts https://docs.github.com/en/actions/using-workflows/reusing-workflows
+    inputs:
+      version:
+        description: "Optional package version override. When empty, the version is derived from the event context."
+        required: false
+        type: string
+        default: ""
   workflow_dispatch: # To allow starting the workflow manually in the web ui
 
 permissions:
@@ -114,4 +120,4 @@ jobs:
     needs: CI
     uses: ./.github/workflows/packages-ci.yml
     with:
-      version: ${{ github.event_name == 'pull_request' && format('0.0.{0}', github.event.pull_request.number) || github.ref_name }}
+      version: ${{ inputs.version != '' && inputs.version || (github.event_name == 'pull_request' && format('0.0.{0}', github.event.pull_request.number) || github.ref_name) }}

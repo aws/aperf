@@ -1,0 +1,130 @@
+name: Nightly Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  DEV_TAG: nightly
+
+permissions:
+  id-token: write
+  contents: write
+  actions: read
+
+jobs:
+  linux_build:
+    name: Build Linux binaries
+    if: github.repository == 'aws/aperf' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true)
+    uses: ./.github/workflows/ci.yml
+    with:
+      version: 0.0.0.nightly
+
+  cross_platform_build:
+    name: Build cross-platform binaries
+    if: github.repository == 'aws/aperf' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true)
+    uses: ./.github/workflows/cross-platform-ci.yml
+
+  release:
+    name: Create and upload release artifacts
+    runs-on: ubuntu-24.04
+    needs:
+      - linux_build
+      - cross_platform_build
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download built binaries
+        uses: actions/download-artifact@v4
+
+      - name: Force-update nightly tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f ${{ env.DEV_TAG }}
+          git push origin ${{ env.DEV_TAG }} --force
+
+      - name: Create x86_64 tarball
+        run: |
+          name=aperf-${{ env.DEV_TAG }}-x86_64
+          mkdir "$name"
+          tar -zxvf x86_64-release-artifacts/artifacts.tar.gz -C "$name"
+          tar -zcvf "$name".tar.gz "$name"
+
+      - name: Create aarch64 tarball
+        run: |
+          name=aperf-${{ env.DEV_TAG }}-aarch64
+          mkdir "$name"
+          tar -zxvf aarch64-release-artifacts/artifacts.tar.gz -C "$name"
+          tar -zcvf "$name".tar.gz "$name"
+
+      - name: Create macOS tarball
+        run: |
+          name=aperf-${{ env.DEV_TAG }}-macos
+          tar -zcvf "$name".tar.gz -C macos-release-artifacts aperf
+
+      - name: Create Windows tarball
+        run: |
+          name=aperf-${{ env.DEV_TAG }}-windows
+          tar -zcvf "$name".tar.gz -C windows-release-artifacts aperf.exe
+
+      - name: Create Krew kubectl plugin tarball
+        run: |
+          name=kubectl-aperf-${{ env.DEV_TAG }}
+          mkdir "$name"
+          cp kubectl-aperf "$name/"
+          chmod +x "$name/kubectl-aperf"
+          tar -zcvf "$name".tar.gz "$name"
+
+      - name: Rename RPM packages
+        run: |
+          cp x86_64-rpm/aperf-0.0.0.nightly-x86_64.rpm aperf-${{ env.DEV_TAG }}-x86_64.rpm
+          cp aarch64-rpm/aperf-0.0.0.nightly-aarch64.rpm aperf-${{ env.DEV_TAG }}-aarch64.rpm
+
+      - name: Rename DEB packages
+        run: |
+          cp x86_64-deb/aperf-0.0.0.nightly-amd64.deb aperf-${{ env.DEV_TAG }}-amd64.deb
+          cp aarch64-deb/aperf-0.0.0.nightly-arm64.deb aperf-${{ env.DEV_TAG }}-arm64.deb
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.DEV_TAG }}
+          name: "Nightly Build"
+          body: |
+            ⚠️ **This is an automated nightly build and is NOT a stable release.**
+
+            Built from commit `${{ github.sha }}`.
+          prerelease: true
+          make_latest: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            aperf-${{ env.DEV_TAG }}-x86_64.tar.gz
+            aperf-${{ env.DEV_TAG }}-aarch64.tar.gz
+            aperf-${{ env.DEV_TAG }}-macos.tar.gz
+            aperf-${{ env.DEV_TAG }}-windows.tar.gz
+            kubectl-aperf-${{ env.DEV_TAG }}.tar.gz
+            aperf-${{ env.DEV_TAG }}-x86_64.rpm
+            aperf-${{ env.DEV_TAG }}-amd64.deb
+            aperf-${{ env.DEV_TAG }}-aarch64.rpm
+            aperf-${{ env.DEV_TAG }}-arm64.deb
+
+  ecr-publish:
+    name: Build image and publish to ECR
+    needs: [release]
+    uses: ./.github/workflows/ecr-publish.yml
+    with:
+      aperf_version: nightly
+      update_latest: false
+    secrets:
+      ecr_registry_alias: ${{ secrets.ECR_REGISTRY_ALIAS }}
+      ecr_publish_role_arn: ${{ secrets.ECR_PUBLISH_ROLE_ARN }}
