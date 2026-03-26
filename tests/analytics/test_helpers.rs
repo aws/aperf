@@ -21,7 +21,7 @@ pub fn create_time_series_data_multi_series(
         for (idx, (series_name, values)) in series_list.into_iter().enumerate() {
             let is_aggregate = idx == num_series - 1;
             let series = Series {
-                series_name: series_name.map(|s| s.to_string()),
+                series_name: series_name.unwrap_or("").to_string(),
                 time_diff: (0..values.len() as u64).collect(),
                 values: values.clone(),
                 is_aggregate,
@@ -29,6 +29,7 @@ pub fn create_time_series_data_multi_series(
 
             if is_aggregate {
                 metric.stats = Statistics::from_values(&values);
+                metric.stats_series_idx = idx;
             }
 
             metric.series.push(series);

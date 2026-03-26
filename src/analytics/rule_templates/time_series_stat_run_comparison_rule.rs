@@ -1,9 +1,11 @@
-use crate::analytics;
-use crate::analytics::{AnalyticalFinding, Analyze, DataFindings};
+use crate::analytics::{
+    compute_finding_score, get_base_run_name, AnalyticalFinding, Analyze, DataFindings,
+};
 use crate::computations::{
     delta_ratio_to_percentage_string, formatted_number_string, Comparator, Stat,
 };
 use crate::data::common::data_formats::ProcessedData;
+use crate::data::common::processed_data_accessor::ProcessedDataAccessor;
 use log::debug;
 use std::fmt;
 use std::fmt::Formatter;
@@ -59,38 +61,39 @@ impl fmt::Display for TimeSeriesStatRunComparisonRule {
 }
 
 impl Analyze for TimeSeriesStatRunComparisonRule {
-    fn analyze(&self, data_findings: &mut DataFindings, processed_data: &ProcessedData) {
-        let base_run_name = &analytics::get_base_run_name();
+    fn analyze(
+        &self,
+        data_findings: &mut DataFindings,
+        processed_data: &ProcessedData,
+        processed_data_accessor: &mut ProcessedDataAccessor,
+    ) {
+        let base_run_name = &get_base_run_name();
 
-        let base_time_series_data = match processed_data.get_time_series_data(base_run_name) {
-            Some(time_series_data) => time_series_data,
+        let base_stat = match processed_data_accessor.time_series_metric_stats(
+            processed_data,
+            base_run_name,
+            self.metric_name,
+        ) {
+            Some(base_stats) => self.stat.get_stat(&base_stats),
             None => {
+                debug!("{self} failed to analyze: cannot find the base time series metric or its stats");
                 return;
             }
         };
-        let base_metric = match base_time_series_data.metrics.get(self.metric_name) {
-            Some(time_series_metric) => time_series_metric,
-            None => {
-                debug!("{self} failed to analyze: the base time series metric does not exist");
-                return;
-            }
-        };
-        let base_stat = self.stat.get_stat(&base_metric.stats);
 
         for run_name in processed_data.runs.keys() {
             if base_run_name == run_name {
                 continue;
             }
 
-            let cur_time_series_data = match processed_data.get_time_series_data(run_name) {
-                Some(time_series_data) => time_series_data,
+            let cur_stat = match processed_data_accessor.time_series_metric_stats(
+                processed_data,
+                run_name,
+                self.metric_name,
+            ) {
+                Some(cur_stats) => self.stat.get_stat(&cur_stats),
                 None => continue,
             };
-            let cur_metric = match cur_time_series_data.metrics.get(self.metric_name) {
-                Some(time_series_metric) => time_series_metric,
-                None => continue,
-            };
-            let cur_stat = self.stat.get_stat(&cur_metric.stats);
 
             let original_delta_ratio = if cur_stat == base_stat {
                 0.0
@@ -112,11 +115,8 @@ impl Analyze for TimeSeriesStatRunComparisonRule {
                 .comparator
                 .compare(comparison_delta_ratio, self.delta_ratio)
             {
-                let finding_score = analytics::compute_finding_score(
-                    comparison_delta_ratio,
-                    self.delta_ratio,
-                    self.score,
-                );
+                let finding_score =
+                    compute_finding_score(comparison_delta_ratio, self.delta_ratio, self.score);
 
                 let finding_description = format!(
                     "The {} in {} ({}) is {} {} ({}).",

@@ -182,7 +182,7 @@ impl ProcessData for Processes {
                         .or_insert(HashMap::new());
                     let process_series = per_process_series
                         .entry(process_pid_name.clone())
-                        .or_insert(Series::new(Some(process_pid_name.clone())));
+                        .or_insert(Series::new(process_pid_name.clone()));
                     process_series.time_diff.push(time);
                     process_series.values.push(process_key_stat as f64);
                 }

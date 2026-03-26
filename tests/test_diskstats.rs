@@ -210,18 +210,16 @@ mod diskstats_tests {
                     assert_eq!(series.values.len(), num_samples);
 
                     // Series name should match device name
-                    assert!(devices.contains(series.series_name.as_ref().unwrap()));
+                    assert!(devices.contains(&series.series_name));
 
                     // Verify values are reasonable
                     for (sample_idx, &value) in series.values.iter().enumerate() {
                         // First sample should be 0 for accumulated metrics (except in_progress)
                         if sample_idx == 0 && disk_stat_key != DiskStatKey::InProgress {
                             assert_eq!(
-                                value,
-                                0.0,
+                                value, 0.0,
                                 "First sample should be 0 for metric {} device {}",
-                                metric_name,
-                                series.series_name.as_ref().unwrap()
+                                metric_name, series.series_name
                             );
                             continue;
                         }
@@ -232,11 +230,11 @@ mod diskstats_tests {
                             "Negative value {} for metric {} device {} sample {}",
                             value,
                             metric_name,
-                            series.series_name.as_ref().unwrap(),
+                            series.series_name,
                             sample_idx
                         );
 
-                        let device_name = series.series_name.as_ref().unwrap();
+                        let device_name = &series.series_name;
                         let expected_stats =
                             &expected_per_sample_per_device_stats[sample_idx][device_name];
                         let expected_value =
@@ -358,17 +356,17 @@ mod diskstats_tests {
             let sda_series = reads_metric
                 .series
                 .iter()
-                .find(|s| s.series_name.as_ref().unwrap() == "sda")
+                .find(|s| s.series_name == "sda")
                 .unwrap();
             let sdb_series = reads_metric
                 .series
                 .iter()
-                .find(|s| s.series_name.as_ref().unwrap() == "sdb")
+                .find(|s| s.series_name == "sdb")
                 .unwrap();
             let nvme_series = reads_metric
                 .series
                 .iter()
-                .find(|s| s.series_name.as_ref().unwrap() == "nvme0n1")
+                .find(|s| s.series_name == "nvme0n1")
                 .unwrap();
 
             // sda should have full length (appears from sample 0)

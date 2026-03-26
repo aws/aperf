@@ -201,7 +201,7 @@ fn test_process_pmu_stat_raw_data_complex() {
         for metric in time_series_data.metrics.values() {
             let aggregate_series = &metric.series[0];
             assert!(aggregate_series.is_aggregate);
-            assert_eq!(aggregate_series.series_name, Some("Aggregate".to_string()));
+            assert_eq!(aggregate_series.series_name, "Aggregate");
         }
 
         // Validate time differences

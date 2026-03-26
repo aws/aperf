@@ -127,14 +127,8 @@ fn test_ena_two_interfaces_accumulative_deltas() {
     let rx = data_series(&ts.metrics["rx_bytes"]);
     assert_eq!(rx.len(), 2, "Expected 2 series for rx_bytes");
 
-    let eth0 = rx
-        .iter()
-        .find(|s| s.series_name.as_deref() == Some("eth0"))
-        .unwrap();
-    let eth1 = rx
-        .iter()
-        .find(|s| s.series_name.as_deref() == Some("eth1"))
-        .unwrap();
+    let eth0 = rx.iter().find(|s| s.series_name == "eth0").unwrap();
+    let eth1 = rx.iter().find(|s| s.series_name == "eth1").unwrap();
 
     assert_eq!(eth0.values, vec![0.0, 300.0, 500.0]); // 1300-1000, 1800-1300
     assert_eq!(eth1.values, vec![0.0, 500.0, 700.0]); // 2500-2000, 3200-2500
@@ -142,14 +136,8 @@ fn test_ena_two_interfaces_accumulative_deltas() {
     // tx_bytes likewise
     let tx = data_series(&ts.metrics["tx_bytes"]);
     assert_eq!(tx.len(), 2);
-    let eth0_tx = tx
-        .iter()
-        .find(|s| s.series_name.as_deref() == Some("eth0"))
-        .unwrap();
-    let eth1_tx = tx
-        .iter()
-        .find(|s| s.series_name.as_deref() == Some("eth1"))
-        .unwrap();
+    let eth0_tx = tx.iter().find(|s| s.series_name == "eth0").unwrap();
+    let eth1_tx = tx.iter().find(|s| s.series_name == "eth1").unwrap();
     assert_eq!(eth0_tx.values, vec![0.0, 200.0, 300.0]);
     assert_eq!(eth1_tx.values, vec![0.0, 300.0, 400.0]);
 }
@@ -223,13 +211,13 @@ fn test_ena_multi_interface_different_metrics() {
     // tx_bytes only from eth0
     let tx = data_series(&ts.metrics["tx_bytes"]);
     assert_eq!(tx.len(), 1);
-    assert_eq!(tx[0].series_name.as_deref(), Some("eth0"));
+    assert_eq!(tx[0].series_name, "eth0");
     assert_eq!(tx[0].values, vec![0.0, 100.0]);
 
     // bw_in_allowance_exceeded only from eth1
     let bw = data_series(&ts.metrics["bw_in_allowance_exceeded"]);
     assert_eq!(bw.len(), 1);
-    assert_eq!(bw[0].series_name.as_deref(), Some("eth1"));
+    assert_eq!(bw[0].series_name, "eth1");
     assert_eq!(bw[0].values, vec![0.0, 20.0]);
 }
 
@@ -256,14 +244,8 @@ fn test_ena_interface_appearing_later() {
     let ts = unwrap_time_series(ena.process_raw_data(ReportParams::new(), raw).unwrap());
 
     let rx = data_series(&ts.metrics["rx_bytes"]);
-    let eth0 = rx
-        .iter()
-        .find(|s| s.series_name.as_deref() == Some("eth0"))
-        .unwrap();
-    let eth1 = rx
-        .iter()
-        .find(|s| s.series_name.as_deref() == Some("eth1"))
-        .unwrap();
+    let eth0 = rx.iter().find(|s| s.series_name == "eth0").unwrap();
+    let eth1 = rx.iter().find(|s| s.series_name == "eth1").unwrap();
 
     assert_eq!(eth0.values.len(), 4);
     assert_eq!(eth0.values, vec![0.0, 100.0, 150.0, 150.0]);
@@ -298,14 +280,8 @@ fn test_ena_decreasing_counter() {
     let ts = unwrap_time_series(ena.process_raw_data(ReportParams::new(), raw).unwrap());
 
     let rx = data_series(&ts.metrics["rx_bytes"]);
-    let eth0 = rx
-        .iter()
-        .find(|s| s.series_name.as_deref() == Some("eth0"))
-        .unwrap();
-    let eth1 = rx
-        .iter()
-        .find(|s| s.series_name.as_deref() == Some("eth1"))
-        .unwrap();
+    let eth0 = rx.iter().find(|s| s.series_name == "eth0").unwrap();
+    let eth1 = rx.iter().find(|s| s.series_name == "eth1").unwrap();
 
     // Decreasing counter is skipped — eth0 only has the first sample (0.0)
     assert_eq!(eth0.values, vec![0.0]);
@@ -365,7 +341,7 @@ fn test_ena_queue_metric_transformation_multi_interface() {
 
     // Each series name should contain "queue_0" or "queue_1"
     for s in &non_agg {
-        let name = s.series_name.as_deref().unwrap();
+        let name = s.series_name.as_str();
         assert!(
             name.contains("queue_0") || name.contains("queue_1"),
             "Unexpected series name: {}",
@@ -397,7 +373,7 @@ fn test_ena_queue_series_naming() {
     assert!(ts.metrics.contains_key("tx_cnt"));
     let series_names: Vec<_> = data_series(&ts.metrics["tx_cnt"])
         .iter()
-        .map(|s| s.series_name.clone().unwrap())
+        .map(|s| s.series_name.clone())
         .collect();
     // series_name = format!("{}_{}_{}",  interface, "queue", N)
     assert!(
@@ -531,14 +507,8 @@ fn test_ena_many_samples_multi_interface() {
     let rx = data_series(&ts.metrics["rx_bytes"]);
     assert_eq!(rx.len(), 2);
 
-    let eth0 = rx
-        .iter()
-        .find(|s| s.series_name.as_deref() == Some("eth0"))
-        .unwrap();
-    let eth1 = rx
-        .iter()
-        .find(|s| s.series_name.as_deref() == Some("eth1"))
-        .unwrap();
+    let eth0 = rx.iter().find(|s| s.series_name == "eth0").unwrap();
+    let eth1 = rx.iter().find(|s| s.series_name == "eth1").unwrap();
 
     assert_eq!(eth0.values.len(), 100);
     assert_eq!(eth1.values.len(), 100);
@@ -580,14 +550,8 @@ fn test_ena_metric_appearing_later_multi_interface() {
 
     let nm = data_series(&ts.metrics["new_metric"]);
     assert_eq!(nm.len(), 2); // both interfaces
-    let eth0_nm = nm
-        .iter()
-        .find(|s| s.series_name.as_deref() == Some("eth0"))
-        .unwrap();
-    let eth1_nm = nm
-        .iter()
-        .find(|s| s.series_name.as_deref() == Some("eth1"))
-        .unwrap();
+    let eth0_nm = nm.iter().find(|s| s.series_name == "eth0").unwrap();
+    let eth1_nm = nm.iter().find(|s| s.series_name == "eth1").unwrap();
     assert_eq!(eth0_nm.values, vec![0.0, 40.0]); // 90-50
     assert_eq!(eth1_nm.values, vec![0.0, 50.0]); // 130-80
 }

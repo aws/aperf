@@ -36,26 +36,6 @@ impl ProcessedData {
             runs: HashMap::new(),
         }
     }
-
-    pub fn get_time_series_data(&self, run_name: &String) -> Option<&TimeSeriesData> {
-        match self.runs.get(run_name) {
-            Some(aperf_data) => match aperf_data {
-                AperfData::TimeSeries(time_series_data) => Some(time_series_data),
-                _ => None,
-            },
-            None => None,
-        }
-    }
-
-    pub fn get_key_value_data(&self, run_name: &String) -> Option<&KeyValueData> {
-        match self.runs.get(run_name) {
-            Some(aperf_data) => match aperf_data {
-                AperfData::KeyValue(key_value_data) => Some(key_value_data),
-                _ => None,
-            },
-            None => None,
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -126,8 +106,7 @@ impl TimeSeriesMetric {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Series {
     /// The name of the series.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub series_name: Option<String>,
+    pub series_name: String,
     /// The list of all time (x-axis) values.
     pub time_diff: Vec<u64>,
     /// The list of all data (y-axis) values.
@@ -139,7 +118,7 @@ pub struct Series {
 }
 
 impl Series {
-    pub fn new(series_name: Option<String>) -> Self {
+    pub fn new(series_name: String) -> Self {
         Series {
             series_name,
             time_diff: Vec::new(),

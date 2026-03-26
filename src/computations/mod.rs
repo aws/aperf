@@ -23,7 +23,7 @@ pub struct Statistics {
 }
 
 impl Statistics {
-    pub fn from_values(values: &Vec<f64>) -> Self {
+    pub fn from_values(values: &[f64]) -> Self {
         let n = values.len();
         if n == 0 {
             return Self::default();
@@ -46,7 +46,7 @@ impl Statistics {
         }
         let std = (sum_sq_diff / n as f64).sqrt();
 
-        let mut sorted_values = values.clone();
+        let mut sorted_values: Vec<f64> = values.iter().copied().collect();
         sorted_values.sort_by(|a, b| a.partial_cmp(b).unwrap());
         let p50 = sorted_values[(0.5 * n as f64).floor() as usize];
         let p90 = sorted_values[(0.9 * n as f64).floor() as usize];
@@ -75,7 +75,7 @@ pub fn get_average(values: &Vec<f64>) -> Option<f64> {
     Some(values.iter().sum::<f64>() / values.len() as f64)
 }
 
-#[derive(Display, Clone, Copy)]
+#[derive(Display, Debug, Clone, Copy)]
 #[strum(serialize_all = "lowercase")]
 pub enum Stat {
     Average,

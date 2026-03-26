@@ -1,5 +1,6 @@
 use crate::analytics::{AnalyticalFinding, Analyze, DataFindings};
 use crate::data::common::data_formats::ProcessedData;
+use crate::data::common::processed_data_accessor::ProcessedDataAccessor;
 use std::fmt;
 use std::fmt::Formatter;
 
@@ -31,7 +32,6 @@ macro_rules! key_value_key_expected {
         )
     };
 }
-
 pub(crate) use key_value_key_expected;
 
 impl fmt::Display for KeyValueKeyExpectedRule {
@@ -45,38 +45,33 @@ impl fmt::Display for KeyValueKeyExpectedRule {
 }
 
 impl Analyze for KeyValueKeyExpectedRule {
-    fn analyze(&self, report_findings: &mut DataFindings, processed_data: &ProcessedData) {
+    fn analyze(
+        &self,
+        report_findings: &mut DataFindings,
+        processed_data: &ProcessedData,
+        processed_data_accessor: &mut ProcessedDataAccessor,
+    ) {
         for run_name in processed_data.runs.keys() {
-            let key_value_data = match processed_data.get_key_value_data(&run_name) {
-                Some(key_value_data) => key_value_data,
-                None => continue,
-            };
-
-            let mut found_key = false;
-            for key_value_group in key_value_data.key_value_groups.values() {
-                if let Some(value) = key_value_group.key_values.get(self.key) {
-                    found_key = true;
-                    if value != self.expected_value {
-                        let finding_description = format!(
-                            "The value of {} in {} is \"{}\", instead of \"{}\".",
-                            self.key, run_name, value, self.expected_value
-                        );
-                        report_findings.insert_finding(
-                            run_name,
-                            self.key,
-                            AnalyticalFinding::new(
-                                self.rule_name.to_string(),
-                                self.score,
-                                finding_description,
-                                self.message.to_string(),
-                            ),
-                        );
-                    }
-                    break;
+            if let Some(value) =
+                processed_data_accessor.key_value_value_by_key(processed_data, run_name, self.key)
+            {
+                if value != self.expected_value {
+                    let finding_description = format!(
+                        "The value of {} in {} is \"{}\", instead of \"{}\".",
+                        self.key, run_name, value, self.expected_value
+                    );
+                    report_findings.insert_finding(
+                        run_name,
+                        self.key,
+                        AnalyticalFinding::new(
+                            self.rule_name.to_string(),
+                            self.score,
+                            finding_description,
+                            self.message.to_string(),
+                        ),
+                    );
                 }
-            }
-
-            if !found_key {
+            } else {
                 let finding_description = format!(
                     "The key {} in {} is missing, instead of being set to {}",
                     self.key, run_name, self.expected_value

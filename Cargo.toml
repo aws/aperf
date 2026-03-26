@@ -40,6 +40,8 @@ ctor = "0.2.6"
 anyhow = "1.0"
 serde_urlencoded = "0.7"
 serde_json = "1.0"
+itoa = "1"
+ryu = "1"
 aws-config = "1.0.0"
 tokio = { version = "1.26.0", features = ["full"] }
 strum = "0.24"

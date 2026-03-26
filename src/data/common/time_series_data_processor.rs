@@ -144,7 +144,7 @@ impl TimeSeriesDataProcessor {
             .entry(metric_name.to_string())
             .or_insert(HashMap::new())
             .entry(series_name.to_string())
-            .or_insert(Series::new(Some(series_name.to_string())));
+            .or_insert(Series::new(series_name.to_string()));
         series.is_aggregate = is_aggregate;
         series.time_diff.push(self.cur_time_diff);
         series.values.push(metric_value);
@@ -231,7 +231,7 @@ impl TimeSeriesDataProcessor {
                 .entry(metric_name.clone())
                 .or_insert(HashMap::new())
                 .entry(aggregate_series_name.to_string())
-                .or_insert(Series::new(Some(aggregate_series_name.to_string())));
+                .or_insert(Series::new(aggregate_series_name.to_string()));
             aggregate_series.is_aggregate = true;
             let aggregate_value = match self.aggregate_mode {
                 TimeSeriesDataAggregateMode::Average => {
@@ -291,12 +291,7 @@ impl TimeSeriesDataProcessor {
             let mut time_series_metric = TimeSeriesMetric::new(metric_name.clone());
 
             let mut all_series: Vec<Series> = cur_metric_series.into_values().collect();
-            all_series.sort_by(|s1, s2| {
-                cmp(
-                    s1.series_name.as_ref().unwrap(),
-                    s2.series_name.as_ref().unwrap(),
-                )
-            });
+            all_series.sort_by(|s1, s2| cmp(&s1.series_name, &s2.series_name));
 
             time_series_metric.stats_series_idx = if all_series.len() == 1 {
                 // Simplest case - if there is only one series then use it for stat computation
@@ -525,14 +520,8 @@ mod tests {
         let s = data_series(&ts, "cpu");
         assert_eq!(s.len(), 2);
 
-        let core0 = s
-            .iter()
-            .find(|s| s.series_name.as_deref() == Some("core0"))
-            .unwrap();
-        let core1 = s
-            .iter()
-            .find(|s| s.series_name.as_deref() == Some("core1"))
-            .unwrap();
+        let core0 = s.iter().find(|s| s.series_name == "core0").unwrap();
+        let core1 = s.iter().find(|s| s.series_name == "core1").unwrap();
         assert_eq!(core0.values, vec![50.0, 60.0]);
         assert_eq!(core1.values, vec![70.0, 80.0]);
     }
@@ -615,14 +604,8 @@ mod tests {
 
         let ts = p.get_time_series_data();
         let s = data_series(&ts, "bytes");
-        let eth0 = s
-            .iter()
-            .find(|s| s.series_name.as_deref() == Some("eth0"))
-            .unwrap();
-        let eth1 = s
-            .iter()
-            .find(|s| s.series_name.as_deref() == Some("eth1"))
-            .unwrap();
+        let eth0 = s.iter().find(|s| s.series_name == "eth0").unwrap();
+        let eth1 = s.iter().find(|s| s.series_name == "eth1").unwrap();
 
         // eth0: only the first sample (0), second was skipped
         assert_eq!(eth0.values, vec![0.0]);
@@ -672,14 +655,8 @@ mod tests {
 
         let ts = p.get_time_series_data();
         let s = data_series(&ts, "bytes");
-        let eth0 = s
-            .iter()
-            .find(|s| s.series_name.as_deref() == Some("eth0"))
-            .unwrap();
-        let eth1 = s
-            .iter()
-            .find(|s| s.series_name.as_deref() == Some("eth1"))
-            .unwrap();
+        let eth0 = s.iter().find(|s| s.series_name == "eth0").unwrap();
+        let eth1 = s.iter().find(|s| s.series_name == "eth1").unwrap();
 
         assert_eq!(eth0.values, vec![0.0, 100.0, 150.0]);
         assert_eq!(eth1.values, vec![0.0, 300.0, 100.0]);
@@ -806,7 +783,7 @@ mod tests {
         let agg = agg_series(&ts, "m").expect("Sum aggregate should exist with 3 series");
         // Sum: 10+20+30=60, 40+50+60=150
         assert_eq!(agg.values, vec![60.0, 150.0]);
-        assert_eq!(agg.series_name.as_deref(), Some("sum"));
+        assert_eq!(agg.series_name.as_str(), "sum");
     }
 
     #[test]
@@ -1002,7 +979,7 @@ mod tests {
         let names: Vec<_> = ts.metrics["m"]
             .series
             .iter()
-            .map(|s| s.series_name.as_deref().unwrap())
+            .map(|s| s.series_name.as_str())
             .collect();
         assert_eq!(names, vec!["a_series", "m_series", "z_series"]);
     }
@@ -1167,7 +1144,7 @@ mod tests {
         let ts = p.get_time_series_data();
         let s1 = data_series(&ts, "m")
             .into_iter()
-            .find(|s| s.series_name.as_deref() == Some("s1"))
+            .find(|s| s.series_name == "s1")
             .unwrap();
         assert_eq!(s1.values, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
     }
@@ -1292,7 +1269,7 @@ mod tests {
 
         let ts = p.get_time_series_data();
         let agg = agg_series(&ts, "m").unwrap();
-        assert_eq!(agg.series_name.as_deref(), Some("average"));
+        assert_eq!(agg.series_name.as_str(), "average");
     }
 
     #[test]
@@ -1310,6 +1287,6 @@ mod tests {
 
         let ts = p.get_time_series_data();
         let agg = agg_series(&ts, "m").unwrap();
-        assert_eq!(agg.series_name.as_deref(), Some("total"));
+        assert_eq!(agg.series_name.as_str(), "total");
     }
 }

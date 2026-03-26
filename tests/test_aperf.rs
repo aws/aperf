@@ -206,6 +206,7 @@ fn test_record_and_report() {
                     .into_string()
                     .unwrap(),
             ),
+            time_range: vec![],
         };
         assert!(report(&rep, &tmp_dir).is_ok());
 
@@ -236,6 +237,7 @@ fn test_record_and_report_dot_in_run_name() {
                     .into_string()
                     .unwrap(),
             ),
+            time_range: vec![],
         };
         assert!(report(&rep, &tmp_dir).is_ok());
 
@@ -284,6 +286,7 @@ fn test_report_with_empty_data_bin() {
                     .into_string()
                     .unwrap(),
             ),
+            time_range: vec![],
         };
         assert!(report(&rep, &tmp_dir).is_ok());
 
@@ -313,6 +316,7 @@ fn test_report_single_run() {
                     .into_string()
                     .unwrap(),
             ),
+            time_range: vec![],
         };
         assert!(report(&rep, &tmp_dir).is_ok());
 
@@ -346,6 +350,10 @@ fn test_report_multiple_runs() {
                     .into_string()
                     .unwrap(),
             ),
+            time_range: vec![
+                ("test_run_1".to_string(), Some(2), None),
+                ("test_run_2".to_string(), None, Some(8)),
+            ],
         };
         assert!(report(&rep, &tmp_dir).is_ok());
 
@@ -378,6 +386,7 @@ fn test_report_from_report() {
                     .into_string()
                     .unwrap(),
             ),
+            time_range: vec![],
         };
         assert!(report(&rep, &tmp_dir).is_ok());
 
@@ -390,6 +399,50 @@ fn test_report_from_report() {
                 run_name,
             ],
         );
+
+        clean_dir_and_archive(&work_dir, &report_name);
+
+        Ok(())
+    })
+}
+
+#[test]
+#[serial]
+fn test_report_with_time_range() {
+    run_test(|work_dir, tmp_dir| {
+        let run_name = String::from("test_run_1");
+        let run_path = get_test_data_path(format!("{}.tar.gz", run_name));
+
+        let report_name = String::from("time_range_report");
+        let rep = Report {
+            run: vec![run_path.into_os_string().into_string().unwrap()],
+            name: Some(
+                work_dir
+                    .join(&report_name)
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+            ),
+            time_range: vec![(run_name.clone(), Some(5), Some(30))],
+        };
+        assert!(report(&rep, &tmp_dir).is_ok());
+
+        verify_report_structure(&work_dir, &report_name, vec![run_name]);
+
+        // Verify the processed JS files exist and contain valid JSON
+        let js_dir = work_dir.join(&report_name).join("data").join("js");
+        for entry in fs::read_dir(&js_dir).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            if path.extension().map_or(false, |ext| ext == "js") {
+                let content = fs::read_to_string(&path).unwrap();
+                assert!(
+                    !content.is_empty(),
+                    "JS file {:?} should not be empty",
+                    path
+                );
+            }
+        }
 
         clean_dir_and_archive(&work_dir, &report_name);
 
@@ -413,6 +466,7 @@ fn test_report_already_exists() {
         let rep = Report {
             run: vec![run_path.into_os_string().into_string().unwrap()],
             name: Some(report_path_str.clone()),
+            time_range: vec![],
         };
         assert!(report(&rep, &tmp_dir).is_ok());
 
@@ -422,6 +476,7 @@ fn test_report_already_exists() {
         let rep_with_same_name = Report {
             run: vec![another_run_path.into_os_string().into_string().unwrap()],
             name: Some(report_path_str.clone()),
+            time_range: vec![],
         };
         let error = report(&rep_with_same_name, &tmp_dir).unwrap_err();
         assert_eq!(
@@ -457,6 +512,7 @@ fn test_run_data_not_exists() {
                     .into_string()
                     .unwrap(),
             ),
+            time_range: vec![],
         };
         let error = report(&rep, &tmp_dir).unwrap_err();
         assert_eq!(
@@ -494,6 +550,7 @@ fn test_duplicate_run_data() {
                     .into_string()
                     .unwrap(),
             ),
+            time_range: vec![],
         };
 
         let error = report(&rep, &tmp_dir).unwrap_err();
@@ -539,6 +596,7 @@ fn test_duplicate_run_data_quick_fail() {
                     .into_string()
                     .unwrap(),
             ),
+            time_range: vec![],
         };
 
         let error = report(&rep, &tmp_dir).unwrap_err();
@@ -547,6 +605,83 @@ fn test_duplicate_run_data_quick_fail() {
             format!("Multiple runs with the same name: {}", duplicate_run_name)
         );
 
+        assert!(!report_dir_path.exists());
+        assert!(!report_archive_path.exists());
+
+        Ok(())
+    })
+}
+
+#[test]
+#[serial]
+fn test_report_with_time_range_invalid_run_name() {
+    run_test(|work_dir, tmp_dir| {
+        let run_name = String::from("test_run_1");
+        let run_path = get_test_data_path(format!("{}.tar.gz", run_name));
+
+        let report_name = String::from("bad_time_range_report");
+        let report_dir_path = work_dir.join(&report_name);
+        let report_archive_path = work_dir.join(format!("{}.tar.gz", report_name));
+        let rep = Report {
+            run: vec![run_path.into_os_string().into_string().unwrap()],
+            name: Some(
+                report_dir_path
+                    .clone()
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+            ),
+            // Specify a time range for a run name that doesn't exist in the report
+            time_range: vec![("nonexistent_run".to_string(), Some(0), Some(10))],
+        };
+        let error = report(&rep, &tmp_dir).unwrap_err();
+        assert!(
+            error.to_string().contains("nonexistent_run"),
+            "Error should mention the invalid run name, got: {}",
+            error
+        );
+
+        // Report should not have been created
+        assert!(!report_dir_path.exists());
+        assert!(!report_archive_path.exists());
+
+        Ok(())
+    })
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn test_report_with_time_range_from_greater_than_to() {
+    run_test(|work_dir, tmp_dir| {
+        let run_name = String::from("test_run_1");
+        let run_path = get_test_data_path(format!("{}.tar.gz", run_name));
+
+        let report_name = String::from("bad_time_range_inverted_report");
+        let report_dir_path = work_dir.join(&report_name);
+        let report_archive_path = work_dir.join(format!("{}.tar.gz", report_name));
+        let rep = Report {
+            run: vec![run_path.into_os_string().into_string().unwrap()],
+            name: Some(
+                report_dir_path
+                    .clone()
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+            ),
+            // from_time (60) > to_time (10) — should fail
+            time_range: vec![(run_name.clone(), Some(60), Some(10))],
+        };
+        let error = report(&rep, &tmp_dir).unwrap_err();
+        assert!(
+            error.to_string().contains("from_time")
+                && error.to_string().contains("larger than")
+                && error.to_string().contains("to_time"),
+            "Error should mention from_time is larger than to_time, got: {}",
+            error
+        );
+
+        // Report should not have been created
         assert!(!report_dir_path.exists());
         assert!(!report_archive_path.exists());
 
@@ -618,6 +753,38 @@ fn verify_report_structure(
     assert!(report_path.join("main.css").exists());
     assert!(report_path.join("bundle.js").exists());
     assert!(report_path.join("data").join("js").join("runs.js").exists());
+    let report_data_js_dir = report_path.join("data").join("js");
+    assert!(report_data_js_dir.exists());
+    assert!(report_data_js_dir.join("runs.js").exists());
+    for entry in fs::read_dir(&report_data_js_dir).unwrap() {
+        let entry = entry.unwrap();
+        let path = entry.path();
+        if path.extension().map_or(false, |ext| ext == "js") {
+            let content = fs::read_to_string(&path).unwrap();
+            assert!(
+                !content.is_empty(),
+                "JS file {:?} should not be empty",
+                path
+            );
+            // Each JS file contains one or more "var_name = <json>" assignments.
+            // Validate that every JSON value is parseable.
+            for line in content.split('\n') {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                if let Some(eq_pos) = line.find('=') {
+                    let json_str = line[eq_pos + 1..].trim();
+                    assert!(
+                        serde_json::from_str::<serde_json::Value>(json_str).is_ok(),
+                        "Invalid JSON in {:?}: {}",
+                        path.file_name().unwrap(),
+                        json_str.chars().take(200).collect::<String>(),
+                    );
+                }
+            }
+        }
+    }
     let report_run_archives_path = report_path.join("data").join("archive");
     assert!(report_run_archives_path.exists());
     for run_name in &expected_run_names {

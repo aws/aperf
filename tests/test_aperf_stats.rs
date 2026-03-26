@@ -138,7 +138,7 @@ mod aperf_stats_tests {
                 let total_series = metric
                     .series
                     .iter()
-                    .find(|s| s.series_name.as_ref().unwrap().contains("total"))
+                    .find(|s| s.series_name.contains("total"))
                     .unwrap();
                 assert_eq!(total_series.values.len(), 100);
             }
@@ -161,7 +161,7 @@ mod aperf_stats_tests {
                         let collect_series = metric
                             .series
                             .iter()
-                            .find(|s| s.series_name.as_ref().unwrap().contains("collect"))
+                            .find(|s| s.series_name.contains("collect"))
                             .unwrap();
                         assert_eq!(collect_series.values[sample_idx], *expected_collect as f64);
                     }
@@ -170,7 +170,7 @@ mod aperf_stats_tests {
                         let print_series = metric
                             .series
                             .iter()
-                            .find(|s| s.series_name.as_ref().unwrap().contains("write"))
+                            .find(|s| s.series_name.contains("write"))
                             .unwrap();
                         assert_eq!(print_series.values[sample_idx], *expected_print as f64);
                     }
@@ -429,17 +429,17 @@ mod aperf_stats_tests {
                 let collect_series = metric
                     .series
                     .iter()
-                    .find(|s| s.series_name.as_ref().unwrap().contains("collect"))
+                    .find(|s| s.series_name.contains("collect"))
                     .unwrap();
                 let print_series = metric
                     .series
                     .iter()
-                    .find(|s| s.series_name.as_ref().unwrap().contains("write"))
+                    .find(|s| s.series_name.contains("write"))
                     .unwrap();
                 let total_series = metric
                     .series
                     .iter()
-                    .find(|s| s.series_name.as_ref().unwrap().contains("total"))
+                    .find(|s| s.series_name.contains("total"))
                     .unwrap();
 
                 assert_eq!(collect_series.values.len(), 20);
@@ -469,12 +469,12 @@ mod aperf_stats_tests {
                     let collect_series = metric
                         .series
                         .iter()
-                        .find(|s| s.series_name.as_ref().unwrap().contains("collect"))
+                        .find(|s| s.series_name.contains("collect"))
                         .unwrap();
                     let print_series = metric
                         .series
                         .iter()
-                        .find(|s| s.series_name.as_ref().unwrap().contains("write"))
+                        .find(|s| s.series_name.contains("write"))
                         .unwrap();
 
                     let expected_collect = expected_stats.stats[&collect_key] as f64;

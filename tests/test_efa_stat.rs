@@ -57,8 +57,7 @@ fn unwrap_time_series(result: AperfData) -> aperf::data::common::data_formats::T
 fn data_series(
     metric: &aperf::data::common::data_formats::TimeSeriesMetric,
 ) -> Vec<&aperf::data::common::data_formats::Series> {
-    let mut v: Vec<_> = metric.series.iter().filter(|s| !s.is_aggregate).collect();
-    v
+    metric.series.iter().filter(|s| !s.is_aggregate).collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -126,27 +125,15 @@ fn test_efa_two_drivers_accumulative_deltas() {
     let tx = data_series(&ts.metrics["tx_bytes"]);
     assert_eq!(tx.len(), 2, "Expected 2 series for tx_bytes");
 
-    let efa0 = tx
-        .iter()
-        .find(|s| s.series_name.as_deref() == Some("efa0"))
-        .unwrap();
-    let efa0_1 = tx
-        .iter()
-        .find(|s| s.series_name.as_deref() == Some("efa0/1"))
-        .unwrap();
+    let efa0 = tx.iter().find(|s| s.series_name == "efa0").unwrap();
+    let efa0_1 = tx.iter().find(|s| s.series_name == "efa0/1").unwrap();
 
     assert_eq!(efa0.values, vec![0.0, 500.0, 700.0]);
     assert_eq!(efa0_1.values, vec![0.0, 700.0, 800.0]);
 
     let rx = data_series(&ts.metrics["rx_bytes"]);
-    let efa0_rx = rx
-        .iter()
-        .find(|s| s.series_name.as_deref() == Some("efa0"))
-        .unwrap();
-    let efa0_1_rx = rx
-        .iter()
-        .find(|s| s.series_name.as_deref() == Some("efa0/1"))
-        .unwrap();
+    let efa0_rx = rx.iter().find(|s| s.series_name == "efa0").unwrap();
+    let efa0_1_rx = rx.iter().find(|s| s.series_name == "efa0/1").unwrap();
     assert_eq!(efa0_rx.values, vec![0.0, 300.0, 500.0]);
     assert_eq!(efa0_1_rx.values, vec![0.0, 400.0, 600.0]);
 }
@@ -221,25 +208,25 @@ fn test_efa_multi_driver_different_metrics() {
     // send_wrs only from efa0
     let sw = data_series(&ts.metrics["send_wrs"]);
     assert_eq!(sw.len(), 1);
-    assert_eq!(sw[0].series_name.as_deref(), Some("efa0"));
+    assert_eq!(sw[0].series_name, "efa0");
     assert_eq!(sw[0].values, vec![0.0, 15.0]);
 
     // rdma_write_bytes only from efa1
     let rw = data_series(&ts.metrics["rdma_write_bytes"]);
     assert_eq!(rw.len(), 1);
-    assert_eq!(rw[0].series_name.as_deref(), Some("efa1"));
+    assert_eq!(rw[0].series_name, "efa1");
     assert_eq!(rw[0].values, vec![0.0, 70.0]);
 
     // avg_bytes_per_send_wr: efa0 has send_wrs but no send_bytes → 0.0
     let avg_send = data_series(&ts.metrics["avg_bytes_per_send_wr"]);
     assert_eq!(avg_send.len(), 1);
-    assert_eq!(avg_send[0].series_name.as_deref(), Some("efa0"));
+    assert_eq!(avg_send[0].series_name, "efa0");
     assert_eq!(avg_send[0].values, vec![0.0, 0.0]);
 
     // avg_bytes_per_rdma_write_wr: efa1 has rdma_write_bytes but no rdma_write_wrs → 0.0
     let avg_rdma_w = data_series(&ts.metrics["avg_bytes_per_rdma_write_wr"]);
     assert_eq!(avg_rdma_w.len(), 1);
-    assert_eq!(avg_rdma_w[0].series_name.as_deref(), Some("efa1"));
+    assert_eq!(avg_rdma_w[0].series_name, "efa1");
     assert_eq!(avg_rdma_w[0].values, vec![0.0, 0.0]);
 }
 
@@ -265,14 +252,8 @@ fn test_efa_driver_appearing_later() {
     let ts = unwrap_time_series(efa.process_raw_data(ReportParams::new(), raw).unwrap());
 
     let tx = data_series(&ts.metrics["tx_bytes"]);
-    let efa0 = tx
-        .iter()
-        .find(|s| s.series_name.as_deref() == Some("efa0"))
-        .unwrap();
-    let efa1 = tx
-        .iter()
-        .find(|s| s.series_name.as_deref() == Some("efa1"))
-        .unwrap();
+    let efa0 = tx.iter().find(|s| s.series_name == "efa0").unwrap();
+    let efa1 = tx.iter().find(|s| s.series_name == "efa1").unwrap();
 
     assert_eq!(efa0.values.len(), 4);
     assert_eq!(efa0.values, vec![0.0, 100.0, 150.0, 150.0]);
@@ -305,14 +286,8 @@ fn test_efa_decreasing_counter_multi_driver() {
     let ts = unwrap_time_series(efa.process_raw_data(ReportParams::new(), raw).unwrap());
 
     let tx = data_series(&ts.metrics["tx_bytes"]);
-    let efa0 = tx
-        .iter()
-        .find(|s| s.series_name.as_deref() == Some("efa0"))
-        .unwrap();
-    let efa1 = tx
-        .iter()
-        .find(|s| s.series_name.as_deref() == Some("efa1"))
-        .unwrap();
+    let efa0 = tx.iter().find(|s| s.series_name == "efa0").unwrap();
+    let efa1 = tx.iter().find(|s| s.series_name == "efa1").unwrap();
 
     // Decreasing counter is skipped — efa0 only has the first sample (0.0)
     assert_eq!(efa0.values, vec![0.0]);
@@ -551,14 +526,8 @@ fn test_efa_many_samples_multi_driver() {
     let tx = data_series(&ts.metrics["tx_bytes"]);
     assert_eq!(tx.len(), 2);
 
-    let efa0 = tx
-        .iter()
-        .find(|s| s.series_name.as_deref() == Some("efa0"))
-        .unwrap();
-    let efa1 = tx
-        .iter()
-        .find(|s| s.series_name.as_deref() == Some("efa1"))
-        .unwrap();
+    let efa0 = tx.iter().find(|s| s.series_name == "efa0").unwrap();
+    let efa1 = tx.iter().find(|s| s.series_name == "efa1").unwrap();
 
     assert_eq!(efa0.values.len(), 100);
     assert_eq!(efa1.values.len(), 100);
@@ -668,14 +637,8 @@ fn test_efa_avg_bytes_per_wr_per_device_independence() {
     let avg = data_series(&ts.metrics["avg_bytes_per_send_wr"]);
     assert_eq!(avg.len(), 2);
 
-    let efa0 = avg
-        .iter()
-        .find(|s| s.series_name.as_deref() == Some("efa0"))
-        .unwrap();
-    let efa1 = avg
-        .iter()
-        .find(|s| s.series_name.as_deref() == Some("efa1"))
-        .unwrap();
+    let efa0 = avg.iter().find(|s| s.series_name == "efa0").unwrap();
+    let efa1 = avg.iter().find(|s| s.series_name == "efa1").unwrap();
 
     assert_eq!(efa0.values, vec![0.0, 100.0]);
     assert_eq!(efa1.values, vec![0.0, 500.0]);

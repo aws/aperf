@@ -167,7 +167,7 @@ fn test_process_processes_raw_data_complex() {
             let metric = &time_series_data.metrics[&metric_name];
 
             for series in &metric.series {
-                let process_name = series.series_name.as_ref().unwrap();
+                let process_name = &series.series_name;
 
                 for (sample_idx, &value) in series.values.iter().enumerate() {
                     // First sample should be 0 for CPU metrics
@@ -289,7 +289,7 @@ fn test_process_processes_raw_data_simple() {
             let series = &metric.series[0];
             assert_eq!(series.values.len(), 3);
 
-            let process_name = series.series_name.as_ref().unwrap();
+            let process_name = &series.series_name;
 
             for (sample_idx, &value) in series.values.iter().enumerate() {
                 // Get expected stats for this sample and process
@@ -559,7 +559,7 @@ fn test_process_processes_top_16_ranking_complex() {
         let mut process_total_cpu: Vec<(String, f64)> = Vec::new();
         for (i, series) in user_space_metric.series.iter().enumerate() {
             let kernel_series = &kernel_space_metric.series[i];
-            let process_name = series.series_name.as_ref().unwrap().clone();
+            let process_name = series.series_name.clone();
 
             let total_user: f64 = series.values.iter().sum();
             let total_kernel: f64 = kernel_series.values.iter().sum();

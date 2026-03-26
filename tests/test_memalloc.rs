@@ -192,7 +192,7 @@ fn test_process_buddyinfo_simple() {
         let dma_series = order_0
             .series
             .iter()
-            .find(|s| s.series_name.as_ref().unwrap() == "node_0_zone_DMA")
+            .find(|s| s.series_name == "node_0_zone_DMA")
             .unwrap();
         assert_eq!(dma_series.values.len(), 3);
         assert!((dma_series.values[0] - 100.0).abs() < 1e-5);
@@ -361,7 +361,7 @@ fn test_process_slabinfo_simple() {
         let dentry_series = active_objs
             .series
             .iter()
-            .find(|s| s.series_name.as_ref().unwrap() == "dentry")
+            .find(|s| s.series_name == "dentry")
             .unwrap();
         assert_eq!(dentry_series.values.len(), 3);
         assert!((dentry_series.values[0] - 1000.0).abs() < 1e-5);

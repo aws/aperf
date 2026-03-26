@@ -1,8 +1,9 @@
-use crate::analytics::{AnalyticalFinding, Analyze, DataFindings};
+use crate::analytics::{compute_finding_score, AnalyticalFinding, Analyze, DataFindings};
 use crate::computations::{
     delta_ratio_to_percentage_string, formatted_number_string, Comparator, Stat,
 };
 use crate::data::common::data_formats::ProcessedData;
+use crate::data::common::processed_data_accessor::ProcessedDataAccessor;
 use std::fmt;
 use std::fmt::Formatter;
 
@@ -47,7 +48,6 @@ macro_rules! time_series_stat_intra_run_comparison {
         )
     };
 }
-use crate::analytics;
 pub(crate) use time_series_stat_intra_run_comparison;
 
 impl fmt::Display for TimeSeriesStatIntraRunComparisonRule {
@@ -61,25 +61,30 @@ impl fmt::Display for TimeSeriesStatIntraRunComparisonRule {
 }
 
 impl Analyze for TimeSeriesStatIntraRunComparisonRule {
-    fn analyze(&self, data_findings: &mut DataFindings, processed_data: &ProcessedData) {
+    fn analyze(
+        &self,
+        data_findings: &mut DataFindings,
+        processed_data: &ProcessedData,
+        processed_data_accessor: &mut ProcessedDataAccessor,
+    ) {
         for run_name in processed_data.runs.keys() {
-            let time_series_data = match processed_data.get_time_series_data(run_name) {
-                Some(time_series_data) => time_series_data,
+            let baseline_metric_stat = match processed_data_accessor.time_series_metric_stats(
+                processed_data,
+                run_name,
+                self.baseline_metric_name,
+            ) {
+                Some(baseline_metric_stats) => self.stat.get_stat(&baseline_metric_stats),
                 None => continue,
             };
 
-            let baseline_metric = match time_series_data.metrics.get(self.baseline_metric_name) {
-                Some(time_series_metric) => time_series_metric,
+            let comparison_metric_stat = match processed_data_accessor.time_series_metric_stats(
+                processed_data,
+                run_name,
+                self.comparison_metric_name,
+            ) {
+                Some(comparison_metric_stats) => self.stat.get_stat(&comparison_metric_stats),
                 None => continue,
             };
-            let baseline_metric_stat = self.stat.get_stat(&baseline_metric.stats);
-
-            let comparison_metric = match time_series_data.metrics.get(self.comparison_metric_name)
-            {
-                Some(time_series_metric) => time_series_metric,
-                None => continue,
-            };
-            let comparison_metric_stat = self.stat.get_stat(&comparison_metric.stats);
 
             let cur_ratio = if comparison_metric_stat == baseline_metric_stat {
                 0.0
@@ -97,8 +102,7 @@ impl Analyze for TimeSeriesStatIntraRunComparisonRule {
             );
 
             if rule_matched {
-                let finding_score =
-                    analytics::compute_finding_score(cur_ratio, self.delta_ratio, self.score);
+                let finding_score = compute_finding_score(cur_ratio, self.delta_ratio, self.score);
 
                 let finding_description = format!(
                     "The {} in {} ({}) is {} {} ({}).",
