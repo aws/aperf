@@ -2,6 +2,7 @@ use crate::analytics;
 use crate::analytics::{AnalyticalFinding, Analyze, DataFindings};
 use crate::computations::{formatted_number_string, Comparator};
 use crate::data::common::data_formats::ProcessedData;
+use crate::data::common::processed_data_accessor::ProcessedDataAccessor;
 use std::fmt;
 use std::fmt::Formatter;
 
@@ -50,32 +51,29 @@ impl fmt::Display for TimeSeriesDataPointThresholdRule {
 }
 
 impl Analyze for TimeSeriesDataPointThresholdRule {
-    fn analyze(&self, data_findings: &mut DataFindings, processed_data: &ProcessedData) {
+    fn analyze(
+        &self,
+        data_findings: &mut DataFindings,
+        processed_data: &ProcessedData,
+        processed_data_accessor: &mut ProcessedDataAccessor,
+    ) {
         for run_name in processed_data.runs.keys() {
-            let time_series_data = match processed_data.get_time_series_data(run_name) {
-                Some(time_series_data) => time_series_data,
-                None => continue,
-            };
-            let metric = match time_series_data.metrics.get(self.metric_name) {
-                Some(time_series_metric) => time_series_metric,
-                None => continue,
-            };
-
             // Produce one finding per metric for the data point with the largest absolute score
             let mut max_abs_finding_score: f64 = 0.0;
             let mut max_score_value: f64 = 0.0;
             let mut rule_matched = false;
-            for series in &metric.series {
-                for &value in &series.values {
-                    if self.comparator.compare(value, self.threshold) {
-                        rule_matched = true;
-                        let abs_finding_score =
-                            analytics::compute_finding_score(value, self.threshold, self.score)
-                                .abs();
-                        if abs_finding_score >= max_abs_finding_score {
-                            max_score_value = value;
-                            max_abs_finding_score = abs_finding_score;
-                        }
+            for &value in processed_data_accessor.time_series_metric_values_iterator(
+                processed_data,
+                run_name,
+                self.metric_name,
+            ) {
+                if self.comparator.compare(value, self.threshold) {
+                    rule_matched = true;
+                    let abs_finding_score =
+                        analytics::compute_finding_score(value, self.threshold, self.score).abs();
+                    if abs_finding_score >= max_abs_finding_score {
+                        max_score_value = value;
+                        max_abs_finding_score = abs_finding_score;
                     }
                 }
             }

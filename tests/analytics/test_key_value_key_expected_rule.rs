@@ -1,6 +1,7 @@
 use aperf::analytics::key_value_key_expected_rule::KeyValueKeyExpectedRule;
 use aperf::analytics::{Analyze, DataFindings, Score};
 use aperf::data::common::data_formats::AperfData;
+use aperf::data::common::processed_data_accessor::ProcessedDataAccessor;
 
 use super::test_helpers::{create_key_value_data, create_processed_data, DataFindingsExt};
 
@@ -19,7 +20,11 @@ fn test_key_matches_expected_value() {
     };
 
     let mut findings = DataFindings::default();
-    rule.analyze(&mut findings, &processed_data);
+    rule.analyze(
+        &mut findings,
+        &processed_data,
+        &mut ProcessedDataAccessor::new(),
+    );
 
     assert_eq!(findings.num_runs_with_findings(), 0);
 }
@@ -39,7 +44,11 @@ fn test_key_does_not_match_expected_value() {
     };
 
     let mut findings = DataFindings::default();
-    rule.analyze(&mut findings, &processed_data);
+    rule.analyze(
+        &mut findings,
+        &processed_data,
+        &mut ProcessedDataAccessor::new(),
+    );
 
     assert_eq!(findings.num_runs_with_findings(), 1);
     assert!(findings.has_findings_for_run("run1"));
@@ -60,7 +69,11 @@ fn test_key_missing() {
     };
 
     let mut findings = DataFindings::default();
-    rule.analyze(&mut findings, &processed_data);
+    rule.analyze(
+        &mut findings,
+        &processed_data,
+        &mut ProcessedDataAccessor::new(),
+    );
 
     assert_eq!(findings.num_runs_with_findings(), 1);
     assert!(findings.has_findings_for_run("run1"));
@@ -87,7 +100,11 @@ fn test_multiple_runs() {
     };
 
     let mut findings = DataFindings::default();
-    rule.analyze(&mut findings, &processed_data);
+    rule.analyze(
+        &mut findings,
+        &processed_data,
+        &mut ProcessedDataAccessor::new(),
+    );
 
     assert_eq!(findings.num_runs_with_findings(), 1);
     assert!(!findings.has_findings_for_run("run1"));
@@ -109,7 +126,11 @@ fn test_empty_key_value_data() {
     };
 
     let mut findings = DataFindings::default();
-    rule.analyze(&mut findings, &processed_data);
+    rule.analyze(
+        &mut findings,
+        &processed_data,
+        &mut ProcessedDataAccessor::new(),
+    );
 
     assert_eq!(findings.num_runs_with_findings(), 1);
 }

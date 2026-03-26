@@ -1,6 +1,7 @@
 use crate::analytics;
 use crate::analytics::{AnalyticalFinding, Analyze, DataFindings};
 use crate::data::common::data_formats::ProcessedData;
+use crate::data::common::processed_data_accessor::ProcessedDataAccessor;
 use log::debug;
 use std::fmt;
 use std::fmt::Formatter;
@@ -44,65 +45,52 @@ impl fmt::Display for KeyValueKeyRunComparisonRule {
 }
 
 impl Analyze for KeyValueKeyRunComparisonRule {
-    fn analyze(&self, report_findings: &mut DataFindings, processed_data: &ProcessedData) {
+    fn analyze(
+        &self,
+        report_findings: &mut DataFindings,
+        processed_data: &ProcessedData,
+        processed_data_accessor: &mut ProcessedDataAccessor,
+    ) {
         let base_run_name = analytics::get_base_run_name();
 
-        let base_key_value_data = match processed_data.get_key_value_data(&base_run_name) {
-            Some(key_value_data) => key_value_data,
+        let base_value = match processed_data_accessor.key_value_value_by_key(
+            processed_data,
+            &base_run_name,
+            self.key,
+        ) {
+            Some(base_value) => base_value,
             None => {
+                debug!("{self} failed to analyze: the base value does not exist");
                 return;
             }
         };
-        let mut base_value: Option<&String> = None;
-        for key_value_group in base_key_value_data.key_value_groups.values() {
-            if let Some(value) = key_value_group.key_values.get(self.key) {
-                base_value = Some(value);
-                break;
-            }
-        }
-
-        if base_value.is_none() {
-            debug!("{self} failed to analyze: the base value does not exist");
-            return;
-        }
-        let base_value = base_value.unwrap();
 
         for run_name in processed_data.runs.keys() {
             if base_run_name == *run_name {
                 continue;
             }
 
-            let key_value_data = match processed_data.get_key_value_data(&run_name) {
-                Some(key_value_data) => key_value_data,
-                None => continue,
-            };
+            if let Some(value) =
+                processed_data_accessor.key_value_value_by_key(processed_data, run_name, self.key)
+            {
+                if value != base_value {
+                    let finding_description = format!(
+                        "The value of {} in {} (\"{}\") is different from {} (\"{}\").",
+                        self.key, run_name, value, base_run_name, base_value,
+                    );
 
-            let mut found_key = false;
-            for key_value_group in key_value_data.key_value_groups.values() {
-                if let Some(value) = key_value_group.key_values.get(self.key) {
-                    found_key = true;
-                    if value != base_value {
-                        let finding_description = format!(
-                            "The value of {} in {} (\"{}\") is different from {} (\"{}\").",
-                            self.key, run_name, value, base_run_name, base_value,
-                        );
-
-                        report_findings.insert_finding(
-                            run_name,
-                            self.key,
-                            AnalyticalFinding::new(
-                                self.rule_name.to_string(),
-                                self.score,
-                                finding_description,
-                                self.message.to_string(),
-                            ),
-                        );
-                    }
-                    break;
+                    report_findings.insert_finding(
+                        run_name,
+                        self.key,
+                        AnalyticalFinding::new(
+                            self.rule_name.to_string(),
+                            self.score,
+                            finding_description,
+                            self.message.to_string(),
+                        ),
+                    );
                 }
-            }
-
-            if !found_key {
+            } else {
                 let finding_description = format!(
                     "The key {} does not exist in {}, while its value in {} is \"{}\".",
                     self.key, run_name, base_run_name, base_value,

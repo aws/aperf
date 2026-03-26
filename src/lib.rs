@@ -14,6 +14,7 @@ pub mod visualizer;
 
 use crate::analytics::{AnalyticalEngine, DataFindings};
 use crate::data::aperf_runlog::AperfRunlog;
+use crate::data::common::processed_data_accessor::ProcessedDataAccessor;
 use crate::visualizer::DataVisualizer;
 use anyhow::Result;
 use chrono::prelude::*;
@@ -119,6 +120,9 @@ pub enum PDError {
 
     #[error("Invalid verbose option")]
     InvalidVerboseOption,
+
+    #[error("Invalid time-range option: {}", .0)]
+    InvalidRunTimeRangeOption(String),
 
     #[error("All processes collection error")]
     CollectorAllProcessError,
@@ -497,7 +501,10 @@ impl VisualizationData {
         Ok(())
     }
 
-    pub fn run_analytics(&mut self) -> HashMap<String, DataFindings> {
+    pub fn run_analytics(
+        &mut self,
+        processed_data_accessor: &mut ProcessedDataAccessor,
+    ) -> HashMap<String, DataFindings> {
         let mut analytical_engine = AnalyticalEngine::default();
         for (data_name, data_visualizer) in &self.visualizers {
             analytical_engine.add_data_rules(
@@ -509,7 +516,7 @@ impl VisualizationData {
         }
 
         info!("Running analytical rules");
-        analytical_engine.run();
+        analytical_engine.run(processed_data_accessor);
 
         analytical_engine.findings
     }

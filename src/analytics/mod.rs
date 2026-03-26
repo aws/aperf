@@ -11,6 +11,7 @@ use rule_templates::{
     time_series_stat_threshold_rule::TimeSeriesStatThresholdRule,
 };
 // Re-export rule types for testing
+use crate::data::common::processed_data_accessor::ProcessedDataAccessor;
 pub use rule_templates::{
     key_value_key_expected_rule, key_value_key_run_comparison_rule,
     time_series_data_point_threshold_rule, time_series_stat_intra_run_comparison_rule,
@@ -59,7 +60,7 @@ impl<'a> AnalyticalEngine<'a> {
         self.per_data_rules.insert(data_name, rules);
     }
 
-    pub fn run(&mut self) {
+    pub fn run(&mut self, processed_data_accessor: &mut ProcessedDataAccessor) {
         for (data_name, data_rules) in &self.per_data_rules {
             if let Some(&processed_data) = self.all_processed_data.get(data_name) {
                 let data_findings = self
@@ -67,13 +68,17 @@ impl<'a> AnalyticalEngine<'a> {
                     .entry(data_name.clone())
                     .or_insert(DataFindings::default());
                 for data_rule in data_rules {
-                    data_rule.analyze(data_findings, processed_data);
+                    data_rule.analyze(data_findings, processed_data, processed_data_accessor);
                 }
             }
         }
 
         for multi_data_rule in &self.multi_data_rules {
-            multi_data_rule.analyze(&mut self.findings, &self.all_processed_data);
+            multi_data_rule.analyze(
+                &mut self.findings,
+                &self.all_processed_data,
+                processed_data_accessor,
+            );
         }
     }
 
@@ -175,7 +180,12 @@ fn compute_finding_score(value: f64, threshold: f64, rule_score: f64) -> f64 {
 /// processed data of the corresponding type. If a rule matches, it should produce one or
 /// more findings and store them in the data_findings struct.
 pub trait Analyze {
-    fn analyze(&self, data_findings: &mut DataFindings, processed_data: &ProcessedData);
+    fn analyze(
+        &self,
+        data_findings: &mut DataFindings,
+        processed_data: &ProcessedData,
+        processed_data_accessor: &mut ProcessedDataAccessor,
+    );
 }
 
 /// The trait to be implemented by every multi-data rule. It runs the rule against multiple types
@@ -186,6 +196,7 @@ pub trait MultiDataAnalyze {
         &self,
         findings: &HashMap<String, DataFindings>,
         all_processed_data: &HashMap<String, &ProcessedData>,
+        processed_data_accessor: &mut ProcessedDataAccessor,
     );
 }
 
@@ -198,10 +209,10 @@ macro_rules! analytical_rules {
         }
 
         impl AnalyticalRule {
-            pub fn analyze(&self, data_findings: &mut DataFindings, processed_data: &ProcessedData) {
+            pub fn analyze(&self, data_findings: &mut DataFindings, processed_data: &ProcessedData, processed_data_accessor: &mut ProcessedDataAccessor) {
                 match self {
                     $(
-                        AnalyticalRule::$analytical_rule(ref analytical_rule) => analytical_rule.analyze(data_findings, processed_data),
+                        AnalyticalRule::$analytical_rule(ref analytical_rule) => analytical_rule.analyze(data_findings, processed_data, processed_data_accessor),
                     )*
                 }
             }
@@ -228,10 +239,10 @@ macro_rules! multi_data_analytical_rules {
         }
 
         impl MultiDataAnalyticalRule {
-            pub fn analyze(&self, _findings: &mut HashMap<String, DataFindings>, _all_processed_data: &HashMap<String, &ProcessedData>) {
+            pub fn analyze(&self, _findings: &mut HashMap<String, DataFindings>, _all_processed_data: &HashMap<String, &ProcessedData>, _processed_data_accessor: &mut ProcessedDataAccessor) {
                 match self {
                     $(
-                        MultiDataAnalyticalRule::$multi_data_analytical_rule(ref multi_data_analytical_rule) => multi_data_analytical_rule.analyze(findings, all_processed_data),
+                        MultiDataAnalyticalRule::$multi_data_analytical_rule(ref multi_data_analytical_rule) => multi_data_analytical_rule.analyze(findings, all_processed_data, processed_data_accessor),
                     )*
                     _ => todo!(),
                 }

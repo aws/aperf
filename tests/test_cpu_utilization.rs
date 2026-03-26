@@ -260,18 +260,13 @@ mod cpu_utilization_tests {
                     assert_eq!(series.values.len(), num_samples);
                     if series.is_aggregate {
                         assert_eq!(
-                            series.series_name.as_ref().unwrap(),
-                            "Aggregate",
+                            series.series_name, "Aggregate",
                             "Unexpected aggregate series for metric {} {}",
-                            metric.metric_name,
-                            cpu_state
+                            metric.metric_name, cpu_state
                         );
                     } else {
                         // Series name should indicate the corresponding CPU number
-                        assert_eq!(
-                            series.series_name.as_ref().unwrap(),
-                            &format!("CPU{}", cur_cpu)
-                        );
+                        assert_eq!(series.series_name, format!("CPU{}", cur_cpu));
                         cur_cpu += 1;
                     }
                     // Verify that series values are as expected

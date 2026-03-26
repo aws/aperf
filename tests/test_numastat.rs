@@ -98,7 +98,7 @@ fn test_numastat_process_raw_data_single_node() {
         let node0_series = numa_hit_metric
             .series
             .iter()
-            .find(|s| s.series_name.as_ref() == Some(&"node0".to_string()))
+            .find(|s| s.series_name == "node0")
             .expect("Should have node0 series");
         assert_eq!(node0_series.values.len(), 3);
         assert_eq!(node0_series.values[0], 0.0); // First sample, no previous value
@@ -146,7 +146,7 @@ fn test_numastat_process_raw_data_multiple_nodes() {
         let node0_series = numa_hit_metric
             .series
             .iter()
-            .find(|s| s.series_name.as_ref() == Some(&"node0".to_string()))
+            .find(|s| s.series_name == "node0")
             .expect("Should have node0 series");
         assert_eq!(node0_series.values.len(), 2);
         assert_eq!(node0_series.values[0], 0.0); // First sample
@@ -156,7 +156,7 @@ fn test_numastat_process_raw_data_multiple_nodes() {
         let node1_series = numa_hit_metric
             .series
             .iter()
-            .find(|s| s.series_name.as_ref() == Some(&"node1".to_string()))
+            .find(|s| s.series_name == "node1")
             .expect("Should have node1 series");
         assert_eq!(node1_series.values.len(), 2);
         assert_eq!(node1_series.values[0], 0.0); // First sample

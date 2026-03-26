@@ -16,6 +16,9 @@ module.exports = (env) => {
       }),
       new MiniCssExtractPlugin(),
     ],
+    cache: {
+      type: "filesystem",
+    },
     module: {
       rules: [
         {

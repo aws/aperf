@@ -1,4 +1,5 @@
 use crate::analytics::BASE_RUN_NAME;
+use crate::data::common::processed_data_accessor::ProcessedDataAccessor;
 use crate::data::common::utils::no_tar_gz_file_name;
 use crate::data::JS_DIR;
 use crate::{data, PDError, VisualizationData};
@@ -8,7 +9,7 @@ use clap::Args;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use log::info;
 use serde::Serialize;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
@@ -38,6 +39,10 @@ struct RunsInfo {
     run_archive_paths: Vec<PathBuf>,
     /// The list of paths to the run data directory (where data are available for read and processing)
     run_dir_paths: Vec<PathBuf>,
+    /// The specified start time of every run's time range
+    per_run_from_time: HashMap<String, u64>,
+    /// The specified end time of every run's time range
+    per_run_to_time: HashMap<String, u64>,
 }
 
 impl RunsInfo {
@@ -61,6 +66,69 @@ impl RunsInfo {
 
         Ok(())
     }
+
+    fn process_per_run_time_range(
+        &mut self,
+        run_time_ranges: &Vec<(String, Option<u64>, Option<u64>)>,
+    ) -> Result<()> {
+        for (run_name, from_time, to_time) in run_time_ranges {
+            // Empty run name means apply to all runs
+            let target_runs: Vec<String> = if run_name.is_empty() {
+                self.run_names.clone()
+            } else {
+                if !self.run_names.contains(run_name) {
+                    return Err(PDError::InvalidRunTimeRangeOption(format!(
+                        "The run name {} is not part of the report.",
+                        run_name
+                    ))
+                    .into());
+                }
+                vec![run_name.clone()]
+            };
+
+            if let (Some(from_time), Some(to_time)) = (from_time, to_time) {
+                if from_time > to_time {
+                    return Err(PDError::InvalidRunTimeRangeOption(format!(
+                        "The specified from_time {} is larger than to_time {} for run {}.",
+                        from_time,
+                        to_time,
+                        if run_name.is_empty() {
+                            "all runs"
+                        } else {
+                            run_name
+                        }
+                    ))
+                    .into());
+                }
+            }
+
+            for target_run in &target_runs {
+                if let Some(from_time) = from_time {
+                    if self.per_run_from_time.contains_key(target_run) {
+                        return Err(PDError::InvalidRunTimeRangeOption(format!(
+                            "The time range of run {} was specified multiple times.",
+                            target_run
+                        ))
+                        .into());
+                    }
+                    self.per_run_from_time
+                        .insert(target_run.clone(), *from_time);
+                }
+                if let Some(to_time) = to_time {
+                    if self.per_run_to_time.contains_key(target_run) {
+                        return Err(PDError::InvalidRunTimeRangeOption(format!(
+                            "The time range of run {} was specified multiple times.",
+                            target_run
+                        ))
+                        .into());
+                    }
+                    self.per_run_to_time.insert(target_run.clone(), *to_time);
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Clone, Args, Debug)]
@@ -74,6 +142,26 @@ pub struct Report {
     /// The directory and archive name of the report.
     #[clap(help_heading = "Basic Options", short, long, value_parser)]
     pub name: Option<String>,
+
+    /// Time range to apply to a run in the report. All the time-series metrics, stats, and
+    /// analytical findings of the run will be limited to the specified time range.
+    /// ===================================
+    /// Format: RUN_NAME=FROM:TO or FROM:TO
+    /// ===================================
+    /// where FROM and TO are in seconds from the start of the run. If no run name is specified,
+    /// the time range is applied to all runs. Either bound can be omitted and it can be specified
+    /// for multiple runs.
+    /// Example: --time-range first_run=10:60 second_run=:30
+    ///          --time-range 20:150
+    #[clap(
+        help_heading = "Basic Options",
+        verbatim_doc_comment,
+        long,
+        value_parser = parse_time_range,
+        value_name = "RUN=FROM:TO",
+        num_args = 1..
+    )]
+    pub time_range: Vec<(String, Option<u64>, Option<u64>)>,
 }
 
 pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
@@ -139,9 +227,42 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
         }
     }
 
+    runs_info.process_per_run_time_range(&report.time_range)?;
+
     generate_report_files(report_dir_path, runs_info, tmp_dir);
 
     Ok(())
+}
+
+/// Used to parse the --time-range option, in the format of run_name=from_time:to_time,
+/// into a tuple (run_name, from_time, to_time)
+fn parse_time_range(s: &str) -> Result<(String, Option<u64>, Option<u64>), String> {
+    // If there's no '=', treat the whole string as FROM:TO (applies to all runs)
+    let (run_name, range) = s.split_once('=').unwrap_or(("", s));
+    let (from_str, to_str) = range
+        .split_once(':')
+        .ok_or_else(|| format!("invalid range '{}', expected FROM:TO", range))?;
+
+    let from = if from_str.is_empty() {
+        None
+    } else {
+        Some(
+            from_str
+                .parse::<u64>()
+                .map_err(|e| format!("invalid FROM value: {}", e))?,
+        )
+    };
+    let to = if to_str.is_empty() {
+        None
+    } else {
+        Some(
+            to_str
+                .parse::<u64>()
+                .map_err(|e| format!("invalid TO value: {}", e))?,
+        )
+    };
+
+    Ok((run_name.to_string(), from, to))
 }
 
 /// Checks if the list of runs include duplicates
@@ -252,7 +373,12 @@ fn generate_report_files(report_dir: PathBuf, runs_info: RunsInfo, tmp_dir: &Pat
         visualization_data.process_raw_data(run_name).unwrap();
     }
 
-    let analytical_findings = visualization_data.run_analytics();
+    let mut processed_data_accessor = ProcessedDataAccessor::from_time_ranges(
+        runs_info.per_run_from_time,
+        runs_info.per_run_to_time,
+    );
+
+    let analytical_findings = visualization_data.run_analytics(&mut processed_data_accessor);
 
     /* Generate run.js */
     let run_js_path = processed_data_js_dir.join("runs.js");
@@ -285,11 +411,11 @@ fn generate_report_files(report_dir: PathBuf, runs_info: RunsInfo, tmp_dir: &Pat
 
         let processed_data_js_path = processed_data_js_dir.join(format!("{}.js", data_name));
         let mut processed_data_js_file = File::create(processed_data_js_path).unwrap();
-        let out_data = serde_json::to_string(&visualizer.processed_data).unwrap();
         write!(
             processed_data_js_file,
             "processed_{}_data = {}\n\n",
-            data_name, out_data
+            data_name,
+            processed_data_accessor.json_string(&visualizer.processed_data)
         )
         .unwrap();
 
