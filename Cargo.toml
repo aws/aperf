@@ -63,6 +63,7 @@ tdigest = "0.2"
 csv = "1.2"
 csv-to-html = "0.5.10"
 numeric-sort = "0.1.5"
+regex = "1.12.3"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 sysinfo = "0.26.2"
