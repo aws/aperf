@@ -86,6 +86,8 @@ pub fn create_processed_data(data_name: &str, runs: Vec<(&str, AperfData)>) -> P
 pub trait DataFindingsExt {
     fn has_findings_for_run(&self, run_name: &str) -> bool;
     fn num_runs_with_findings(&self) -> usize;
+    fn has_findings_for_metric(&self, run_name: &str, metric_name: &str) -> bool;
+    fn num_metrics_with_findings(&self, run_name: &str) -> usize;
 }
 
 impl DataFindingsExt for aperf::analytics::DataFindings {
@@ -101,6 +103,22 @@ impl DataFindingsExt for aperf::analytics::DataFindings {
     fn num_runs_with_findings(&self) -> usize {
         let json = serde_json::to_value(self).unwrap();
         json["per_run_findings"]
+            .as_object()
+            .map(|obj| obj.len())
+            .unwrap_or(0)
+    }
+
+    fn has_findings_for_metric(&self, run_name: &str, metric_name: &str) -> bool {
+        let json = serde_json::to_value(self).unwrap();
+        json["per_run_findings"][run_name]["findings"]
+            .as_object()
+            .map(|obj| obj.contains_key(metric_name))
+            .unwrap_or(false)
+    }
+
+    fn num_metrics_with_findings(&self, run_name: &str) -> usize {
+        let json = serde_json::to_value(self).unwrap();
+        json["per_run_findings"][run_name]["findings"]
             .as_object()
             .map(|obj| obj.len())
             .unwrap_or(0)

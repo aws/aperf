@@ -1,7 +1,9 @@
 use crate::analytics::rule_templates::time_series_stat_run_comparison_rule::time_series_stat_run_comparison;
 use crate::analytics::rule_templates::time_series_stat_threshold_rule::time_series_stat_threshold;
+use crate::analytics::time_series_data_point_threshold_rule::time_series_data_point_threshold_multi_metric;
 use crate::analytics::{
-    AnalyticalRule, Score, TimeSeriesStatRunComparisonRule, TimeSeriesStatThresholdRule,
+    AnalyticalRule, Score, TimeSeriesDataPointThresholdRule, TimeSeriesStatRunComparisonRule,
+    TimeSeriesStatThresholdRule,
 };
 use crate::computations::{Comparator, Stat};
 use crate::data::efa_stat::EfaStat;
@@ -47,6 +49,14 @@ impl AnalyzeData for EfaStat {
                 delta_ratio: 0.1,
                 score: Score::Critical,
                 message: "The average numbers of bytes transmitted by EFA are different. Verify if this is the expected behavior.",
+            ),
+            time_series_data_point_threshold_multi_metric!(
+                name: "EFA Errors",
+                pattern: "^*_err$",
+                comparator: Comparator::GreaterEqual,
+                threshold: 1.0,
+                score: Score::Poor,
+                message: "One or more errors occurred in EFA driver. Click the info button to learn more about the error",
             ),
         ]
     }

@@ -2,6 +2,7 @@ use crate::computations::{f64_to_fixed_2, Statistics};
 use crate::data::common::data_formats::{
     AperfData, DataFormat, KeyValueData, ProcessedData, Series, TimeSeriesData, TimeSeriesMetric,
 };
+use regex::Regex;
 use std::collections::HashMap;
 use std::fmt::Write;
 
@@ -81,6 +82,30 @@ impl ProcessedDataAccessor {
             time_series_data.metrics.get(metric_name)?,
             run_name,
         ))
+    }
+
+    /// Returns the list of metric names in the run that matches the pattern.
+    pub fn time_series_matched_metric_names<'a>(
+        &self,
+        processed_data: &'a ProcessedData,
+        run_name: &str,
+        pattern: &str,
+    ) -> Vec<&'a str> {
+        let re = match Regex::new(pattern) {
+            Ok(re) => re,
+            Err(_) => return Vec::new(),
+        };
+
+        if let Some(time_series_data) = get_time_series_data(processed_data, run_name) {
+            time_series_data
+                .metrics
+                .keys()
+                .filter(|&key| re.is_match(key))
+                .map(|key| key.as_str())
+                .collect()
+        } else {
+            Vec::new()
+        }
     }
 
     /// Returns the value of the corresponding key in the key-value data.

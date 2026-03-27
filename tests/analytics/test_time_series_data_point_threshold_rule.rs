@@ -17,6 +17,7 @@ fn test_no_data_points_exceed_threshold() {
     let rule = TimeSeriesDataPointThresholdRule {
         rule_name: "test_rule",
         metric_name: "metric1",
+        regex_matching: false,
         comparator: Comparator::Greater,
         threshold: 50.0,
         score: Score::Bad.as_f64(),
@@ -42,6 +43,7 @@ fn test_one_data_point_exceeds_threshold() {
     let rule = TimeSeriesDataPointThresholdRule {
         rule_name: "test_rule",
         metric_name: "metric1",
+        regex_matching: false,
         comparator: Comparator::Greater,
         threshold: 50.0,
         score: Score::Bad.as_f64(),
@@ -68,6 +70,7 @@ fn test_multiple_data_points_exceed_threshold() {
     let rule = TimeSeriesDataPointThresholdRule {
         rule_name: "test_rule",
         metric_name: "metric1",
+        regex_matching: false,
         comparator: Comparator::Greater,
         threshold: 50.0,
         score: Score::Bad.as_f64(),
@@ -93,6 +96,7 @@ fn test_less_than_comparator() {
     let rule = TimeSeriesDataPointThresholdRule {
         rule_name: "test_rule",
         metric_name: "metric1",
+        regex_matching: false,
         comparator: Comparator::Less,
         threshold: 15.0,
         score: Score::Bad.as_f64(),
@@ -118,6 +122,7 @@ fn test_equal_comparator() {
     let rule = TimeSeriesDataPointThresholdRule {
         rule_name: "test_rule",
         metric_name: "metric1",
+        regex_matching: false,
         comparator: Comparator::Equal,
         threshold: 50.0,
         score: Score::Bad.as_f64(),
@@ -143,6 +148,7 @@ fn test_metric_not_found() {
     let rule = TimeSeriesDataPointThresholdRule {
         rule_name: "test_rule",
         metric_name: "metric2",
+        regex_matching: false,
         comparator: Comparator::Greater,
         threshold: 50.0,
         score: Score::Bad.as_f64(),
@@ -168,6 +174,7 @@ fn test_empty_values() {
     let rule = TimeSeriesDataPointThresholdRule {
         rule_name: "test_rule",
         metric_name: "metric1",
+        regex_matching: false,
         comparator: Comparator::Greater,
         threshold: 50.0,
         score: Score::Bad.as_f64(),
@@ -199,6 +206,7 @@ fn test_multiple_runs() {
     let rule = TimeSeriesDataPointThresholdRule {
         rule_name: "test_rule",
         metric_name: "metric1",
+        regex_matching: false,
         comparator: Comparator::Greater,
         threshold: 50.0,
         score: Score::Bad.as_f64(),
@@ -226,6 +234,7 @@ fn test_negative_score() {
     let rule = TimeSeriesDataPointThresholdRule {
         rule_name: "test_rule",
         metric_name: "metric1",
+        regex_matching: false,
         comparator: Comparator::Greater,
         threshold: 50.0,
         score: -10.0,
@@ -255,6 +264,7 @@ fn test_time_range_filters_data_points() {
     let rule = TimeSeriesDataPointThresholdRule {
         rule_name: "test_rule",
         metric_name: "metric1",
+        regex_matching: false,
         comparator: Comparator::Greater,
         threshold: 50.0,
         score: Score::Bad.as_f64(),
@@ -312,6 +322,7 @@ fn test_time_range_multi_run() {
     let rule = TimeSeriesDataPointThresholdRule {
         rule_name: "test_rule",
         metric_name: "metric1",
+        regex_matching: false,
         comparator: Comparator::Greater,
         threshold: 50.0,
         score: Score::Bad.as_f64(),
@@ -382,4 +393,250 @@ fn test_time_range_multi_run() {
     assert!(findings4.has_findings_for_run("run1"));
     assert!(findings4.has_findings_for_run("run2"));
     assert!(!findings4.has_findings_for_run("run3"));
+}
+
+// ==================== Pattern Matching (multi-metric) Tests ====================
+
+#[test]
+fn test_regex_matching_matches_multiple_metrics() {
+    // Three metrics, two match the pattern "cpu_.*", one exceeds threshold in each
+    let ts_data = create_time_series_data(vec![
+        ("cpu_user", vec![60.0, 20.0, 30.0]),
+        ("cpu_system", vec![10.0, 70.0, 30.0]),
+        ("mem_used", vec![90.0, 90.0, 90.0]),
+    ]);
+    let processed_data =
+        create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
+
+    let rule = TimeSeriesDataPointThresholdRule {
+        rule_name: "test_rule",
+        metric_name: "cpu_.*",
+        regex_matching: true,
+        comparator: Comparator::Greater,
+        threshold: 50.0,
+        score: Score::Bad.as_f64(),
+        message: "Test message",
+    };
+
+    let mut findings = DataFindings::default();
+    rule.analyze(
+        &mut findings,
+        &processed_data,
+        &mut ProcessedDataAccessor::new(),
+    );
+
+    assert_eq!(findings.num_runs_with_findings(), 1);
+    assert!(findings.has_findings_for_metric("run1", "cpu_user"));
+    assert!(findings.has_findings_for_metric("run1", "cpu_system"));
+    // mem_used should not be matched by the pattern
+    assert!(!findings.has_findings_for_metric("run1", "mem_used"));
+    assert_eq!(findings.num_metrics_with_findings("run1"), 2);
+}
+
+#[test]
+fn test_regex_matching_no_metrics_match_pattern() {
+    let ts_data = create_time_series_data(vec![
+        ("mem_used", vec![60.0, 70.0, 80.0]),
+        ("mem_free", vec![60.0, 70.0, 80.0]),
+    ]);
+    let processed_data =
+        create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
+
+    let rule = TimeSeriesDataPointThresholdRule {
+        rule_name: "test_rule",
+        metric_name: "cpu_.*",
+        regex_matching: true,
+        comparator: Comparator::Greater,
+        threshold: 50.0,
+        score: Score::Bad.as_f64(),
+        message: "Test message",
+    };
+
+    let mut findings = DataFindings::default();
+    rule.analyze(
+        &mut findings,
+        &processed_data,
+        &mut ProcessedDataAccessor::new(),
+    );
+
+    assert_eq!(findings.num_runs_with_findings(), 0);
+}
+
+#[test]
+fn test_regex_matching_only_some_matched_metrics_exceed_threshold() {
+    // Both metrics match the pattern, but only one exceeds the threshold
+    let ts_data = create_time_series_data(vec![
+        ("cpu_user", vec![60.0, 70.0, 80.0]),
+        ("cpu_system", vec![10.0, 20.0, 30.0]),
+    ]);
+    let processed_data =
+        create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
+
+    let rule = TimeSeriesDataPointThresholdRule {
+        rule_name: "test_rule",
+        metric_name: "cpu_.*",
+        regex_matching: true,
+        comparator: Comparator::Greater,
+        threshold: 50.0,
+        score: Score::Bad.as_f64(),
+        message: "Test message",
+    };
+
+    let mut findings = DataFindings::default();
+    rule.analyze(
+        &mut findings,
+        &processed_data,
+        &mut ProcessedDataAccessor::new(),
+    );
+
+    assert_eq!(findings.num_runs_with_findings(), 1);
+    assert!(findings.has_findings_for_metric("run1", "cpu_user"));
+    assert!(!findings.has_findings_for_metric("run1", "cpu_system"));
+    assert_eq!(findings.num_metrics_with_findings("run1"), 1);
+}
+
+#[test]
+fn test_regex_matching_multiple_runs() {
+    // run1: cpu_user exceeds, cpu_system doesn't
+    // run2: both exceed
+    let ts_data1 = create_time_series_data(vec![
+        ("cpu_user", vec![60.0, 70.0]),
+        ("cpu_system", vec![10.0, 20.0]),
+    ]);
+    let ts_data2 = create_time_series_data(vec![
+        ("cpu_user", vec![80.0, 90.0]),
+        ("cpu_system", vec![60.0, 70.0]),
+    ]);
+    let processed_data = create_processed_data(
+        "test_data",
+        vec![
+            ("run1", AperfData::TimeSeries(ts_data1)),
+            ("run2", AperfData::TimeSeries(ts_data2)),
+        ],
+    );
+
+    let rule = TimeSeriesDataPointThresholdRule {
+        rule_name: "test_rule",
+        metric_name: "cpu_.*",
+        regex_matching: true,
+        comparator: Comparator::Greater,
+        threshold: 50.0,
+        score: Score::Bad.as_f64(),
+        message: "Test message",
+    };
+
+    let mut findings = DataFindings::default();
+    rule.analyze(
+        &mut findings,
+        &processed_data,
+        &mut ProcessedDataAccessor::new(),
+    );
+
+    assert_eq!(findings.num_runs_with_findings(), 2);
+    assert_eq!(findings.num_metrics_with_findings("run1"), 1);
+    assert!(findings.has_findings_for_metric("run1", "cpu_user"));
+    assert_eq!(findings.num_metrics_with_findings("run2"), 2);
+    assert!(findings.has_findings_for_metric("run2", "cpu_user"));
+    assert!(findings.has_findings_for_metric("run2", "cpu_system"));
+}
+
+#[test]
+fn test_regex_matching_invalid_regex() {
+    let ts_data = create_time_series_data(vec![("cpu_user", vec![60.0, 70.0, 80.0])]);
+    let processed_data =
+        create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
+
+    let rule = TimeSeriesDataPointThresholdRule {
+        rule_name: "test_rule",
+        metric_name: "[invalid",
+        regex_matching: true,
+        comparator: Comparator::Greater,
+        threshold: 50.0,
+        score: Score::Bad.as_f64(),
+        message: "Test message",
+    };
+
+    let mut findings = DataFindings::default();
+    rule.analyze(
+        &mut findings,
+        &processed_data,
+        &mut ProcessedDataAccessor::new(),
+    );
+
+    // Invalid regex should match nothing
+    assert_eq!(findings.num_runs_with_findings(), 0);
+}
+
+#[test]
+fn test_regex_matching_with_time_range() {
+    // cpu_user: spikes at t=3,4; cpu_system: spikes at t=0,1
+    let ts_data = create_time_series_data(vec![
+        ("cpu_user", vec![10.0, 20.0, 30.0, 60.0, 70.0, 10.0]),
+        ("cpu_system", vec![60.0, 70.0, 10.0, 20.0, 30.0, 10.0]),
+    ]);
+    let processed_data =
+        create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
+
+    let rule = TimeSeriesDataPointThresholdRule {
+        rule_name: "test_rule",
+        metric_name: "cpu_.*",
+        regex_matching: true,
+        comparator: Comparator::Greater,
+        threshold: 50.0,
+        score: Score::Bad.as_f64(),
+        message: "Test message",
+    };
+
+    // Time range 0:1 → only cpu_system has spikes
+    let mut accessor = ProcessedDataAccessor::from_time_ranges(
+        HashMap::from([("run1".to_string(), 0)]),
+        HashMap::from([("run1".to_string(), 1)]),
+    );
+    let mut findings = DataFindings::default();
+    rule.analyze(&mut findings, &processed_data, &mut accessor);
+    assert_eq!(findings.num_runs_with_findings(), 1);
+    assert!(findings.has_findings_for_metric("run1", "cpu_system"));
+    assert!(!findings.has_findings_for_metric("run1", "cpu_user"));
+
+    // Time range 3:4 → only cpu_user has spikes
+    let mut accessor2 = ProcessedDataAccessor::from_time_ranges(
+        HashMap::from([("run1".to_string(), 3)]),
+        HashMap::from([("run1".to_string(), 4)]),
+    );
+    let mut findings2 = DataFindings::default();
+    rule.analyze(&mut findings2, &processed_data, &mut accessor2);
+    assert_eq!(findings2.num_runs_with_findings(), 1);
+    assert!(findings2.has_findings_for_metric("run1", "cpu_user"));
+    assert!(!findings2.has_findings_for_metric("run1", "cpu_system"));
+}
+
+#[test]
+fn test_regex_matching_false_uses_exact_metric_name() {
+    // With regex_matching: false, "cpu_.*" should be treated as a literal metric name
+    let ts_data = create_time_series_data(vec![
+        ("cpu_user", vec![60.0, 70.0, 80.0]),
+        ("cpu_system", vec![60.0, 70.0, 80.0]),
+    ]);
+    let processed_data =
+        create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
+
+    let rule = TimeSeriesDataPointThresholdRule {
+        rule_name: "test_rule",
+        metric_name: "cpu_.*",
+        regex_matching: false,
+        comparator: Comparator::Greater,
+        threshold: 50.0,
+        score: Score::Bad.as_f64(),
+        message: "Test message",
+    };
+
+    let mut findings = DataFindings::default();
+    rule.analyze(
+        &mut findings,
+        &processed_data,
+        &mut ProcessedDataAccessor::new(),
+    );
+
+    // No metric literally named "cpu_.*" exists, so no findings
+    assert_eq!(findings.num_runs_with_findings(), 0);
 }
