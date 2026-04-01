@@ -51,11 +51,12 @@ impl DataVisualizer {
 
     pub fn init_visualizer(
         &mut self,
-        run_data_dir: PathBuf,
         run_name: String,
+        run_data_dir: PathBuf,
         tmp_dir: &Path,
         report_dir: &Path,
     ) -> Result<()> {
+        self.report_params.run_name = run_name.clone();
         let (file_path, file) =
             get_file(&run_data_dir, self.data_name.to_string()).or_else(|e| {
                 // Backward compatibility: if file is not found using the data's name,
@@ -78,19 +79,26 @@ impl DataVisualizer {
         self.report_params.data_dir = run_data_dir;
         self.report_params.tmp_dir = tmp_dir.to_path_buf();
         self.report_params.report_dir = report_dir.to_path_buf();
-        self.report_params.run_name = run_name.clone();
         self.report_params.data_file_path = file_path;
         self.file_handle = Some(file);
         self.data_available.insert(run_name, true);
         Ok(())
     }
 
-    pub fn process_raw_data(&mut self, run_name: String) -> Result<()> {
-        if !self.data_available.get(&run_name).unwrap() {
+    pub fn process_raw_data(&mut self) -> Result<()> {
+        debug!(
+            "Processing raw {} data in {}",
+            self.data_name, self.report_params.run_name
+        );
+
+        if !self
+            .data_available
+            .get(&self.report_params.run_name)
+            .unwrap()
+        {
             debug!("Raw data unavailable for: {}", self.data_name);
             return Ok(());
         }
-        debug!("Processing raw {} data in {}", self.data_name, run_name);
 
         self.file_handle
             .as_ref()
@@ -129,7 +137,9 @@ impl DataVisualizer {
             .data
             .process_raw_data(self.report_params.clone(), raw_data)?;
         self.processed_data.data_format = processed_data.get_format_name();
-        self.processed_data.runs.insert(run_name, processed_data);
+        self.processed_data
+            .runs
+            .insert(self.report_params.run_name.clone(), processed_data);
 
         Ok(())
     }

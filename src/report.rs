@@ -3,13 +3,13 @@ use crate::data::common::processed_data_accessor::ProcessedDataAccessor;
 use crate::data::common::utils::no_tar_gz_file_name;
 use crate::data::JS_DIR;
 use crate::{data, PDError, VisualizationData};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::Utc;
 use clap::Args;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
-use log::info;
+use log::{info, warn};
 use serde::Serialize;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
@@ -35,10 +35,12 @@ impl VersionInfo {
 struct RunsInfo {
     /// The list of run names (the run dir/archive file name minus the file format)
     run_names: Vec<String>,
-    /// The list of paths to the run archives (run data tar files)
-    run_archive_paths: Vec<PathBuf>,
-    /// The list of paths to the run data directory (where data are available for read and processing)
-    run_dir_paths: Vec<PathBuf>,
+    /// The index used to deduplicate each unique run name
+    run_name_dedup_indices: HashMap<String, u8>,
+    /// The map from run names to paths to the run archives (run data tar files)
+    run_archive_paths: HashMap<String, PathBuf>,
+    /// The map from run names to paths to the run data directory (where data are available for read and processing)
+    run_dir_paths: HashMap<String, PathBuf>,
     /// The specified start time of every run's time range
     per_run_from_time: HashMap<String, u64>,
     /// The specified end time of every run's time range
@@ -56,15 +58,39 @@ impl RunsInfo {
         run_archive_path: PathBuf,
         run_dir_path: PathBuf,
     ) -> Result<()> {
-        if self.run_names.contains(&run_name) {
-            return Err(PDError::DuplicateRunNames(run_name).into());
-        }
-
-        self.run_names.push(run_name);
-        self.run_archive_paths.push(run_archive_path);
-        self.run_dir_paths.push(run_dir_path);
+        let deduped_run_name = self.deduplicate_run_name(run_name);
+        self.run_names.push(deduped_run_name.clone());
+        self.run_archive_paths
+            .insert(deduped_run_name.clone(), run_archive_path);
+        self.run_dir_paths.insert(deduped_run_name, run_dir_path);
 
         Ok(())
+    }
+
+    fn deduplicate_run_name(&mut self, run_name: String) -> String {
+        if !self.run_name_dedup_indices.contains_key(&run_name) {
+            self.run_name_dedup_indices.insert(run_name.clone(), 1);
+            return run_name;
+        }
+        // Any duplicate run name will be deduped to original run name appended with the first
+        // unused index
+        loop {
+            let deduped_run_name = format!(
+                "{}_{}",
+                run_name,
+                self.run_name_dedup_indices.get(&run_name).unwrap()
+            );
+            if self.run_name_dedup_indices.contains_key(&deduped_run_name) {
+                *self.run_name_dedup_indices.get_mut(&run_name).unwrap() += 1;
+            } else {
+                self.run_name_dedup_indices
+                    .insert(deduped_run_name.clone(), 1);
+                warn!(
+                    "Duplicate run names detected. Renaming run {run_name} to {deduped_run_name}."
+                );
+                return deduped_run_name;
+            }
+        }
     }
 
     fn process_per_run_time_range(
@@ -180,8 +206,6 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
         return Err(PDError::ReportExists(report_path_str).into());
     }
 
-    check_duplicate_runs(&report.run)?;
-
     let mut runs_info = RunsInfo::new();
 
     for run in &report.run {
@@ -265,21 +289,6 @@ fn parse_time_range(s: &str) -> Result<(String, Option<u64>, Option<u64>), Strin
     Ok((run_name.to_string(), from, to))
 }
 
-/// Checks if the list of runs include duplicates
-pub fn check_duplicate_runs(run_args: &Vec<String>) -> Result<()> {
-    let mut unique_runs: HashSet<String> = HashSet::new();
-
-    for run in run_args {
-        let run_name = no_tar_gz_file_name(&PathBuf::from(run))
-            .ok_or(PDError::InvalidArchive(PathBuf::from(run)))?;
-        if !unique_runs.insert(run_name.clone()) {
-            return Err(PDError::DuplicateRunNames(run_name).into());
-        }
-    }
-
-    Ok(())
-}
-
 /// Creates (tar) an archive in the temporary directory
 pub fn create_archive(dir_path: &PathBuf, tmp_dir: &PathBuf) -> Result<PathBuf> {
     if !dir_path.is_dir() {
@@ -307,17 +316,35 @@ pub fn extract_archive(archive_path: &PathBuf, tmp_dir: &PathBuf) -> Result<Path
 
     info!("Extracting archive {:?}", archive_path);
 
+    // Get the top-level directory to help locate the path after untar
+    let archive_file = File::open(&archive_path)?;
+    let gz_decoder = GzDecoder::new(archive_file);
+    let mut tar = tar::Archive::new(gz_decoder);
+    let dir_name = tar
+        .entries()?
+        .next()
+        .context(format!("Empty tar archive {:?}", archive_path))??
+        .path()?
+        .components()
+        .next()
+        .context(format!(
+            "No top-level directory in archive {:?}",
+            archive_path
+        ))?
+        .as_os_str()
+        .to_string_lossy()
+        .to_string();
+
+    // Re-open the file to unpack, since the above entries() call moved the archive's reader
+    // past position 0
     let archive_file = File::open(&archive_path)?;
     let gz_decoder = GzDecoder::new(archive_file);
     let mut tar = tar::Archive::new(gz_decoder);
     tar.unpack(tmp_dir)?;
-    let dir_name = match no_tar_gz_file_name(&archive_path) {
-        Some(dir_name) => dir_name,
-        None => return Err(PDError::InvalidArchive(archive_path.clone()).into()),
-    };
+
     let extracted_dir_path = tmp_dir.join(&dir_name);
     if !extracted_dir_path.exists() {
-        return Err(PDError::ArchiveDirectoryInvalidName(dir_name).into());
+        return Err(PDError::InvalidDirectory(extracted_dir_path).into());
     }
 
     Ok(extracted_dir_path)
@@ -366,11 +393,11 @@ fn generate_report_files(report_dir: PathBuf, runs_info: RunsInfo, tmp_dir: &Pat
     let mut visualization_data = VisualizationData::new();
     data::add_all_visualization_data(&mut visualization_data);
     /* Init visualizers */
-    for run_data_dir in runs_info.run_dir_paths {
-        let run_name = visualization_data
-            .init_visualizers(run_data_dir.clone(), tmp_dir, &report_dir)
+    for (run_name, run_data_dir) in runs_info.run_dir_paths {
+        visualization_data
+            .init_visualizers(run_name.clone(), run_data_dir.clone(), tmp_dir, &report_dir)
             .unwrap();
-        visualization_data.process_raw_data(run_name).unwrap();
+        visualization_data.process_raw_data().unwrap();
     }
 
     let mut processed_data_accessor = ProcessedDataAccessor::from_time_ranges(
@@ -432,9 +459,8 @@ fn generate_report_files(report_dir: PathBuf, runs_info: RunsInfo, tmp_dir: &Pat
 
     /* Copy all run archives into the report's data/archives path */
     let report_run_archives_dir = report_data_dir.join("archive");
-    for run_archive_source_path in runs_info.run_archive_paths {
-        let run_archive_dest_path =
-            report_run_archives_dir.join(run_archive_source_path.file_name().unwrap());
+    for (run_name, run_archive_source_path) in runs_info.run_archive_paths {
+        let run_archive_dest_path = report_run_archives_dir.join(format!("{run_name}.tar.gz"));
         info!("Copying archive to {:?}", run_archive_dest_path);
         fs::copy(run_archive_source_path, run_archive_dest_path).unwrap();
     }

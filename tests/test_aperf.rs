@@ -39,7 +39,6 @@ where
 }
 
 #[test]
-#[serial]
 #[cfg(feature = "hotline")]
 fn test_hotline() {
     unsafe {
@@ -49,7 +48,6 @@ fn test_hotline() {
 
 #[cfg(target_os = "linux")]
 #[test]
-#[serial]
 fn test_record() {
     run_test(|work_dir, tmp_dir| {
         let run_name =
@@ -80,7 +78,6 @@ fn test_record() {
 
 #[cfg(target_os = "linux")]
 #[test]
-#[serial]
 fn test_record_dont_collect_some_data() {
     run_test(|work_dir, tmp_dir| {
         let dont_collect_data_names = vec![
@@ -132,7 +129,6 @@ fn test_record_dont_collect_some_data() {
 
 #[cfg(target_os = "linux")]
 #[test]
-#[serial]
 fn test_record_collect_only_some_data() {
     run_test(|work_dir, tmp_dir| {
         let collect_only_data_names = vec![
@@ -190,7 +186,6 @@ fn test_record_collect_only_some_data() {
 
 #[cfg(target_os = "linux")]
 #[test]
-#[serial]
 fn test_record_and_report() {
     run_test(|work_dir, tmp_dir| {
         let run_name = String::from("test_record_run");
@@ -221,7 +216,6 @@ fn test_record_and_report() {
 
 #[cfg(target_os = "linux")]
 #[test]
-#[serial]
 fn test_record_and_report_dot_in_run_name() {
     run_test(|work_dir, tmp_dir| {
         let run_name = String::from("test.record.data");
@@ -251,7 +245,6 @@ fn test_record_and_report_dot_in_run_name() {
 }
 
 #[test]
-#[serial]
 fn test_report_with_empty_data_bin() {
     run_test(|work_dir, tmp_dir| {
         let run_name = String::from("empty_data_bin");
@@ -300,7 +293,6 @@ fn test_report_with_empty_data_bin() {
 }
 
 #[test]
-#[serial]
 fn test_report_single_run() {
     run_test(|work_dir, tmp_dir| {
         let run_name = String::from("test_run_1");
@@ -329,7 +321,6 @@ fn test_report_single_run() {
 }
 
 #[test]
-#[serial]
 fn test_report_multiple_runs() {
     run_test(|work_dir, tmp_dir| {
         let run_name_1 = String::from("test_run_1");
@@ -366,7 +357,6 @@ fn test_report_multiple_runs() {
 }
 
 #[test]
-#[serial]
 fn test_report_from_report() {
     run_test(|work_dir, tmp_dir| {
         let input_report_path = get_test_data_path("test_report.tar.gz");
@@ -407,7 +397,155 @@ fn test_report_from_report() {
 }
 
 #[test]
-#[serial]
+fn test_report_renamed_run() {
+    run_test(|work_dir, tmp_dir| {
+        let run_name = String::from("renamed_test_run");
+        let run_path = get_test_data_path(format!("{}.tar.gz", run_name));
+
+        let report_name = String::from("renamed_run_report");
+        let rep = Report {
+            run: vec![run_path.into_os_string().into_string().unwrap()],
+            name: Some(
+                work_dir
+                    .join(&report_name)
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+            ),
+            time_range: vec![],
+        };
+        assert!(report(&rep, &tmp_dir).is_ok());
+
+        verify_report_structure(&work_dir, &report_name, vec![run_name]);
+
+        clean_dir_and_archive(&work_dir, &report_name);
+
+        Ok(())
+    })
+}
+
+#[test]
+fn test_duplicate_run_names() {
+    run_test(|work_dir, tmp_dir| {
+        let input_report_path = get_test_data_path("test_report.tar.gz");
+        let duplicate_run_name = String::from("test_run_1");
+        let duplicate_run_path = get_test_data_path(format!("{}.tar.gz", duplicate_run_name));
+
+        let report_name = String::from("test_report");
+        let report_dir_path = work_dir.join(&report_name);
+        let rep = Report {
+            run: vec![
+                input_report_path
+                    .clone()
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+                duplicate_run_path
+                    .clone()
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+            ],
+            name: Some(
+                report_dir_path
+                    .clone()
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+            ),
+            time_range: vec![],
+        };
+
+        assert!(report(&rep, &tmp_dir).is_ok());
+
+        verify_report_structure(
+            &work_dir,
+            &report_name,
+            vec![
+                String::from("test_run_1"),
+                String::from("test_run_2"),
+                String::from("test_run_1_1"),
+            ],
+        );
+
+        let rev_report_name = String::from("test_report_rev");
+        let rev_report_dir_path = work_dir.join(&rev_report_name);
+        let rev_rep = Report {
+            run: vec![
+                duplicate_run_path
+                    .clone()
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+                input_report_path
+                    .clone()
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+            ],
+            name: Some(
+                rev_report_dir_path
+                    .clone()
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+            ),
+            time_range: vec![],
+        };
+
+        assert!(report(&rev_rep, &tmp_dir).is_ok());
+
+        verify_report_structure(
+            &work_dir,
+            &rev_report_name,
+            vec![
+                String::from("test_run_1"),
+                String::from("test_run_1_1"),
+                String::from("test_run_2"),
+            ],
+        );
+
+        let combined_report_name = String::from("combined");
+        let combined_report_dir_path = work_dir.join(&combined_report_name);
+        let combined_rep = Report {
+            run: vec![
+                report_dir_path.into_os_string().into_string().unwrap(),
+                rev_report_dir_path.into_os_string().into_string().unwrap(),
+            ],
+            name: Some(
+                combined_report_dir_path
+                    .clone()
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+            ),
+            time_range: vec![],
+        };
+
+        assert!(report(&combined_rep, &tmp_dir).is_ok());
+
+        verify_report_structure(
+            &work_dir,
+            &combined_report_name,
+            vec![
+                String::from("test_run_1"),
+                String::from("test_run_1_1"),
+                String::from("test_run_2"),
+                String::from("test_run_1_2"),
+                String::from("test_run_1_1_1"),
+                String::from("test_run_2_1"),
+            ],
+        );
+
+        clean_dir_and_archive(&work_dir, &report_name);
+        clean_dir_and_archive(&work_dir, &rev_report_name);
+        clean_dir_and_archive(&work_dir, &combined_report_name);
+
+        Ok(())
+    })
+}
+
+#[test]
 fn test_report_with_time_range() {
     run_test(|work_dir, tmp_dir| {
         let run_name = String::from("test_run_1");
@@ -451,7 +589,6 @@ fn test_report_with_time_range() {
 }
 
 #[test]
-#[serial]
 fn test_report_already_exists() {
     run_test(|work_dir, tmp_dir| {
         let run_name = String::from("test_run_3");
@@ -494,7 +631,6 @@ fn test_report_already_exists() {
 }
 
 #[test]
-#[serial]
 fn test_run_data_not_exists() {
     run_test(|work_dir, tmp_dir| {
         let run_name = String::from("fake_run");
@@ -528,92 +664,6 @@ fn test_run_data_not_exists() {
 }
 
 #[test]
-#[serial]
-fn test_duplicate_run_data() {
-    run_test(|work_dir, tmp_dir| {
-        let input_report_path = get_test_data_path("test_report.tar.gz");
-        let duplicate_run_name = String::from("test_run_1");
-        let duplicate_run_path = get_test_data_path(format!("{}.tar.gz", duplicate_run_name));
-
-        let report_name = String::from("report_with_duplicate_data");
-        let report_dir_path = work_dir.join(&report_name);
-        let report_archive_path = work_dir.join(format!("{}.tar.gz", report_name));
-        let rep = Report {
-            run: vec![
-                input_report_path.into_os_string().into_string().unwrap(),
-                duplicate_run_path.into_os_string().into_string().unwrap(),
-            ],
-            name: Some(
-                report_dir_path
-                    .clone()
-                    .into_os_string()
-                    .into_string()
-                    .unwrap(),
-            ),
-            time_range: vec![],
-        };
-
-        let error = report(&rep, &tmp_dir).unwrap_err();
-        assert_eq!(
-            error.to_string(),
-            format!("Multiple runs with the same name: {}", duplicate_run_name)
-        );
-
-        assert!(!report_dir_path.exists());
-        assert!(!report_archive_path.exists());
-
-        Ok(())
-    })
-}
-
-#[test]
-#[serial]
-fn test_duplicate_run_data_quick_fail() {
-    run_test(|work_dir, tmp_dir| {
-        let duplicate_run_name = String::from("test_run_2");
-        let duplicate_run_path = get_test_data_path(format!("{}.tar.gz", duplicate_run_name));
-
-        let report_name = String::from("report_not_to_be_generated");
-        let report_dir_path = work_dir.join(&report_name);
-        let report_archive_path = work_dir.join(format!("{}.tar.gz", report_name));
-        let rep = Report {
-            run: vec![
-                duplicate_run_path
-                    .clone()
-                    .into_os_string()
-                    .into_string()
-                    .unwrap(),
-                duplicate_run_path
-                    .clone()
-                    .into_os_string()
-                    .into_string()
-                    .unwrap(),
-            ],
-            name: Some(
-                report_dir_path
-                    .clone()
-                    .into_os_string()
-                    .into_string()
-                    .unwrap(),
-            ),
-            time_range: vec![],
-        };
-
-        let error = report(&rep, &tmp_dir).unwrap_err();
-        assert_eq!(
-            error.to_string(),
-            format!("Multiple runs with the same name: {}", duplicate_run_name)
-        );
-
-        assert!(!report_dir_path.exists());
-        assert!(!report_archive_path.exists());
-
-        Ok(())
-    })
-}
-
-#[test]
-#[serial]
 fn test_report_with_time_range_invalid_run_name() {
     run_test(|work_dir, tmp_dir| {
         let run_name = String::from("test_run_1");
@@ -651,7 +701,6 @@ fn test_report_with_time_range_invalid_run_name() {
 
 #[cfg(target_os = "linux")]
 #[test]
-#[serial]
 fn test_report_with_time_range_from_greater_than_to() {
     run_test(|work_dir, tmp_dir| {
         let run_name = String::from("test_run_1");

@@ -18,7 +18,6 @@ use crate::data::common::processed_data_accessor::ProcessedDataAccessor;
 use crate::visualizer::DataVisualizer;
 use anyhow::Result;
 use chrono::prelude::*;
-use data::common;
 use data::common::utils::get_data_name_from_type;
 use log::{debug, error, info};
 use serde::{Deserialize, Serialize};
@@ -108,9 +107,6 @@ pub enum PDError {
 
     #[error("The report {0} already exists in current directory.")]
     ReportExists(String),
-
-    #[error("The directory within the archive does not have the same name as the archive: {0}")]
-    ArchiveDirectoryInvalidName(String),
 
     #[error("Invalid directory {0:?}")]
     InvalidDirectory(PathBuf),
@@ -457,18 +453,18 @@ impl VisualizationData {
 
     pub fn init_visualizers(
         &mut self,
+        run_name: String,
         run_data_dir: PathBuf,
         tmp_dir: &Path,
         report_dir: &Path,
-    ) -> Result<String> {
-        let run_name = common::utils::no_tar_gz_file_name(&run_data_dir).unwrap();
+    ) -> Result<()> {
         let visualizers_len = self.visualizers.len();
         let mut error_count = 0;
 
         for data_visualizer in self.visualizers.values_mut() {
             if let Err(e) = data_visualizer.init_visualizer(
-                run_data_dir.clone(),
                 run_name.clone(),
+                run_data_dir.clone(),
                 tmp_dir,
                 report_dir,
             ) {
@@ -481,7 +477,8 @@ impl VisualizationData {
         if error_count == visualizers_len {
             return Err(PDError::InvalidRunData.into());
         }
-        Ok(run_name.clone())
+
+        Ok(())
     }
 
     pub fn add_visualizer(&mut self, data_visualizer: DataVisualizer) {
@@ -489,9 +486,9 @@ impl VisualizationData {
             .insert(data_visualizer.data_name.to_string(), data_visualizer);
     }
 
-    pub fn process_raw_data(&mut self, name: String) -> Result<()> {
+    pub fn process_raw_data(&mut self) -> Result<()> {
         for data_visualizer in self.visualizers.values_mut() {
-            if let Err(e) = data_visualizer.process_raw_data(name.clone()) {
+            if let Err(e) = data_visualizer.process_raw_data() {
                 error!(
                     "Error while processing {} raw data: {:#?}",
                     data_visualizer.data_name, e
