@@ -169,6 +169,12 @@ fn compute_finding_score(value: f64, threshold: f64, rule_score: f64) -> f64 {
         };
     }
 
+    // Value being 100% less than the threshold should be treated the same as
+    // being 100% greater than the threshold
+    if value == 0.0 {
+        return 2.0 * rule_score;
+    }
+
     let mut delta = value / threshold;
     if delta < 1.0 {
         delta = delta.recip();
@@ -253,3 +259,82 @@ macro_rules! multi_data_analytical_rules {
 
 // Register all multi-data-type rule templates here
 multi_data_analytical_rules!();
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- value == 0.0 cases ---
+
+    #[test]
+    fn test_value_zero_positive_score() {
+        // value=0 with non-zero threshold should return 2.0 * rule_score
+        let result = compute_finding_score(0.0, 10.0, 5.0);
+        assert_eq!(result, 10.0); // 2.0 * 5.0
+    }
+
+    #[test]
+    fn test_value_zero_negative_score() {
+        let result = compute_finding_score(0.0, 50.0, -2.0);
+        assert_eq!(result, -4.0); // 2.0 * -2.0
+    }
+
+    #[test]
+    fn test_value_zero_zero_score() {
+        let result = compute_finding_score(0.0, 100.0, 0.0);
+        assert_eq!(result, 0.0); // 2.0 * 0.0
+    }
+
+    // --- threshold == 0.0 cases ---
+
+    #[test]
+    fn test_threshold_zero_value_less_than_one() {
+        // threshold=0, value<1 => rule_score
+        let result = compute_finding_score(0.5, 0.0, 3.0);
+        assert_eq!(result, 3.0);
+    }
+
+    #[test]
+    fn test_threshold_zero_value_greater_than_one() {
+        // threshold=0, value>=1 => (value - 1.0) * rule_score
+        let result = compute_finding_score(5.0, 0.0, 3.0);
+        assert_eq!(result, 12.0); // (5.0 - 1.0) * 3.0
+    }
+
+    #[test]
+    fn test_threshold_zero_value_exactly_one() {
+        // threshold=0, value==1.0 => (1.0 - 1.0) * rule_score = 0
+        let result = compute_finding_score(1.0, 0.0, 3.0);
+        assert_eq!(result, 0.0);
+    }
+
+    #[test]
+    fn test_both_value_and_threshold_zero() {
+        // threshold==0 branch is checked first; value=0.0 < 1.0 => rule_score
+        let result = compute_finding_score(0.0, 0.0, 7.0);
+        assert_eq!(result, 7.0);
+    }
+
+    // --- normal delta cases ---
+
+    #[test]
+    fn test_value_above_threshold() {
+        // delta = 10/5 = 2.0, >= 1 so no recip => 2.0 * 3.0 = 6.0
+        let result = compute_finding_score(10.0, 5.0, 3.0);
+        assert_eq!(result, 6.0);
+    }
+
+    #[test]
+    fn test_value_below_threshold() {
+        // delta = 2/10 = 0.2, < 1 so recip => 5.0 * 3.0 = 15.0
+        let result = compute_finding_score(2.0, 10.0, 3.0);
+        assert_eq!(result, 15.0);
+    }
+
+    #[test]
+    fn test_value_equals_threshold() {
+        // delta = 1.0, not < 1 => 1.0 * rule_score
+        let result = compute_finding_score(5.0, 5.0, 4.0);
+        assert_eq!(result, 4.0);
+    }
+}
