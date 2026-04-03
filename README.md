@@ -267,9 +267,10 @@ The paths to the directories or archives of the recorded data to be included in 
 
 The directory and archive name of the report.
 
-`-t, --tmp-dir <TMP_DIR> ` [default: /tmp]
+`--time-range RUN_NAME=FROM_TIME:TO_TIME`
 
-Temporary directory for intermediate files 
+The time range to apply to a run in the report, including its time-series metrics, statistics, and analytical findings.
+Specify the option multiple times to apply a time range for multiple runs, or omit the `RUN_NAME=` part to apply it to all runs. Either bound can be omitted or negative.
 
 -----
 
