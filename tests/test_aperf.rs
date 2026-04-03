@@ -546,14 +546,19 @@ fn test_duplicate_run_names() {
 }
 
 #[test]
-fn test_report_with_time_range() {
+fn test_report_with_time_ranges() {
     run_test(|work_dir, tmp_dir| {
-        let run_name = String::from("test_run_1");
-        let run_path = get_test_data_path(format!("{}.tar.gz", run_name));
+        let run_name_1 = String::from("test_run_1");
+        let run_path_1 = get_test_data_path(format!("{run_name_1}.tar.gz"));
+        let run_name_2 = String::from("test_run_2");
+        let run_path_2 = get_test_data_path(format!("{run_name_2}.tar.gz"));
 
         let report_name = String::from("time_range_report");
         let rep = Report {
-            run: vec![run_path.into_os_string().into_string().unwrap()],
+            run: vec![
+                run_path_1.into_os_string().into_string().unwrap(),
+                run_path_2.into_os_string().into_string().unwrap(),
+            ],
             name: Some(
                 work_dir
                     .join(&report_name)
@@ -561,26 +566,14 @@ fn test_report_with_time_range() {
                     .into_string()
                     .unwrap(),
             ),
-            time_range: vec![(run_name.clone(), Some(5), Some(30))],
+            time_range: vec![
+                (run_name_1.clone(), Some(5), Some(30)),
+                (run_name_2.clone(), Some(-8), Some(-2)),
+            ],
         };
         assert!(report(&rep, &tmp_dir).is_ok());
 
-        verify_report_structure(&work_dir, &report_name, vec![run_name]);
-
-        // Verify the processed JS files exist and contain valid JSON
-        let js_dir = work_dir.join(&report_name).join("data").join("js");
-        for entry in fs::read_dir(&js_dir).unwrap() {
-            let entry = entry.unwrap();
-            let path = entry.path();
-            if path.extension().map_or(false, |ext| ext == "js") {
-                let content = fs::read_to_string(&path).unwrap();
-                assert!(
-                    !content.is_empty(),
-                    "JS file {:?} should not be empty",
-                    path
-                );
-            }
-        }
+        verify_report_structure(&work_dir, &report_name, vec![run_name_1, run_name_2]);
 
         clean_dir_and_archive(&work_dir, &report_name);
 

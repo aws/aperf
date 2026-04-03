@@ -42,9 +42,9 @@ struct RunsInfo {
     /// The map from run names to paths to the run data directory (where data are available for read and processing)
     run_dir_paths: HashMap<String, PathBuf>,
     /// The specified start time of every run's time range
-    per_run_from_time: HashMap<String, u64>,
+    per_run_from_time: HashMap<String, i64>,
     /// The specified end time of every run's time range
-    per_run_to_time: HashMap<String, u64>,
+    per_run_to_time: HashMap<String, i64>,
 }
 
 impl RunsInfo {
@@ -95,7 +95,7 @@ impl RunsInfo {
 
     fn process_per_run_time_range(
         &mut self,
-        run_time_ranges: &Vec<(String, Option<u64>, Option<u64>)>,
+        run_time_ranges: &Vec<(String, Option<i64>, Option<i64>)>,
     ) -> Result<()> {
         for (run_name, from_time, to_time) in run_time_ranges {
             // Empty run name means apply to all runs
@@ -113,7 +113,8 @@ impl RunsInfo {
             };
 
             if let (Some(from_time), Some(to_time)) = (from_time, to_time) {
-                if from_time > to_time {
+                // Quickly fail if the two bounds are of the same sign and FROM > TO
+                if (*from_time ^ *to_time) >= 0 && *from_time > *to_time {
                     return Err(PDError::InvalidRunTimeRangeOption(format!(
                         "The specified from_time {} is larger than to_time {} for run {}.",
                         from_time,
@@ -169,25 +170,27 @@ pub struct Report {
     #[clap(help_heading = "Basic Options", short, long, value_parser)]
     pub name: Option<String>,
 
-    /// Time range to apply to a run in the report. All the time-series metrics, stats, and
+    /// The time range to apply to a run in the report. All the time-series metrics, stats, and
     /// analytical findings of the run will be limited to the specified time range.
     /// ===================================
     /// Format: RUN_NAME=FROM:TO or FROM:TO
     /// ===================================
     /// where FROM and TO are in seconds from the start of the run. If no run name is specified,
-    /// the time range is applied to all runs. Either bound can be omitted and it can be specified
-    /// for multiple runs.
-    /// Example: --time-range first_run=10:60 second_run=:30
+    /// the time range is applied to all runs. Either bound can be omitted or negative, and it
+    /// can be specified for multiple runs.
+    /// Example: --time-range first_run=10:60 --time-range second_run=:30
     ///          --time-range 20:150
+    ///          --time-range -10:-5
     #[clap(
         help_heading = "Basic Options",
         verbatim_doc_comment,
         long,
         value_parser = parse_time_range,
         value_name = "RUN=FROM:TO",
-        num_args = 1..
+        allow_hyphen_values = true,
+        num_args = 1
     )]
-    pub time_range: Vec<(String, Option<u64>, Option<u64>)>,
+    pub time_range: Vec<(String, Option<i64>, Option<i64>)>,
 }
 
 pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
@@ -260,7 +263,7 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
 
 /// Used to parse the --time-range option, in the format of run_name=from_time:to_time,
 /// into a tuple (run_name, from_time, to_time)
-fn parse_time_range(s: &str) -> Result<(String, Option<u64>, Option<u64>), String> {
+fn parse_time_range(s: &str) -> Result<(String, Option<i64>, Option<i64>), String> {
     // If there's no '=', treat the whole string as FROM:TO (applies to all runs)
     let (run_name, range) = s.split_once('=').unwrap_or(("", s));
     let (from_str, to_str) = range
@@ -272,7 +275,7 @@ fn parse_time_range(s: &str) -> Result<(String, Option<u64>, Option<u64>), Strin
     } else {
         Some(
             from_str
-                .parse::<u64>()
+                .parse::<i64>()
                 .map_err(|e| format!("invalid FROM value: {}", e))?,
         )
     };
@@ -281,7 +284,7 @@ fn parse_time_range(s: &str) -> Result<(String, Option<u64>, Option<u64>), Strin
     } else {
         Some(
             to_str
-                .parse::<u64>()
+                .parse::<i64>()
                 .map_err(|e| format!("invalid TO value: {}", e))?,
         )
     };

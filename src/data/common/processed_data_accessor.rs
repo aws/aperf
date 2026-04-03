@@ -13,9 +13,9 @@ use std::fmt::Write;
 #[derive(Debug)]
 pub struct ProcessedDataAccessor {
     /// The start of the time range for every run data
-    per_run_from_time: HashMap<String, u64>,
+    per_run_from_time: HashMap<String, i64>,
     /// The end of the time range for every run data
-    per_run_to_time: HashMap<String, u64>,
+    per_run_to_time: HashMap<String, i64>,
     /// The cache for a metric's stat within the time range
     /// (since stat computation is costly).
     time_series_metric_stat_cache: HashMap<(String, String), Statistics>,
@@ -31,8 +31,8 @@ impl ProcessedDataAccessor {
     }
 
     pub fn from_time_ranges(
-        per_run_from_time: HashMap<String, u64>,
-        per_run_to_time: HashMap<String, u64>,
+        per_run_from_time: HashMap<String, i64>,
+        per_run_to_time: HashMap<String, i64>,
     ) -> Self {
         ProcessedDataAccessor {
             per_run_from_time,
@@ -267,8 +267,8 @@ fn write_time_series_metric_json_string(
     buf: &mut String,
     time_series_metric: &TimeSeriesMetric,
     stats: Statistics,
-    from_time: Option<u64>,
-    to_time: Option<u64>,
+    from_time: Option<i64>,
+    to_time: Option<i64>,
 ) {
     buf.push_str("{\"metric_name\":");
     write!(
@@ -307,8 +307,8 @@ fn write_time_series_metric_json_string(
 fn write_series_json_string(
     buf: &mut String,
     series: &Series,
-    from_time: Option<u64>,
-    to_time: Option<u64>,
+    from_time: Option<i64>,
+    to_time: Option<i64>,
 ) {
     let (start, end) = compute_time_diff_index(&series.time_diff, from_time, to_time);
     // Uses itoa/ryu for fast int/float number formatting
@@ -377,20 +377,38 @@ fn get_key_value_data<'a>(
 /// the specified time range.
 fn compute_time_diff_index(
     time_diff: &[u64],
-    from_time: Option<u64>,
-    to_time: Option<u64>,
+    from_time: Option<i64>,
+    to_time: Option<i64>,
 ) -> (usize, usize) {
     let start_idx = if let Some(from) = from_time {
-        time_diff.partition_point(|t| *t < from)
+        let from_t = if from < 0 {
+            time_diff
+                .last()
+                .map(|&last_time_diff| last_time_diff.saturating_sub(from.abs() as u64))
+                .unwrap_or(0)
+        } else {
+            from as u64
+        };
+        time_diff.partition_point(|t| *t < from_t)
     } else {
         0
     };
+
     let end_idx = if let Some(to) = to_time {
-        time_diff.partition_point(|t| *t <= to)
+        let to_t = if to < 0 {
+            time_diff
+                .last()
+                .map(|&last_time_diff| last_time_diff.saturating_sub(to.abs() as u64))
+                .unwrap_or(0)
+        } else {
+            to as u64
+        };
+        time_diff.partition_point(|t| *t <= to_t)
     } else {
         time_diff.len()
     };
-    (start_idx, end_idx)
+
+    (start_idx, end_idx.max(start_idx))
 }
 
 #[cfg(test)]
@@ -551,6 +569,93 @@ mod tests {
         // Typical real-world case: second-by-second time_diff
         let td: Vec<u64> = (0..100).collect();
         assert_eq!(compute_time_diff_index(&td, Some(25), Some(74)), (25, 75));
+    }
+
+    // ---- negative index tests ----
+
+    #[test]
+    fn test_index_negative_from() {
+        // time_diff: [0, 10, 20, 30, 40], last=40
+        // from=-15 → 40-15=25 → first index where t >= 25 is index 3 (value 30)
+        assert_eq!(
+            compute_time_diff_index(&[0, 10, 20, 30, 40], Some(-15), None),
+            (3, 5)
+        );
+    }
+
+    #[test]
+    fn test_index_negative_to() {
+        // time_diff: [0, 10, 20, 30, 40], last=40
+        // to=-15 → 40-15=25 → first index where t > 25 is index 3 (value 30), so end=3
+        assert_eq!(
+            compute_time_diff_index(&[0, 10, 20, 30, 40], None, Some(-15)),
+            (0, 3)
+        );
+    }
+
+    #[test]
+    fn test_index_both_negative() {
+        // time_diff: [0, 10, 20, 30, 40], last=40
+        // from=-30 → 40-30=10, to=-10 → 40-10=30
+        // range [10, 30] → indices 1..4
+        assert_eq!(
+            compute_time_diff_index(&[0, 10, 20, 30, 40], Some(-30), Some(-10)),
+            (1, 4)
+        );
+    }
+
+    #[test]
+    fn test_index_negative_from_positive_to() {
+        // time_diff: [0, 10, 20, 30, 40], last=40
+        // from=-25 → 40-25=15, to=30
+        // range [15, 30] → indices 2..4
+        assert_eq!(
+            compute_time_diff_index(&[0, 10, 20, 30, 40], Some(-25), Some(30)),
+            (2, 4)
+        );
+    }
+
+    #[test]
+    fn test_index_negative_exceeds_range() {
+        // time_diff: [0, 10, 20], last=20
+        // from=-100 → 20-100 saturates to 0 → full range from start
+        assert_eq!(
+            compute_time_diff_index(&[0, 10, 20], Some(-100), None),
+            (0, 3)
+        );
+    }
+
+    #[test]
+    fn test_index_negative_on_empty() {
+        assert_eq!(compute_time_diff_index(&[], Some(-5), Some(-1)), (0, 0));
+    }
+
+    #[test]
+    fn test_index_negative_second_by_second() {
+        // Typical: 100-second recording, want last 10 seconds
+        let td: Vec<u64> = (0..100).collect();
+        // from=-10 → 99-10=89, to=-1 → 99-1=98
+        // range [89, 98] → indices 89..99
+        assert_eq!(compute_time_diff_index(&td, Some(-10), Some(-1)), (89, 99));
+    }
+
+    #[test]
+    fn test_index_inverted_range_returns_empty() {
+        // from=35 (positive), to=-30 → resolves to 40-30=10
+        // Resolved range [35, 10] is inverted → should return empty (start, start)
+        assert_eq!(
+            compute_time_diff_index(&[0, 10, 20, 30, 40], Some(35), Some(-30)),
+            (4, 4)
+        );
+    }
+
+    #[test]
+    fn test_index_inverted_positive_range_returns_empty() {
+        // Pure positive inversion: from=30, to=10
+        assert_eq!(
+            compute_time_diff_index(&[0, 10, 20, 30, 40], Some(30), Some(10)),
+            (3, 3)
+        );
     }
 
     // ---- iterator tests ----
