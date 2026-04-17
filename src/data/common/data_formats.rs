@@ -1,4 +1,5 @@
 use crate::computations::{serialize_f64_vec_fixed2, Statistics};
+use crate::profiling::Profile;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use strum_macros::Display;
@@ -159,6 +160,7 @@ pub struct KeyValueGroup {
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct GraphData {
     pub graph_groups: Vec<GraphGroup>,
+    pub profiler_data_map: HashMap<String, ProfilerData>,
 }
 
 /// Contents of a graph group, which contains all graphs to be displayed together.
@@ -198,4 +200,33 @@ impl Graph {
 pub struct TextData {
     /// All lines of the text content.
     pub lines: Vec<String>,
+}
+
+// ---------------------------------------- PROFILER DATA ------------------------------------------
+/// Time-bucketed profiling data supporting JFR and perf record sources.
+/// Enables per-block sample lookups (for heatmaps and time range selection) and call graph traversal
+/// (for self/total sample computation).
+///
+/// See [`crate::profiling`] for the implementation of profile building and querying.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProfilerData {
+    /// Start time of the profile in milliseconds since epoch
+    pub start_time_ms: i64,
+    /// Duration of each block in milliseconds
+    pub block_width_ms: u64,
+    /// Additional metadata (e.g., source, architecture, JVM version)
+    pub metadata: KeyValueData,
+    /// Profiling type (e.g., "cpu", "wall", "allocation") -> Profile
+    pub profiles: HashMap<String, Profile>,
+}
+
+impl ProfilerData {
+    pub fn new(start_time_ms: i64, block_width_ms: u64) -> Self {
+        ProfilerData {
+            start_time_ms,
+            block_width_ms,
+            metadata: KeyValueData::default(),
+            profiles: HashMap::new(),
+        }
+    }
 }
