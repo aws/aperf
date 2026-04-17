@@ -2,6 +2,7 @@ use crate::data::common::data_formats::{AperfData, Graph, GraphData, GraphGroup}
 use crate::data::{Data, ProcessData};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
+use log::error;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 #[cfg(target_os = "linux")]
@@ -10,7 +11,8 @@ use {
     crate::{get_file_name, PDError},
     inferno::collapse::{perf::Folder, Collapse},
     inferno::flamegraph::{self, Direction, Options},
-    log::{debug, error, info},
+    log::{debug, info},
+    std::fs,
     std::fs::File,
     std::io::Write,
     std::process::Command,
@@ -83,6 +85,7 @@ impl CollectData for FlamegraphRaw {
             }
             Ok(_) => {
                 info!("Creating flamegraph...");
+                // TODO: extract metadata from perf record and generate script -> ProfilerData
                 let script_loc = data_dir.join("script.out");
                 let out = Command::new("perf")
                     .stdout(File::create(&script_loc)?)
@@ -96,9 +99,12 @@ impl CollectData for FlamegraphRaw {
                     }
                     Ok(_) => {
                         let collapse_loc = data_dir.join("collapse.out");
+                        // TODO: move flamegraph generation to report phase using ProfilerData (so user specifies time range)
+                        Folder::default().collapse_file(
+                            Some(script_loc.clone()),
+                            File::create(&collapse_loc)?,
+                        )?;
 
-                        Folder::default()
-                            .collapse_file(Some(script_loc), File::create(&collapse_loc)?)?;
                         // Generate icicle graph as default
                         let mut reverse_options = Options::default();
                         reverse_options.direction = Direction::Inverted;
@@ -116,6 +122,11 @@ impl CollectData for FlamegraphRaw {
                             &[collapse_loc.to_path_buf()],
                             reverse_fg_out,
                         )?;
+
+                        // Clean up intermediate files after creating flamegraphs and saving
+                        for file in [&script_loc, &perf_jit_loc, &collapse_loc] {
+                            fs::remove_file(file).ok();
+                        }
                     }
                 }
             }
@@ -175,6 +186,8 @@ impl ProcessData for Flamegraph {
         }
 
         let mut graph_data = GraphData::default();
+
+        // TODO: Populate graph_data profiler_data_map from record serialized profiler data
 
         copy_and_add_to_graph_group(
             &params,

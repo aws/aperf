@@ -7,6 +7,7 @@ pub mod computations;
 pub mod data;
 #[cfg(target_os = "linux")]
 pub mod pmu;
+pub mod profiling;
 #[cfg(target_os = "linux")]
 pub mod record;
 pub mod report;

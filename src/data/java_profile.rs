@@ -1,10 +1,13 @@
-use crate::data::common::data_formats::{AperfData, Graph, GraphData, GraphGroup};
+use crate::data::common::data_formats::{AperfData, Graph, GraphData, GraphGroup, ProfilerData};
 #[cfg(target_os = "linux")]
 use crate::data::common::utils::get_data_name_from_type;
 use crate::data::{Data, ProcessData};
+use crate::profiling::{jfr, BUCKET_WIDTH_MS};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
+use log::error;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -12,7 +15,7 @@ use std::path::PathBuf;
 use {
     crate::data::{CollectData, CollectorParams},
     crate::PDError,
-    log::{debug, error},
+    log::debug,
     nix::{sys::signal, unistd::Pid},
     std::fs::File,
     std::io::Write,
@@ -256,6 +259,44 @@ impl CollectData for JavaProfileRaw {
                 .join(format!("{}-java-profile-{}.jfr", params.run_name, key));
 
             if fs::exists(&jfr_path).expect("Can't check existence of jfr file") {
+                // Extract metadata JSON string from JFR
+                let metadata_events = [
+                    "jdk.ActiveRecording",
+                    "jdk.ActiveSetting",
+                    "jdk.CheckPoint",
+                    "jdk.Metadata",
+                    "jdk.JVMInformation",
+                    "jdk.NativeLibrary",
+                ];
+                let metadata_json = match Command::new("jfr")
+                    .args([
+                        "print",
+                        "--json",
+                        "--events",
+                        &metadata_events.join(","),
+                        &jfr_path.to_string_lossy(),
+                    ])
+                    .output()
+                {
+                    Err(e) => {
+                        error!("'jfr' metadata extraction failed for {}: {}", key, e);
+                        Value::Null
+                    }
+                    Ok(output) => {
+                        if !output.status.success() {
+                            error!(
+                                "'jfr' metadata extraction failed for {}: {}",
+                                key,
+                                String::from_utf8_lossy(&output.stderr)
+                            );
+                            Value::Null
+                        } else {
+                            serde_json::from_slice(&output.stdout).unwrap_or(Value::Null)
+                        }
+                    }
+                };
+
+                // Generate heatmaps for each profiling type
                 for metric in PROFILE_METRICS {
                     let html_path = data_dir.join(format!(
                         "{}-java-profile-{}-{}.html",
@@ -267,6 +308,7 @@ impl CollectData for JavaProfileRaw {
                             &format!("--{metric}"),
                             "-o",
                             "heatmap",
+                            "--dot",
                             &jfr_path.to_string_lossy(),
                             html_path.to_str().unwrap(),
                         ])
@@ -293,6 +335,23 @@ impl CollectData for JavaProfileRaw {
                                 );
                             }
                         }
+                    }
+                }
+
+                // Generate ProfilerData from JFR
+                let profiler_data_path = params.data_dir.join(format!(
+                    "{}-java-profile-{}-profiler-data.json",
+                    params.run_name, key
+                ));
+                match jfr::jfr_to_profiler_data(&jfr_path, BUCKET_WIDTH_MS) {
+                    Ok(mut profiler_data) => {
+                        profiler_data.metadata = jfr::parse_jfr_metadata(&metadata_json);
+                        if let Ok(json) = serde_json::to_string(&profiler_data) {
+                            fs::write(&profiler_data_path, json).ok();
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to build ProfilerData for {}: {}", key, e);
                     }
                 }
 
@@ -409,6 +468,23 @@ impl ProcessData for JavaProfile {
             }
 
             graph_data.graph_groups.push(graph_group);
+        }
+
+        // Load profiler data for Java profiles
+        for (process, _) in &process_map {
+            let profiler_data_path = params.data_dir.join(format!(
+                "{}-java-profile-{}-profiler-data.json",
+                params.run_name, process
+            ));
+            if let Ok(json) = fs::read_to_string(&profiler_data_path) {
+                if let Ok(profiler_data) = serde_json::from_str::<ProfilerData>(&json) {
+                    if let Some(name) = deduped_names.get(process) {
+                        graph_data
+                            .profiler_data_map
+                            .insert(name.clone(), profiler_data);
+                    }
+                }
+            }
         }
 
         Ok(AperfData::Graph(graph_data))

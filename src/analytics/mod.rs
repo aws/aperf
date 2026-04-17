@@ -5,6 +5,9 @@ use crate::data::common::data_formats::ProcessedData;
 use rule_templates::{
     key_value_key_expected_rule::KeyValueKeyExpectedRule,
     key_value_key_run_comparison_rule::KeyValueKeyRunComparisonRule,
+    profile_metadata_comparison_rule::ProfileMetadataComparisonRule,
+    profile_metadata_expected_rule::ProfileMetadataExpectedRule,
+    profile_stack_frame_threshold_rule::ProfileStackFrameThresholdRule,
     time_series_data_point_threshold_rule::TimeSeriesDataPointThresholdRule,
     time_series_stat_intra_run_comparison_rule::TimeSeriesStatIntraRunComparisonRule,
     time_series_stat_run_comparison_rule::TimeSeriesStatRunComparisonRule,
@@ -14,8 +17,10 @@ use rule_templates::{
 use crate::data::common::processed_data_accessor::ProcessedDataAccessor;
 pub use rule_templates::{
     key_value_key_expected_rule, key_value_key_run_comparison_rule,
-    time_series_data_point_threshold_rule, time_series_stat_intra_run_comparison_rule,
-    time_series_stat_run_comparison_rule, time_series_stat_threshold_rule,
+    profile_metadata_comparison_rule, profile_metadata_expected_rule,
+    profile_stack_frame_threshold_rule, time_series_data_point_threshold_rule,
+    time_series_stat_intra_run_comparison_rule, time_series_stat_run_comparison_rule,
+    time_series_stat_threshold_rule,
 };
 use rules::multi_data_rules::get_multi_data_rules;
 use serde::{Deserialize, Serialize};
@@ -233,7 +238,10 @@ analytical_rules!(
     TimeSeriesDataPointThresholdRule,
     KeyValueKeyRunComparisonRule,
     KeyValueKeyExpectedRule,
-    TimeSeriesStatIntraRunComparisonRule
+    TimeSeriesStatIntraRunComparisonRule,
+    ProfileStackFrameThresholdRule,
+    ProfileMetadataExpectedRule,
+    ProfileMetadataComparisonRule
 );
 
 macro_rules! multi_data_analytical_rules {

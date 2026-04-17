@@ -1,0 +1,173 @@
+use aperf::analytics::profile_stack_frame_threshold_rule::ProfileStackFrameThresholdRule;
+use aperf::analytics::{Analyze, DataFindings, Score};
+use aperf::data::common::data_formats::{AperfData, GraphData, ProfilerData};
+use aperf::data::common::processed_data_accessor::ProcessedDataAccessor;
+use aperf::profiling::ThreadState;
+use std::collections::HashMap;
+
+use super::test_helpers::{create_processed_data, DataFindingsExt};
+
+/// Stacks:
+///   frame1;frame2 100
+///   frame1;frame2;frame3 110
+///   frame4;frame5;frame6 75
+///   frame1;frame7 90
+fn create_profiler_data(group_name: &str) -> ProfilerData {
+    let mut pd = ProfilerData::new(0, 100);
+    let ts = ThreadState::from_str("STATE_DEFAULT");
+    pd.insert_stack(
+        group_name,
+        0,
+        ts,
+        &["frame1", "frame2"].map(String::from),
+        100,
+    );
+    pd.insert_stack(
+        group_name,
+        0,
+        ts,
+        &["frame1", "frame2", "frame3"].map(String::from),
+        110,
+    );
+    pd.insert_stack(
+        group_name,
+        0,
+        ts,
+        &["frame4", "frame5", "frame6"].map(String::from),
+        75,
+    );
+    pd.insert_stack(
+        group_name,
+        0,
+        ts,
+        &["frame1", "frame7"].map(String::from),
+        90,
+    );
+    pd
+}
+
+fn create_graph_data(group_name: &str) -> GraphData {
+    let mut profiler_data_map = HashMap::new();
+    profiler_data_map.insert("profile_0".to_string(), create_profiler_data(group_name));
+    GraphData {
+        graph_groups: vec![],
+        profiler_data_map,
+    }
+}
+
+#[test]
+fn test_below_threshold() {
+    let graph_data = create_graph_data("cpu");
+    let processed_data =
+        create_processed_data("test_data", vec![("run1", AperfData::Graph(graph_data))]);
+
+    let rule = ProfileStackFrameThresholdRule {
+        rule_name: "test_rule",
+        graph_group: "cpu",
+        stack_frame: &[&["frame5"]],
+        frame_type: None,
+        thread_states: &[],
+        aggregate_occurences: false,
+        total_samples: true,
+        threshold: 60.0,
+        score: Score::Bad.as_f64(),
+        message: "Test message",
+    };
+
+    let mut findings = DataFindings::default();
+    rule.analyze(
+        &mut findings,
+        &processed_data,
+        &mut ProcessedDataAccessor::new(),
+    );
+    assert_eq!(findings.num_runs_with_findings(), 0);
+}
+
+#[test]
+fn test_above_threshold() {
+    let graph_data = create_graph_data("cpu");
+    let processed_data =
+        create_processed_data("test_data", vec![("run1", AperfData::Graph(graph_data))]);
+
+    let rule = ProfileStackFrameThresholdRule {
+        rule_name: "test_rule",
+        graph_group: "cpu",
+        stack_frame: &[&["frame1"]],
+        frame_type: None,
+        thread_states: &[],
+        aggregate_occurences: false,
+        total_samples: true,
+        threshold: 50.0,
+        score: Score::Bad.as_f64(),
+        message: "Test message",
+    };
+
+    let mut findings = DataFindings::default();
+    rule.analyze(
+        &mut findings,
+        &processed_data,
+        &mut ProcessedDataAccessor::new(),
+    );
+    assert_eq!(findings.num_runs_with_findings(), 1);
+    assert!(findings.has_findings_for_run("run1"));
+}
+
+#[test]
+fn test_stack_pattern() {
+    let graph_data = create_graph_data("cpu");
+    let processed_data =
+        create_processed_data("test_data", vec![("run1", AperfData::Graph(graph_data))]);
+
+    let rule = ProfileStackFrameThresholdRule {
+        rule_name: "test_rule",
+        graph_group: "cpu",
+        stack_frame: &[&["frame1", "frame2", "frame3"]],
+        frame_type: None,
+        thread_states: &[],
+        aggregate_occurences: false,
+        total_samples: true,
+        threshold: 25.0,
+        score: Score::Bad.as_f64(),
+        message: "Test message",
+    };
+
+    let mut findings = DataFindings::default();
+    rule.analyze(
+        &mut findings,
+        &processed_data,
+        &mut ProcessedDataAccessor::new(),
+    );
+    assert_eq!(findings.num_runs_with_findings(), 1);
+    assert!(findings.has_findings_for_run("run1"));
+}
+
+#[test]
+fn test_missing_metric() {
+    let graph_data = GraphData {
+        graph_groups: vec![],
+        profiler_data_map: HashMap::new(),
+    };
+    let processed_data =
+        create_processed_data("test_data", vec![("run1", AperfData::Graph(graph_data))]);
+
+    let rule = ProfileStackFrameThresholdRule {
+        rule_name: "test_rule",
+        graph_group: "alloc",
+        stack_frame: &[&["frame1"]],
+        frame_type: None,
+        thread_states: &[],
+        aggregate_occurences: false,
+        total_samples: true,
+        threshold: 10.0,
+        score: Score::Bad.as_f64(),
+        message: "Test message",
+    };
+
+    let mut findings = DataFindings::default();
+    rule.analyze(
+        &mut findings,
+        &processed_data,
+        &mut ProcessedDataAccessor::new(),
+    );
+    assert_eq!(findings.num_runs_with_findings(), 0);
+}

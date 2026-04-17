@@ -1,5 +1,8 @@
 pub mod key_value_key_expected_rule;
 pub mod key_value_key_run_comparison_rule;
+pub mod profile_metadata_comparison_rule;
+pub mod profile_metadata_expected_rule;
+pub mod profile_stack_frame_threshold_rule;
 pub mod time_series_data_point_threshold_rule;
 pub mod time_series_stat_intra_run_comparison_rule;
 pub mod time_series_stat_run_comparison_rule;
