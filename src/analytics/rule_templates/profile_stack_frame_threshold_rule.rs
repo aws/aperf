@@ -14,7 +14,7 @@ use std::fmt::Formatter;
 /// threshold            - % samples to generate finding
 pub struct ProfileStackFrameThresholdRule {
     pub rule_name: &'static str,
-    pub graph_group: &'static str,
+    pub profile_type: &'static str,
     pub stack_frame: &'static [&'static [&'static str]],
     pub frame_type: Option<FrameType>,
     pub thread_states: &'static [ThreadState],
@@ -28,7 +28,7 @@ pub struct ProfileStackFrameThresholdRule {
 macro_rules! profile_stack_frame_threshold {
     {
         name: $rule_name:literal,
-        graph_group: $graph_group:literal,
+        profile_type: $profile_type:literal,
         stack_frame: [$([$($frame:literal),+]),+],
         frame_type: $frame_type:expr,
         $(thread_states: [$($state:expr),*],)?
@@ -41,7 +41,7 @@ macro_rules! profile_stack_frame_threshold {
         AnalyticalRule::ProfileStackFrameThresholdRule(
             ProfileStackFrameThresholdRule {
                 rule_name: $rule_name,
-                graph_group: $graph_group,
+                profile_type: $profile_type,
                 stack_frame: &[$(&[$($frame),+]),+],
                 frame_type: $frame_type,
                 thread_states: &[$($($state),*)?],
@@ -70,23 +70,23 @@ impl Analyze for ProfileStackFrameThresholdRule {
         _processed_data_accessor: &mut ProcessedDataAccessor,
     ) {
         for (run_name, run_data) in &processed_data.runs {
-            let AperfData::Graph(graph_data) = run_data else {
+            let AperfData::Profile(profiling_data) = run_data else {
                 continue;
             };
 
-            for (key, profiler_data) in &graph_data.profiler_data_map {
-                if !profiler_data.profiles.contains_key(self.graph_group) {
+            for (key, profiler) in &profiling_data.profilers {
+                if !profiler.profiles.contains_key(self.profile_type) {
                     continue;
                 }
                 let total_samples =
-                    profiler_data.get_total_samples(self.graph_group, self.thread_states);
+                    profiler.get_total_samples(self.profile_type, self.thread_states);
 
                 let (sample_count, matched_pattern) =
                     self.stack_frame
                         .iter()
                         .fold((0u64, None), |(acc, acc_pat), pattern| {
-                            let count = profiler_data.get_samples(
-                                self.graph_group,
+                            let count = profiler.get_samples(
+                                self.profile_type,
                                 pattern,
                                 self.frame_type,
                                 self.thread_states,
@@ -120,7 +120,7 @@ impl Analyze for ProfileStackFrameThresholdRule {
                     };
                     let finding_description = format!(
                         "Stack pattern {} accounts for {:.2}% of samples in {} (threshold: {:.2}%)",
-                        pattern_str, percentage, self.graph_group, self.threshold
+                        pattern_str, percentage, self.profile_type, self.threshold
                     );
 
                     report_findings.insert_finding(

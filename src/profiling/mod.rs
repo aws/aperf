@@ -8,15 +8,18 @@ pub mod jfr;
 
 pub const BUCKET_WIDTH_MS: u64 = 100;
 
-use crate::data::common::data_formats::ProfilerData;
+use crate::data::common::data_formats::Profiler;
+use anyhow::Result;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::cell::OnceCell;
 use std::collections::HashMap;
 
 /// A single profiling type's data (e.g., cpu, wall, allocation).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Profile {
+    /// Profile graph visualization (to be removed after native visualization is supported)
+    pub profile_graph: ProfileGraph,
     /// Time-ordered blocks of sample data, [thread_state_id -> node_id (index into context_tree) -> sample count]
     pub blocks: Vec<HashMap<u8, HashMap<usize, u64>>>,
     /// Block number time range where profile node aggregate counts are calculated
@@ -28,6 +31,27 @@ pub struct Profile {
     /// Cache: thread_state_id -> total self_samples across all nodes (lazily computed in report time)
     #[serde(skip)]
     total_samples_per_thread_state: OnceCell<HashMap<u8, u64>>,
+}
+
+/// Information about a graph. TODO: Will remove after native profiler visualization is implemented
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+pub struct ProfileGraph {
+    /// The name of the graph.
+    pub graph_name: String,
+    /// The relative path to graph (value of the IFrame's src attribute).
+    pub graph_path: String,
+    /// The size of the graph, which can be used for graph ordering in the report.
+    pub graph_size: Option<u64>,
+}
+
+impl ProfileGraph {
+    pub fn new(graph_name: String, graph_path: String, graph_size: Option<u64>) -> Self {
+        ProfileGraph {
+            graph_name,
+            graph_path,
+            graph_size,
+        }
+    }
 }
 
 /// A node in the call tree. Each node represents a unique call path.
@@ -52,7 +76,7 @@ pub struct SampleStats {
 }
 
 /// Frame id to name bidirectional mapping, with name→index lookup for insertion.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct FrameMap {
     frame_id_to_frame: Vec<Frame>,
     #[serde(skip)]
@@ -108,8 +132,8 @@ impl FrameMap {
     }
 }
 
-// Public functions for building ProfilerData
-impl ProfilerData {
+// Public functions for building Profiler
+impl Profiler {
     /// Insert a stack sample into the appropriate profile and time block.
     ///
     /// Computes the block index from `sample_time_ms` relative to `self.start_time`
@@ -125,7 +149,7 @@ impl ProfilerData {
         let profile = self
             .profiles
             .entry(profile_type.to_string())
-            .or_insert_with(Profile::new);
+            .or_insert_with(|| Profile::new());
         profile.insert_stack(
             sample_time_ms,
             self.start_time_ms,
@@ -158,6 +182,31 @@ impl ProfilerData {
             .get(profile_type)
             .map_or(0, |p| p.get_total_samples(thread_states))
     }
+
+    /// Generate the collapsed format of the current context tree, which has the aggregated sample
+    /// counts for Profile.time_range.
+    pub fn generate_collapsed(&self, profile_type: &str, thread_states: &[ThreadState]) -> String {
+        match self.profiles.get(profile_type) {
+            Some(profile) => profile.generate_collapsed(thread_states),
+            None => String::new(),
+        }
+    }
+
+    /// Update context_tree sample_counts to contain the aggregate of samples between the specified
+    /// start and end times.
+    pub fn set_time_range(
+        &mut self,
+        relative_start_time_ms: u64,
+        relative_end_time_ms: u64,
+    ) -> Result<()> {
+        let start_idx = (relative_start_time_ms / self.block_width_ms) as usize;
+        let end_idx = (relative_end_time_ms / self.block_width_ms) as usize;
+
+        for (_profile_type, profile) in self.profiles.iter_mut() {
+            profile.set_time_range(start_idx, end_idx)?;
+        }
+        Ok(())
+    }
 }
 
 impl Profile {
@@ -165,6 +214,7 @@ impl Profile {
         let mut frame_map = FrameMap::new();
         frame_map.get_or_insert("[root]");
         Self {
+            profile_graph: ProfileGraph::default(),
             blocks: Vec::new(),
             time_range: (0, 0),
             context_tree: vec![CCTreeNode {
@@ -176,6 +226,12 @@ impl Profile {
             frame_map,
             total_samples_per_thread_state: OnceCell::new(),
         }
+    }
+
+    pub fn with_graph(profile_graph: ProfileGraph) -> Self {
+        let mut p = Self::new();
+        p.profile_graph = profile_graph;
+        p
     }
 
     /// Returns sum of sample counts for call graph nodes matching a stack pattern.
@@ -192,7 +248,7 @@ impl Profile {
         thread_states: &[ThreadState],
         total_samples: bool,
     ) -> u64 {
-        if pattern.is_empty() {
+        if pattern.is_empty() || self.context_tree.is_empty() {
             return 0;
         }
 
@@ -376,6 +432,101 @@ impl Profile {
                 .map(|thread_state| thread_state.id())
                 .collect()
         }
+    }
+
+    /// DFS through call tree, print current path if node self samples is > 0.
+    /// collapsed format consists lines of call stack and sample count:
+    ///
+    /// frame1;frame2;frame3 10
+    /// frame1;frame4 20
+    pub fn generate_collapsed(&self, thread_states: &[ThreadState]) -> String {
+        let thread_state_ids = self.resolve_thread_states(thread_states);
+        let mut result = String::new();
+        let mut path: Vec<usize> = Vec::new();
+        self.dfs_collapsed(0, &thread_state_ids, &mut path, &mut result);
+        result
+    }
+
+    fn dfs_collapsed(
+        &self,
+        node_id: usize,
+        thread_state_ids: &[u8],
+        path: &mut Vec<usize>,
+        result: &mut String,
+    ) {
+        let node = &self.context_tree[node_id];
+
+        // Emit line if this node has self_samples for any requested thread state
+        if !path.is_empty() {
+            let self_samples: u64 = thread_state_ids
+                .iter()
+                .filter_map(|ts| node.sample_stats.get(ts).map(|s| s.self_samples))
+                .sum();
+            if self_samples > 0 {
+                let stack: String = path
+                    .iter()
+                    .map(|&nid| self.frame_map.name(self.context_tree[nid].frame_id))
+                    .collect::<Vec<_>>()
+                    .join(";");
+                result.push_str(&format!("{} {}\n", stack, self_samples));
+            }
+        }
+
+        for (&_frame_id, &child_node_id) in &node.children {
+            path.push(child_node_id);
+            self.dfs_collapsed(child_node_id, thread_state_ids, path, result);
+            path.pop();
+        }
+    }
+
+    /// Iterates through the corresponding time blocks in Profile.blocks and
+    /// accumulates the sample counts in nodes. Counts are accumulated to a nodes self_samples
+    /// and every of its ancestors total samples. Then Profile.time_range is updated.
+    pub fn set_time_range(&mut self, start_idx: usize, end_idx: usize) -> Result<()> {
+        // Clear existing sample stats
+        for node in &mut self.context_tree {
+            node.sample_stats.clear();
+        }
+
+        // Reset cached totals
+        self.total_samples_per_thread_state = OnceCell::new();
+
+        let end = end_idx.min(self.blocks.len());
+        for block_idx in start_idx..end {
+            for (&thread_state_id, node_map) in &self.blocks[block_idx] {
+                for (&node_id, &count) in node_map {
+                    // Add self_samples to the leaf node
+                    self.context_tree[node_id]
+                        .sample_stats
+                        .entry(thread_state_id)
+                        .or_insert(SampleStats {
+                            total_samples: 0,
+                            self_samples: 0,
+                        })
+                        .self_samples += count;
+
+                    // Walk up ancestors adding total_samples
+                    let mut cur = node_id;
+                    loop {
+                        self.context_tree[cur]
+                            .sample_stats
+                            .entry(thread_state_id)
+                            .or_insert(SampleStats {
+                                total_samples: 0,
+                                self_samples: 0,
+                            })
+                            .total_samples += count;
+                        match self.context_tree[cur].parent {
+                            Some(parent) => cur = parent,
+                            None => break,
+                        }
+                    }
+                }
+            }
+        }
+
+        self.time_range = (start_idx, end_idx);
+        Ok(())
     }
 }
 

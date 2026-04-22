@@ -1,4 +1,4 @@
-use crate::data::common::data_formats::{KeyValueData, ProfilerData};
+use crate::data::common::data_formats::{KeyValueData, Profiler};
 use crate::profiling::jfr::{ExecSampleType, JfrEvent, JfrReader};
 use crate::profiling::{FrameType, ThreadState};
 use anyhow::Result;
@@ -280,8 +280,8 @@ fn parse_type(chars: &mut std::iter::Peekable<std::str::Chars>) -> String {
 }
 
 /// This function uses JfrReader to parse async-profiler generated JFR files into
-/// APerf ProfilerData.
-pub fn jfr_to_profiler_data(path: &Path, block_width_ms: u64) -> Result<ProfilerData> {
+/// APerf Profiler.
+pub fn jfr_to_profiler(path: &Path, block_width_ms: u64) -> Result<Profiler> {
     let mut reader = JfrReader::open(path.to_str().unwrap())?;
     let start_time_ms = reader.start_nanos / 1_000_000;
 
@@ -301,7 +301,12 @@ pub fn jfr_to_profiler_data(path: &Path, block_width_ms: u64) -> Result<Profiler
         .cloned()
         .unwrap_or_default();
 
-    let mut profiler_data = ProfilerData::new(start_time_ms, block_width_ms);
+    let mut profiler = Profiler::new(start_time_ms, block_width_ms);
+
+    // Cache: (method_id, frame_type) -> formatted frame string
+    let mut frame_cache: HashMap<(i64, u8), String> = HashMap::new();
+    // Cache: class_id -> formatted alloc class string
+    let mut alloc_class_cache: HashMap<i64, String> = HashMap::new();
 
     loop {
         match reader.read_event() {
@@ -338,28 +343,46 @@ pub fn jfr_to_profiler_data(path: &Path, block_width_ms: u64) -> Result<Profiler
                         .zip(trace.types.iter())
                         .rev()
                         .map(|(&mid, &ftype)| {
-                            let suffix = frame_type_suffix.get(&ftype).copied().unwrap_or("");
-                            if let Some((cls, method, _)) = reader.resolve_method(mid) {
-                                if ftype == 3 || ftype == 4 || cls.is_empty() {
-                                    format!("{}{}", method, suffix)
-                                } else if method.is_empty() {
-                                    format!("{}{}", cls.replace('/', "."), suffix)
-                                } else {
-                                    format!("{}.{}{}", cls.replace('/', "."), method, suffix)
-                                }
-                            } else {
-                                format!("[unknown:{}]{}", mid, suffix)
-                            }
+                            frame_cache
+                                .entry((mid, ftype))
+                                .or_insert_with(|| {
+                                    let suffix =
+                                        frame_type_suffix.get(&ftype).copied().unwrap_or("");
+                                    if let Some((cls, method, _)) = reader.resolve_method(mid) {
+                                        if ftype == 3 || ftype == 4 || cls.is_empty() {
+                                            format!("{}{}", method, suffix)
+                                        } else if method.is_empty() {
+                                            format!("{}{}", cls.replace('/', "."), suffix)
+                                        } else {
+                                            format!(
+                                                "{}.{}{}",
+                                                cls.replace('/', "."),
+                                                method,
+                                                suffix
+                                            )
+                                        }
+                                    } else {
+                                        format!("[unknown:{}]{}", mid, suffix)
+                                    }
+                                })
+                                .clone()
                         })
                         .collect();
 
                     if let JfrEvent::AllocationSample(e) = &event {
-                        let cls = jvm_type_to_human(&reader.resolve_class(e.class_id as i64));
-                        frames.push(format!("{}{}", cls, FrameType::Inlined.literal_suffix()));
+                        let frame = alloc_class_cache
+                            .entry(e.class_id as i64)
+                            .or_insert_with(|| {
+                                let cls =
+                                    jvm_type_to_human(&reader.resolve_class(e.class_id as i64));
+                                format!("{}{}", cls, FrameType::Inlined.literal_suffix())
+                            })
+                            .clone();
+                        frames.push(frame);
                     }
 
                     if !frames.is_empty() {
-                        profiler_data.insert_stack(
+                        profiler.insert_stack(
                             profile_type,
                             sample_time_ms,
                             thread_state,
@@ -373,7 +396,7 @@ pub fn jfr_to_profiler_data(path: &Path, block_width_ms: u64) -> Result<Profiler
         }
     }
 
-    Ok(profiler_data)
+    Ok(profiler)
 }
 
 // Reference: https://github.com/async-profiler/async-profiler/blob/master/src/jfrMetadata.h#L46-L70

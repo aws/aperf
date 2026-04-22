@@ -1,6 +1,6 @@
 use aperf::analytics::profile_stack_frame_threshold_rule::ProfileStackFrameThresholdRule;
 use aperf::analytics::{Analyze, DataFindings, Score};
-use aperf::data::common::data_formats::{AperfData, GraphData, ProfilerData};
+use aperf::data::common::data_formats::{AperfData, Profiler, ProfilingData};
 use aperf::data::common::processed_data_accessor::ProcessedDataAccessor;
 use aperf::profiling::ThreadState;
 use std::collections::HashMap;
@@ -12,8 +12,8 @@ use super::test_helpers::{create_processed_data, DataFindingsExt};
 ///   frame1;frame2;frame3 110
 ///   frame4;frame5;frame6 75
 ///   frame1;frame7 90
-fn create_profiler_data(group_name: &str) -> ProfilerData {
-    let mut pd = ProfilerData::new(0, 100);
+fn create_profiler_instance(group_name: &str) -> Profiler {
+    let mut pd = Profiler::new(0, 100);
     let ts = ThreadState::from_str("STATE_DEFAULT");
     pd.insert_stack(
         group_name,
@@ -46,24 +46,26 @@ fn create_profiler_data(group_name: &str) -> ProfilerData {
     pd
 }
 
-fn create_graph_data(group_name: &str) -> GraphData {
-    let mut profiler_data_map = HashMap::new();
-    profiler_data_map.insert("profile_0".to_string(), create_profiler_data(group_name));
-    GraphData {
-        graph_groups: vec![],
-        profiler_data_map,
-    }
+fn create_profiler_data(group_name: &str) -> ProfilingData {
+    let mut profilers = HashMap::new();
+    profilers.insert(
+        "profile_0".to_string(),
+        create_profiler_instance(group_name),
+    );
+    ProfilingData { profilers }
 }
 
 #[test]
 fn test_below_threshold() {
-    let graph_data = create_graph_data("cpu");
-    let processed_data =
-        create_processed_data("test_data", vec![("run1", AperfData::Graph(graph_data))]);
+    let profiling_data = create_profiler_data("cpu");
+    let processed_data = create_processed_data(
+        "test_data",
+        vec![("run1", AperfData::Profile(profiling_data))],
+    );
 
     let rule = ProfileStackFrameThresholdRule {
         rule_name: "test_rule",
-        graph_group: "cpu",
+        profile_type: "cpu",
         stack_frame: &[&["frame5"]],
         frame_type: None,
         thread_states: &[],
@@ -85,13 +87,15 @@ fn test_below_threshold() {
 
 #[test]
 fn test_above_threshold() {
-    let graph_data = create_graph_data("cpu");
-    let processed_data =
-        create_processed_data("test_data", vec![("run1", AperfData::Graph(graph_data))]);
+    let profiling_data = create_profiler_data("cpu");
+    let processed_data = create_processed_data(
+        "test_data",
+        vec![("run1", AperfData::Profile(profiling_data))],
+    );
 
     let rule = ProfileStackFrameThresholdRule {
         rule_name: "test_rule",
-        graph_group: "cpu",
+        profile_type: "cpu",
         stack_frame: &[&["frame1"]],
         frame_type: None,
         thread_states: &[],
@@ -114,13 +118,15 @@ fn test_above_threshold() {
 
 #[test]
 fn test_stack_pattern() {
-    let graph_data = create_graph_data("cpu");
-    let processed_data =
-        create_processed_data("test_data", vec![("run1", AperfData::Graph(graph_data))]);
+    let profiling_data = create_profiler_data("cpu");
+    let processed_data = create_processed_data(
+        "test_data",
+        vec![("run1", AperfData::Profile(profiling_data))],
+    );
 
     let rule = ProfileStackFrameThresholdRule {
         rule_name: "test_rule",
-        graph_group: "cpu",
+        profile_type: "cpu",
         stack_frame: &[&["frame1", "frame2", "frame3"]],
         frame_type: None,
         thread_states: &[],
@@ -143,16 +149,17 @@ fn test_stack_pattern() {
 
 #[test]
 fn test_missing_metric() {
-    let graph_data = GraphData {
-        graph_groups: vec![],
-        profiler_data_map: HashMap::new(),
+    let profiling_data = ProfilingData {
+        profilers: HashMap::new(),
     };
-    let processed_data =
-        create_processed_data("test_data", vec![("run1", AperfData::Graph(graph_data))]);
+    let processed_data = create_processed_data(
+        "test_data",
+        vec![("run1", AperfData::Profile(profiling_data))],
+    );
 
     let rule = ProfileStackFrameThresholdRule {
         rule_name: "test_rule",
-        graph_group: "alloc",
+        profile_type: "alloc",
         stack_frame: &[&["frame1"]],
         frame_type: None,
         thread_states: &[],

@@ -1,7 +1,7 @@
 use aperf::analytics::profile_metadata_expected_rule::ProfileMetadataExpectedRule;
 use aperf::analytics::{Analyze, DataFindings, Score};
 use aperf::data::common::data_formats::{
-    AperfData, GraphData, KeyValueData, KeyValueGroup, ProfilerData,
+    AperfData, KeyValueData, KeyValueGroup, Profiler, ProfilingData,
 };
 use aperf::data::common::processed_data_accessor::ProcessedDataAccessor;
 use std::collections::HashMap;
@@ -20,30 +20,28 @@ fn create_key_value_data(group: &str, key: &str, value: Option<&str>) -> KeyValu
     KeyValueData { key_value_groups }
 }
 
-fn create_graph_data(metadata: Vec<KeyValueData>) -> GraphData {
-    let mut map = HashMap::new();
+fn create_profiling_data(metadata: Vec<KeyValueData>) -> ProfilingData {
+    let mut profilers = HashMap::new();
     for (i, data) in metadata.into_iter().enumerate() {
-        map.insert(
+        profilers.insert(
             format!("profile_{}", i),
-            ProfilerData {
-                start_time_ms: 0,
-                block_width_ms: 0,
+            Profiler {
                 metadata: data,
-                profiles: HashMap::new(),
+                ..Default::default()
             },
         );
     }
-    GraphData {
-        graph_groups: vec![],
-        profiler_data_map: map,
-    }
+    ProfilingData { profilers }
 }
 
 #[test]
 fn test_field_matches_expected_value() {
-    let graph_data = create_graph_data(vec![create_key_value_data("cpu", "mode", Some("kernel"))]);
-    let processed_data =
-        create_processed_data("test_data", vec![("run1", AperfData::Graph(graph_data))]);
+    let profiling_data =
+        create_profiling_data(vec![create_key_value_data("cpu", "mode", Some("kernel"))]);
+    let processed_data = create_processed_data(
+        "test_data",
+        vec![("run1", AperfData::Profile(profiling_data))],
+    );
 
     let rule = ProfileMetadataExpectedRule {
         rule_name: "test_rule",
@@ -67,9 +65,12 @@ fn test_field_matches_expected_value() {
 
 #[test]
 fn test_field_does_not_match_expected_value() {
-    let graph_data = create_graph_data(vec![create_key_value_data("cpu", "mode", Some("user"))]);
-    let processed_data =
-        create_processed_data("test_data", vec![("run1", AperfData::Graph(graph_data))]);
+    let profiling_data =
+        create_profiling_data(vec![create_key_value_data("cpu", "mode", Some("user"))]);
+    let processed_data = create_processed_data(
+        "test_data",
+        vec![("run1", AperfData::Profile(profiling_data))],
+    );
 
     let rule = ProfileMetadataExpectedRule {
         rule_name: "test_rule",
@@ -94,9 +95,11 @@ fn test_field_does_not_match_expected_value() {
 
 #[test]
 fn test_field_missing_should_exist() {
-    let graph_data = create_graph_data(vec![create_key_value_data("cpu", "mode", None)]);
-    let processed_data =
-        create_processed_data("test_data", vec![("run1", AperfData::Graph(graph_data))]);
+    let profiling_data = create_profiling_data(vec![create_key_value_data("cpu", "mode", None)]);
+    let processed_data = create_processed_data(
+        "test_data",
+        vec![("run1", AperfData::Profile(profiling_data))],
+    );
 
     let rule = ProfileMetadataExpectedRule {
         rule_name: "test_rule",
@@ -121,13 +124,15 @@ fn test_field_missing_should_exist() {
 
 #[test]
 fn test_regex_pattern_match() {
-    let graph_data = create_graph_data(vec![create_key_value_data(
+    let profiling_data = create_profiling_data(vec![create_key_value_data(
         "cpu",
         "mode",
         Some("kernel_mode"),
     )]);
-    let processed_data =
-        create_processed_data("test_data", vec![("run1", AperfData::Graph(graph_data))]);
+    let processed_data = create_processed_data(
+        "test_data",
+        vec![("run1", AperfData::Profile(profiling_data))],
+    );
 
     let rule = ProfileMetadataExpectedRule {
         rule_name: "test_rule",
@@ -151,13 +156,15 @@ fn test_regex_pattern_match() {
 
 #[test]
 fn test_multiple_runs() {
-    let graph_data1 = create_graph_data(vec![create_key_value_data("cpu", "mode", Some("kernel"))]);
-    let graph_data2 = create_graph_data(vec![create_key_value_data("cpu", "mode", Some("user"))]);
+    let profiling_data1 =
+        create_profiling_data(vec![create_key_value_data("cpu", "mode", Some("kernel"))]);
+    let profiling_data2 =
+        create_profiling_data(vec![create_key_value_data("cpu", "mode", Some("user"))]);
     let processed_data = create_processed_data(
         "test_data",
         vec![
-            ("run1", AperfData::Graph(graph_data1)),
-            ("run2", AperfData::Graph(graph_data2)),
+            ("run1", AperfData::Profile(profiling_data1)),
+            ("run2", AperfData::Profile(profiling_data2)),
         ],
     );
 

@@ -67,15 +67,12 @@ fn test_process_raw_data_with_valid_files() {
     let result = java_profile.process_raw_data(params, vec![]);
 
     assert!(result.is_ok());
-    if let Ok(AperfData::Graph(graph_data)) = result {
-        assert_eq!(graph_data.graph_groups.len(), 4);
-        for metric in &["cpu", "alloc", "wall", "legacy"] {
-            let group = graph_data
-                .graph_groups
-                .iter()
-                .find(|g| g.group_name == *metric)
-                .unwrap();
-            assert_eq!(group.graphs.len(), 2);
+    if let Ok(AperfData::Profile(profiling_data)) = result {
+        // 2 JVMs
+        assert_eq!(profiling_data.profilers.len(), 2);
+        // Each JVM has 4 metrics
+        for (_name, profiler) in &profiling_data.profilers {
+            assert_eq!(profiler.profiles.len(), 4);
         }
     }
 }
@@ -88,10 +85,8 @@ fn test_process_raw_data_with_missing_jps_map() {
     let result = java_profile.process_raw_data(params, vec![]);
 
     assert!(result.is_ok());
-    if let Ok(AperfData::Graph(graph_data)) = result {
-        for group in &graph_data.graph_groups {
-            assert!(group.graphs.is_empty());
-        }
+    if let Ok(AperfData::Profile(profiling_data)) = result {
+        assert!(profiling_data.profilers.is_empty());
     }
 }
 
@@ -114,20 +109,13 @@ fn test_process_raw_data_with_duplicate_jvm_names() {
     let result = java_profile.process_raw_data(params, vec![]);
 
     assert!(result.is_ok());
-    if let Ok(AperfData::Graph(graph_data)) = result {
-        let cpu_group = graph_data
-            .graph_groups
-            .iter()
-            .find(|g| g.group_name == "cpu")
-            .unwrap();
-        assert_eq!(cpu_group.graphs.len(), 3);
-
-        let graph_names: Vec<String> = cpu_group.graphs.keys().cloned().collect();
-        assert!(graph_names.iter().any(|name| name.contains("TestApp")
-            && !name.contains("(1)")
-            && !name.contains("(2)")));
-        assert!(graph_names.iter().any(|name| name.contains("TestApp (1)")));
-        assert!(graph_names.iter().any(|name| name.contains("TestApp (2)")));
+    if let Ok(AperfData::Profile(profiling_data)) = result {
+        // 3 deduped JVM entries
+        assert_eq!(profiling_data.profilers.len(), 3);
+        let names: Vec<String> = profiling_data.profilers.keys().cloned().collect();
+        assert!(names.iter().any(|n| n == "TestApp"));
+        assert!(names.iter().any(|n| n == "TestApp (1)"));
+        assert!(names.iter().any(|n| n == "TestApp (2)"));
     }
 }
 
@@ -144,10 +132,8 @@ fn test_process_raw_data_with_no_html_files() {
     let result = java_profile.process_raw_data(params, vec![]);
 
     assert!(result.is_ok());
-    if let Ok(AperfData::Graph(graph_data)) = result {
-        for group in &graph_data.graph_groups {
-            assert!(group.graphs.is_empty());
-        }
+    if let Ok(AperfData::Profile(profiling_data)) = result {
+        assert!(profiling_data.profilers.is_empty());
     }
 }
 
@@ -191,75 +177,47 @@ fn test_process_raw_data_with_complex_duplicate_names_and_missing_files() {
     let result = java_profile.process_raw_data(params, vec![]);
 
     assert!(result.is_ok());
-    if let Ok(AperfData::Graph(graph_data)) = result {
-        let cpu_group = graph_data
-            .graph_groups
-            .iter()
-            .find(|g| g.group_name == "cpu")
-            .unwrap();
-        assert_eq!(cpu_group.graphs.len(), 7);
-        let cpu_names: Vec<String> = cpu_group.graphs.keys().cloned().collect();
-        assert!(cpu_names.iter().any(|name| name == "(cpu) JVM: App"));
-        assert!(cpu_names.iter().any(|name| name == "(cpu) JVM: App (1)"));
-        assert!(cpu_names.iter().any(|name| name == "(cpu) JVM: App (2)"));
-        assert!(cpu_names.iter().any(|name| name == "(cpu) JVM: App (3)"));
-        assert!(cpu_names.iter().any(|name| name == "(cpu) JVM: App (4)"));
-        assert!(cpu_names.iter().any(|name| name == "(cpu) JVM: App (5)"));
-        assert!(cpu_names.iter().any(|name| name == "(cpu) JVM: Service"));
+    if let Ok(AperfData::Profile(profiling_data)) = result {
+        // 8 JVMs total (6 App deduped + 2 Service deduped)
+        assert_eq!(profiling_data.profilers.len(), 8);
 
-        let alloc_group = graph_data
-            .graph_groups
-            .iter()
-            .find(|g| g.group_name == "alloc")
-            .unwrap();
-        assert_eq!(alloc_group.graphs.len(), 5);
-        let alloc_names: Vec<String> = alloc_group.graphs.keys().cloned().collect();
-        assert_eq!(
-            alloc_names
-                .iter()
-                .filter(|name| name.starts_with("(alloc) JVM: App"))
-                .count(),
-            3
-        );
-        assert_eq!(
-            alloc_names
-                .iter()
-                .filter(|name| name.starts_with("(alloc) JVM: Service"))
-                .count(),
-            2
-        );
+        // Count total profiles per metric across all JVMs
+        let cpu_count: usize = profiling_data
+            .profilers
+            .values()
+            .filter(|pd| pd.profiles.contains_key("cpu"))
+            .count();
+        assert_eq!(cpu_count, 7); // 6 App + 1 Service
 
-        let wall_group = graph_data
-            .graph_groups
-            .iter()
-            .find(|g| g.group_name == "wall")
-            .unwrap();
-        assert_eq!(wall_group.graphs.len(), 4);
-        let wall_names: Vec<String> = wall_group.graphs.keys().cloned().collect();
-        assert_eq!(
-            wall_names
-                .iter()
-                .filter(|name| name.starts_with("(wall) JVM: App"))
-                .count(),
-            3
-        );
-        assert_eq!(
-            wall_names
-                .iter()
-                .filter(|name| name.starts_with("(wall) JVM: Service"))
-                .count(),
-            1
-        );
+        let alloc_count: usize = profiling_data
+            .profilers
+            .values()
+            .filter(|pd| pd.profiles.contains_key("alloc"))
+            .count();
+        assert_eq!(alloc_count, 5); // 3 App + 2 Service
 
-        let legacy_group = graph_data
-            .graph_groups
-            .iter()
-            .find(|g| g.group_name == "legacy")
-            .unwrap();
-        assert_eq!(legacy_group.graphs.len(), 2);
-        let legacy_names: Vec<String> = legacy_group.graphs.keys().cloned().collect();
-        assert!(legacy_names
-            .iter()
-            .any(|name| name == "(legacy) JVM: Service"));
+        let wall_count: usize = profiling_data
+            .profilers
+            .values()
+            .filter(|pd| pd.profiles.contains_key("wall"))
+            .count();
+        assert_eq!(wall_count, 4); // 3 App + 1 Service
+
+        let legacy_count: usize = profiling_data
+            .profilers
+            .values()
+            .filter(|pd| pd.profiles.contains_key("legacy"))
+            .count();
+        assert_eq!(legacy_count, 2); // 2 Service
+
+        // Verify deduped App names exist
+        let names: Vec<String> = profiling_data.profilers.keys().cloned().collect();
+        assert!(names.iter().any(|n| n == "App"));
+        assert!(names.iter().any(|n| n == "App (1)"));
+        assert!(names.iter().any(|n| n == "App (2)"));
+        assert!(names.iter().any(|n| n == "App (3)"));
+        assert!(names.iter().any(|n| n == "App (4)"));
+        assert!(names.iter().any(|n| n == "App (5)"));
+        assert!(names.iter().any(|n| n == "Service"));
     }
 }

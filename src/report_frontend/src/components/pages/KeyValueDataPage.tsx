@@ -1,83 +1,25 @@
-import { DataPageProps, DataType, KeyValueData } from "../../definitions/types";
+import { DataPageProps, KeyValueData } from "../../definitions/types";
 import React from "react";
 import { PROCESSED_DATA, RUNS } from "../../definitions/data-config";
-import { Box, Pagination, SpaceBetween, Table, TableProps, TextFilter, Toggle } from "@cloudscape-design/components";
+import { Box, Pagination, SpaceBetween, Table, TextFilter, Toggle } from "@cloudscape-design/components";
 import { useCollection } from "@cloudscape-design/collection-hooks";
 import Header from "@cloudscape-design/components/header";
 import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
-import { RunHeader } from "../data/RunSystemInfo";
 import { ReportHelpPanelLink } from "../misc/ReportHelpPanel";
 import { ShowFindingsPanelButton } from "../analytics/FindingsSplitPanel";
 import { useReportState } from "../ReportStateProvider";
+import { buildKeyValueTable, TableItem } from "../data/KeyValueTable";
 
 const NUM_KEY_VALUE_PAIRS_PER_PAGE = 50;
-
-type TableItem = { [key in string]: string };
 
 /**
  * Transform processed key value data into formats required by the Table component
  */
-function getTableItemsAndDefinitions(dataType: DataType) {
-  // If there is only one KeyValueGroup, and it is an empty string, we consider it as dummy
-  // and the table will not show the "section"
-  let isDummySection = true;
-  // The map from lower-case key-value group name + key to TableItem - we want to make
-  // group names and keys with only case differences to be still placed at the same row
-  const keyValueTableItems = new Map<string, TableItem>();
-
-  for (const runName of RUNS) {
-    const reportData = PROCESSED_DATA[dataType].runs[runName] as KeyValueData;
-    if (reportData === undefined) continue;
-    for (const groupName in reportData.key_value_groups) {
-      if (groupName != "") isDummySection = false;
-      for (const [key, value] of Object.entries(reportData.key_value_groups[groupName].key_values)) {
-        const tableItemsKey = `${groupName} ${key}`.toLowerCase();
-        // If a group name or key is only case-different across runs, they will be placed
-        // at the same row in the table which shows the first occurrence of the group name
-        // or key
-        if (!keyValueTableItems.has(tableItemsKey)) {
-          const newTableItem = {
-            sectionName: groupName,
-            key: key,
-          };
-          for (const runName of RUNS) {
-            newTableItem[runName] = "";
-          }
-          keyValueTableItems.set(tableItemsKey, newTableItem);
-        }
-        const tableItem = keyValueTableItems.get(tableItemsKey);
-        tableItem[runName] = value;
-      }
-    }
-  }
-
-  // ColumnDefinition defines how the table items will be shown
-  const tableColumnDefinitions: TableProps.ColumnDefinition<TableItem>[] = [];
-  if (!isDummySection) {
-    tableColumnDefinitions.push({
-      id: "section_name",
-      header: "Section",
-      cell: (item) => item.sectionName,
-      isRowHeader: true,
-      sortingField: "sectionName",
-    });
-  }
-  tableColumnDefinitions.push({
-    id: "key",
-    header: "Key",
-    cell: (item) => <b>{item.key}</b>,
-    isRowHeader: isDummySection,
-    sortingField: "key",
-  });
-  for (const runName of RUNS) {
-    tableColumnDefinitions.push({
-      id: `${runName}-value`,
-      header: <RunHeader runName={runName} />,
-      cell: (item) => item[runName],
-    });
-  }
-
-  return { tableItems: Array.from(keyValueTableItems.values()), tableColumnDefinitions };
+function getTableItemsAndDefinitions(dataType: DataPageProps["dataType"]) {
+  const dataByRun = new Map(
+    RUNS.map((runName) => [runName, PROCESSED_DATA[dataType].runs[runName] as KeyValueData | undefined]),
+  );
+  return buildKeyValueTable(dataByRun);
 }
 
 /**
