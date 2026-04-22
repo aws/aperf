@@ -1,5 +1,6 @@
-use crate::data::common::data_formats::{AperfData, Graph, GraphData, GraphGroup};
+use crate::data::common::data_formats::{AperfData, Profiler, ProfilingData};
 use crate::data::{Data, ProcessData};
+use crate::profiling::{Profile, ProfileGraph};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
 use log::error;
@@ -85,7 +86,7 @@ impl CollectData for FlamegraphRaw {
             }
             Ok(_) => {
                 info!("Creating flamegraph...");
-                // TODO: extract metadata from perf record and generate script -> ProfilerData
+                // TODO: extract metadata from perf record and generate script -> ProfilingData
                 let script_loc = data_dir.join("script.out");
                 let out = Command::new("perf")
                     .stdout(File::create(&script_loc)?)
@@ -99,7 +100,7 @@ impl CollectData for FlamegraphRaw {
                     }
                     Ok(_) => {
                         let collapse_loc = data_dir.join("collapse.out");
-                        // TODO: move flamegraph generation to report phase using ProfilerData (so user specifies time range)
+                        // TODO: move flamegraph generation to report phase using ProfilingData (so user specifies time range)
                         Folder::default().collapse_file(
                             Some(script_loc.clone()),
                             File::create(&collapse_loc)?,
@@ -158,11 +159,12 @@ impl ProcessData for Flamegraph {
         params: ReportParams,
         _raw_data: Vec<Data>,
     ) -> Result<AperfData> {
-        fn copy_and_add_to_graph_group(
+        fn copy_and_add_to_profiler(
             params: &ReportParams,
             filename: String,
-            graph_data: &mut GraphData,
-            graph_group_name: String,
+            profiling_data: &mut ProfilingData,
+            profiler_name: String,
+            profile_name: String,
         ) {
             let source_path = params.data_dir.join(&filename);
             let relative_dest_path = PathBuf::from("data/js").join(filename);
@@ -170,38 +172,39 @@ impl ProcessData for Flamegraph {
 
             if source_path.exists() {
                 if let Ok(_) = std::fs::copy(&source_path, &dest_path) {
-                    let mut graph_group = GraphGroup::default();
-                    graph_group.group_name = graph_group_name.clone();
-                    graph_group.graphs.insert(
-                        String::new(),
-                        Graph::new(
-                            format!("Kernel Profiling Flamegraph ({graph_group_name})"),
+                    let profiler = profiling_data
+                        .profilers
+                        .entry(profiler_name.clone())
+                        .or_insert_with(Profiler::default);
+                    profiler.profiles.insert(
+                        profile_name.clone(),
+                        Profile::with_graph(ProfileGraph::new(
+                            format!("Kernel Profiling Flamegraph ({profiler_name})"),
                             relative_dest_path.into_os_string().into_string().unwrap(),
                             None,
-                        ),
+                        )),
                     );
-                    graph_data.graph_groups.push(graph_group);
                 }
             }
         }
 
-        let mut graph_data = GraphData::default();
+        let mut profiling_data = ProfilingData::default();
 
-        // TODO: Populate graph_data profiler_data_map from record serialized profiler data
-
-        copy_and_add_to_graph_group(
+        copy_and_add_to_profiler(
             &params,
             format!("{}-flamegraph.svg", params.run_name),
-            &mut graph_data,
+            &mut profiling_data,
+            String::from("perf"),
             String::from("default"),
         );
-        copy_and_add_to_graph_group(
+        copy_and_add_to_profiler(
             &params,
             format!("{}-reverse-flamegraph.svg", params.run_name),
-            &mut graph_data,
+            &mut profiling_data,
+            String::from("perf"),
             String::from("reverse"),
         );
 
-        Ok(AperfData::Graph(graph_data))
+        Ok(AperfData::Profile(profiling_data))
     }
 }

@@ -69,11 +69,11 @@ impl Analyze for ProfileMetadataExpectedRule {
         };
 
         for (run_name, run_data) in &processed_data.runs {
-            let AperfData::Graph(graph_data) = run_data else {
+            let AperfData::Profile(profiling_data) = run_data else {
                 continue;
             };
-            for (key, profiler_data) in &graph_data.profiler_data_map {
-                let metadata_value = profiler_data
+            for (key, profiler) in &profiling_data.profilers {
+                let metadata_value = profiler
                     .metadata
                     .key_value_groups
                     .get(self.group)

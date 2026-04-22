@@ -16,7 +16,7 @@ impl AnalyzeData for JavaProfile {
             // If rule for cpu or alloc group, use only ThreadState::AsyncDefault
             profile_stack_frame_threshold! {
                 name: "Excessive Exceptions",
-                graph_group: "cpu",
+                profile_type: "cpu",
                 stack_frame: [[r"java\.lang\.(Throwable\.(fillInStackTrace|getStackTrace|getOurStackTrace)|StackTraceElement\.<init>)|\w+(\.\w+)*\.((\w*Exception|\w*Error|Throwable)\.<init>)"]],
                 frame_type: None,
                 thread_states: [ThreadState::AsyncDefault],

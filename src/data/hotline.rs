@@ -1,7 +1,8 @@
 extern crate ctor;
 
-use crate::data::common::data_formats::{AperfData, Graph, GraphData, GraphGroup};
+use crate::data::common::data_formats::{AperfData, Profiler, ProfilingData};
 use crate::data::ProcessData;
+use crate::profiling::{Profile, ProfileGraph};
 use crate::{data::Data, visualizer::ReportParams};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -288,7 +289,7 @@ impl ProcessData for Hotline {
     ) -> Result<AperfData> {
         use crate::data::hotline::hotline_reports::REPORT_CONFIGS;
 
-        let mut graph_data = GraphData::default();
+        let mut profiling_data = ProfilingData::default();
 
         for config in REPORT_CONFIGS {
             let csv_string = fs::read_to_string(params.data_dir.join(config.filename))?;
@@ -321,20 +322,21 @@ impl ProcessData for Hotline {
             let mut file = File::create(dest_path)?;
             file.write_all(full_html.as_bytes())?;
 
-            let mut graph_group = GraphGroup::default();
-            graph_group.group_name = config.table_id.to_string();
-            graph_group.graphs.insert(
-                String::new(),
-                Graph::new(
+            // TODO: Create standard data format for hotline (and similar) data
+            let profiler = profiling_data
+                .profilers
+                .entry(config.table_id.to_string())
+                .or_insert_with(Profiler::default);
+            profiler.profiles.insert(
+                config.table_id.to_string(),
+                Profile::with_graph(ProfileGraph::new(
                     format!("{}_table", config.table_id),
                     relative_dest_path.into_os_string().into_string().unwrap(),
                     None,
-                ),
+                )),
             );
-
-            graph_data.graph_groups.push(graph_group);
         }
 
-        Ok(AperfData::Graph(graph_data))
+        Ok(AperfData::Profile(profiling_data))
     }
 }

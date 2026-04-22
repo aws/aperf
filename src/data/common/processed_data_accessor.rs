@@ -130,7 +130,7 @@ impl ProcessedDataAccessor {
             DataFormat::TimeSeries => self.time_series_data_json_string(processed_data),
             DataFormat::KeyValue => self.key_value_data_json_string(processed_data),
             DataFormat::Text => self.text_data_json_string(processed_data),
-            DataFormat::Graph => self.graph_data_json_string(processed_data),
+            DataFormat::Profile => self.profiler_data_json_string(processed_data),
             DataFormat::Unknown => serde_json::to_string(processed_data).unwrap(),
         }
     }
@@ -228,8 +228,8 @@ impl ProcessedDataAccessor {
         serde_json::to_string(processed_data).unwrap()
     }
 
-    /// Serializes the processed graph data into JSON string.
-    pub fn graph_data_json_string(&mut self, processed_data: &ProcessedData) -> String {
+    /// Serializes the processed profiler data into JSON string.
+    pub fn profiler_data_json_string(&mut self, processed_data: &ProcessedData) -> String {
         serde_json::to_string(processed_data).unwrap()
     }
 

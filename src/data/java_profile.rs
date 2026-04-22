@@ -1,8 +1,8 @@
-use crate::data::common::data_formats::{AperfData, Graph, GraphData, GraphGroup, ProfilerData};
+use crate::data::common::data_formats::{AperfData, Profiler, ProfilingData};
 #[cfg(target_os = "linux")]
 use crate::data::common::utils::get_data_name_from_type;
 use crate::data::{Data, ProcessData};
-use crate::profiling::{jfr, BUCKET_WIDTH_MS};
+use crate::profiling::{jfr, Profile, ProfileGraph, BUCKET_WIDTH_MS};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
 use log::error;
@@ -338,20 +338,20 @@ impl CollectData for JavaProfileRaw {
                     }
                 }
 
-                // Generate ProfilerData from JFR
+                // Generate Profiler from JFR
                 let profiler_data_path = params.data_dir.join(format!(
                     "{}-java-profile-{}-profiler-data.json",
                     params.run_name, key
                 ));
-                match jfr::jfr_to_profiler_data(&jfr_path, BUCKET_WIDTH_MS) {
-                    Ok(mut profiler_data) => {
-                        profiler_data.metadata = jfr::parse_jfr_metadata(&metadata_json);
-                        if let Ok(json) = serde_json::to_string(&profiler_data) {
+                match jfr::jfr_to_profiler(&jfr_path, BUCKET_WIDTH_MS) {
+                    Ok(mut profiler) => {
+                        profiler.metadata = jfr::parse_jfr_metadata(&metadata_json);
+                        if let Ok(json) = serde_json::to_string(&profiler) {
                             fs::write(&profiler_data_path, json).ok();
                         }
                     }
                     Err(e) => {
-                        error!("Failed to build ProfilerData for {}: {}", key, e);
+                        error!("Failed to build Profiler Data for {}: {}", key, e);
                     }
                 }
 
@@ -391,7 +391,7 @@ impl ProcessData for JavaProfile {
         params: ReportParams,
         _raw_data: Vec<Data>,
     ) -> Result<AperfData> {
-        let mut graph_data = GraphData::default();
+        let mut profiling_data = ProfilingData::default();
 
         let processes_loc = params
             .data_dir
@@ -399,25 +399,23 @@ impl ProcessData for JavaProfile {
         let processes_json =
             fs::read_to_string(processes_loc.to_str().unwrap()).unwrap_or_default();
         let process_map: HashMap<String, Vec<String>> =
-            serde_json::from_str(&processes_json).unwrap_or(HashMap::new());
+            serde_json::from_str(&processes_json).unwrap_or_default();
 
         let mut profile_metrics = Vec::from(PROFILE_METRICS);
         profile_metrics.push("legacy");
 
-        // There might be multiple JVMs with the same name. Use the number of occurrences
-        // for each JVM name to dedupe
+        // Track JVMs with same name
         let mut jvm_name_counts: HashMap<String, usize> = HashMap::new();
-        // Stores the deduped JVM name of each PID
-        let mut deduped_names: HashMap<String, String> = HashMap::new();
+        let relative_path = PathBuf::from("data/js");
+        let report_dest_dir = params.report_dir.join(&relative_path);
 
-        for metric in profile_metrics {
-            let mut graph_group = GraphGroup::default();
-            graph_group.group_name = String::from(metric);
-
-            for (process, process_names) in &process_map {
-                let filename = if metric == "legacy" {
-                    // backward compatibility - to support previous versions where java profile
-                    // generates a single flamegraph
+        for (process, process_names) in &process_map {
+            // TODO: Remove when natively rendering profile data. Holds jfrconv-generated
+            // html graphs for this process, keyed by metric name.
+            let mut jfrconv_graphs: HashMap<String, ProfileGraph> = HashMap::new();
+            for metric in &profile_metrics {
+                let filename = if *metric == "legacy" {
+                    // backward compatibility - previous versions generated a single flamegraph
                     format!("{}-java-flamegraph-{}.html", params.run_name, process)
                 } else {
                     format!(
@@ -425,69 +423,56 @@ impl ProcessData for JavaProfile {
                         params.run_name, process, metric
                     )
                 };
-
-                let relative_path = PathBuf::from("data/js");
-                if let Some(file_size) = copy_file_to_report_data(
-                    &filename,
-                    &params.data_dir,
-                    &params.report_dir.join(relative_path.clone()),
-                ) {
-                    let jvm_name = process_names.first().map_or("unknown", |s| s.as_str());
-
-                    // Dedupe JVM names
-                    if !deduped_names.contains_key(process) {
-                        let jvm_name_count =
-                            jvm_name_counts.entry(jvm_name.to_string()).or_insert(0);
-                        *jvm_name_count += 1;
-                        deduped_names.insert(
-                            process.clone(),
-                            if *jvm_name_count > 1 {
-                                format!("{} ({})", jvm_name, *jvm_name_count - 1)
-                            } else {
-                                jvm_name.to_string()
-                            },
-                        );
-                    }
-
-                    let graph_name =
-                        format!("({}) JVM: {}", metric, deduped_names.get(process).unwrap());
-
-                    graph_group.graphs.insert(
-                        graph_name.clone(),
-                        Graph::new(
-                            graph_name,
-                            relative_path
-                                .join(filename)
-                                .into_os_string()
-                                .into_string()
-                                .unwrap(),
-                            Some(file_size),
-                        ),
-                    );
-                }
+                let Some(file_size) =
+                    copy_file_to_report_data(&filename, &params.data_dir, &report_dest_dir)
+                else {
+                    continue;
+                };
+                let graph_path = relative_path
+                    .join(&filename)
+                    .into_os_string()
+                    .into_string()
+                    .unwrap();
+                jfrconv_graphs.insert(
+                    metric.to_string(),
+                    ProfileGraph::new(String::new(), graph_path, Some(file_size)),
+                );
+            }
+            if jfrconv_graphs.is_empty() {
+                continue;
             }
 
-            graph_data.graph_groups.push(graph_group);
-        }
+            // Assign a deduped JVM name for this process
+            let jvm_name = process_names.first().map_or("unknown", |s| s.as_str());
+            let count = jvm_name_counts.entry(jvm_name.to_string()).or_insert(0);
+            *count += 1;
+            let deduped_name = if *count > 1 {
+                format!("{} ({})", jvm_name, *count - 1)
+            } else {
+                jvm_name.to_string()
+            };
 
-        // Load profiler data for Java profiles
-        for (process, _) in &process_map {
+            // Load profiler JSON if present, attach jfrconv graphs.
             let profiler_data_path = params.data_dir.join(format!(
                 "{}-java-profile-{}-profiler-data.json",
                 params.run_name, process
             ));
-            if let Ok(json) = fs::read_to_string(&profiler_data_path) {
-                if let Ok(profiler_data) = serde_json::from_str::<ProfilerData>(&json) {
-                    if let Some(name) = deduped_names.get(process) {
-                        graph_data
-                            .profiler_data_map
-                            .insert(name.clone(), profiler_data);
-                    }
-                }
+            let mut profiler = fs::read_to_string(&profiler_data_path)
+                .ok()
+                .and_then(|json| serde_json::from_str::<Profiler>(&json).ok())
+                .unwrap_or_default();
+            for (metric, mut graph) in jfrconv_graphs {
+                graph.graph_name = format!("({}) JVM: {}", metric, deduped_name);
+                profiler
+                    .profiles
+                    .entry(metric)
+                    .or_insert_with(Profile::new)
+                    .profile_graph = graph;
             }
+            profiling_data.profilers.insert(deduped_name, profiler);
         }
 
-        Ok(AperfData::Graph(graph_data))
+        Ok(AperfData::Profile(profiling_data))
     }
 }
 

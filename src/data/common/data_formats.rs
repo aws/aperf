@@ -17,7 +17,7 @@ pub enum DataFormat {
     TimeSeries,
     Text,
     KeyValue,
-    Graph,
+    Profile,
     Unknown,
 }
 
@@ -45,7 +45,7 @@ pub enum AperfData {
     TimeSeries(TimeSeriesData),
     Text(TextData),
     KeyValue(KeyValueData),
-    Graph(GraphData),
+    Profile(ProfilingData),
 }
 
 impl AperfData {
@@ -54,7 +54,7 @@ impl AperfData {
             AperfData::TimeSeries(_) => DataFormat::TimeSeries,
             AperfData::Text(_) => DataFormat::Text,
             AperfData::KeyValue(_) => DataFormat::KeyValue,
-            AperfData::Graph(_) => DataFormat::Graph,
+            AperfData::Profile(_) => DataFormat::Profile,
         }
     }
 }
@@ -152,47 +152,6 @@ pub struct KeyValueGroup {
     pub key_values: HashMap<String, String>,
 }
 
-// ------------------------------------------ GRAPH DATA -------------------------------------------
-/// Data types falling into this format produce one or more HTML or SVG files at the end of a
-/// recording run, which are to be rendered through IFrame in the report. The graphs can be
-/// categorized into different groups, so that only one group of graphs are shown in the report
-/// at a time.
-#[derive(Serialize, Deserialize, Debug, Default, Clone)]
-pub struct GraphData {
-    pub graph_groups: Vec<GraphGroup>,
-    pub profiler_data_map: HashMap<String, ProfilerData>,
-}
-
-/// Contents of a graph group, which contains all graphs to be displayed together.
-#[derive(Serialize, Deserialize, Debug, Default, Clone)]
-pub struct GraphGroup {
-    /// Name of the graph group.
-    pub group_name: String,
-    /// A map from graph names to all graphs within the group.
-    pub graphs: HashMap<String, Graph>,
-}
-
-/// Information about a graph.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Graph {
-    /// The name of the graph.
-    pub graph_name: String,
-    /// The relative path to graph (value of the IFrame's src attribute).
-    pub graph_path: String,
-    /// The size of the graph, which can be used for graph ordering in the report.
-    pub graph_size: Option<u64>,
-}
-
-impl Graph {
-    pub fn new(graph_name: String, graph_path: String, graph_size: Option<u64>) -> Self {
-        Graph {
-            graph_name,
-            graph_path,
-            graph_size,
-        }
-    }
-}
-
 // ------------------------------------------- TEXT DATA -------------------------------------------
 /// Data types falling into this format produce human-readable, formatted, texts, which can be
 /// displayed in the report directly.
@@ -202,14 +161,24 @@ pub struct TextData {
     pub lines: Vec<String>,
 }
 
-// ---------------------------------------- PROFILER DATA ------------------------------------------
-/// Time-bucketed profiling data supporting JFR and perf record sources.
-/// Enables per-block sample lookups (for heatmaps and time range selection) and call graph traversal
-/// (for self/total sample computation).
-///
-/// See [`crate::profiling`] for the implementation of profile building and querying.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProfilerData {
+// ---------------------------------------- PROFILING DATA ------------------------------------------
+/// Data types falling into this format collect profiling data from one or more profiled
+/// targets (e.g. JVMs for java profiling, and system for perf profiling). Each target is
+/// represented by a [`Profiler`] holding metadata and a map of [`Profile`]s keyed by profiling
+/// type (e.g. "cpu", "wall", "allocation"). Each [`Profile`] carries:
+///     - Time bucketed sample data with total counts for the entire profile
+///     - Calling context tree used to analyze a selected time range
+///     - A [`ProfileGraph`](crate::profiling::ProfileGraph) pointing to a pre-rendered HTML/SVG
+///       file displayed via IFrame in the report (legacy path, to be removed once native
+///       rendering is complete).
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct ProfilingData {
+    /// Map from profiler name to its profiler data
+    pub profilers: HashMap<String, Profiler>,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct Profiler {
     /// Start time of the profile in milliseconds since epoch
     pub start_time_ms: i64,
     /// Duration of each block in milliseconds
@@ -220,9 +189,9 @@ pub struct ProfilerData {
     pub profiles: HashMap<String, Profile>,
 }
 
-impl ProfilerData {
+impl Profiler {
     pub fn new(start_time_ms: i64, block_width_ms: u64) -> Self {
-        ProfilerData {
+        Profiler {
             start_time_ms,
             block_width_ms,
             metadata: KeyValueData::default(),

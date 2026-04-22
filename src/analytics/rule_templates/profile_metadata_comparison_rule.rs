@@ -73,12 +73,12 @@ impl Analyze for ProfileMetadataComparisonRule {
 
         // Map base values from all profiles in the first record
         let base_values: HashMap<String, String> =
-            if let AperfData::Graph(graph_data) = base_run_data {
-                graph_data
-                    .profiler_data_map
+            if let AperfData::Profile(profiling_data) = base_run_data {
+                profiling_data
+                    .profilers
                     .iter()
-                    .filter_map(|(key, profiler_data)| {
-                        profiler_data
+                    .filter_map(|(key, profiler)| {
+                        profiler
                             .metadata
                             .key_value_groups
                             .get(self.group)
@@ -114,15 +114,15 @@ impl Analyze for ProfileMetadataComparisonRule {
                 continue;
             }
 
-            let AperfData::Graph(graph_data) = run_data else {
+            let AperfData::Profile(profiling_data) = run_data else {
                 continue;
             };
 
-            let comparison_values: HashMap<String, String> = graph_data
-                .profiler_data_map
+            let comparison_values: HashMap<String, String> = profiling_data
+                .profilers
                 .iter()
-                .filter_map(|(key, profiler_data)| {
-                    profiler_data
+                .filter_map(|(key, profiler)| {
+                    profiler
                         .metadata
                         .key_value_groups
                         .get(self.group)

@@ -23,10 +23,10 @@ export const ALL_DATA_TYPES = [
 ] as const;
 export type DataType = (typeof ALL_DATA_TYPES)[number];
 
-export type DataFormat = "time_series" | "key_value" | "text" | "graph" | "unknown";
+export type DataFormat = "time_series" | "key_value" | "text" | "profile" | "unknown";
 
 // See src/data/data_formats.rs
-export type AperfData = TimeSeriesData | KeyValueData | TextData | GraphData;
+export type AperfData = TimeSeriesData | KeyValueData | TextData | ProfilingData;
 
 export interface ReportData {
   readonly data_name: DataType;
@@ -65,13 +65,19 @@ export interface TextData {
   readonly lines: string[];
 }
 
-export interface GraphData {
-  readonly graph_groups: GraphGroup[];
+export interface ProfilingData {
+  readonly profilers: { [key in string]: Profiler };
 }
 
-export interface GraphGroup {
-  readonly group_name: string;
-  readonly graphs: { [key in string]: GraphInfo };
+export interface Profiler {
+  readonly start_time_ms: number;
+  readonly block_width_ms: number;
+  readonly metadata: KeyValueData;
+  readonly profiles: { [key in string]: Profile };
+}
+
+export interface Profile {
+  readonly profile_graph: GraphInfo;
 }
 
 export interface GraphInfo {
