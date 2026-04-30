@@ -98,6 +98,7 @@ jobs:
           mkdir "$name"
           cp kubectl-aperf "$name/"
           chmod +x "$name/kubectl-aperf"
+          cp LICENSE "$name/"
           tar -zcvf "$name".tar.gz "$name"
 
       # Upload Krew tarball
