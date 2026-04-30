@@ -15,8 +15,8 @@ APERF_IMAGE="public.ecr.aws/aperf/aperf:latest"
 REPORT_NAME="aperf_record"
 OPEN_BROWSER=true
 SHOW_HELP=false
-CPU_REQUEST="1.0"
-MEMORY_REQUEST="1Gi"
+CPU_REQUEST="10m"
+MEMORY_REQUEST="64Mi"
 CPU_LIMIT="4.0"
 MEMORY_LIMIT="4Gi"
 
@@ -147,8 +147,7 @@ metadata:
   labels:
     app: aperf
 spec:
-  nodeSelector:
-    kubernetes.io/hostname: "${NODE_NAME}"
+  nodeName: "${NODE_NAME}"
 ${TOLERATIONS}
   containers:
   - name: aperf-runner
@@ -245,6 +244,105 @@ if kubectl top pods --all-namespaces > /tmp/allpods.out 2>/dev/null; then
 else
   echo "  ${YELLOW}Note: kubectl top not available (metrics-server may not be installed)${NC}"
 fi
+
+# Pre-flight capacity check: verify the node can fit the aperf pod requests
+# This compares allocatable resources against the sum of all pod requests on the node.
+# The scheduler uses requests (not actual usage) to make scheduling decisions.
+
+# Convert a CPU value (e.g. "10m", "2", "1.5") to millicores
+cpu_to_milli() {
+  local val="$1"
+  if [[ "$val" =~ ^([0-9]+)m$ ]]; then
+    echo "${BASH_REMATCH[1]}"
+  elif [[ "$val" =~ ^([0-9]+\.?[0-9]*)$ ]]; then
+    echo "$val * 1000" | bc | cut -d. -f1
+  else
+    echo "0"
+  fi
+}
+
+# Convert a memory value (e.g. "64Mi", "1Gi", "1024Ki", "1048576") to bytes
+mem_to_bytes() {
+  local val="$1"
+  if [[ "$val" =~ ^([0-9]+)Gi$ ]]; then
+    echo $(( ${BASH_REMATCH[1]} * 1073741824 ))
+  elif [[ "$val" =~ ^([0-9]+)Mi$ ]]; then
+    echo $(( ${BASH_REMATCH[1]} * 1048576 ))
+  elif [[ "$val" =~ ^([0-9]+)Ki$ ]]; then
+    echo $(( ${BASH_REMATCH[1]} * 1024 ))
+  elif [[ "$val" =~ ^([0-9]+)$ ]]; then
+    echo "${BASH_REMATCH[1]}"
+  else
+    echo "0"
+  fi
+}
+
+check_node_capacity() {
+  local cpu_req="$1"
+  local mem_req="$2"
+
+  # Skip check if both requests are zero
+  if [[ "$cpu_req" == "0" && "$mem_req" == "0" ]]; then
+    return 0
+  fi
+
+  echo -e "${BOLD}Checking node allocatable capacity...${NC}"
+
+  local cpu_req_milli=$(cpu_to_milli "$cpu_req")
+  local mem_req_bytes=$(mem_to_bytes "$mem_req")
+
+  # Get node allocatable resources
+  local node_json
+  node_json=$(kubectl get node "${NODE_NAME}" -o json 2>/dev/null)
+  if [ $? -ne 0 ]; then
+    echo -e "  ${YELLOW}Warning: Could not query node capacity. Proceeding anyway.${NC}"
+    return 0
+  fi
+
+  local alloc_cpu alloc_mem
+  alloc_cpu=$(echo "$node_json" | jq -r '.status.allocatable.cpu // "0"')
+  alloc_mem=$(echo "$node_json" | jq -r '.status.allocatable.memory // "0"')
+
+  local alloc_cpu_milli=$(cpu_to_milli "$alloc_cpu")
+  local alloc_mem_bytes=$(mem_to_bytes "$alloc_mem")
+
+  # Sum CPU and memory requests from all pods on this node
+  local total_cpu_milli=0
+  local total_mem_bytes=0
+  local pod_resources
+  pod_resources=$(kubectl get pods --all-namespaces --field-selector spec.nodeName="${NODE_NAME}" \
+    -o jsonpath='{range .items[*]}{range .spec.containers[*]}{.resources.requests.cpu}{" "}{.resources.requests.memory}{"\n"}{end}{end}' 2>/dev/null)
+
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    local pcpu pmem
+    pcpu=$(echo "$line" | awk '{print $1}')
+    pmem=$(echo "$line" | awk '{print $2}')
+    total_cpu_milli=$(( total_cpu_milli + $(cpu_to_milli "$pcpu") ))
+    total_mem_bytes=$(( total_mem_bytes + $(mem_to_bytes "$pmem") ))
+  done <<< "$pod_resources"
+
+  local avail_cpu_milli=$(( alloc_cpu_milli - total_cpu_milli ))
+  local avail_mem_bytes=$(( alloc_mem_bytes - total_mem_bytes ))
+
+  echo -e "  Allocatable: ${alloc_cpu_milli}m CPU, $(( alloc_mem_bytes / 1048576 ))Mi memory"
+  echo -e "  Requested by existing pods: ${total_cpu_milli}m CPU, $(( total_mem_bytes / 1048576 ))Mi memory"
+  echo -e "  Available: ${avail_cpu_milli}m CPU, $(( avail_mem_bytes / 1048576 ))Mi memory"
+  echo -e "  APerf requests: ${cpu_req_milli}m CPU, $(( mem_req_bytes / 1048576 ))Mi memory"
+
+  if (( avail_cpu_milli < cpu_req_milli )) || (( avail_mem_bytes < mem_req_bytes )); then
+    echo -e "\n${RED}${BOLD}Error: Node '${NODE_NAME}' does not have enough allocatable capacity for the aperf pod.${NC}"
+    echo -e "${YELLOW}The node's remaining allocatable resources (based on pod requests) are insufficient.${NC}"
+    echo -e "${YELLOW}To run anyway with best-effort scheduling (pod may be evicted during recording), use:${NC}"
+    echo -e "${BLUE}  kubectl aperf --node=${NODE_NAME} --cpu-request=0 --memory-request=0${NC}"
+    exit 1
+  fi
+
+  echo -e "  ${GREEN}Node has sufficient allocatable capacity.${NC}"
+  return 0
+}
+
+check_node_capacity "$CPU_REQUEST" "$MEMORY_REQUEST"
 
 # Create APerf pod
 echo -e "\n${BOLD}Created pod configuration for node:${NC} ${NODE_NAME}${NC}"

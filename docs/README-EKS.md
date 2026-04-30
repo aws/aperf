@@ -60,8 +60,8 @@ kubectl aperf \
 - `--aperf_image`: ECR image URI (optional, default: `public.ecr.aws/aperf/aperf:latest`)
 - `--aperf_options`: APerf command options (optional, default: ``)
 - `--namespace`: Kubernetes namespace (optional, default: `default`)
-- `--cpu-request`: CPU request for the pod (optional, default: `1.0`)
-- `--memory-request`: Memory request for the pod (optional, default: `1Gi`)
+- `--cpu-request`: CPU request for the pod (optional, default: `10m`)
+- `--memory-request`: Memory request for the pod (optional, default: `64Mi`)
 - `--cpu-limit`: CPU limit for the pod (optional, default: `4.0`)
 - `--memory-limit`: Memory limit for the pod (optional, default: `4Gi`)
 
@@ -207,6 +207,18 @@ kubectl aperf \
   --aperf_image="${APERF_ECR_REPO}:latest" \
   --node="ip-10-0-120-104.us-west-2.compute.internal" 
 ```
+
+## Running on Karpenter-managed Clusters
+
+When using [Karpenter](https://karpenter.sh/) as your node autoscaler, be aware that Karpenter provisions nodes based on the aggregated resource requests of pending (unscheduled) pods. Since the aperf pod is created *after* the application pod is already running, Karpenter does not account for it when sizing the node. This means the node may not have enough allocatable capacity for the aperf pod's resource requests.
+
+The `kubectl-aperf` script performs a pre-flight capacity check before creating the pod. It compares the node's allocatable resources against the sum of all existing pod requests to verify there is room for the aperf pod. If the node is too constrained, the script will exit with an error and suggest running with zero requests:
+
+```bash
+kubectl aperf --node=<NODE_NAME> --cpu-request=0 --memory-request=0
+```
+
+Running with zero requests sets the pod's [QoS class](https://kubernetes.io/docs/concepts/workloads/pods/pod-qos/) to `BestEffort`, making it the first candidate for eviction if the node runs low on resources during recording. The default non-zero requests (`10m` CPU, `64Mi` memory) place the pod in the `Burstable` QoS class, which is less likely to be evicted.
 
 ## Security Considerations
 
