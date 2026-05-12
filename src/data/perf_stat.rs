@@ -244,7 +244,7 @@ impl CollectData for PerfStatRaw {
                     Err(e) => {
                         match e.kind() {
                             ErrorKind::PermissionDenied => {
-                                warn!("kernel.perf_event_paranoid needs to be -1. Run `sudo sysctl -w kernel.perf_event_paranoid=-1`")
+                                warn!("kernel.perf_event_paranoid is not <=0. Run `sudo sysctl -w kernel.perf_event_paranoid=-1`")
                             }
                             ErrorKind::NotFound => warn!("PMU counters not available on this instance type. Refer to APerf documentation for supported instances"),
                             _ => match e.raw_os_error().unwrap() {
