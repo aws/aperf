@@ -9,8 +9,8 @@ use std::{process::Child, sync::Mutex};
 use {
     crate::data::{CollectData, CollectorParams},
     crate::PDError,
-    log::{debug, error},
-    nix::{sys::signal, unistd::Pid},
+    log::{debug, error, warn},
+    nix::{sys::signal, unistd, unistd::Pid},
     std::io::Write,
     std::process::{Command, Stdio},
 };
@@ -38,27 +38,38 @@ impl PerfProfileRaw {
 #[cfg(target_os = "linux")]
 impl CollectData for PerfProfileRaw {
     fn prepare_data_collector(&mut self, params: &CollectorParams) -> Result<()> {
-        // Check kernel.perf_event_paranoid
-        let paranoid_value = fs::read_to_string("/proc/sys/kernel/perf_event_paranoid")?
-            .trim()
-            .parse::<i32>()
-            .unwrap_or(4);
-        if paranoid_value != -1 {
-            return Err(PDError::DependencyError(format!(
-                "kernel.perf_event_paranoid is not -1. Run `sudo sysctl -w kernel.perf_event_paranoid=-1`"
-            )).into());
-        }
+        let is_root = unistd::geteuid().is_root();
 
-        // Check kernel.kptr_restrict
-        let kptr_value = fs::read_to_string("/proc/sys/kernel/kptr_restrict")?
-            .trim()
-            .parse::<i32>()
-            .unwrap_or(-1);
-        if kptr_value != 0 {
-            return Err(PDError::DependencyError(format!(
-                "kernel.kptr_restrict is not 0. Run `sudo sysctl -w kernel.kptr_restrict=0`"
-            ))
-            .into());
+        // Check kernel configs for the following perf command
+        if !is_root {
+            //  Check kernel.perf_event_paranoid
+            // -1: Allow use of almost all events by all users (mmap perf_event_open for hotline)
+            //  0: Allow CPU event Data
+            //          Disallow ftrace function tracepoint by users without CAP_SYS_ADMIN
+            //          Disallow raw tracepoint access by users without CAP_SYS_ADMIN
+            //  1: Allow Kernel Profiling (perf will fail, but generate 0 byte perf.data)
+            //          Disallow CPU event access by users without CAP_SYS_ADMIN
+            //  2: Disallow everything (perf will fail, but generate 0 byte perf.data)
+            //          Disallow kernel profiling by users without CAP_SYS_ADMIN
+            let paranoid_value = fs::read_to_string("/proc/sys/kernel/perf_event_paranoid")?
+                .trim()
+                .parse::<i32>()
+                .unwrap_or(4);
+            if paranoid_value > 0 {
+                warn!("kernel.perf_event_paranoid is not <=0, which disallows access to CPU event data. Run `sudo sysctl -w kernel.perf_event_paranoid=-1`");
+            }
+
+            //  Check kernel.kptr_restrict
+            //  0: the address is hashed before printing. (This is the equivalent to %p.)
+            //  1: (symbols skewed if not root) kernel pointers replaced with 0's unless the user has CAP_SYSLOG.
+            //  2: (symbols may be skewed, perf may fail even with root on older perf) kernel pointers replaced with 0's regardless of privileges.
+            let kptr_value = fs::read_to_string("/proc/sys/kernel/kptr_restrict")?
+                .trim()
+                .parse::<i32>()
+                .unwrap_or(-1);
+            if kptr_value > 0 {
+                warn!("kernel.kptr_restrict is not 0, which may result in missing kernel symbols. Run `sudo sysctl -w kernel.kptr_restrict=0`");
+            }
         }
 
         match Command::new("perf")
