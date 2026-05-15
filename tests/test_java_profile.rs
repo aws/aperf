@@ -20,6 +20,7 @@ fn setup_test_env() -> (TempDir, PathBuf, PathBuf, ReportParams) {
         report_dir: report_dir.clone(),
         run_name: "test_run".to_string(),
         data_file_path: PathBuf::new(),
+        collection_start: None,
     };
 
     (temp_dir, data_dir, report_dir, params)

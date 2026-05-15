@@ -46,7 +46,7 @@ fn test_values_match_across_runs() {
         create_profiling_data(vec![create_key_value_data("cpu", "mode", Some("kernel"))]);
     let profiling_data2 =
         create_profiling_data(vec![create_key_value_data("cpu", "mode", Some("kernel"))]);
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![
             ("run1", AperfData::Profile(profiling_data1)),
@@ -66,7 +66,7 @@ fn test_values_match_across_runs() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -81,7 +81,7 @@ fn test_values_differ_across_runs() {
         create_profiling_data(vec![create_key_value_data("cpu", "mode", Some("kernel"))]);
     let profiling_data2 =
         create_profiling_data(vec![create_key_value_data("cpu", "mode", Some("user"))]);
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![
             ("run1", AperfData::Profile(profiling_data1)),
@@ -101,7 +101,7 @@ fn test_values_differ_across_runs() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -116,7 +116,7 @@ fn test_field_missing_in_non_base_run() {
     let profiling_data1 =
         create_profiling_data(vec![create_key_value_data("cpu", "mode", Some("kernel"))]);
     let profiling_data2 = create_profiling_data(vec![create_key_value_data("cpu", "mode", None)]);
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![
             ("run1", AperfData::Profile(profiling_data1)),
@@ -136,7 +136,7 @@ fn test_field_missing_in_non_base_run() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -151,7 +151,7 @@ fn test_field_missing_in_base_run() {
     let profiling_data1 = create_profiling_data(vec![create_key_value_data("cpu", "mode", None)]);
     let profiling_data2 =
         create_profiling_data(vec![create_key_value_data("cpu", "mode", Some("kernel"))]);
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![
             ("run1", AperfData::Profile(profiling_data1)),
@@ -171,7 +171,7 @@ fn test_field_missing_in_base_run() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -188,7 +188,7 @@ fn test_multiple_non_base_runs() {
         create_profiling_data(vec![create_key_value_data("cpu", "mode", Some("kernel"))]);
     let profiling_data3 =
         create_profiling_data(vec![create_key_value_data("cpu", "mode", Some("user"))]);
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![
             ("run1", AperfData::Profile(profiling_data1)),
@@ -209,7 +209,7 @@ fn test_multiple_non_base_runs() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 

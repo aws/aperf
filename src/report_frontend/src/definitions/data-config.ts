@@ -1,6 +1,6 @@
 import { ALL_DATA_TYPES, DataFindings, DataType, ReportData } from "./types";
 
-declare let runs_raw;
+declare let runs_raw: RunInfo[];
 declare let version_info;
 declare let processed_systeminfo_data;
 declare let processed_cpu_utilization_data;
@@ -93,7 +93,16 @@ export const PER_DATA_ANALYTICAL_FINDINGS: { [key in DataType]: DataFindings } =
   aperf_stats: aperf_stats_findings,
 };
 
-export const RUNS: string[] = Array.from(runs_raw);
+export interface RunInfo {
+  readonly name: string;
+  readonly collection_start_ms: number | null;
+  readonly collection_end_ms: number | null;
+}
+
+// TODO: Display per run start and end times in frontend, used to annotate profiles
+export const RUN_INFO: RunInfo[] = Array.from(runs_raw);
+
+export const RUNS: string[] = RUN_INFO.map((r) => r.name);
 
 export const VERSION_INFO = version_info;
 

@@ -179,7 +179,7 @@ pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
     performance_data.collect_data_serial()?;
 
     info!("Data collection complete.");
-    performance_data.end()?;
+    performance_data.create_record_archive()?;
 
     Ok(())
 }

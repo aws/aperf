@@ -97,12 +97,9 @@ fn parse_meminfo(raw_data: &String) -> IndexMap<String, u64> {
 }
 
 impl ProcessData for MeminfoData {
-    fn process_raw_data(
-        &mut self,
-        _params: ReportParams,
-        raw_data: Vec<Data>,
-    ) -> Result<AperfData> {
-        let mut time_series_data_processor = time_series_data_processor_with_custom_aggregate!();
+    fn process_raw_data(&mut self, params: ReportParams, raw_data: Vec<Data>) -> Result<AperfData> {
+        let mut time_series_data_processor =
+            time_series_data_processor_with_custom_aggregate!(params.collection_start);
 
         let mut metric_name_order: Vec<String> = Vec::new();
 

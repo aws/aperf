@@ -64,7 +64,7 @@ impl Analyze for TimeSeriesStatIntraRunComparisonRule {
     fn analyze(
         &self,
         data_findings: &mut DataFindings,
-        processed_data: &ProcessedData,
+        processed_data: &mut ProcessedData,
         processed_data_accessor: &mut ProcessedDataAccessor,
     ) {
         for run_name in processed_data.runs.keys() {

@@ -1,5 +1,5 @@
 use crate::analytics::{AnalyticalFinding, Analyze, DataFindings};
-use crate::data::common::data_formats::{AperfData, ProcessedData};
+use crate::data::common::data_formats::ProcessedData;
 use crate::data::common::processed_data_accessor::ProcessedDataAccessor;
 use log::debug;
 use regex::Regex;
@@ -54,8 +54,8 @@ impl Analyze for ProfileMetadataExpectedRule {
     fn analyze(
         &self,
         report_findings: &mut DataFindings,
-        processed_data: &ProcessedData,
-        _processed_data_accessor: &mut ProcessedDataAccessor,
+        processed_data: &mut ProcessedData,
+        processed_data_accessor: &mut ProcessedDataAccessor,
     ) {
         let regex = match Regex::new(self.expected_value) {
             Ok(re) => Some(re),
@@ -68,17 +68,16 @@ impl Analyze for ProfileMetadataExpectedRule {
             }
         };
 
-        for (run_name, run_data) in &processed_data.runs {
-            let AperfData::Profile(profiling_data) = run_data else {
-                continue;
-            };
-            for (key, profiler) in &profiling_data.profilers {
-                let metadata_value = profiler
-                    .metadata
-                    .key_value_groups
-                    .get(self.group)
-                    .and_then(|group| group.key_values.get(self.key))
-                    .cloned();
+        let run_names: Vec<String> = processed_data.runs.keys().cloned().collect();
+        for run_name in &run_names {
+            let profiler_keys = processed_data_accessor.profiler_keys(processed_data, run_name);
+            for key in &profiler_keys {
+                let metadata_value = processed_data_accessor.profiler_value_by_key(
+                    processed_data,
+                    run_name,
+                    key,
+                    self.key,
+                );
 
                 let field_exists = metadata_value.is_some();
                 let value_matches = matches!((&metadata_value, &regex), (Some(value), Some(re)) if re.is_match(value));

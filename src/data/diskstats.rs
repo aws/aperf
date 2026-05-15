@@ -134,15 +134,11 @@ impl ProcessData for Diskstats {
         vec!["disk_stats"]
     }
 
-    fn process_raw_data(
-        &mut self,
-        _params: ReportParams,
-        raw_data: Vec<Data>,
-    ) -> Result<AperfData> {
+    fn process_raw_data(&mut self, params: ReportParams, raw_data: Vec<Data>) -> Result<AperfData> {
         // For diskstats there is no easy way to compute or find the aggregate metric, so to assign
         // stats to a metric, we use the stats of the series with the largest average value
         let mut time_series_data_processor =
-            time_series_data_processor_with_max_series_aggregate!();
+            time_series_data_processor_with_max_series_aggregate!(params.collection_start);
 
         for buffer in raw_data {
             let raw_value = match buffer {

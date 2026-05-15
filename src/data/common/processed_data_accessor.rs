@@ -1,7 +1,10 @@
 use crate::computations::{f64_to_fixed_2, Statistics};
 use crate::data::common::data_formats::{
-    AperfData, DataFormat, KeyValueData, ProcessedData, Series, TimeSeriesData, TimeSeriesMetric,
+    AperfData, DataFormat, KeyValueData, ProcessedData, Profiler, Series, TimeSeriesData,
+    TimeSeriesMetric,
 };
+use crate::data::TimeEnum;
+use crate::profiling::{FrameType, ThreadState};
 use regex::Regex;
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -9,16 +12,28 @@ use std::fmt::Write;
 /// This struct is created to allow for accessing the processed data within the specified
 /// time range, without modifying the original processed data. Such design allow APerf to
 /// hold only one copy of the processed data, and they can be accessed for any time range
-/// with minimal performance cost.
+/// with minimal performance cost. Series time_diffs are calculated relative to
+/// `per_run_start_time` (the record start time) when available, falling back to
+/// the first sample time for older archives that lack this timestamp.
 #[derive(Debug)]
 pub struct ProcessedDataAccessor {
     /// The start of the time range for every run data
     per_run_from_time: HashMap<String, i64>,
     /// The end of the time range for every run data
     per_run_to_time: HashMap<String, i64>,
+    /// Wall-clock start of every run's `collect_data_serial`. Used together with
+    /// `per_run_end_time` to generate `run_duration_seconds` and anchor negative time
+    /// range bounds and to convert user-supplied relative seconds into absolute wall
+    /// ms for profile data. A run missing from this map (e.g. archives recorded by
+    /// older aperf) triggers fallback behavior.
+    per_run_start_time: HashMap<String, TimeEnum>,
+    /// Wall-clock end of every run's `collect_data_serial`.
+    per_run_end_time: HashMap<String, TimeEnum>,
     /// The cache for a metric's stat within the time range
     /// (since stat computation is costly).
     time_series_metric_stat_cache: HashMap<(String, String), Statistics>,
+    /// Cache of whether time range has been applied per run per profiler.
+    profiler_time_range_cache: HashMap<String, HashMap<String, bool>>,
 }
 
 impl ProcessedDataAccessor {
@@ -26,18 +41,43 @@ impl ProcessedDataAccessor {
         ProcessedDataAccessor {
             per_run_from_time: HashMap::new(),
             per_run_to_time: HashMap::new(),
+            per_run_start_time: HashMap::new(),
+            per_run_end_time: HashMap::new(),
             time_series_metric_stat_cache: HashMap::new(),
+            profiler_time_range_cache: HashMap::new(),
         }
     }
 
     pub fn from_time_ranges(
         per_run_from_time: HashMap<String, i64>,
         per_run_to_time: HashMap<String, i64>,
+        per_run_start_time: HashMap<String, TimeEnum>,
+        per_run_end_time: HashMap<String, TimeEnum>,
     ) -> Self {
         ProcessedDataAccessor {
             per_run_from_time,
             per_run_to_time,
+            per_run_start_time,
+            per_run_end_time,
             time_series_metric_stat_cache: HashMap::new(),
+            profiler_time_range_cache: HashMap::new(),
+        }
+    }
+
+    /// Returns the recording duration (seconds, rounded) for a run, derived from
+    /// the wall-clock start and end times. `None` if either is missing.
+    fn run_duration_seconds(&self, run_name: &str) -> Option<u64> {
+        let start = self.per_run_start_time.get(run_name).copied()?;
+        let end = self.per_run_end_time.get(run_name).copied()?;
+        match end - start {
+            TimeEnum::TimeDiff(secs) => {
+                if secs == 0 {
+                    None
+                } else {
+                    Some(secs)
+                }
+            }
+            _ => None,
         }
     }
 
@@ -51,6 +91,7 @@ impl ProcessedDataAccessor {
     ) -> impl Iterator<Item = &'a f64> {
         let from_time = self.per_run_from_time.get(run_name).copied();
         let to_time = self.per_run_to_time.get(run_name).copied();
+        let run_duration_seconds = self.run_duration_seconds(run_name);
         let metric_name = metric_name.to_string();
         get_time_series_data(processed_data, run_name)
             .into_iter()
@@ -61,8 +102,12 @@ impl ProcessedDataAccessor {
                     .into_iter()
                     .flat_map(move |metric| {
                         metric.series.iter().flat_map(move |series| {
-                            let (start_idx, end_idx) =
-                                compute_time_diff_index(&series.time_diff, from_time, to_time);
+                            let (start_idx, end_idx) = compute_time_diff_index(
+                                &series.time_diff,
+                                from_time,
+                                to_time,
+                                run_duration_seconds,
+                            );
                             series.values[start_idx..end_idx].iter()
                         })
                     })
@@ -116,12 +161,7 @@ impl ProcessedDataAccessor {
         key: &str,
     ) -> Option<&'a str> {
         let key_value_data = get_key_value_data(processed_data, run_name)?;
-        for key_value_group in key_value_data.key_value_groups.values() {
-            if let Some(value) = key_value_group.key_values.get(key) {
-                return Some(value);
-            }
-        }
-        None
+        lookup_key_value(key_value_data, key)
     }
 
     /// Serializes a processed data into JSON string.
@@ -165,6 +205,7 @@ impl ProcessedDataAccessor {
             if let Some(time_series_data) = get_time_series_data(processed_data, run_name) {
                 let from_time = self.per_run_from_time.get(run_name).copied();
                 let to_time = self.per_run_to_time.get(run_name).copied();
+                let run_duration_seconds = self.run_duration_seconds(run_name);
 
                 buf.push_str("{\"metrics\":{");
                 let mut first_metric = true;
@@ -182,6 +223,7 @@ impl ProcessedDataAccessor {
                         stats,
                         from_time,
                         to_time,
+                        run_duration_seconds,
                     );
                 }
 
@@ -214,6 +256,7 @@ impl ProcessedDataAccessor {
             stats,
             self.per_run_from_time.get(run_name).copied(),
             self.per_run_to_time.get(run_name).copied(),
+            self.run_duration_seconds(run_name),
         );
         buf
     }
@@ -233,6 +276,142 @@ impl ProcessedDataAccessor {
         serde_json::to_string(processed_data).unwrap()
     }
 
+    /// Returns the profiler keys for a run's profile data, or empty vec if not profile data.
+    pub fn profiler_keys(
+        &mut self,
+        processed_data: &mut ProcessedData,
+        run_name: &str,
+    ) -> Vec<String> {
+        match processed_data.runs.get_mut(run_name) {
+            Some(AperfData::Profile(profiling_data)) => {
+                profiling_data.profilers.keys().cloned().collect()
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// Returns total samples for a profiler's profile type within the time range.
+    pub fn profiler_total_samples(
+        &mut self,
+        processed_data: &mut ProcessedData,
+        run_name: &str,
+        profiler_key: &str,
+        profile_type: &str,
+        thread_states: &[ThreadState],
+    ) -> u64 {
+        match processed_data.runs.get_mut(run_name) {
+            Some(AperfData::Profile(profiling_data)) => {
+                if let Some(profiler) = profiling_data.profilers.get_mut(profiler_key) {
+                    self.apply_time_range_to_profiler(run_name, profiler_key, profiler);
+                    profiler.get_total_samples(profile_type, thread_states)
+                } else {
+                    0
+                }
+            }
+            _ => 0,
+        }
+    }
+
+    /// Returns sample count matching a stack pattern within the time range.
+    pub fn profiler_samples(
+        &mut self,
+        processed_data: &mut ProcessedData,
+        run_name: &str,
+        profiler_key: &str,
+        profile_type: &str,
+        pattern: &[&str],
+        frame_type: Option<FrameType>,
+        thread_states: &[ThreadState],
+        total_samples: bool,
+    ) -> u64 {
+        match processed_data.runs.get_mut(run_name) {
+            Some(AperfData::Profile(profiling_data)) => {
+                if let Some(profiler) = profiling_data.profilers.get_mut(profiler_key) {
+                    self.apply_time_range_to_profiler(run_name, profiler_key, profiler);
+                    profiler.get_samples(
+                        profile_type,
+                        pattern,
+                        frame_type,
+                        thread_states,
+                        total_samples,
+                    )
+                } else {
+                    0
+                }
+            }
+            _ => 0,
+        }
+    }
+
+    /// Returns a metadata value from a profiler's KeyValueData, searching all groups.
+    /// Reuses the same lookup logic as `key_value_value_by_key`.
+    pub fn profiler_value_by_key(
+        &self,
+        processed_data: &mut ProcessedData,
+        run_name: &str,
+        profiler_key: &str,
+        key: &str,
+    ) -> Option<String> {
+        match processed_data.runs.get_mut(run_name) {
+            Some(AperfData::Profile(profiling_data)) => {
+                lookup_key_value(&profiling_data.profilers.get(profiler_key)?.metadata, key)
+                    .map(|s| s.to_string())
+            }
+            _ => None,
+        }
+    }
+
+    /// Applies the run's time range to a specific profiler by calling
+    /// [`Profiler::set_time_range`]. Negative user bounds anchor at `collection_end`
+    /// (wall clock), positive at `collection_start`.
+    /// No-op if either collection timestamp is missing for the run.
+    pub fn apply_time_range_to_profiler(
+        &mut self,
+        run_name: &str,
+        profiler_key: &str,
+        profiler: &mut Profiler,
+    ) {
+        if self
+            .profiler_time_range_cache
+            .get(run_name)
+            .and_then(|m| m.get(profiler_key))
+            == Some(&true)
+        {
+            return;
+        }
+
+        let (Some(TimeEnum::DateTime(start_dt)), Some(TimeEnum::DateTime(end_dt))) = (
+            self.per_run_start_time.get(run_name).copied(),
+            self.per_run_end_time.get(run_name).copied(),
+        ) else {
+            return;
+        };
+
+        let start_ms = start_dt.timestamp_millis();
+        let end_ms = end_dt.timestamp_millis();
+        let wall_from_ms = self
+            .per_run_from_time
+            .get(run_name)
+            .copied()
+            .map(|s| resolve_wall_ms(s, start_ms, end_ms))
+            .unwrap_or(start_ms);
+        let wall_to_ms = self
+            .per_run_to_time
+            .get(run_name)
+            .copied()
+            .map(|s| resolve_wall_ms(s, start_ms, end_ms))
+            .unwrap_or(end_ms);
+
+        let rel_start_ms = (wall_from_ms - profiler.start_time_ms).max(0) as u64;
+        let rel_end_ms = (wall_to_ms - profiler.start_time_ms).max(0) as u64;
+        let _ = profiler.set_time_range(rel_start_ms, rel_end_ms);
+
+        self.profiler_time_range_cache
+            .entry(run_name.to_string())
+            .or_default()
+            .insert(profiler_key.to_string(), true);
+    }
+
     /// Retrieves the stat of a time-series metric within the time range from the cache, or,
     /// if it does not exist in the cache, computes the stat and stores it in the cache.
     fn get_or_compute_time_series_metric_stats(
@@ -246,12 +425,17 @@ impl ProcessedDataAccessor {
         }
         let from_time = self.per_run_from_time.get(run_name).copied();
         let to_time = self.per_run_to_time.get(run_name).copied();
+        let run_duration_seconds = self.run_duration_seconds(run_name);
         let stats = if let Some(stats_series) = time_series_metric
             .series
             .get(time_series_metric.stats_series_idx)
         {
-            let (start_idx, end_idx) =
-                compute_time_diff_index(&stats_series.time_diff, from_time, to_time);
+            let (start_idx, end_idx) = compute_time_diff_index(
+                &stats_series.time_diff,
+                from_time,
+                to_time,
+                run_duration_seconds,
+            );
             Statistics::from_values(&stats_series.values[start_idx..end_idx])
         } else {
             Statistics::default()
@@ -269,6 +453,7 @@ fn write_time_series_metric_json_string(
     stats: Statistics,
     from_time: Option<i64>,
     to_time: Option<i64>,
+    run_duration_seconds: Option<u64>,
 ) {
     buf.push_str("{\"metric_name\":");
     write!(
@@ -285,7 +470,7 @@ fn write_time_series_metric_json_string(
             buf.push(',');
         }
         first_series = false;
-        write_series_json_string(buf, series, from_time, to_time);
+        write_series_json_string(buf, series, from_time, to_time, run_duration_seconds);
     }
     buf.push(']');
 
@@ -309,8 +494,10 @@ fn write_series_json_string(
     series: &Series,
     from_time: Option<i64>,
     to_time: Option<i64>,
+    run_duration_seconds: Option<u64>,
 ) {
-    let (start, end) = compute_time_diff_index(&series.time_diff, from_time, to_time);
+    let (start, end) =
+        compute_time_diff_index(&series.time_diff, from_time, to_time, run_duration_seconds);
     // Uses itoa/ryu for fast int/float number formatting
     let mut itoa_buf = itoa::Buffer::new();
     let mut ryu_buf = ryu::Buffer::new();
@@ -373,19 +560,49 @@ fn get_key_value_data<'a>(
     }
 }
 
+/// Looks up a key across all groups in a KeyValueData, returning the first match.
+fn lookup_key_value<'a>(key_value_data: &'a KeyValueData, key: &str) -> Option<&'a str> {
+    for group in key_value_data.key_value_groups.values() {
+        if let Some(value) = group.key_values.get(key) {
+            return Some(value);
+        }
+    }
+    None
+}
+
+/// Resolves a user-supplied relative-seconds bound into an absolute wall-clock
+/// ms timestamp. A non-negative value anchors at `start_ms`; a negative value
+/// anchors at `end_ms` (so `-10` means "10 seconds before end of recording").
+fn resolve_wall_ms(bound_sec: i64, start_ms: i64, end_ms: i64) -> i64 {
+    if bound_sec >= 0 {
+        start_ms.saturating_add(bound_sec.saturating_mul(1000))
+    } else {
+        end_ms.saturating_add(bound_sec.saturating_mul(1000))
+    }
+}
+
 /// Locate the start and end index of a series' time_diff (and values) based on
 /// the specified time range.
+///
+/// Negative `from_time` / `to_time` values are resolved against `run_duration_seconds` (the total
+/// recording duration in the same units as `time_diff`, typically seconds). When
+/// `run_duration_seconds` is `None`, falls back to the last value of `time_diff`.
 fn compute_time_diff_index(
     time_diff: &[u64],
     from_time: Option<i64>,
     to_time: Option<i64>,
+    run_duration_seconds: Option<u64>,
 ) -> (usize, usize) {
+    let resolve_negative = |v: i64| -> u64 {
+        run_duration_seconds
+            .or_else(|| time_diff.last().copied())
+            .map(|a| a.saturating_sub(v.unsigned_abs()))
+            .unwrap_or(0)
+    };
+
     let start_idx = if let Some(from) = from_time {
         let from_t = if from < 0 {
-            time_diff
-                .last()
-                .map(|&last_time_diff| last_time_diff.saturating_sub(from.abs() as u64))
-                .unwrap_or(0)
+            resolve_negative(from)
         } else {
             from as u64
         };
@@ -396,10 +613,7 @@ fn compute_time_diff_index(
 
     let end_idx = if let Some(to) = to_time {
         let to_t = if to < 0 {
-            time_diff
-                .last()
-                .map(|&last_time_diff| last_time_diff.saturating_sub(to.abs() as u64))
-                .unwrap_or(0)
+            resolve_negative(to)
         } else {
             to as u64
         };
@@ -454,7 +668,15 @@ mod tests {
     #[test]
     fn test_index_no_bounds() {
         assert_eq!(
-            compute_time_diff_index(&[0, 10, 20, 30, 40], None, None),
+            compute_time_diff_index(&[0, 10, 20, 30, 40], None, None, None),
+            (0, 5)
+        );
+    }
+
+    #[test]
+    fn test_index_no_bounds_anchored() {
+        assert_eq!(
+            compute_time_diff_index(&[0, 10, 20, 30, 40], None, None, Some(45)),
             (0, 5)
         );
     }
@@ -462,7 +684,7 @@ mod tests {
     #[test]
     fn test_index_with_from() {
         assert_eq!(
-            compute_time_diff_index(&[0, 10, 20, 30, 40], Some(15), None),
+            compute_time_diff_index(&[0, 10, 20, 30, 40], Some(15), None, None),
             (2, 5)
         );
     }
@@ -470,7 +692,7 @@ mod tests {
     #[test]
     fn test_index_with_to() {
         assert_eq!(
-            compute_time_diff_index(&[0, 10, 20, 30, 40], None, Some(25)),
+            compute_time_diff_index(&[0, 10, 20, 30, 40], None, Some(25), None),
             (0, 3)
         );
     }
@@ -478,7 +700,7 @@ mod tests {
     #[test]
     fn test_index_with_both() {
         assert_eq!(
-            compute_time_diff_index(&[0, 10, 20, 30, 40], Some(10), Some(30)),
+            compute_time_diff_index(&[0, 10, 20, 30, 40], Some(10), Some(30), None),
             (1, 4)
         );
     }
@@ -486,20 +708,23 @@ mod tests {
     #[test]
     fn test_index_exact_match() {
         assert_eq!(
-            compute_time_diff_index(&[0, 10, 20, 30, 40], Some(20), Some(20)),
+            compute_time_diff_index(&[0, 10, 20, 30, 40], Some(20), Some(20), None),
             (2, 3)
         );
     }
 
     #[test]
     fn test_index_empty() {
-        assert_eq!(compute_time_diff_index(&[], Some(5), Some(10)), (0, 0));
+        assert_eq!(
+            compute_time_diff_index(&[], Some(5), Some(10), None),
+            (0, 0)
+        );
     }
 
     #[test]
     fn test_index_from_beyond_end() {
         assert_eq!(
-            compute_time_diff_index(&[0, 10, 20], Some(100), None),
+            compute_time_diff_index(&[0, 10, 20], Some(100), None, None),
             (3, 3)
         );
     }
@@ -507,7 +732,7 @@ mod tests {
     #[test]
     fn test_index_to_before_start() {
         assert_eq!(
-            compute_time_diff_index(&[10, 20, 30], None, Some(5)),
+            compute_time_diff_index(&[10, 20, 30], None, Some(5), None),
             (0, 0)
         );
     }
@@ -516,7 +741,7 @@ mod tests {
     fn test_index_from_equals_first_element() {
         // from == first element → should include it
         assert_eq!(
-            compute_time_diff_index(&[10, 20, 30], Some(10), None),
+            compute_time_diff_index(&[10, 20, 30], Some(10), None, None),
             (0, 3)
         );
     }
@@ -525,26 +750,32 @@ mod tests {
     fn test_index_to_equals_last_element() {
         // to == last element → should include it
         assert_eq!(
-            compute_time_diff_index(&[10, 20, 30], None, Some(30)),
+            compute_time_diff_index(&[10, 20, 30], None, Some(30), None),
             (0, 3)
         );
     }
 
     #[test]
     fn test_index_single_element_in_range() {
-        assert_eq!(compute_time_diff_index(&[42], Some(40), Some(50)), (0, 1));
+        assert_eq!(
+            compute_time_diff_index(&[42], Some(40), Some(50), None),
+            (0, 1)
+        );
     }
 
     #[test]
     fn test_index_single_element_out_of_range() {
-        assert_eq!(compute_time_diff_index(&[42], Some(50), Some(60)), (1, 1));
+        assert_eq!(
+            compute_time_diff_index(&[42], Some(50), Some(60), None),
+            (1, 1)
+        );
     }
 
     #[test]
     fn test_index_duplicate_values() {
         // time_diff with duplicates — all matching values should be included
         assert_eq!(
-            compute_time_diff_index(&[10, 10, 20, 20, 30], Some(10), Some(20)),
+            compute_time_diff_index(&[10, 10, 20, 20, 30], Some(10), Some(20), None),
             (0, 4)
         );
     }
@@ -552,14 +783,17 @@ mod tests {
     #[test]
     fn test_index_from_none_to_none() {
         // Both None → full range (same as test_index_no_bounds but explicit)
-        assert_eq!(compute_time_diff_index(&[5, 10, 15], None, None), (0, 3));
+        assert_eq!(
+            compute_time_diff_index(&[5, 10, 15], None, None, None),
+            (0, 3)
+        );
     }
 
     #[test]
     fn test_index_from_equals_to_not_in_array() {
         // from == to but value doesn't exist in array → empty range
         assert_eq!(
-            compute_time_diff_index(&[10, 20, 30], Some(15), Some(15)),
+            compute_time_diff_index(&[10, 20, 30], Some(15), Some(15), None),
             (1, 1)
         );
     }
@@ -568,7 +802,10 @@ mod tests {
     fn test_index_contiguous_range() {
         // Typical real-world case: second-by-second time_diff
         let td: Vec<u64> = (0..100).collect();
-        assert_eq!(compute_time_diff_index(&td, Some(25), Some(74)), (25, 75));
+        assert_eq!(
+            compute_time_diff_index(&td, Some(25), Some(74), None),
+            (25, 75)
+        );
     }
 
     // ---- negative index tests ----
@@ -578,7 +815,7 @@ mod tests {
         // time_diff: [0, 10, 20, 30, 40], last=40
         // from=-15 → 40-15=25 → first index where t >= 25 is index 3 (value 30)
         assert_eq!(
-            compute_time_diff_index(&[0, 10, 20, 30, 40], Some(-15), None),
+            compute_time_diff_index(&[0, 10, 20, 30, 40], Some(-15), None, None),
             (3, 5)
         );
     }
@@ -588,7 +825,7 @@ mod tests {
         // time_diff: [0, 10, 20, 30, 40], last=40
         // to=-15 → 40-15=25 → first index where t > 25 is index 3 (value 30), so end=3
         assert_eq!(
-            compute_time_diff_index(&[0, 10, 20, 30, 40], None, Some(-15)),
+            compute_time_diff_index(&[0, 10, 20, 30, 40], None, Some(-15), None),
             (0, 3)
         );
     }
@@ -599,7 +836,7 @@ mod tests {
         // from=-30 → 40-30=10, to=-10 → 40-10=30
         // range [10, 30] → indices 1..4
         assert_eq!(
-            compute_time_diff_index(&[0, 10, 20, 30, 40], Some(-30), Some(-10)),
+            compute_time_diff_index(&[0, 10, 20, 30, 40], Some(-30), Some(-10), None),
             (1, 4)
         );
     }
@@ -610,7 +847,7 @@ mod tests {
         // from=-25 → 40-25=15, to=30
         // range [15, 30] → indices 2..4
         assert_eq!(
-            compute_time_diff_index(&[0, 10, 20, 30, 40], Some(-25), Some(30)),
+            compute_time_diff_index(&[0, 10, 20, 30, 40], Some(-25), Some(30), None),
             (2, 4)
         );
     }
@@ -620,14 +857,17 @@ mod tests {
         // time_diff: [0, 10, 20], last=20
         // from=-100 → 20-100 saturates to 0 → full range from start
         assert_eq!(
-            compute_time_diff_index(&[0, 10, 20], Some(-100), None),
+            compute_time_diff_index(&[0, 10, 20], Some(-100), None, None),
             (0, 3)
         );
     }
 
     #[test]
     fn test_index_negative_on_empty() {
-        assert_eq!(compute_time_diff_index(&[], Some(-5), Some(-1)), (0, 0));
+        assert_eq!(
+            compute_time_diff_index(&[], Some(-5), Some(-1), None),
+            (0, 0)
+        );
     }
 
     #[test]
@@ -636,7 +876,10 @@ mod tests {
         let td: Vec<u64> = (0..100).collect();
         // from=-10 → 99-10=89, to=-1 → 99-1=98
         // range [89, 98] → indices 89..99
-        assert_eq!(compute_time_diff_index(&td, Some(-10), Some(-1)), (89, 99));
+        assert_eq!(
+            compute_time_diff_index(&td, Some(-10), Some(-1), None),
+            (89, 99)
+        );
     }
 
     #[test]
@@ -644,7 +887,7 @@ mod tests {
         // from=35 (positive), to=-30 → resolves to 40-30=10
         // Resolved range [35, 10] is inverted → should return empty (start, start)
         assert_eq!(
-            compute_time_diff_index(&[0, 10, 20, 30, 40], Some(35), Some(-30)),
+            compute_time_diff_index(&[0, 10, 20, 30, 40], Some(35), Some(-30), None),
             (4, 4)
         );
     }
@@ -653,9 +896,87 @@ mod tests {
     fn test_index_inverted_positive_range_returns_empty() {
         // Pure positive inversion: from=30, to=10
         assert_eq!(
-            compute_time_diff_index(&[0, 10, 20, 30, 40], Some(30), Some(10)),
+            compute_time_diff_index(&[0, 10, 20, 30, 40], Some(30), Some(10), None),
             (3, 3)
         );
+    }
+
+    // ---- run_duration_seconds anchor tests ----
+
+    #[test]
+    fn test_index_anchor_used_for_negative_bounds() {
+        // run_duration_seconds overrides time_diff.last() when resolving negative bounds.
+        // time_diff.last()=40 but anchor=100 → from=-10 resolves to 100-10=90,
+        // which is past every element, so start_idx = len.
+        assert_eq!(
+            compute_time_diff_index(&[0, 10, 20, 30, 40], Some(-10), None, Some(100)),
+            (5, 5)
+        );
+    }
+
+    #[test]
+    fn test_index_anchor_ignored_for_positive_bounds() {
+        // Positive bounds are interpreted as raw time_diff values; anchor has no effect.
+        assert_eq!(
+            compute_time_diff_index(&[0, 10, 20, 30, 40], Some(20), Some(30), Some(9999)),
+            (2, 4)
+        );
+    }
+
+    #[test]
+    fn test_index_to_none_ignores_anchor() {
+        // to_time=None → end_idx = time_diff.len() regardless of anchor.
+        // Even if anchor is smaller than time_diff.last(), samples past anchor are kept.
+        assert_eq!(
+            compute_time_diff_index(&[0, 10, 20, 30, 40], None, None, Some(20)),
+            (0, 5)
+        );
+    }
+
+    #[test]
+    fn test_index_anchor_smaller_than_last_with_negative_from() {
+        // Skew case: time_diff.last()=100 but anchor=60 (nominal collection ended
+        // before the last recorded sample). from=-20 resolves to 60-20=40, yielding
+        // a window larger than the user likely expects given that time_diff extends
+        // past anchor. This test documents the current behavior.
+        let td: Vec<u64> = (0..=100).step_by(10).collect(); // [0,10,...,100]
+        assert_eq!(
+            compute_time_diff_index(&td, Some(-20), None, Some(60)),
+            (4, 11) // from t=40 through t=100
+        );
+    }
+
+    #[test]
+    fn test_index_anchor_saturates_on_large_negative() {
+        // Negative bound whose magnitude exceeds anchor saturates to 0 rather than
+        // underflowing u64.
+        assert_eq!(
+            compute_time_diff_index(&[0, 10, 20, 30, 40], Some(-1000), None, Some(5)),
+            (0, 5)
+        );
+    }
+
+    // ---- resolve_wall_ms tests ----
+
+    #[test]
+    fn test_resolve_wall_ms_nonnegative_anchors_at_start() {
+        // 10s offset from start
+        assert_eq!(resolve_wall_ms(10, 1_000, 61_000), 11_000);
+        // 0s resolves to start itself
+        assert_eq!(resolve_wall_ms(0, 1_000, 61_000), 1_000);
+    }
+
+    #[test]
+    fn test_resolve_wall_ms_negative_anchors_at_end() {
+        // -5s from end
+        assert_eq!(resolve_wall_ms(-5, 1_000, 61_000), 56_000);
+    }
+
+    #[test]
+    fn test_resolve_wall_ms_saturates_on_overflow() {
+        // Huge positive seconds value would overflow i64 ms; saturating_mul/add
+        // keeps the result at i64::MAX instead of panicking.
+        assert_eq!(resolve_wall_ms(i64::MAX, 1_000, 61_000), i64::MAX);
     }
 
     // ---- iterator tests ----
@@ -690,6 +1011,8 @@ mod tests {
         let accessor = ProcessedDataAccessor::from_time_ranges(
             HashMap::from([("run1".to_string(), 10)]),
             HashMap::new(),
+            HashMap::new(),
+            HashMap::new(),
         );
         let values: Vec<&f64> = accessor
             .time_series_metric_values_iterator(&pd, "run1", "cpu")
@@ -709,6 +1032,8 @@ mod tests {
         let accessor = ProcessedDataAccessor::from_time_ranges(
             HashMap::new(),
             HashMap::from([("run1".to_string(), 10)]),
+            HashMap::new(),
+            HashMap::new(),
         );
         let values: Vec<&f64> = accessor
             .time_series_metric_values_iterator(&pd, "run1", "cpu")
@@ -766,6 +1091,8 @@ mod tests {
         let mut accessor = ProcessedDataAccessor::from_time_ranges(
             HashMap::from([("run1".to_string(), 10)]),
             HashMap::from([("run1".to_string(), 20)]),
+            HashMap::new(),
+            HashMap::new(),
         );
         let stats = accessor
             .time_series_metric_stats(&pd, "run1", "cpu")
@@ -823,7 +1150,7 @@ mod tests {
     fn test_write_series_no_range() {
         let series = make_series("total", vec![0, 10, 20], vec![1.5, 2.7, 3.223]);
         let mut buf = String::new();
-        write_series_json_string(&mut buf, &series, None, None);
+        write_series_json_string(&mut buf, &series, None, None, None);
         let v: serde_json::Value = serde_json::from_str(&buf).unwrap();
         assert_eq!(v["series_name"], "total");
         assert_eq!(v["time_diff"], serde_json::json!([0, 10, 20]));
@@ -835,7 +1162,7 @@ mod tests {
     fn test_write_series_with_time_range() {
         let series = make_series("s1", vec![0, 10, 20, 30], vec![1.0, 2.0, 3.0, 4.0]);
         let mut buf = String::new();
-        write_series_json_string(&mut buf, &series, Some(10), Some(20));
+        write_series_json_string(&mut buf, &series, Some(10), Some(20), None);
         let v: serde_json::Value = serde_json::from_str(&buf).unwrap();
         assert_eq!(v["time_diff"], serde_json::json!([10, 20]));
         let values: Vec<f64> = v["values"]
@@ -856,7 +1183,7 @@ mod tests {
             is_aggregate: true,
         };
         let mut buf = String::new();
-        write_series_json_string(&mut buf, &series, None, None);
+        write_series_json_string(&mut buf, &series, None, None, None);
         let v: serde_json::Value = serde_json::from_str(&buf).unwrap();
         assert_eq!(v["is_aggregate"], true);
     }
@@ -889,6 +1216,8 @@ mod tests {
         let mut accessor = ProcessedDataAccessor::from_time_ranges(
             HashMap::from([("run1".to_string(), 10)]),
             HashMap::from([("run1".to_string(), 20)]),
+            HashMap::new(),
+            HashMap::new(),
         );
         let json = accessor.time_series_metric_json_string(&metric, "run1");
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -943,6 +1272,8 @@ mod tests {
         let mut accessor = ProcessedDataAccessor::from_time_ranges(
             HashMap::from([("run1".to_string(), 10)]),
             HashMap::from([("run1".to_string(), 20)]),
+            HashMap::new(),
+            HashMap::new(),
         );
         let json = accessor.time_series_data_json_string(&pd);
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -959,12 +1290,12 @@ mod tests {
 
     #[test]
     fn test_json_string_dispatches_time_series() {
-        let pd = make_processed_data(vec![(
+        let mut pd = make_processed_data(vec![(
             "cpu",
             vec![make_series("total", vec![0, 10], vec![1.0, 2.0])],
         )]);
         let mut accessor = ProcessedDataAccessor::new();
-        let json = accessor.json_string(&pd);
+        let json = accessor.json_string(&mut pd);
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert!(v["runs"]["run1"]["metrics"]["cpu"].is_object());
     }
@@ -983,7 +1314,7 @@ mod tests {
         pd.runs.insert("run1".to_string(), AperfData::KeyValue(kv));
 
         let mut accessor = ProcessedDataAccessor::new();
-        let json = accessor.json_string(&pd);
+        let json = accessor.json_string(&mut pd);
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(v["data_format"], "key_value");
         assert_eq!(
@@ -997,6 +1328,8 @@ mod tests {
         let accessor = ProcessedDataAccessor::from_time_ranges(
             HashMap::from([("run1".to_string(), 10)]),
             HashMap::from([("run1".to_string(), 30)]),
+            HashMap::new(),
+            HashMap::new(),
         );
         assert_eq!(accessor.per_run_from_time.get("run1"), Some(&10));
         assert_eq!(accessor.per_run_to_time.get("run1"), Some(&30));

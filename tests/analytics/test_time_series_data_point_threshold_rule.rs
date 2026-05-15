@@ -11,7 +11,7 @@ use super::test_helpers::{create_processed_data, create_time_series_data, DataFi
 #[test]
 fn test_no_data_points_exceed_threshold() {
     let ts_data = create_time_series_data(vec![("metric1", vec![10.0, 20.0, 30.0])]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
 
     let rule = TimeSeriesDataPointThresholdRule {
@@ -27,7 +27,7 @@ fn test_no_data_points_exceed_threshold() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -37,7 +37,7 @@ fn test_no_data_points_exceed_threshold() {
 #[test]
 fn test_one_data_point_exceeds_threshold() {
     let ts_data = create_time_series_data(vec![("metric1", vec![10.0, 60.0, 30.0])]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
 
     let rule = TimeSeriesDataPointThresholdRule {
@@ -53,7 +53,7 @@ fn test_one_data_point_exceeds_threshold() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -64,7 +64,7 @@ fn test_one_data_point_exceeds_threshold() {
 #[test]
 fn test_multiple_data_points_exceed_threshold() {
     let ts_data = create_time_series_data(vec![("metric1", vec![60.0, 70.0, 80.0])]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
 
     let rule = TimeSeriesDataPointThresholdRule {
@@ -80,7 +80,7 @@ fn test_multiple_data_points_exceed_threshold() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -90,7 +90,7 @@ fn test_multiple_data_points_exceed_threshold() {
 #[test]
 fn test_less_than_comparator() {
     let ts_data = create_time_series_data(vec![("metric1", vec![10.0, 20.0, 30.0])]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
 
     let rule = TimeSeriesDataPointThresholdRule {
@@ -106,7 +106,7 @@ fn test_less_than_comparator() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -116,7 +116,7 @@ fn test_less_than_comparator() {
 #[test]
 fn test_equal_comparator() {
     let ts_data = create_time_series_data(vec![("metric1", vec![10.0, 50.0, 30.0])]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
 
     let rule = TimeSeriesDataPointThresholdRule {
@@ -132,7 +132,7 @@ fn test_equal_comparator() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -142,7 +142,7 @@ fn test_equal_comparator() {
 #[test]
 fn test_metric_not_found() {
     let ts_data = create_time_series_data(vec![("metric1", vec![10.0, 20.0, 30.0])]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
 
     let rule = TimeSeriesDataPointThresholdRule {
@@ -158,7 +158,7 @@ fn test_metric_not_found() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -168,7 +168,7 @@ fn test_metric_not_found() {
 #[test]
 fn test_empty_values() {
     let ts_data = create_time_series_data(vec![("metric1", vec![])]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
 
     let rule = TimeSeriesDataPointThresholdRule {
@@ -184,7 +184,7 @@ fn test_empty_values() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -195,7 +195,7 @@ fn test_empty_values() {
 fn test_multiple_runs() {
     let ts_data1 = create_time_series_data(vec![("metric1", vec![10.0, 20.0, 30.0])]);
     let ts_data2 = create_time_series_data(vec![("metric1", vec![60.0, 70.0, 80.0])]);
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![
             ("run1", AperfData::TimeSeries(ts_data1)),
@@ -216,7 +216,7 @@ fn test_multiple_runs() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -228,7 +228,7 @@ fn test_multiple_runs() {
 #[test]
 fn test_negative_score() {
     let ts_data = create_time_series_data(vec![("metric1", vec![60.0, 70.0, 80.0])]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
 
     let rule = TimeSeriesDataPointThresholdRule {
@@ -244,7 +244,7 @@ fn test_negative_score() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -258,7 +258,7 @@ fn test_time_range_filters_data_points() {
         "metric1",
         vec![10.0, 20.0, 30.0, 60.0, 70.0, 80.0, 10.0, 20.0],
     )]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
 
     let rule = TimeSeriesDataPointThresholdRule {
@@ -275,7 +275,7 @@ fn test_time_range_filters_data_points() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
     assert_eq!(findings.num_runs_with_findings(), 1);
@@ -284,18 +284,22 @@ fn test_time_range_filters_data_points() {
     let mut accessor = ProcessedDataAccessor::from_time_ranges(
         HashMap::from([("run1".to_string(), 0)]),
         HashMap::from([("run1".to_string(), 2)]),
+        HashMap::new(),
+        HashMap::new(),
     );
     let mut findings2 = DataFindings::default();
-    rule.analyze(&mut findings2, &processed_data, &mut accessor);
+    rule.analyze(&mut findings2, &mut processed_data, &mut accessor);
     assert_eq!(findings2.num_runs_with_findings(), 0);
 
     // Time range 3:5 → [60,70,80] → finding
     let mut accessor2 = ProcessedDataAccessor::from_time_ranges(
         HashMap::from([("run1".to_string(), 3)]),
         HashMap::from([("run1".to_string(), 5)]),
+        HashMap::new(),
+        HashMap::new(),
     );
     let mut findings3 = DataFindings::default();
-    rule.analyze(&mut findings3, &processed_data, &mut accessor2);
+    rule.analyze(&mut findings3, &mut processed_data, &mut accessor2);
     assert_eq!(findings3.num_runs_with_findings(), 1);
 }
 
@@ -310,7 +314,7 @@ fn test_time_range_multi_run() {
         create_time_series_data(vec![("metric1", vec![10.0, 10.0, 10.0, 10.0, 80.0, 90.0])]);
     let ts_data3 =
         create_time_series_data(vec![("metric1", vec![60.0, 70.0, 80.0, 10.0, 10.0, 10.0])]);
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![
             ("run1", AperfData::TimeSeries(ts_data1)),
@@ -333,7 +337,7 @@ fn test_time_range_multi_run() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
     assert_eq!(findings.num_runs_with_findings(), 3);
@@ -350,9 +354,11 @@ fn test_time_range_multi_run() {
             ("run2".to_string(), 1),
             ("run3".to_string(), 1),
         ]),
+        HashMap::new(),
+        HashMap::new(),
     );
     let mut findings2 = DataFindings::default();
-    rule.analyze(&mut findings2, &processed_data, &mut accessor);
+    rule.analyze(&mut findings2, &mut processed_data, &mut accessor);
     assert_eq!(findings2.num_runs_with_findings(), 1);
     assert!(findings2.has_findings_for_run("run3"));
 
@@ -368,9 +374,11 @@ fn test_time_range_multi_run() {
             ("run2".to_string(), 5),
             ("run3".to_string(), 5),
         ]),
+        HashMap::new(),
+        HashMap::new(),
     );
     let mut findings3 = DataFindings::default();
-    rule.analyze(&mut findings3, &processed_data, &mut accessor2);
+    rule.analyze(&mut findings3, &mut processed_data, &mut accessor2);
     assert_eq!(findings3.num_runs_with_findings(), 1);
     assert!(findings3.has_findings_for_run("run2"));
 
@@ -386,9 +394,11 @@ fn test_time_range_multi_run() {
             ("run2".to_string(), 5),
             ("run3".to_string(), 5),
         ]),
+        HashMap::new(),
+        HashMap::new(),
     );
     let mut findings4 = DataFindings::default();
-    rule.analyze(&mut findings4, &processed_data, &mut accessor3);
+    rule.analyze(&mut findings4, &mut processed_data, &mut accessor3);
     assert_eq!(findings4.num_runs_with_findings(), 2);
     assert!(findings4.has_findings_for_run("run1"));
     assert!(findings4.has_findings_for_run("run2"));
@@ -405,7 +415,7 @@ fn test_regex_matching_matches_multiple_metrics() {
         ("cpu_system", vec![10.0, 70.0, 30.0]),
         ("mem_used", vec![90.0, 90.0, 90.0]),
     ]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
 
     let rule = TimeSeriesDataPointThresholdRule {
@@ -421,7 +431,7 @@ fn test_regex_matching_matches_multiple_metrics() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -439,7 +449,7 @@ fn test_regex_matching_no_metrics_match_pattern() {
         ("mem_used", vec![60.0, 70.0, 80.0]),
         ("mem_free", vec![60.0, 70.0, 80.0]),
     ]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
 
     let rule = TimeSeriesDataPointThresholdRule {
@@ -455,7 +465,7 @@ fn test_regex_matching_no_metrics_match_pattern() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -469,7 +479,7 @@ fn test_regex_matching_only_some_matched_metrics_exceed_threshold() {
         ("cpu_user", vec![60.0, 70.0, 80.0]),
         ("cpu_system", vec![10.0, 20.0, 30.0]),
     ]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
 
     let rule = TimeSeriesDataPointThresholdRule {
@@ -485,7 +495,7 @@ fn test_regex_matching_only_some_matched_metrics_exceed_threshold() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -507,7 +517,7 @@ fn test_regex_matching_multiple_runs() {
         ("cpu_user", vec![80.0, 90.0]),
         ("cpu_system", vec![60.0, 70.0]),
     ]);
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![
             ("run1", AperfData::TimeSeries(ts_data1)),
@@ -528,7 +538,7 @@ fn test_regex_matching_multiple_runs() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -543,7 +553,7 @@ fn test_regex_matching_multiple_runs() {
 #[test]
 fn test_regex_matching_invalid_regex() {
     let ts_data = create_time_series_data(vec![("cpu_user", vec![60.0, 70.0, 80.0])]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
 
     let rule = TimeSeriesDataPointThresholdRule {
@@ -559,7 +569,7 @@ fn test_regex_matching_invalid_regex() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -574,7 +584,7 @@ fn test_regex_matching_with_time_range() {
         ("cpu_user", vec![10.0, 20.0, 30.0, 60.0, 70.0, 10.0]),
         ("cpu_system", vec![60.0, 70.0, 10.0, 20.0, 30.0, 10.0]),
     ]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
 
     let rule = TimeSeriesDataPointThresholdRule {
@@ -591,9 +601,11 @@ fn test_regex_matching_with_time_range() {
     let mut accessor = ProcessedDataAccessor::from_time_ranges(
         HashMap::from([("run1".to_string(), 0)]),
         HashMap::from([("run1".to_string(), 1)]),
+        HashMap::new(),
+        HashMap::new(),
     );
     let mut findings = DataFindings::default();
-    rule.analyze(&mut findings, &processed_data, &mut accessor);
+    rule.analyze(&mut findings, &mut processed_data, &mut accessor);
     assert_eq!(findings.num_runs_with_findings(), 1);
     assert!(findings.has_findings_for_metric("run1", "cpu_system"));
     assert!(!findings.has_findings_for_metric("run1", "cpu_user"));
@@ -602,9 +614,11 @@ fn test_regex_matching_with_time_range() {
     let mut accessor2 = ProcessedDataAccessor::from_time_ranges(
         HashMap::from([("run1".to_string(), 3)]),
         HashMap::from([("run1".to_string(), 4)]),
+        HashMap::new(),
+        HashMap::new(),
     );
     let mut findings2 = DataFindings::default();
-    rule.analyze(&mut findings2, &processed_data, &mut accessor2);
+    rule.analyze(&mut findings2, &mut processed_data, &mut accessor2);
     assert_eq!(findings2.num_runs_with_findings(), 1);
     assert!(findings2.has_findings_for_metric("run1", "cpu_user"));
     assert!(!findings2.has_findings_for_metric("run1", "cpu_system"));
@@ -617,7 +631,7 @@ fn test_regex_matching_false_uses_exact_metric_name() {
         ("cpu_user", vec![60.0, 70.0, 80.0]),
         ("cpu_system", vec![60.0, 70.0, 80.0]),
     ]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
 
     let rule = TimeSeriesDataPointThresholdRule {
@@ -633,7 +647,7 @@ fn test_regex_matching_false_uses_exact_metric_name() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 

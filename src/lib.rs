@@ -16,6 +16,7 @@ pub mod visualizer;
 use crate::analytics::{AnalyticalEngine, DataFindings};
 use crate::data::aperf_runlog::AperfRunlog;
 use crate::data::common::processed_data_accessor::ProcessedDataAccessor;
+use crate::data::TimeEnum;
 use crate::visualizer::DataVisualizer;
 use anyhow::Result;
 use chrono::prelude::*;
@@ -29,7 +30,6 @@ use thiserror::Error;
 #[cfg(target_os = "linux")]
 use {
     crate::data::aperf_stats::AperfStat,
-    data::TimeEnum,
     flate2::{write::GzEncoder, Compression},
     nix::poll::{poll, PollFd, PollFlags, PollTimeout},
     nix::sys::{
@@ -190,23 +190,6 @@ impl PerformanceData {
     pub fn init_collectors(&mut self) -> Result<()> {
         fs::create_dir(self.init_params.dir_name.clone())?;
 
-        /*
-         * Create a meta_data file to hold the InitParams that was used by the collector.
-         * This will help when we visualize the data and we don't have to guess these values.
-         */
-        let meta_data_path = format!(
-            "{}/meta_data.{}",
-            self.init_params.dir_name.clone(),
-            APERF_FILE_FORMAT
-        );
-        let meta_data_handle = fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .open(meta_data_path.clone())
-            .expect("Could not create meta-data file");
-
-        bincode::serialize_into(meta_data_handle, &self.init_params)?;
-
         self.aperf_stats_path = PathBuf::from(self.init_params.dir_name.clone()).join(format!(
             "{}.{}",
             get_data_name_from_type::<AperfStat>(),
@@ -286,6 +269,7 @@ impl PerformanceData {
 
     pub fn collect_data_serial(&mut self) -> Result<()> {
         let start = time::Instant::now();
+        self.init_params.collection_start = Some(TimeEnum::DateTime(Utc::now()));
         let mut aperf_collect_data = AperfStat::new();
         let mut current = time::Instant::now();
         let end = current + time::Duration::from_secs(self.init_params.period);
@@ -294,7 +278,7 @@ impl PerformanceData {
         let mut tfd = TimerFd::new()?;
         tfd.set_state(
             TimerState::Periodic {
-                current: time::Duration::from_secs(self.init_params.interval),
+                current: time::Duration::from_nanos(1),
                 interval: time::Duration::from_secs(self.init_params.interval),
             },
             SetTimeFlags::Default,
@@ -372,6 +356,7 @@ impl PerformanceData {
                 }
             }
         }
+        self.init_params.collection_end = Some(TimeEnum::DateTime(Utc::now()));
         for (_name, datatype) in self.collectors.iter_mut() {
             datatype.set_signal(datatype_signal);
             datatype.finish_data_collection()?;
@@ -383,9 +368,21 @@ impl PerformanceData {
         Ok(())
     }
 
-    pub fn end(&mut self) -> Result<()> {
+    pub fn create_record_archive(&mut self) -> Result<()> {
         let dst_path = PathBuf::from(&self.init_params.dir_name).join(*APERF_RUNLOG);
         fs::copy(&self.init_params.runlog, dst_path)?;
+
+        // Persist meta_data once, at the end of the recording. This captures the final
+        // InitParams including collection_start/collection_end stamped by
+        // collect_data_serial.
+        let meta_data_path = PathBuf::from(&self.init_params.dir_name)
+            .join(format!("meta_data.{}", APERF_FILE_FORMAT));
+        let meta_data_handle = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&meta_data_path)?;
+        bincode::serialize_into(meta_data_handle, &self.init_params)?;
 
         // All activities in the record folder should be complete before this.
         self.create_data_archive()?;
@@ -458,6 +455,7 @@ impl VisualizationData {
         run_data_dir: PathBuf,
         tmp_dir: &Path,
         report_dir: &Path,
+        collection_start: Option<TimeEnum>,
     ) -> Result<()> {
         let visualizers_len = self.visualizers.len();
         let mut error_count = 0;
@@ -468,6 +466,7 @@ impl VisualizationData {
                 run_data_dir.clone(),
                 tmp_dir,
                 report_dir,
+                collection_start,
             ) {
                 debug!("{:#?}", e);
                 error_count += 1;
@@ -504,13 +503,13 @@ impl VisualizationData {
         processed_data_accessor: &mut ProcessedDataAccessor,
     ) -> HashMap<String, DataFindings> {
         let mut analytical_engine = AnalyticalEngine::default();
-        for (data_name, data_visualizer) in &self.visualizers {
+        for (data_name, data_visualizer) in &mut self.visualizers {
             analytical_engine.add_data_rules(
                 data_name.clone(),
                 data_visualizer.data.get_analytical_rules(),
             );
             analytical_engine
-                .add_processed_data(data_name.clone(), &data_visualizer.processed_data);
+                .add_processed_data(data_name.clone(), &mut data_visualizer.processed_data);
         }
 
         info!("Running analytical rules");
@@ -533,8 +532,6 @@ impl VisualizationData {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct InitParams {
-    pub time_now: DateTime<Utc>,
-    pub time_str: String,
     pub dir_name: String,
     pub period: u64,
     pub profile: HashMap<String, String>,
@@ -548,13 +545,22 @@ pub struct InitParams {
     pub perf_frequency: u32,
     pub hotline_frequency: u32,
     pub num_to_report: u32,
+    /// Wall-clock start of `collect_data_serial`. `None` for archives
+    /// produced by versions of aperf that did not record this.
+    #[serde(default)]
+    pub collection_start: Option<TimeEnum>,
+    /// Wall-clock end of `collect_data_serial`. `None` for archives
+    /// produced by versions of aperf that did not record this.
+    #[serde(default)]
+    pub collection_end: Option<TimeEnum>,
 }
 
 impl InitParams {
     pub fn new(dir: String) -> Self {
-        let time_now = Utc::now();
-        let time_str = time_now.format("%Y-%m-%d_%H_%M_%S").to_string();
-        let mut dir_name = format!("./aperf_{}", time_str);
+        let mut dir_name = format!(
+            "./aperf_{}",
+            Utc::now().format("%Y-%m-%d_%H_%M_%S").to_string()
+        );
         let mut run_name = String::new();
         if !dir.is_empty() {
             dir_name = Path::new(&dir)
@@ -575,8 +581,6 @@ impl InitParams {
         let commit_sha_short = env!("VERGEN_GIT_SHA").to_string();
 
         InitParams {
-            time_now,
-            time_str,
             dir_name,
             period: 0,
             profile: HashMap::new(),
@@ -590,6 +594,8 @@ impl InitParams {
             perf_frequency: 99,
             hotline_frequency: 1000,
             num_to_report: 5000,
+            collection_start: None,
+            collection_end: None,
         }
     }
 }
@@ -604,7 +610,8 @@ impl Default for InitParams {
 mod tests {
     #[cfg(target_os = "linux")]
     use {
-        super::{InitParams, PerformanceData, APERF_FILE_FORMAT},
+        super::{InitParams, PerformanceData},
+        chrono::Utc,
         std::fs,
         std::path::Path,
     };
@@ -616,7 +623,7 @@ mod tests {
 
         let dir_name = format!(
             "./aperf_{}",
-            pd.init_params.time_now.format("%Y-%m-%d_%H_%M_%S")
+            Utc::now().format("%Y-%m-%d_%H_%M_%S").to_string()
         );
         assert!(pd.collectors.is_empty());
         assert_eq!(pd.init_params.dir_name, dir_name);
@@ -626,17 +633,14 @@ mod tests {
     #[test]
     fn test_performance_data_dir_creation() {
         let mut params = InitParams::new("".to_string());
-        params.dir_name = format!("./performance_data_dir_creation_{}", params.time_str);
+        params.dir_name = format!(
+            "./performance_data_dir_creation_{}",
+            Utc::now().format("%Y-%m-%d_%H_%M_%S").to_string()
+        );
 
         let mut pd = PerformanceData::new(params.clone());
         pd.init_collectors().unwrap();
         assert!(Path::new(&pd.init_params.dir_name).exists());
-        let full_path = format!(
-            "{}/meta_data.{}",
-            params.dir_name.clone(),
-            APERF_FILE_FORMAT
-        );
-        assert!(Path::new(&full_path).exists());
         fs::remove_dir_all(pd.init_params.dir_name).unwrap();
     }
 }

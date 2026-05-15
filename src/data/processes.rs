@@ -5,6 +5,7 @@ use crate::data::common::data_formats::{AperfData, Series, TimeSeriesData, TimeS
 use crate::data::{Data, ProcessData, TimeEnum};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
+use chrono::Utc;
 use core::f64;
 use log::warn;
 use serde::{Deserialize, Serialize};
@@ -15,7 +16,6 @@ use strum_macros::{Display, EnumIter};
 #[cfg(target_os = "linux")]
 use {
     crate::data::{CollectData, CollectorParams},
-    chrono::prelude::*,
     std::fs,
     std::sync::Mutex,
 };
@@ -118,18 +118,16 @@ fn get_process_key_stat(process_key: ProcessKey, values: Vec<&str>) -> Option<u6
 }
 
 impl ProcessData for Processes {
-    fn process_raw_data(
-        &mut self,
-        _params: ReportParams,
-        raw_data: Vec<Data>,
-    ) -> Result<AperfData> {
+    fn process_raw_data(&mut self, params: ReportParams, raw_data: Vec<Data>) -> Result<AperfData> {
         let mut time_series_data = TimeSeriesData::default();
 
         // map process field -> process -> series
         let mut per_field_per_process_series: HashMap<ProcessKey, HashMap<String, Series>> =
             HashMap::new();
 
-        let time_zero = if let Some(first_buffer) = raw_data.first() {
+        let time_zero = if let Some(t) = params.collection_start {
+            t
+        } else if let Some(first_buffer) = raw_data.first() {
             match first_buffer {
                 Data::ProcessesRaw(ref value) => value.time,
                 _ => panic!("Invalid Data type in raw file"),

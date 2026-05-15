@@ -1,5 +1,5 @@
 use crate::analytics::{AnalyticalFinding, Analyze, DataFindings};
-use crate::data::common::data_formats::{AperfData, ProcessedData};
+use crate::data::common::data_formats::ProcessedData;
 use crate::data::common::processed_data_accessor::ProcessedDataAccessor;
 use crate::profiling::{FrameType, ThreadState};
 use std::fmt;
@@ -66,26 +66,29 @@ impl Analyze for ProfileStackFrameThresholdRule {
     fn analyze(
         &self,
         report_findings: &mut DataFindings,
-        processed_data: &ProcessedData,
-        _processed_data_accessor: &mut ProcessedDataAccessor,
+        processed_data: &mut ProcessedData,
+        processed_data_accessor: &mut ProcessedDataAccessor,
     ) {
-        for (run_name, run_data) in &processed_data.runs {
-            let AperfData::Profile(profiling_data) = run_data else {
-                continue;
-            };
-
-            for (key, profiler) in &profiling_data.profilers {
-                if !profiler.profiles.contains_key(self.profile_type) {
-                    continue;
-                }
-                let total_samples =
-                    profiler.get_total_samples(self.profile_type, self.thread_states);
+        let run_names: Vec<String> = processed_data.runs.keys().cloned().collect();
+        for run_name in &run_names {
+            let profiler_keys = processed_data_accessor.profiler_keys(processed_data, run_name);
+            for key in &profiler_keys {
+                let total_samples = processed_data_accessor.profiler_total_samples(
+                    processed_data,
+                    run_name,
+                    key,
+                    self.profile_type,
+                    self.thread_states,
+                );
 
                 let (sample_count, matched_pattern) =
                     self.stack_frame
                         .iter()
                         .fold((0u64, None), |(acc, acc_pat), pattern| {
-                            let count = profiler.get_samples(
+                            let count = processed_data_accessor.profiler_samples(
+                                processed_data,
+                                run_name,
+                                key,
                                 self.profile_type,
                                 pattern,
                                 self.frame_type,

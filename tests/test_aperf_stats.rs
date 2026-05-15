@@ -28,6 +28,7 @@ mod aperf_stats_tests {
             report_dir: PathBuf::new(),
             run_name: String::new(),
             data_file_path: PathBuf::from(data_file_path),
+            collection_start: None,
         }
     }
 

@@ -1,5 +1,5 @@
 use crate::computations::{serialize_f64_vec_fixed2, Statistics};
-use crate::profiling::Profile;
+use crate::profiling::{Profile, BUCKET_WIDTH_MS};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use strum_macros::Display;
@@ -177,7 +177,7 @@ pub struct ProfilingData {
     pub profilers: HashMap<String, Profiler>,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Profiler {
     /// Start time of the profile in milliseconds since epoch
     pub start_time_ms: i64,
@@ -187,6 +187,17 @@ pub struct Profiler {
     pub metadata: KeyValueData,
     /// Profiling type (e.g., "cpu", "wall", "allocation") -> Profile
     pub profiles: HashMap<String, Profile>,
+}
+
+impl Default for Profiler {
+    fn default() -> Self {
+        Profiler {
+            start_time_ms: 0,
+            block_width_ms: BUCKET_WIDTH_MS,
+            metadata: KeyValueData::default(),
+            profiles: HashMap::new(),
+        }
+    }
 }
 
 impl Profiler {

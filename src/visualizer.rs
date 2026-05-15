@@ -1,5 +1,6 @@
 use crate::data::common::data_formats::{AperfData, DataFormat, ProcessedData};
 use crate::data::common::utils::{combine_value_ranges, topological_sort};
+use crate::data::TimeEnum;
 use crate::{data::Data, data::ReportData, get_file};
 use anyhow::Result;
 use log::{debug, error};
@@ -14,6 +15,9 @@ pub struct ReportParams {
     pub report_dir: PathBuf,
     pub run_name: String,
     pub data_file_path: PathBuf,
+    /// Wall-clock start of `collect_data_serial`. Used to anchor time_diff=0 in
+    /// time-series data to the actual collection start rather than the first sample time.
+    pub collection_start: Option<TimeEnum>,
 }
 
 impl ReportParams {
@@ -24,6 +28,7 @@ impl ReportParams {
             report_dir: PathBuf::new(),
             run_name: String::new(),
             data_file_path: PathBuf::new(),
+            collection_start: None,
         }
     }
 }
@@ -55,8 +60,10 @@ impl DataVisualizer {
         run_data_dir: PathBuf,
         tmp_dir: &Path,
         report_dir: &Path,
+        collection_start: Option<TimeEnum>,
     ) -> Result<()> {
         self.report_params.run_name = run_name.clone();
+        self.report_params.collection_start = collection_start;
         let (file_path, file) =
             get_file(&run_data_dir, self.data_name.to_string()).or_else(|e| {
                 // Backward compatibility: if file is not found using the data's name,
