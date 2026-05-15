@@ -58,7 +58,7 @@ fn create_profiler_data(group_name: &str) -> ProfilingData {
 #[test]
 fn test_below_threshold() {
     let profiling_data = create_profiler_data("cpu");
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![("run1", AperfData::Profile(profiling_data))],
     );
@@ -79,7 +79,7 @@ fn test_below_threshold() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
     assert_eq!(findings.num_runs_with_findings(), 0);
@@ -88,7 +88,7 @@ fn test_below_threshold() {
 #[test]
 fn test_above_threshold() {
     let profiling_data = create_profiler_data("cpu");
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![("run1", AperfData::Profile(profiling_data))],
     );
@@ -109,7 +109,7 @@ fn test_above_threshold() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
     assert_eq!(findings.num_runs_with_findings(), 1);
@@ -119,7 +119,7 @@ fn test_above_threshold() {
 #[test]
 fn test_stack_pattern() {
     let profiling_data = create_profiler_data("cpu");
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![("run1", AperfData::Profile(profiling_data))],
     );
@@ -140,7 +140,7 @@ fn test_stack_pattern() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
     assert_eq!(findings.num_runs_with_findings(), 1);
@@ -152,7 +152,7 @@ fn test_missing_metric() {
     let profiling_data = ProfilingData {
         profilers: HashMap::new(),
     };
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![("run1", AperfData::Profile(profiling_data))],
     );
@@ -173,7 +173,7 @@ fn test_missing_metric() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
     assert_eq!(findings.num_runs_with_findings(), 0);

@@ -64,7 +64,7 @@ impl Analyze for TimeSeriesStatRunComparisonRule {
     fn analyze(
         &self,
         data_findings: &mut DataFindings,
-        processed_data: &ProcessedData,
+        processed_data: &mut ProcessedData,
         processed_data_accessor: &mut ProcessedDataAccessor,
     ) {
         let base_run_name = &get_base_run_name();

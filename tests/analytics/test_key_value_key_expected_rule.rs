@@ -8,7 +8,7 @@ use super::test_helpers::{create_key_value_data, create_processed_data, DataFind
 #[test]
 fn test_key_matches_expected_value() {
     let kv_data = create_key_value_data(vec![("test_key", "expected_value")]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::KeyValue(kv_data))]);
 
     let rule = KeyValueKeyExpectedRule {
@@ -22,7 +22,7 @@ fn test_key_matches_expected_value() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -32,7 +32,7 @@ fn test_key_matches_expected_value() {
 #[test]
 fn test_key_does_not_match_expected_value() {
     let kv_data = create_key_value_data(vec![("test_key", "wrong_value")]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::KeyValue(kv_data))]);
 
     let rule = KeyValueKeyExpectedRule {
@@ -46,7 +46,7 @@ fn test_key_does_not_match_expected_value() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -57,7 +57,7 @@ fn test_key_does_not_match_expected_value() {
 #[test]
 fn test_key_missing() {
     let kv_data = create_key_value_data(vec![("other_key", "value")]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::KeyValue(kv_data))]);
 
     let rule = KeyValueKeyExpectedRule {
@@ -71,7 +71,7 @@ fn test_key_missing() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -83,7 +83,7 @@ fn test_key_missing() {
 fn test_multiple_runs() {
     let kv_data1 = create_key_value_data(vec![("test_key", "expected_value")]);
     let kv_data2 = create_key_value_data(vec![("test_key", "wrong_value")]);
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![
             ("run1", AperfData::KeyValue(kv_data1)),
@@ -102,7 +102,7 @@ fn test_multiple_runs() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -114,7 +114,7 @@ fn test_multiple_runs() {
 #[test]
 fn test_empty_key_value_data() {
     let kv_data = create_key_value_data(vec![]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::KeyValue(kv_data))]);
 
     let rule = KeyValueKeyExpectedRule {
@@ -128,7 +128,7 @@ fn test_empty_key_value_data() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 

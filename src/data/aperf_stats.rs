@@ -46,7 +46,8 @@ impl ProcessData for AperfStat {
         params: ReportParams,
         _raw_data: Vec<Data>,
     ) -> Result<AperfData> {
-        let mut time_series_data_processor = time_series_data_processor_with_sum_aggregate!();
+        let mut time_series_data_processor =
+            time_series_data_processor_with_sum_aggregate!(params.collection_start);
         time_series_data_processor.set_aggregate_series_name("total");
 
         let mut values = Vec::new();

@@ -36,7 +36,7 @@ fn get_base_run_name() -> String {
 
 pub struct AnalyticalEngine<'a> {
     // Map from a data name to its processed data across all runs
-    all_processed_data: HashMap<String, &'a ProcessedData>,
+    all_processed_data: HashMap<String, &'a mut ProcessedData>,
     // Map from a data name to its defined rules
     per_data_rules: HashMap<String, Vec<AnalyticalRule>>,
     // All rules that require multiple data types
@@ -57,7 +57,7 @@ impl Default for AnalyticalEngine<'_> {
 }
 
 impl<'a> AnalyticalEngine<'a> {
-    pub fn add_processed_data(&mut self, data_name: String, processed_data: &'a ProcessedData) {
+    pub fn add_processed_data(&mut self, data_name: String, processed_data: &'a mut ProcessedData) {
         self.all_processed_data.insert(data_name, processed_data);
     }
 
@@ -67,7 +67,7 @@ impl<'a> AnalyticalEngine<'a> {
 
     pub fn run(&mut self, processed_data_accessor: &mut ProcessedDataAccessor) {
         for (data_name, data_rules) in &self.per_data_rules {
-            if let Some(&processed_data) = self.all_processed_data.get(data_name) {
+            if let Some(processed_data) = self.all_processed_data.get_mut(data_name) {
                 let data_findings = self
                     .findings
                     .entry(data_name.clone())
@@ -194,7 +194,7 @@ pub trait Analyze {
     fn analyze(
         &self,
         data_findings: &mut DataFindings,
-        processed_data: &ProcessedData,
+        processed_data: &mut ProcessedData,
         processed_data_accessor: &mut ProcessedDataAccessor,
     );
 }
@@ -206,7 +206,7 @@ pub trait MultiDataAnalyze {
     fn analyze(
         &self,
         findings: &HashMap<String, DataFindings>,
-        all_processed_data: &HashMap<String, &ProcessedData>,
+        all_processed_data: &HashMap<String, &mut ProcessedData>,
         processed_data_accessor: &mut ProcessedDataAccessor,
     );
 }
@@ -220,7 +220,7 @@ macro_rules! analytical_rules {
         }
 
         impl AnalyticalRule {
-            pub fn analyze(&self, data_findings: &mut DataFindings, processed_data: &ProcessedData, processed_data_accessor: &mut ProcessedDataAccessor) {
+            pub fn analyze(&self, data_findings: &mut DataFindings, processed_data: &mut ProcessedData, processed_data_accessor: &mut ProcessedDataAccessor) {
                 match self {
                     $(
                         AnalyticalRule::$analytical_rule(ref analytical_rule) => analytical_rule.analyze(data_findings, processed_data, processed_data_accessor),
@@ -253,7 +253,7 @@ macro_rules! multi_data_analytical_rules {
         }
 
         impl MultiDataAnalyticalRule {
-            pub fn analyze(&self, _findings: &mut HashMap<String, DataFindings>, _all_processed_data: &HashMap<String, &ProcessedData>, _processed_data_accessor: &mut ProcessedDataAccessor) {
+            pub fn analyze(&self, _findings: &mut HashMap<String, DataFindings>, _all_processed_data: &HashMap<String, &mut ProcessedData>, _processed_data_accessor: &mut ProcessedDataAccessor) {
                 match self {
                     $(
                         MultiDataAnalyticalRule::$multi_data_analytical_rule(ref multi_data_analytical_rule) => multi_data_analytical_rule.analyze(findings, all_processed_data, processed_data_accessor),

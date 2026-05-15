@@ -126,12 +126,9 @@ fn get_cpu_time(cpu_state: &CpuState, cpu_time: &Vec<u64>) -> u64 {
 }
 
 impl ProcessData for CpuUtilization {
-    fn process_raw_data(
-        &mut self,
-        _params: ReportParams,
-        raw_data: Vec<Data>,
-    ) -> Result<AperfData> {
-        let mut time_series_data_processor = time_series_data_processor_with_custom_aggregate!();
+    fn process_raw_data(&mut self, params: ReportParams, raw_data: Vec<Data>) -> Result<AperfData> {
+        let mut time_series_data_processor =
+            time_series_data_processor_with_custom_aggregate!(params.collection_start);
         // Override the value ranges - we want every metric graph to show from 0 to 100
         time_series_data_processor.set_fixed_value_range((0, 100));
         // CPU utils have a dedicated aggregate metric to hold the aggregate of every CPU-state metric, as well as

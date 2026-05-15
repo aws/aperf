@@ -47,12 +47,9 @@ impl Vmstat {
 }
 
 impl ProcessData for Vmstat {
-    fn process_raw_data(
-        &mut self,
-        _params: ReportParams,
-        raw_data: Vec<Data>,
-    ) -> Result<AperfData> {
-        let mut time_series_data_processor = time_series_data_processor_with_custom_aggregate!();
+    fn process_raw_data(&mut self, params: ReportParams, raw_data: Vec<Data>) -> Result<AperfData> {
+        let mut time_series_data_processor =
+            time_series_data_processor_with_custom_aggregate!(params.collection_start);
 
         for buffer in raw_data {
             let raw_value = match buffer {

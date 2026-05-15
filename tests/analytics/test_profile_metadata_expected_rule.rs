@@ -38,7 +38,7 @@ fn create_profiling_data(metadata: Vec<KeyValueData>) -> ProfilingData {
 fn test_field_matches_expected_value() {
     let profiling_data =
         create_profiling_data(vec![create_key_value_data("cpu", "mode", Some("kernel"))]);
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![("run1", AperfData::Profile(profiling_data))],
     );
@@ -56,7 +56,7 @@ fn test_field_matches_expected_value() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -67,7 +67,7 @@ fn test_field_matches_expected_value() {
 fn test_field_does_not_match_expected_value() {
     let profiling_data =
         create_profiling_data(vec![create_key_value_data("cpu", "mode", Some("user"))]);
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![("run1", AperfData::Profile(profiling_data))],
     );
@@ -85,7 +85,7 @@ fn test_field_does_not_match_expected_value() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -96,7 +96,7 @@ fn test_field_does_not_match_expected_value() {
 #[test]
 fn test_field_missing_should_exist() {
     let profiling_data = create_profiling_data(vec![create_key_value_data("cpu", "mode", None)]);
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![("run1", AperfData::Profile(profiling_data))],
     );
@@ -114,7 +114,7 @@ fn test_field_missing_should_exist() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -129,7 +129,7 @@ fn test_regex_pattern_match() {
         "mode",
         Some("kernel_mode"),
     )]);
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![("run1", AperfData::Profile(profiling_data))],
     );
@@ -147,7 +147,7 @@ fn test_regex_pattern_match() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -160,7 +160,7 @@ fn test_multiple_runs() {
         create_profiling_data(vec![create_key_value_data("cpu", "mode", Some("kernel"))]);
     let profiling_data2 =
         create_profiling_data(vec![create_key_value_data("cpu", "mode", Some("user"))]);
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![
             ("run1", AperfData::Profile(profiling_data1)),
@@ -181,7 +181,7 @@ fn test_multiple_runs() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 

@@ -52,7 +52,11 @@ pub struct TimeSeriesDataProcessor {
 }
 
 impl TimeSeriesDataProcessor {
-    pub fn new(data_name: &'static str, aggregate_mode: TimeSeriesDataAggregateMode) -> Self {
+    pub fn new(
+        data_name: &'static str,
+        aggregate_mode: TimeSeriesDataAggregateMode,
+        time_zero: Option<TimeEnum>,
+    ) -> Self {
         TimeSeriesDataProcessor {
             data_name,
             prev_data_points: HashMap::new(),
@@ -61,7 +65,7 @@ impl TimeSeriesDataProcessor {
             aggregate_mode,
             aggregate_series_name: None,
             per_metric_sum_count: HashMap::new(),
-            time_zero: None,
+            time_zero,
             cur_time_diff: 0,
             decreasing_accumulative_data: HashMap::new(),
             fixed_value_range: None,
@@ -401,23 +405,25 @@ fn compress_all_zero_time_series_metric(time_series_metric: &mut TimeSeriesMetri
 /// The aggregate series of every metric is auto-generated as the average of all series values
 /// at a timestamp.
 macro_rules! time_series_data_processor_with_average_aggregate {
-    () => {
+    ($time_zero:expr) => {{
         crate::data::common::time_series_data_processor::TimeSeriesDataProcessor::new(
             crate::data::common::utils::get_data_name_from_type::<Self>(),
             crate::data::common::time_series_data_processor::TimeSeriesDataAggregateMode::Average,
+            $time_zero,
         )
-    };
+    }};
 }
 
 /// The aggregate series of every metric is auto-generated as the sum of all series values
 /// at a timestamp.
 macro_rules! time_series_data_processor_with_sum_aggregate {
-    () => {
+    ($time_zero:expr) => {{
         crate::data::common::time_series_data_processor::TimeSeriesDataProcessor::new(
             crate::data::common::utils::get_data_name_from_type::<Self>(),
             crate::data::common::time_series_data_processor::TimeSeriesDataAggregateMode::Sum,
+            $time_zero,
         )
-    };
+    }};
 }
 
 /// The aggregate series of every metric is the series with the maximum average value.
@@ -425,22 +431,24 @@ macro_rules! time_series_data_processor_with_sum_aggregate {
 /// a series is the sum of other series. For example, diskstats metrics include the root
 /// partition as well as all the subpartitions it contains.
 macro_rules! time_series_data_processor_with_max_series_aggregate {
-    () => {
+    ($time_zero:expr) => {{
         crate::data::common::time_series_data_processor::TimeSeriesDataProcessor::new(
             crate::data::common::utils::get_data_name_from_type::<Self>(),
             crate::data::common::time_series_data_processor::TimeSeriesDataAggregateMode::MaxSeries,
+            $time_zero,
         )
-    };
+    }};
 }
 
 /// The aggregate series needs to be manually added by calling add_aggregate_data.
 macro_rules! time_series_data_processor_with_custom_aggregate {
-    () => {
+    ($time_zero:expr) => {{
         crate::data::common::time_series_data_processor::TimeSeriesDataProcessor::new(
             crate::data::common::utils::get_data_name_from_type::<Self>(),
             crate::data::common::time_series_data_processor::TimeSeriesDataAggregateMode::Custom,
+            $time_zero,
         )
-    };
+    }};
 }
 
 pub(crate) use time_series_data_processor_with_average_aggregate;
@@ -463,7 +471,7 @@ mod tests {
     }
 
     fn make_processor(mode: TimeSeriesDataAggregateMode) -> TimeSeriesDataProcessor {
-        TimeSeriesDataProcessor::new(TEST_DATA, mode)
+        TimeSeriesDataProcessor::new(TEST_DATA, mode, None)
     }
 
     fn data_series<'a>(ts: &'a TimeSeriesData, metric: &str) -> Vec<&'a Series> {

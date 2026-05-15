@@ -15,7 +15,7 @@ fn test_values_match_across_runs() {
 
     let kv_data1 = create_key_value_data(vec![("test_key", "same_value")]);
     let kv_data2 = create_key_value_data(vec![("test_key", "same_value")]);
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![
             ("run1", AperfData::KeyValue(kv_data1)),
@@ -33,7 +33,7 @@ fn test_values_match_across_runs() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -46,7 +46,7 @@ fn test_values_differ_across_runs() {
 
     let kv_data1 = create_key_value_data(vec![("test_key", "value1")]);
     let kv_data2 = create_key_value_data(vec![("test_key", "value2")]);
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![
             ("run1", AperfData::KeyValue(kv_data1)),
@@ -64,7 +64,7 @@ fn test_values_differ_across_runs() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -78,7 +78,7 @@ fn test_key_missing_in_non_base_run() {
 
     let kv_data1 = create_key_value_data(vec![("test_key", "value1")]);
     let kv_data2 = create_key_value_data(vec![("other_key", "value2")]);
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![
             ("run1", AperfData::KeyValue(kv_data1)),
@@ -96,7 +96,7 @@ fn test_key_missing_in_non_base_run() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -110,7 +110,7 @@ fn test_key_missing_in_base_run() {
 
     let kv_data1 = create_key_value_data(vec![("other_key", "value1")]);
     let kv_data2 = create_key_value_data(vec![("test_key", "value2")]);
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![
             ("run1", AperfData::KeyValue(kv_data1)),
@@ -128,7 +128,7 @@ fn test_key_missing_in_base_run() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -142,7 +142,7 @@ fn test_multiple_non_base_runs() {
     let kv_data1 = create_key_value_data(vec![("test_key", "base_value")]);
     let kv_data2 = create_key_value_data(vec![("test_key", "base_value")]);
     let kv_data3 = create_key_value_data(vec![("test_key", "different_value")]);
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![
             ("run1", AperfData::KeyValue(kv_data1)),
@@ -161,7 +161,7 @@ fn test_multiple_non_base_runs() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 

@@ -1,19 +1,26 @@
 use crate::analytics::BASE_RUN_NAME;
 use crate::data::common::processed_data_accessor::ProcessedDataAccessor;
 use crate::data::common::utils::no_tar_gz_file_name;
-use crate::data::JS_DIR;
-use crate::{data, PDError, VisualizationData};
+use crate::data::{TimeEnum, JS_DIR};
+use crate::{data, InitParams, PDError, VisualizationData, APERF_FILE_FORMAT};
 use anyhow::{Context, Result};
 use chrono::Utc;
 use clap::Args;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use log::{info, warn};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 use std::{env, fs};
+
+#[derive(Serialize, Deserialize)]
+struct RunMetadata {
+    name: String,
+    collection_start_ms: Option<i64>,
+    collection_end_ms: Option<i64>,
+}
 
 #[derive(Serialize)]
 struct VersionInfo {
@@ -28,6 +35,17 @@ impl VersionInfo {
             git_sha: env!("VERGEN_GIT_SHA"),
         }
     }
+}
+
+/// Reads `meta_data.bin` from a run's data directory and returns the run's
+/// wall-clock collection start and end times. Returns `None` if the file is
+/// missing, fails to deserialize, or was produced by an older aperf that did
+/// not stamp collection start/end.
+fn read_collection_times(run_dir_path: &PathBuf) -> Option<(TimeEnum, TimeEnum)> {
+    let meta_data_path = run_dir_path.join(format!("meta_data.{}", APERF_FILE_FORMAT));
+    let bytes = fs::read(&meta_data_path).ok()?;
+    let params: InitParams = bincode::deserialize(&bytes).ok()?;
+    Some((params.collection_start?, params.collection_end?))
 }
 
 /// Stores the information of all runs to be included in the report
@@ -45,6 +63,12 @@ struct RunsInfo {
     per_run_from_time: HashMap<String, i64>,
     /// The specified end time of every run's time range
     per_run_to_time: HashMap<String, i64>,
+    /// Wall-clock start of `collect_data_serial`, derived from the run's
+    /// `meta_data.bin`. Missing entry => archive was recorded by an older
+    /// aperf that did not stamp collection start/end times.
+    per_run_start_time: HashMap<String, TimeEnum>,
+    /// Wall-clock end of `collect_data_serial`.
+    per_run_end_time: HashMap<String, TimeEnum>,
 }
 
 impl RunsInfo {
@@ -62,6 +86,11 @@ impl RunsInfo {
         self.run_names.push(deduped_run_name.clone());
         self.run_archive_paths
             .insert(deduped_run_name.clone(), run_archive_path);
+        if let Some((start, end)) = read_collection_times(&run_dir_path) {
+            self.per_run_start_time
+                .insert(deduped_run_name.clone(), start);
+            self.per_run_end_time.insert(deduped_run_name.clone(), end);
+        }
         self.run_dir_paths.insert(deduped_run_name, run_dir_path);
 
         Ok(())
@@ -366,7 +395,12 @@ pub fn get_report_run_archive_paths(report_path: &PathBuf) -> Option<Vec<PathBuf
 
     let runs_content = fs::read_to_string(report_runs_path).unwrap();
     let json_str = runs_content.strip_prefix("runs_raw = ").unwrap().trim();
-    let runs: Vec<String> = serde_json::from_str(json_str).unwrap();
+    // Try the current structured shape first; fall back to the legacy string-array
+    // shape emitted by older aperf versions so previously generated reports still open.
+    let runs: Vec<String> = match serde_json::from_str::<Vec<RunMetadata>>(json_str) {
+        Ok(metas) => metas.into_iter().map(|m| m.name).collect(),
+        Err(_) => serde_json::from_str(json_str).unwrap(),
+    };
 
     let mut run_archive_paths = Vec::new();
     for run_name in runs {
@@ -397,28 +431,55 @@ fn generate_report_files(report_dir: PathBuf, runs_info: RunsInfo, tmp_dir: &Pat
     data::add_all_visualization_data(&mut visualization_data);
     /* Init visualizers */
     for (run_name, run_data_dir) in runs_info.run_dir_paths {
+        let collection_start = runs_info.per_run_start_time.get(&run_name).copied();
         visualization_data
-            .init_visualizers(run_name.clone(), run_data_dir.clone(), tmp_dir, &report_dir)
+            .init_visualizers(
+                run_name.clone(),
+                run_data_dir.clone(),
+                tmp_dir,
+                &report_dir,
+                collection_start,
+            )
             .unwrap();
         visualization_data.process_raw_data().unwrap();
     }
 
-    let mut processed_data_accessor = ProcessedDataAccessor::from_time_ranges(
-        runs_info.per_run_from_time,
-        runs_info.per_run_to_time,
-    );
-
-    let analytical_findings = visualization_data.run_analytics(&mut processed_data_accessor);
-
-    /* Generate run.js */
+    /* Generate run.js, containing run name and metadata (currently only start and end wall time) */
     let run_js_path = processed_data_js_dir.join("runs.js");
     let mut runs_file = File::create(run_js_path).unwrap();
+    let runs_metadata: Vec<RunMetadata> = runs_info
+        .run_names
+        .iter()
+        .map(|name| RunMetadata {
+            name: name.clone(),
+            collection_start_ms: runs_info
+                .per_run_start_time
+                .get(name)
+                .and_then(|t| match t {
+                    TimeEnum::DateTime(dt) => Some(dt.timestamp_millis()),
+                    _ => None,
+                }),
+            collection_end_ms: runs_info.per_run_end_time.get(name).and_then(|t| match t {
+                TimeEnum::DateTime(dt) => Some(dt.timestamp_millis()),
+                _ => None,
+            }),
+        })
+        .collect();
     write!(
         runs_file,
         "runs_raw = {}",
-        serde_json::to_string(&runs_info.run_names).unwrap()
+        serde_json::to_string(&runs_metadata).unwrap()
     )
     .unwrap();
+
+    let mut processed_data_accessor = ProcessedDataAccessor::from_time_ranges(
+        runs_info.per_run_from_time,
+        runs_info.per_run_to_time,
+        runs_info.per_run_start_time,
+        runs_info.per_run_end_time,
+    );
+
+    let analytical_findings = visualization_data.run_analytics(&mut processed_data_accessor);
 
     /* Generate version.js */
     let version_js_path = processed_data_js_dir.join("version.js");

@@ -48,7 +48,7 @@ impl Analyze for KeyValueKeyExpectedRule {
     fn analyze(
         &self,
         report_findings: &mut DataFindings,
-        processed_data: &ProcessedData,
+        processed_data: &mut ProcessedData,
         processed_data_accessor: &mut ProcessedDataAccessor,
     ) {
         for run_name in processed_data.runs.keys() {

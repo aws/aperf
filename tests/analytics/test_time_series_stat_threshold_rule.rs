@@ -14,7 +14,7 @@ use super::test_helpers::{
 #[test]
 fn test_stat_below_threshold() {
     let ts_data = create_time_series_data(vec![("metric1", vec![10.0, 20.0, 30.0])]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
 
     let rule = TimeSeriesStatThresholdRule {
@@ -30,7 +30,7 @@ fn test_stat_below_threshold() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -40,7 +40,7 @@ fn test_stat_below_threshold() {
 #[test]
 fn test_stat_above_threshold() {
     let ts_data = create_time_series_data(vec![("metric1", vec![50.0, 60.0, 70.0])]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
 
     let rule = TimeSeriesStatThresholdRule {
@@ -56,7 +56,7 @@ fn test_stat_above_threshold() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -67,7 +67,7 @@ fn test_stat_above_threshold() {
 #[test]
 fn test_stat_equal_threshold() {
     let ts_data = create_time_series_data(vec![("metric1", vec![50.0, 50.0, 50.0])]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
 
     let rule = TimeSeriesStatThresholdRule {
@@ -83,7 +83,7 @@ fn test_stat_equal_threshold() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -93,7 +93,7 @@ fn test_stat_equal_threshold() {
 #[test]
 fn test_less_than_comparator() {
     let ts_data = create_time_series_data(vec![("metric1", vec![10.0, 20.0, 30.0])]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
 
     let rule = TimeSeriesStatThresholdRule {
@@ -109,7 +109,7 @@ fn test_less_than_comparator() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -119,7 +119,7 @@ fn test_less_than_comparator() {
 #[test]
 fn test_max_stat() {
     let ts_data = create_time_series_data(vec![("metric1", vec![10.0, 20.0, 100.0])]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
 
     let rule = TimeSeriesStatThresholdRule {
@@ -135,7 +135,7 @@ fn test_max_stat() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -145,7 +145,7 @@ fn test_max_stat() {
 #[test]
 fn test_min_stat() {
     let ts_data = create_time_series_data(vec![("metric1", vec![5.0, 20.0, 100.0])]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
 
     let rule = TimeSeriesStatThresholdRule {
@@ -161,7 +161,7 @@ fn test_min_stat() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -171,7 +171,7 @@ fn test_min_stat() {
 #[test]
 fn test_metric_not_found() {
     let ts_data = create_time_series_data(vec![("metric1", vec![10.0, 20.0, 30.0])]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
 
     let rule = TimeSeriesStatThresholdRule {
@@ -187,7 +187,7 @@ fn test_metric_not_found() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -198,7 +198,7 @@ fn test_metric_not_found() {
 fn test_multiple_runs() {
     let ts_data1 = create_time_series_data(vec![("metric1", vec![10.0, 20.0, 30.0])]);
     let ts_data2 = create_time_series_data(vec![("metric1", vec![60.0, 70.0, 80.0])]);
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![
             ("run1", AperfData::TimeSeries(ts_data1)),
@@ -219,7 +219,7 @@ fn test_multiple_runs() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -238,7 +238,7 @@ fn test_multiple_series_uses_aggregate() {
             (None, vec![60.0, 70.0, 80.0]), // aggregate series
         ],
     )]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
 
     let rule = TimeSeriesStatThresholdRule {
@@ -254,7 +254,7 @@ fn test_multiple_series_uses_aggregate() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
 
@@ -266,7 +266,7 @@ fn test_time_range_changes_stat() {
     // Values: [10, 20, 30, 90, 90, 90]  (time_diff: [0,1,2,3,4,5])
     let ts_data =
         create_time_series_data(vec![("metric1", vec![10.0, 20.0, 30.0, 90.0, 90.0, 90.0])]);
-    let processed_data =
+    let mut processed_data =
         create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
 
     let rule = TimeSeriesStatThresholdRule {
@@ -283,7 +283,7 @@ fn test_time_range_changes_stat() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
     assert_eq!(findings.num_runs_with_findings(), 1);
@@ -292,18 +292,22 @@ fn test_time_range_changes_stat() {
     let mut accessor = ProcessedDataAccessor::from_time_ranges(
         HashMap::from([("run1".to_string(), 0)]),
         HashMap::from([("run1".to_string(), 2)]),
+        HashMap::new(),
+        HashMap::new(),
     );
     let mut findings2 = DataFindings::default();
-    rule.analyze(&mut findings2, &processed_data, &mut accessor);
+    rule.analyze(&mut findings2, &mut processed_data, &mut accessor);
     assert_eq!(findings2.num_runs_with_findings(), 0);
 
     // Time range 3:5 → [90,90,90], avg = 90 → finding
     let mut accessor2 = ProcessedDataAccessor::from_time_ranges(
         HashMap::from([("run1".to_string(), 3)]),
         HashMap::from([("run1".to_string(), 5)]),
+        HashMap::new(),
+        HashMap::new(),
     );
     let mut findings3 = DataFindings::default();
-    rule.analyze(&mut findings3, &processed_data, &mut accessor2);
+    rule.analyze(&mut findings3, &mut processed_data, &mut accessor2);
     assert_eq!(findings3.num_runs_with_findings(), 1);
 }
 
@@ -318,7 +322,7 @@ fn test_time_range_multi_run() {
         create_time_series_data(vec![("metric1", vec![90.0, 90.0, 90.0, 10.0, 20.0, 30.0])]);
     let ts_data3 =
         create_time_series_data(vec![("metric1", vec![40.0, 40.0, 40.0, 40.0, 40.0, 40.0])]);
-    let processed_data = create_processed_data(
+    let mut processed_data = create_processed_data(
         "test_data",
         vec![
             ("run1", AperfData::TimeSeries(ts_data1)),
@@ -341,7 +345,7 @@ fn test_time_range_multi_run() {
     let mut findings = DataFindings::default();
     rule.analyze(
         &mut findings,
-        &processed_data,
+        &mut processed_data,
         &mut ProcessedDataAccessor::new(),
     );
     assert_eq!(findings.num_runs_with_findings(), 2);
@@ -361,9 +365,11 @@ fn test_time_range_multi_run() {
             ("run2".to_string(), 2),
             ("run3".to_string(), 2),
         ]),
+        HashMap::new(),
+        HashMap::new(),
     );
     let mut findings2 = DataFindings::default();
-    rule.analyze(&mut findings2, &processed_data, &mut accessor);
+    rule.analyze(&mut findings2, &mut processed_data, &mut accessor);
     assert_eq!(findings2.num_runs_with_findings(), 1);
     assert!(findings2.has_findings_for_run("run2"));
 
@@ -379,9 +385,11 @@ fn test_time_range_multi_run() {
             ("run2".to_string(), 5),
             ("run3".to_string(), 5),
         ]),
+        HashMap::new(),
+        HashMap::new(),
     );
     let mut findings3 = DataFindings::default();
-    rule.analyze(&mut findings3, &processed_data, &mut accessor2);
+    rule.analyze(&mut findings3, &mut processed_data, &mut accessor2);
     assert_eq!(findings3.num_runs_with_findings(), 1);
     assert!(findings3.has_findings_for_run("run1"));
 }

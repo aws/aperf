@@ -4,7 +4,6 @@ use chrono::Utc;
 use flate2::read::GzDecoder;
 #[cfg(feature = "hotline")]
 use libc::c_int;
-use serial_test::serial;
 use std::path::{Path, PathBuf};
 use std::{fs, panic};
 use tar::Archive;

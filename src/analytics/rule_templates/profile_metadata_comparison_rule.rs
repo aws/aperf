@@ -1,6 +1,6 @@
 use crate::analytics;
 use crate::analytics::{AnalyticalFinding, Analyze, DataFindings};
-use crate::data::common::data_formats::{AperfData, ProcessedData};
+use crate::data::common::data_formats::ProcessedData;
 use crate::data::common::processed_data_accessor::ProcessedDataAccessor;
 use log::debug;
 use std::collections::HashMap;
@@ -56,39 +56,38 @@ impl Analyze for ProfileMetadataComparisonRule {
     fn analyze(
         &self,
         report_findings: &mut DataFindings,
-        processed_data: &ProcessedData,
-        _processed_data_accessor: &mut ProcessedDataAccessor,
+        processed_data: &mut ProcessedData,
+        processed_data_accessor: &mut ProcessedDataAccessor,
     ) {
         let base_run_name = analytics::get_base_run_name();
 
-        let base_run_data = match processed_data.runs.get(&base_run_name) {
-            Some(data) => data,
-            None => {
-                if processed_data.runs.keys().len() > 0 {
-                    debug!("{self} failed to analyze: base run does not exist");
-                }
-                return;
+        if !processed_data.runs.contains_key(&base_run_name) {
+            if !processed_data.runs.is_empty() {
+                debug!("{self} failed to analyze: base run does not exist");
             }
+            return;
+        }
+
+        // Collect metadata values for a run: profiler_key -> value
+        let collect_values = |processed_data: &mut ProcessedData,
+                              accessor: &mut ProcessedDataAccessor,
+                              run_name: &str|
+         -> HashMap<String, String> {
+            let keys = accessor.profiler_keys(processed_data, run_name);
+            keys.into_iter()
+                .filter_map(|profiler_key| {
+                    let value = accessor.profiler_value_by_key(
+                        processed_data,
+                        run_name,
+                        &profiler_key,
+                        self.key,
+                    )?;
+                    Some((profiler_key, value))
+                })
+                .collect()
         };
 
-        // Map base values from all profiles in the first record
-        let base_values: HashMap<String, String> =
-            if let AperfData::Profile(profiling_data) = base_run_data {
-                profiling_data
-                    .profilers
-                    .iter()
-                    .filter_map(|(key, profiler)| {
-                        profiler
-                            .metadata
-                            .key_value_groups
-                            .get(self.group)
-                            .and_then(|group| group.key_values.get(self.key))
-                            .map(|value| (key.clone(), value.clone()))
-                    })
-                    .collect()
-            } else {
-                HashMap::new()
-            };
+        let base_values = collect_values(processed_data, processed_data_accessor, &base_run_name);
 
         if base_values.is_empty() {
             if self.should_exist {
@@ -109,27 +108,16 @@ impl Analyze for ProfileMetadataComparisonRule {
             return;
         }
 
-        for (run_name, run_data) in &processed_data.runs {
-            if *run_name == base_run_name {
-                continue;
-            }
+        let run_names: Vec<String> = processed_data
+            .runs
+            .keys()
+            .filter(|r| **r != base_run_name)
+            .cloned()
+            .collect();
 
-            let AperfData::Profile(profiling_data) = run_data else {
-                continue;
-            };
-
-            let comparison_values: HashMap<String, String> = profiling_data
-                .profilers
-                .iter()
-                .filter_map(|(key, profiler)| {
-                    profiler
-                        .metadata
-                        .key_value_groups
-                        .get(self.group)
-                        .and_then(|group| group.key_values.get(self.key))
-                        .map(|value| (key.clone(), value.clone()))
-                })
-                .collect();
+        for run_name in &run_names {
+            let comparison_values =
+                collect_values(processed_data, processed_data_accessor, run_name);
 
             // If both runs have exactly one key-value pair, compare values regardless of key match
             if base_values.len() == 1 && comparison_values.len() == 1 {

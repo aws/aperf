@@ -140,10 +140,7 @@ impl DataType {
     }
 
     pub fn init_data_type(&mut self, param: &InitParams) -> Result<()> {
-        let name = format!(
-            "{}_{}.{}",
-            self.file_name, param.time_str, APERF_FILE_FORMAT
-        );
+        let name = format!("{}.{}", self.file_name, APERF_FILE_FORMAT);
 
         self.file_name = name.clone();
         self.full_path = format!("{}/{}", param.dir_name, name);
@@ -530,7 +527,7 @@ mod tests {
             collector_params: CollectorParams::new(),
         };
 
-        param.dir_name = format!("./performance_data_init_test_{}", param.time_str);
+        param.dir_name = format!("./performance_data_init_test");
         fs::DirBuilder::new()
             .recursive(true)
             .create(param.dir_name.clone())
@@ -559,7 +556,7 @@ mod tests {
             collector_params: CollectorParams::new(),
         };
 
-        param.dir_name = format!("./performance_data_print_test_{}", param.time_str);
+        param.dir_name = format!("./performance_data_print_test");
         fs::DirBuilder::new()
             .recursive(true)
             .create(param.dir_name.clone())
