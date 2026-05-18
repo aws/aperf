@@ -281,7 +281,7 @@ fn parse_type(chars: &mut std::iter::Peekable<std::str::Chars>) -> String {
 
 /// This function uses JfrReader to parse async-profiler generated JFR files into
 /// APerf Profiler.
-pub fn jfr_to_profiler(path: &Path, block_width_ms: u64) -> Result<Profiler> {
+pub fn jfr_to_profiler(path: &Path) -> Result<Profiler> {
     let mut reader = JfrReader::open(path.to_str().unwrap())?;
     let start_time_ms = reader.start_nanos / 1_000_000;
 
@@ -301,7 +301,7 @@ pub fn jfr_to_profiler(path: &Path, block_width_ms: u64) -> Result<Profiler> {
         .cloned()
         .unwrap_or_default();
 
-    let mut profiler = Profiler::new(start_time_ms, block_width_ms);
+    let mut profiler = Profiler::new(start_time_ms);
 
     // Cache: (method_id, frame_type) -> formatted frame string
     let mut frame_cache: HashMap<(i64, u8), String> = HashMap::new();

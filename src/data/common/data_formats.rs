@@ -201,10 +201,10 @@ impl Default for Profiler {
 }
 
 impl Profiler {
-    pub fn new(start_time_ms: i64, block_width_ms: u64) -> Self {
+    pub fn new(start_time_ms: i64) -> Self {
         Profiler {
             start_time_ms,
-            block_width_ms,
+            block_width_ms: BUCKET_WIDTH_MS,
             metadata: KeyValueData::default(),
             profiles: HashMap::new(),
         }
