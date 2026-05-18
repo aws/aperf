@@ -13,7 +13,7 @@ use super::test_helpers::{create_processed_data, DataFindingsExt};
 ///   frame4;frame5;frame6 75
 ///   frame1;frame7 90
 fn create_profiler_instance(group_name: &str) -> Profiler {
-    let mut pd = Profiler::new(0, 100);
+    let mut pd = Profiler::new(0);
     let ts = ThreadState::from_str("STATE_DEFAULT");
     pd.insert_stack(
         group_name,

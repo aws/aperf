@@ -2,7 +2,7 @@ use crate::data::common::data_formats::{AperfData, Profiler, ProfilingData};
 #[cfg(target_os = "linux")]
 use crate::data::common::utils::get_data_name_from_type;
 use crate::data::{Data, ProcessData};
-use crate::profiling::{jfr, Profile, ProfileGraph, BUCKET_WIDTH_MS};
+use crate::profiling::{jfr, Profile, ProfileGraph};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
 use log::error;
@@ -343,7 +343,7 @@ impl CollectData for JavaProfileRaw {
                     "{}-java-profile-{}-profiler-data.json",
                     params.run_name, key
                 ));
-                match jfr::jfr_to_profiler(&jfr_path, BUCKET_WIDTH_MS) {
+                match jfr::jfr_to_profiler(&jfr_path) {
                     Ok(mut profiler) => {
                         profiler.metadata = jfr::parse_jfr_metadata(&metadata_json);
                         if let Ok(json) = serde_json::to_string(&profiler) {

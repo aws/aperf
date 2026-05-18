@@ -71,6 +71,13 @@ sysctl = "*"
 perf-event2 = "0.7.2"
 procfs = "0.12.0"
 timerfd = "1.6.0"
+linux-perf-data = "0.12"
+linux-perf-event-reader = "0.10"
+object = { version = "0.36", features = ["read"] }
+cpp_demangle = "0.5"
+rustc-demangle = "0.1"
+gimli = { version = "0.33", default-features = false, features = ["read-core", "endian-reader"] }
+lzma-rs = "0.3"
 
 [features]
 default = []

@@ -1,24 +1,28 @@
-use crate::data::common::data_formats::{AperfData, TextData};
+use crate::data::common::data_formats::{AperfData, Profiler, TextData};
 use crate::data::{Data, ProcessData};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::{process::Child, sync::Mutex};
 #[cfg(target_os = "linux")]
 use {
     crate::data::{CollectData, CollectorParams},
+    crate::profiling::perf::parser::build_perf_profiler_data,
     crate::PDError,
+    chrono::Utc,
     log::{debug, error, warn},
     nix::{sys::signal, unistd, unistd::Pid},
     std::io::Write,
     std::process::{Command, Stdio},
+    std::{process::Child, sync::Mutex},
 };
 
 pub const PERF_TOP_FUNCTIONS_FILE_NAME: &str = "top_functions";
 
+#[cfg(target_os = "linux")]
 lazy_static! {
     pub static ref PERF_CHILD: Mutex<Option<Child>> = Mutex::new(None);
+    pub static ref PROFILE_START_TIME_MS: Mutex<i64> = Mutex::new(0);
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -72,6 +76,7 @@ impl CollectData for PerfProfileRaw {
             }
         }
 
+        *PROFILE_START_TIME_MS.lock().unwrap() = Utc::now().timestamp_millis();
         match Command::new("perf")
             .stdout(Stdio::null())
             .args([
@@ -130,6 +135,19 @@ impl CollectData for PerfProfileRaw {
             }
             Ok(_) => debug!("'perf record' executed successfully."),
         }
+
+        // Parse raw Perf profile and build ProfilingData
+        let perf_profiler_data = build_perf_profiler_data(
+            &params.data_file_path,
+            *PROFILE_START_TIME_MS.lock().unwrap(),
+        );
+        let perf_profiler_data_path = params
+            .data_dir
+            .join(format!("{}-perf-profiler-data.json", params.run_name));
+        if let Ok(json) = serde_json::to_string(&perf_profiler_data) {
+            fs::write(&perf_profiler_data_path, json)?;
+        }
+
         let mut top_functions_file =
             fs::File::create(params.data_dir.join(PERF_TOP_FUNCTIONS_FILE_NAME))?;
 
@@ -181,6 +199,14 @@ impl ProcessData for PerfProfile {
         params: ReportParams,
         _raw_data: Vec<Data>,
     ) -> Result<AperfData> {
+        // Deserialize the ProfilerData generated at the end of record.
+        // TODO: build ProfilingData from the ProfilerData and return it to replace top_function data.
+        let perf_profiler_data_path = params
+            .data_dir
+            .join(format!("{}-perf-profiler-data.json", params.run_name));
+        let json_string = fs::read_to_string(perf_profiler_data_path)?;
+        let _perf_profiler_data = serde_json::from_str::<Profiler>(&json_string)?;
+
         let mut text_data = TextData::default();
         let file_loc = params.data_dir.join(PERF_TOP_FUNCTIONS_FILE_NAME);
         if file_loc.exists() {

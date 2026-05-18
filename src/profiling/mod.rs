@@ -5,6 +5,8 @@
 //! - [`jfr`] — JFR (Java Flight Recorder) binary format parser for async-profiler output.
 
 pub mod jfr;
+pub mod perf;
+pub mod symbols;
 
 pub const BUCKET_WIDTH_MS: u64 = 100;
 
