@@ -1,34 +1,38 @@
 {
   "name": "aperf",
+  "scripts": {
+    "dev": "webpack serve --config src/report_frontend/webpack.config.js --mode development --hot"
+  },
   "dependencies": {
-    "@cloudscape-design/global-styles": "^1.0.45",
     "@cloudscape-design/components": "^3.0.1095",
+    "@cloudscape-design/global-styles": "^1.0.45",
+    "plotly.js": "^2.33.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "plotly.js": "^2.33.0",
-    "react-plotly.js": "^2.6.0",
-    "react-markdown": "^10.1.0"
+    "react-markdown": "^10.1.0",
+    "react-plotly.js": "^2.6.0"
   },
   "devDependencies": {
-    "@types/react": "^19.1.13",
-    "@types/react-dom": "^19.1.9",
-    "@types/plotly.js": "^2.29.5",
-    "@types/react-plotly.js": "^2.6.3",
-    "typescript": "^5.5.3",
-    "webpack": "^5.101.3",
-    "webpack-cli": "^5.1.4",
-    "babel-loader": "^9.2.1",
     "@babel/preset-env": "^7.28.5",
     "@babel/preset-react": "^7.18.6",
     "@babel/preset-typescript": "^7.18.6",
-    "babel-plugin-react-compiler": "^1.0.0",
-    "css-loader": "^6.11.0",
-    "html-webpack-plugin": "^5.6.4",
-    "mini-css-extract-plugin": "^2.9.4",
+    "@types/plotly.js": "^2.29.5",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "@types/react-plotly.js": "^2.6.3",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
+    "babel-loader": "^9.2.1",
+    "babel-plugin-react-compiler": "^1.0.0",
+    "css-loader": "^6.11.0",
     "eslint": "^8.57.1",
     "eslint-config-prettier": "^8.10.2",
-    "eslint-plugin-prettier": "^5.0.0"
+    "eslint-plugin-prettier": "^5.0.0",
+    "html-webpack-plugin": "^5.6.4",
+    "mini-css-extract-plugin": "^2.9.4",
+    "typescript": "^5.5.3",
+    "webpack": "^5.101.3",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^5.2.4"
   }
 }
