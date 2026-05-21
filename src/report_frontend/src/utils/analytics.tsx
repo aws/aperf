@@ -77,10 +77,14 @@ export interface StatisticalFinding {
    */
   readonly stat: Stat;
   /**
-   * Indicates how good or bad the delta is, computed from the
-   * desired value set in data-descriptions.ts
+   * Sign of the finding: -1 (negative / worse than base), 1 (positive / better than base),
+   * or 0 (neutral), based on the desired direction set in data-descriptions.ts.
    */
-  readonly score: number;
+  readonly baseScore: number;
+  /**
+   * The raw delta between the current and base stat values, used for sorting.
+   */
+  readonly delta: number;
   /**
    * Color-coded string to be rendered that reflects the score of the delta
    */
@@ -167,7 +171,6 @@ export function computeAllTimeSeriesStatsDelta() {
               color = "";
             }
 
-            const score = baseScore * Math.abs(delta);
             // If delta is 0, the two stats are the same, so we do not produce a delta string
             const deltaString = delta != 0 ? <span style={{ color }}>{deltaStr}</span> : undefined;
 
@@ -177,7 +180,8 @@ export function computeAllTimeSeriesStatsDelta() {
                 runName,
                 metricName,
                 stat,
-                score,
+                baseScore,
+                delta,
                 deltaString,
                 baseValue,
                 statValue,
