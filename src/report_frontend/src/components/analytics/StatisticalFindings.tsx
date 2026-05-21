@@ -44,20 +44,29 @@ function getStatisticalFindings(
     (finding) =>
       stats.includes(finding.stat) &&
       dataTypes.includes(finding.dataType) &&
-      isFindingTypeExpected(finding.score, findingTypes),
+      isFindingTypeExpected(finding.baseScore, findingTypes),
   );
 }
 
 /**
  * The common column definitions to be used by the global and per-data statistical finding table.
+ * If the base value is 0, then it is a raw delta so it is treated as +/- infinity
+ * If both are raw delta, they are compared normally
  */
+function compareDelta(a: StatisticalFinding, b: StatisticalFinding): number {
+  const aDelta = a.baseValue === 0 ? (a.delta > 0 ? Infinity : -Infinity) : a.delta;
+  const bDelta = b.baseValue === 0 ? (b.delta > 0 ? Infinity : -Infinity) : b.delta;
+  if (aDelta === bDelta) return b.delta - a.delta;
+  return bDelta - aDelta;
+}
+
 const COMMON_COLUMN_DEFINITIONS = [
   {
     id: "stat",
     header: "Stat",
     cell: (item: StatisticalFinding) => item.stat,
     sortingComparator: (a: StatisticalFinding, b: StatisticalFinding) => {
-      if (a.stat == b.stat) return Math.abs(b.score) - Math.abs(a.score);
+      if (a.stat == b.stat) return compareDelta(a, b);
       return a.stat.localeCompare(b.stat);
     },
     width: 80,
@@ -66,19 +75,21 @@ const COMMON_COLUMN_DEFINITIONS = [
     id: "delta",
     header: "Delta",
     cell: (item: StatisticalFinding) => item.deltaString,
-    sortingComparator: (a: StatisticalFinding, b: StatisticalFinding) => Math.abs(b.score) - Math.abs(a.score),
+    sortingComparator: compareDelta,
     width: 100,
   },
   {
     id: "stat_value",
     header: "Value",
     cell: (item: StatisticalFinding) => formatNumber(item.statValue),
+    sortingComparator: (a: StatisticalFinding, b: StatisticalFinding) => b.statValue - a.statValue,
     width: 80,
   },
   {
     id: "base_value",
     header: "Base",
     cell: (item: StatisticalFinding) => formatNumber(item.baseValue),
+    sortingComparator: (a: StatisticalFinding, b: StatisticalFinding) => b.baseValue - a.baseValue,
     width: 80,
   },
   {

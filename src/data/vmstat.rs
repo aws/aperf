@@ -58,6 +58,9 @@ impl ProcessData for Vmstat {
             };
             time_series_data_processor.proceed_to_time(raw_value.time);
 
+            let mut pgfault_delta: Option<f64> = None;
+            let mut pgmajfault_delta: Option<f64> = None;
+
             for line in raw_value.data.lines() {
                 let mut split = line.split_whitespace();
                 let name = match split.next() {
@@ -79,9 +82,23 @@ impl ProcessData for Vmstat {
                 if name.contains("nr_") {
                     time_series_data_processor.add_data_point(&name, "values", val as f64);
                 } else {
-                    time_series_data_processor
+                    let delta = time_series_data_processor
                         .add_accumulative_data_point(&name, "values", val as f64);
+                    match name {
+                        "pgfault" => pgfault_delta = delta,
+                        "pgmajfault" => pgmajfault_delta = delta,
+                        _ => {}
+                    }
                 }
+            }
+
+            // Derive pgminorfault = pgfault - pgmajfault
+            if let (Some(fault), Some(majfault)) = (pgfault_delta, pgmajfault_delta) {
+                time_series_data_processor.add_data_point(
+                    "pgminorfault",
+                    "values",
+                    fault - majfault,
+                );
             }
         }
 

@@ -1542,6 +1542,14 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
         description:
           "Page faults that require loading data from storage devices indicating memory pressure and I/O activity.",
         desired: "lower",
+        helpfulLinks: ["https://www.kernel.org/doc/html/latest/admin-guide/mm/concepts.html#page-faults"],
+      },
+      pgminorfault: {
+        readableName: "Minor Page Faults",
+        description:
+          "Page faults resolved without disk I/O where the page is already present in memory. Derived as total page faults minus major page faults.",
+        desired: "lower",
+        helpfulLinks: ["https://www.kernel.org/doc/html/latest/admin-guide/mm/concepts.html#page-faults"],
       },
       compact_migrate_scanned: {
         readableName: "Compact Migrate Scanned",
