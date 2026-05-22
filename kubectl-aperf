@@ -169,7 +169,15 @@ ${TOLERATIONS}
       [ ! -L "/usr/bin/asprof" ] && ln -sf /tmp/aperf/async-profiler/bin/asprof /usr/bin/asprof > /dev/null
       [ ! -L "/usr/bin/jfrconv" ] && ln -sf /tmp/aperf/async-profiler/bin/jfrconv /usr/bin/jfrconv > /dev/null
       export LD_LIBRARY_PATH="/tmp/aperf/async-profiler/lib:${LD_LIBRARY_PATH}"
-      
+
+      # Some distros (e.g. Bottlerocket on EKS Auto Mode) ship with
+      # perf_event_paranoid=2 and a non-zero kptr_restrict, which causes
+      # 'aperf record' to fail. The pod is privileged with hostPID, so it can
+      # relax these on the host's /proc/sys before recording.
+      echo -e "Relaxing kernel perf settings for aperf record..."
+      echo -1 > /proc/sys/kernel/perf_event_paranoid 2>/dev/null || echo "  Warning: could not write perf_event_paranoid"
+      echo 0 > /proc/sys/kernel/kptr_restrict 2>/dev/null || echo "  Warning: could not write kptr_restrict"
+
       echo -e "Starting Aperf recording execution..."
       echo "Run: /usr/bin/aperf record --tmp-dir="/tmp/aperf/profile"  -r ${REPORT_NAME} ${APERF_OPTIONS}"
       mkdir -p /tmp/aperf/profile 
