@@ -8,6 +8,6 @@ document.addEventListener("DOMContentLoaded", () => {
   root.render(
     <ReportStateProvider>
       <Report />
-    </ReportStateProvider>
+    </ReportStateProvider>,
   );
 });

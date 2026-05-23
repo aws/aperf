@@ -8,7 +8,7 @@ pub mod jfr;
 pub mod perf;
 pub mod symbols;
 
-pub const BUCKET_WIDTH_MS: u64 = 100;
+pub const BUCKET_WIDTH_MS: u64 = 20;
 
 use crate::data::common::data_formats::Profiler;
 use anyhow::Result;
@@ -360,7 +360,9 @@ impl Profile {
     ) {
         // Calculate block index and extend blocks vec if necessary
         let thread_state_id = thread_state.id();
-        let offset_ms = (sample_time_ms - start_time_ms).max(0) as u64;
+        // Align blocks by width
+        let start_block_ms = start_time_ms - (start_time_ms % (bucket_width_ms as i64));
+        let offset_ms = (sample_time_ms - start_block_ms).max(0) as u64;
         let block_idx = (offset_ms / bucket_width_ms) as usize;
 
         while self.blocks.len() <= block_idx {

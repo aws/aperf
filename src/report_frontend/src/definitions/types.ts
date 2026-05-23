@@ -78,6 +78,21 @@ export interface Profiler {
 
 export interface Profile {
   readonly profile_graph: GraphInfo;
+  readonly blocks: { [threadStateId: string]: { [nodeId: string]: number } }[];
+  readonly time_range: [number, number];
+  readonly context_tree: CCTreeNode[];
+  readonly frame_map: FrameMap;
+}
+
+export interface CCTreeNode {
+  readonly parent: number | null;
+  readonly frame_id: number;
+  readonly sample_stats: { [threadStateId: string]: { total_samples: number; self_samples: number } };
+  readonly children: { [childFrameId: string]: number };
+}
+
+export interface FrameMap {
+  readonly frame_id_to_frame: { name: string; node_ids: number[] }[];
 }
 
 export interface GraphInfo {
@@ -114,6 +129,12 @@ export interface TimeSeriesMetricProps {
   readonly dataType: DataType;
   readonly runName: string;
   readonly metricName: string;
+}
+
+export interface ProfilingDataMetricProps {
+  readonly dataType: DataType;
+  readonly runName: string;
+  readonly profileInstance: string;
 }
 
 export type NumCpusPerRun = { [key in string]: number };

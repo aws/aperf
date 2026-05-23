@@ -110,7 +110,9 @@ export default function () {
           {!preprocessing && dataFormat == "key_value" && (
             <KeyValueDataPage dataType={dataComponent} key={dataComponent} />
           )}
-          {!preprocessing && dataFormat == "profile" && <ProfilingDataPage dataType={dataComponent} key={dataComponent} />}
+          {!preprocessing && dataFormat == "profile" && (
+            <ProfilingDataPage dataType={dataComponent} key={dataComponent} />
+          )}
           {!preprocessing && dataFormat == "text" && <TextDataPage dataType={dataComponent} key={dataComponent} />}
           {!preprocessing && (dataFormat == "unknown" || (dataFormat as string) === "" || dataFormat === undefined) && (
             <Box textAlign="center" color="inherit">

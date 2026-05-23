@@ -302,6 +302,8 @@ pub fn jfr_to_profiler(path: &Path) -> Result<Profiler> {
         .unwrap_or_default();
 
     let mut profiler = Profiler::new(start_time_ms);
+    // Computed lazily after settings are populated from ActiveSetting events
+    let mut wall_interval_ms: Option<i64> = None;
 
     // Cache: (method_id, frame_type) -> formatted frame string
     let mut frame_cache: HashMap<(i64, u8), String> = HashMap::new();
@@ -382,13 +384,41 @@ pub fn jfr_to_profiler(path: &Path) -> Result<Profiler> {
                     }
 
                     if !frames.is_empty() {
-                        profiler.insert_stack(
-                            profile_type,
-                            sample_time_ms,
-                            thread_state,
-                            &frames,
-                            samples,
-                        );
+                        // Wall clock events with samples > 1 represent consecutive sampling
+                        // intervals. Spread them across time blocks to match async-profiler
+                        // heatmap behavior.
+                        // Source https://github.com/async-profiler/async-profiler/blob/20e0b5cfc344bf5e32e5554750c2b08462c353b8/src/converter/one/convert/JfrToHeatmap.java#L34
+                        if profile_type == "wall" && samples > 1 {
+                            let interval = *wall_interval_ms.get_or_insert_with(|| {
+                                reader
+                                    .settings
+                                    .get("wall")
+                                    .or_else(|| reader.settings.get("interval"))
+                                    .and_then(|s| s.parse::<i64>().ok())
+                                    .filter(|&v| v > 0)
+                                    .unwrap_or(50_000_000)
+                                    / 1_000_000
+                            });
+                            let mut time_ms = sample_time_ms;
+                            for _ in 0..samples {
+                                profiler.insert_stack(
+                                    profile_type,
+                                    time_ms,
+                                    thread_state,
+                                    &frames,
+                                    1,
+                                );
+                                time_ms += interval;
+                            }
+                        } else {
+                            profiler.insert_stack(
+                                profile_type,
+                                sample_time_ms,
+                                thread_state,
+                                &frames,
+                                samples,
+                            );
+                        }
                     }
                 }
             }

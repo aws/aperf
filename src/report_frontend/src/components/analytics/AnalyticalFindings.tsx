@@ -1,5 +1,11 @@
 import React from "react";
-import { AnalyticalFinding, DataType, FindingType, TimeSeriesMetricProps } from "../../definitions/types";
+import {
+  AnalyticalFinding,
+  DataType,
+  FindingType,
+  TimeSeriesMetricProps,
+  ProfilingDataMetricProps,
+} from "../../definitions/types";
 import {
   Icon,
   SpaceBetween,
@@ -149,6 +155,30 @@ export function MetricAnalyticalFindings(props: TimeSeriesMetricProps) {
     <SpaceBetween size={"xxxs"}>
       {sortedMetricFindings.map((finding) => (
         <Finding finding={finding} dataType={props.dataType} dataKey={props.metricName} />
+      ))}
+    </SpaceBetween>
+  );
+}
+
+/**
+ * This component renders all analytical findings of a specific profiler instance.
+ */
+export function ProfileAnalyticalFindings(props: ProfilingDataMetricProps) {
+  const dataFindings = PER_DATA_ANALYTICAL_FINDINGS[props.dataType];
+  if (dataFindings == undefined) return null;
+  const curRunFindings = dataFindings.per_run_findings[props.runName];
+  if (curRunFindings == undefined) return null;
+
+  const profileFindings = curRunFindings.findings[props.profileInstance];
+  if (profileFindings == undefined) return null;
+
+  const sortedProfileFindings = [...profileFindings];
+  sortedProfileFindings.sort((a, b) => a.score - b.score);
+
+  return (
+    <SpaceBetween size={"xxxs"}>
+      {sortedProfileFindings.map((finding) => (
+        <Finding finding={finding} dataType={props.dataType} dataKey={props.profileInstance} />
       ))}
     </SpaceBetween>
   );

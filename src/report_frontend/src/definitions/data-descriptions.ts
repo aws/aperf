@@ -4671,10 +4671,11 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
     defaultHelpfulLinks: ["https://perfwiki.github.io/main/"],
     fieldDescriptions: {},
   },
+  // TODO: Move content of profiling analytical findings to help panel
   java_profile: {
-    readableName: "Java Profiling Heatmaps",
+    readableName: "Java Profiling",
     summary:
-      "Java profiling heatmaps show profiled CPU utilization, memory allocations, and wall clocks for JVMs running on the system at every second. For the legacy APerf version, only the flamegraph of CPU utilization across the whole recording period is available.",
+      "Java profiling shows profiled CPU utilization, memory allocations, and wall clocks for JVMs running on the system visualized as heatmaps. JVM and async-profiler metadata are also displayed. For the legacy APerf version, only the flamegraph of CPU utilization across the whole recording period is available.",
     fieldDescriptions: {
       wall: {
         readableName: "Wall Clock Profiling",
