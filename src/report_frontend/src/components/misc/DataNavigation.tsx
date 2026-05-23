@@ -118,7 +118,16 @@ export function DataLink(props: { dataType: DataType; dataKey: string }) {
  * data key (metric name or key-value key) to show the data
  */
 export function SamePageDataLink(props: { dataKey: string }) {
-  const { updateFilteringText } = useReportState();
+  const { updateFilteringText, setSearchKey } = useReportState();
 
-  return <Link onFollow={() => updateFilteringText(props.dataKey)}>{props.dataKey}</Link>;
+  return (
+    <Link
+      onFollow={() => {
+        updateFilteringText(props.dataKey);
+        setSearchKey(props.dataKey);
+      }}
+    >
+      {props.dataKey}
+    </Link>
+  );
 }
