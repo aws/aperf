@@ -2,33 +2,66 @@ use crate::data::common::data_formats::{KeyValueData, Profiler};
 use crate::profiling::jfr::{ExecSampleType, JfrEvent, JfrReader};
 use crate::profiling::{FrameType, ThreadState};
 use anyhow::Result;
+use chrono::{TimeZone, Utc};
+use log::{debug, warn};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::fmt::Write;
+use std::fs::File;
+use std::io::Write;
 use std::path::Path;
+use std::time::Instant;
 
-/// This converts a JFR to string output, and should be equivalent to jfr print function.
-/// Only used for validating data parsing.
-pub fn format_jfr(path: &Path) -> Result<String> {
-    let mut out = String::new();
-    let mut reader = JfrReader::open(path.to_str().unwrap())?;
+/// This function uses JfrReader to parse async-profiler generated JFR files into
+/// APerf data Profiler.
+pub fn build_java_profiler_data(
+    jfr_path: &Path,
+    events_output_path: Option<&Path>,
+) -> Result<Profiler> {
+    debug!("Start parsing raw JFR records...");
+    let jfr_parse_start_time = Instant::now();
 
-    writeln!(out, "start_nanos: {}", reader.start_nanos)?;
-    writeln!(out, "end_nanos: {}", reader.end_nanos)?;
-    writeln!(
-        out,
-        "chunk ticks_per_sec: {}",
-        reader.chunk_info.ticks_per_sec
-    )?;
-    writeln!(out, "threads: {}", reader.threads.len())?;
-    writeln!(out, "methods: {}", reader.methods.len())?;
-    writeln!(out, "stack_traces: {}", reader.stack_traces.len())?;
-    writeln!(out, "classes: {}", reader.classes.len())?;
-    writeln!(out, "strings: {}", reader.strings.len())?;
-    writeln!(out, "enums: {:?}", reader.enums)?;
-    writeln!(out, "settings: {:?}", reader.settings)?;
-    writeln!(out, "---")?;
+    let mut reader = JfrReader::open(jfr_path.to_str().unwrap())?;
 
+    let mut events_output_file = if let Some(events_output_path) = events_output_path {
+        if let Ok(events_output_file) = File::create(events_output_path) {
+            Some(events_output_file)
+        } else {
+            warn!(
+                "Failed to create file {} to save the JFR events",
+                events_output_path.display()
+            );
+            None
+        }
+    } else {
+        None
+    };
+
+    let frame_type_suffix: HashMap<u8, &str> = reader
+        .enums
+        .get("jdk.types.FrameType")
+        .map(|m| {
+            m.iter()
+                .map(|(&k, v)| (k as u8, FrameType::from_jfr_name(v).literal_suffix()))
+                .collect()
+        })
+        .unwrap_or_default();
+    let thread_state_map = reader
+        .enums
+        .get("jdk.types.ThreadState")
+        .cloned()
+        .unwrap_or_default();
+    // Cache: (method_id, frame_type) -> formatted frame string
+    let mut formatted_frame_name_cache: HashMap<(i64, u8), String> = HashMap::new();
+    // Cache: class_id -> humanized class name string
+    let mut humanized_class_name_cache: HashMap<i64, String> = HashMap::new();
+
+    let mut profiler = Profiler::new(reader.start_nanos / 1_000_000);
+
+    if let Some(file) = events_output_file.as_mut() {
+        let _ = write_jfr_out_header(file, &reader);
+    }
+
+    let mut num_samples: usize = 0;
     loop {
         match reader.read_event() {
             Ok(JfrEvent::EndOfChunk) => {
@@ -37,164 +70,294 @@ pub fn format_jfr(path: &Path) -> Result<String> {
                 }
             }
             Ok(event) => {
-                let time_nanos = reader.chunk_info.event_time_to_nanos(event.time());
-                let secs = time_nanos / 1_000_000_000;
-                let nanos_rem = (time_nanos % 1_000_000_000).unsigned_abs();
-                let h = (secs / 3600) % 24;
-                let m = (secs / 60) % 60;
-                let s = secs % 60;
-                let ms = nanos_rem / 1_000_000;
-                let time_str = format!("{:02}:{:02}:{:02}.{:03}", h, m, s, ms);
+                let sample_time_ms = reader.chunk_info.event_time_to_millis(event.time());
 
-                let tid = event.tid();
-                let thread_name = reader.resolve_thread(tid as i64).unwrap_or_default();
-                let java_tid = reader.java_thread_ids.get(&(tid as i64)).copied();
-
-                match &event {
-                    JfrEvent::ExecutionSample(e) => {
-                        let state = reader
-                            .enums
-                            .get("jdk.types.ThreadState")
-                            .and_then(|m| m.get(&e.thread_state))
-                            .cloned()
-                            .unwrap_or_else(|| format!("STATE_{}", e.thread_state));
-                        let type_name = match e.sample_type {
-                            ExecSampleType::Execution => "jdk.ExecutionSample",
-                            ExecSampleType::NativeMethod => "jdk.NativeMethodSample",
-                            ExecSampleType::WallClock => "profiler.WallClockSample",
-                            ExecSampleType::CpuTime => "jdk.CPUTimeSample",
-                        };
-                        writeln!(out, "{} {{", type_name)?;
-                        writeln!(out, "  startTime = {}", time_str)?;
-                        write_thread_field(&mut out, "sampledThread", &thread_name, tid, java_tid)?;
-                        writeln!(out, "  state = \"{}\"", state)?;
-                        if e.sample_type == ExecSampleType::WallClock {
-                            writeln!(out, "  samples = {}", e.samples)?;
-                        }
-                    }
-                    JfrEvent::AllocationSample(e) => {
-                        let cls = jvm_type_to_human(&reader.resolve_class(e.class_id as i64));
-                        let type_name = if e.tlab_size > 0 {
-                            "jdk.ObjectAllocationInNewTLAB"
-                        } else {
-                            "jdk.ObjectAllocationOutsideTLAB"
-                        };
-                        writeln!(out, "{} {{", type_name)?;
-                        writeln!(out, "  startTime = {}", time_str)?;
-                        writeln!(out, "  objectClass = {} (classLoader = null)", cls)?;
-                        writeln!(
-                            out,
-                            "  allocationSize = {}",
-                            format_bytes(e.allocation_size)
-                        )?;
-                        if e.tlab_size > 0 {
-                            writeln!(out, "  tlabSize = {}", format_bytes(e.tlab_size))?;
-                        }
-                        write_thread_field(&mut out, "eventThread", &thread_name, tid, java_tid)?;
-                    }
-                    JfrEvent::ContendedLock(e) => {
-                        let cls = jvm_type_to_human(&reader.resolve_class(e.class_id as i64));
-                        writeln!(out, "jdk.JavaMonitorEnter {{")?;
-                        writeln!(out, "  startTime = {}", time_str)?;
-                        writeln!(out, "  duration = {} ns", e.duration)?;
-                        writeln!(out, "  monitorClass = {}", cls)?;
-                        write_thread_field(&mut out, "eventThread", &thread_name, tid, java_tid)?;
-                    }
-                    JfrEvent::LiveObject(e) => {
-                        let cls = jvm_type_to_human(&reader.resolve_class(e.class_id as i64));
-                        writeln!(out, "profiler.LiveObject {{")?;
-                        writeln!(out, "  startTime = {}", time_str)?;
-                        writeln!(out, "  objectClass = {}", cls)?;
-                        writeln!(
-                            out,
-                            "  allocationSize = {}",
-                            format_bytes(e.allocation_size)
-                        )?;
-                        writeln!(out, "  allocationTime = {}", e.allocation_time)?;
-                    }
-                    JfrEvent::MallocEvent(e) => {
-                        let type_name = if e.size > 0 {
-                            "profiler.Malloc"
-                        } else {
-                            "profiler.Free"
-                        };
-                        writeln!(out, "{} {{", type_name)?;
-                        writeln!(out, "  startTime = {}", time_str)?;
-                        writeln!(out, "  address = 0x{:x}", e.address)?;
-                        if e.size > 0 {
-                            writeln!(out, "  size = {}", format_bytes(e.size))?;
-                        }
-                    }
-                    JfrEvent::MethodTrace(e) => {
-                        writeln!(out, "jdk.MethodTrace {{")?;
-                        writeln!(out, "  startTime = {}", time_str)?;
-                        writeln!(out, "  duration = {} ns", e.duration)?;
-                        writeln!(out, "  method = {}", e.method)?;
-                    }
-                    JfrEvent::NativeLock(e) => {
-                        writeln!(out, "profiler.NativeLock {{")?;
-                        writeln!(out, "  startTime = {}", time_str)?;
-                        writeln!(out, "  duration = {} ns", e.duration)?;
-                        writeln!(out, "  address = 0x{:x}", e.address)?;
-                    }
-                    JfrEvent::Custom(_) => {
-                        writeln!(out, "CustomEvent {{")?;
-                        writeln!(out, "  startTime = {}", time_str)?;
-                    }
-                    JfrEvent::EndOfChunk => unreachable!(),
+                if let Some(file) = events_output_file.as_mut() {
+                    let _ =
+                        write_jfr_out_event(file, &event, &mut humanized_class_name_cache, &reader);
                 }
+
+                let (profile_type, thread_state, samples) = match &event {
+                    JfrEvent::ExecutionSample(e) => {
+                        let ptype = match e.sample_type {
+                            ExecSampleType::Execution
+                            | ExecSampleType::NativeMethod
+                            | ExecSampleType::CpuTime => "cpu",
+                            ExecSampleType::WallClock => "wall",
+                        };
+                        let state_name = thread_state_map
+                            .get(&e.thread_state)
+                            .map(|s| s.as_str())
+                            .unwrap_or("");
+                        (ptype, ThreadState::from_str(state_name), e.samples as u64)
+                    }
+                    JfrEvent::AllocationSample(_) => ("alloc", ThreadState::None, 1u64),
+                    _ => continue,
+                };
+
+                num_samples += 1;
 
                 if let Some(trace) = reader.stack_traces.get(&(event.stack_trace_id() as i64)) {
-                    writeln!(out, "  stackTrace = [")?;
-                    for (i, &method_id) in trace.methods.iter().enumerate() {
-                        let loc = trace.locations[i];
-                        let line = loc >> 16;
-                        if let Some((cls, method, sig)) = reader.resolve_method(method_id) {
-                            let sig_str = if sig.is_empty() || sig.starts_with("[unknown") {
-                                String::new()
-                            } else {
-                                format_signature(&sig)
-                            };
-                            writeln!(
-                                out,
-                                "    {}.{}({}) line: {}",
-                                cls.replace('/', "."),
-                                method,
-                                sig_str,
-                                line
-                            )?;
-                        } else {
-                            writeln!(out, "    [unknown:{}]() line: {}", method_id, line)?;
-                        }
-                    }
-                    writeln!(out, "  ]")?;
-                }
+                    let mut frames: Vec<String> = trace
+                        .methods
+                        .iter()
+                        .zip(trace.types.iter())
+                        .rev()
+                        .map(|(&method_id, &frame_type)| {
+                            formatted_frame_name_cache
+                                .entry((method_id, frame_type))
+                                .or_insert_with(|| {
+                                    let suffix =
+                                        frame_type_suffix.get(&frame_type).copied().unwrap_or("");
+                                    if let Some((cls, method, _)) = reader.resolve_method(method_id)
+                                    {
+                                        if frame_type == 3 || frame_type == 4 || cls.is_empty() {
+                                            format!("{}{}", method, suffix)
+                                        } else if method.is_empty() {
+                                            format!("{}{}", cls.replace('/', "."), suffix)
+                                        } else {
+                                            format!(
+                                                "{}.{}{}",
+                                                cls.replace('/', "."),
+                                                method,
+                                                suffix
+                                            )
+                                        }
+                                    } else {
+                                        format!("[unknown:{}]{}", method_id, suffix)
+                                    }
+                                })
+                                .clone()
+                        })
+                        .collect();
 
-                writeln!(out, "}}")?;
-                writeln!(out)?;
+                    if let JfrEvent::AllocationSample(e) = &event {
+                        let cls = humanized_class_name_cache
+                            .entry(e.class_id as i64)
+                            .or_insert_with(|| {
+                                jvm_type_to_human(&reader.resolve_class(e.class_id as i64))
+                            });
+                        let frame = format!("{}{}", cls, FrameType::Inlined.literal_suffix());
+                        frames.push(frame);
+                    }
+
+                    if !frames.is_empty() {
+                        profiler.insert_stack(
+                            profile_type,
+                            sample_time_ms,
+                            thread_state,
+                            &frames,
+                            samples,
+                        );
+                    }
+                }
             }
             Err(e) => return Err(e.into()),
         }
     }
-    Ok(out)
+
+    debug!(
+        "Finished parsing {num_samples} JFR samples in {:?}",
+        jfr_parse_start_time.elapsed()
+    );
+
+    Ok(profiler)
+}
+
+fn write_jfr_out_header(out_file: &mut File, reader: &JfrReader) -> Result<()> {
+    writeln!(out_file, "start_nanos: {}", reader.start_nanos)?;
+    writeln!(out_file, "end_nanos: {}", reader.end_nanos)?;
+    writeln!(
+        out_file,
+        "chunk ticks_per_sec: {}",
+        reader.chunk_info.ticks_per_sec
+    )?;
+    writeln!(out_file, "threads: {}", reader.threads.len())?;
+    writeln!(out_file, "methods: {}", reader.methods.len())?;
+    writeln!(out_file, "stack_traces: {}", reader.stack_traces.len())?;
+    writeln!(out_file, "classes: {}", reader.classes.len())?;
+    writeln!(out_file, "strings: {}", reader.strings.len())?;
+    writeln!(out_file, "enums: {:?}", reader.enums)?;
+    writeln!(out_file, "settings: {:?}", reader.settings)?;
+    writeln!(out_file, "---")?;
+
+    Ok(())
+}
+
+fn write_jfr_out_event(
+    out_file: &mut File,
+    event: &JfrEvent,
+    humanized_class_name_cache: &mut HashMap<i64, String>,
+    reader: &JfrReader,
+) -> Result<()> {
+    let time_nanos = reader.chunk_info.event_time_to_nanos(event.time());
+    let date_time = Utc.timestamp_nanos(time_nanos);
+    let time_str = date_time.format("%H:%M:%S%.3f (%Y-%m-%d)").to_string();
+
+    let tid = event.tid();
+    let thread_name = reader.resolve_thread(tid as i64).unwrap_or_default();
+    let java_tid = reader.java_thread_ids.get(&(tid as i64)).copied();
+
+    match &event {
+        JfrEvent::ExecutionSample(e) => {
+            let state = reader
+                .enums
+                .get("jdk.types.ThreadState")
+                .and_then(|m| m.get(&e.thread_state))
+                .cloned()
+                .unwrap_or_else(|| format!("STATE_{}", e.thread_state));
+            let type_name = match e.sample_type {
+                ExecSampleType::Execution => "jdk.ExecutionSample",
+                ExecSampleType::NativeMethod => "jdk.NativeMethodSample",
+                ExecSampleType::WallClock => "profiler.WallClockSample",
+                ExecSampleType::CpuTime => "jdk.CPUTimeSample",
+            };
+            writeln!(out_file, "{} {{", type_name)?;
+            writeln!(out_file, "  startTime = {}", time_str)?;
+            write_thread_field(out_file, "sampledThread", &thread_name, tid, java_tid)?;
+            writeln!(out_file, "  state = \"{}\"", state)?;
+            if e.sample_type == ExecSampleType::WallClock {
+                writeln!(out_file, "  samples = {}", e.samples)?;
+            }
+        }
+        JfrEvent::AllocationSample(e) => {
+            let cls = humanized_class_name_cache
+                .entry(e.class_id as i64)
+                .or_insert_with(|| jvm_type_to_human(&reader.resolve_class(e.class_id as i64)));
+            let type_name = if e.tlab_size > 0 {
+                "jdk.ObjectAllocationInNewTLAB"
+            } else {
+                "jdk.ObjectAllocationOutsideTLAB"
+            };
+            writeln!(out_file, "{} {{", type_name)?;
+            writeln!(out_file, "  startTime = {}", time_str)?;
+            writeln!(out_file, "  objectClass = {} (classLoader = null)", cls)?;
+            writeln!(
+                out_file,
+                "  allocationSize = {}",
+                format_bytes(e.allocation_size)
+            )?;
+            if e.tlab_size > 0 {
+                writeln!(out_file, "  tlabSize = {}", format_bytes(e.tlab_size))?;
+            }
+            write_thread_field(out_file, "eventThread", &thread_name, tid, java_tid)?;
+        }
+        JfrEvent::ContendedLock(e) => {
+            let cls = humanized_class_name_cache
+                .entry(e.class_id as i64)
+                .or_insert_with(|| jvm_type_to_human(&reader.resolve_class(e.class_id as i64)));
+            writeln!(out_file, "jdk.JavaMonitorEnter {{")?;
+            writeln!(out_file, "  startTime = {}", time_str)?;
+            writeln!(out_file, "  duration = {} ns", e.duration)?;
+            writeln!(out_file, "  monitorClass = {}", cls)?;
+            write_thread_field(out_file, "eventThread", &thread_name, tid, java_tid)?;
+        }
+        JfrEvent::LiveObject(e) => {
+            let cls = humanized_class_name_cache
+                .entry(e.class_id as i64)
+                .or_insert_with(|| jvm_type_to_human(&reader.resolve_class(e.class_id as i64)));
+            writeln!(out_file, "profiler.LiveObject {{")?;
+            writeln!(out_file, "  startTime = {}", time_str)?;
+            writeln!(out_file, "  objectClass = {}", cls)?;
+            writeln!(
+                out_file,
+                "  allocationSize = {}",
+                format_bytes(e.allocation_size)
+            )?;
+            writeln!(out_file, "  allocationTime = {}", e.allocation_time)?;
+        }
+        JfrEvent::MallocEvent(e) => {
+            let type_name = if e.size > 0 {
+                "profiler.Malloc"
+            } else {
+                "profiler.Free"
+            };
+            writeln!(out_file, "{} {{", type_name)?;
+            writeln!(out_file, "  startTime = {}", time_str)?;
+            writeln!(out_file, "  address = 0x{:x}", e.address)?;
+            if e.size > 0 {
+                writeln!(out_file, "  size = {}", format_bytes(e.size))?;
+            }
+        }
+        JfrEvent::MethodTrace(e) => {
+            writeln!(out_file, "jdk.MethodTrace {{")?;
+            writeln!(out_file, "  startTime = {}", time_str)?;
+            writeln!(out_file, "  duration = {} ns", e.duration)?;
+            writeln!(out_file, "  method = {}", e.method)?;
+        }
+        JfrEvent::NativeLock(e) => {
+            writeln!(out_file, "profiler.NativeLock {{")?;
+            writeln!(out_file, "  startTime = {}", time_str)?;
+            writeln!(out_file, "  duration = {} ns", e.duration)?;
+            writeln!(out_file, "  address = 0x{:x}", e.address)?;
+        }
+        JfrEvent::Custom(_) => {
+            writeln!(out_file, "CustomEvent {{")?;
+            writeln!(out_file, "  startTime = {}", time_str)?;
+        }
+        JfrEvent::EndOfChunk => unreachable!(),
+    }
+
+    if let Some(trace) = reader.stack_traces.get(&(event.stack_trace_id() as i64)) {
+        writeln!(out_file, "  stackTrace = [")?;
+        for (i, &method_id) in trace.methods.iter().enumerate() {
+            let loc = trace.locations[i];
+            let line = loc >> 16;
+            if let Some((cls, method, sig)) = reader.resolve_method(method_id) {
+                let sig_str = if sig.is_empty() || sig.starts_with("[unknown") {
+                    String::new()
+                } else {
+                    format_signature(&sig)
+                };
+                writeln!(
+                    out_file,
+                    "    {}.{}({}) line: {}",
+                    cls.replace('/', "."),
+                    method,
+                    sig_str,
+                    line
+                )?;
+            } else {
+                writeln!(out_file, "    [unknown:{}]() line: {}", method_id, line)?;
+            }
+        }
+        writeln!(out_file, "  ]")?;
+    }
+
+    writeln!(out_file, "}}")?;
+    writeln!(out_file)?;
+
+    Ok(())
 }
 
 fn write_thread_field(
-    out: &mut String,
+    out_file: &mut File,
     field: &str,
     name: &str,
     tid: i32,
     java_tid: Option<i64>,
-) -> std::fmt::Result {
+) -> Result<()> {
     if name.is_empty() {
-        return writeln!(out, "  {} = N/A", field);
+        writeln!(out_file, "  {} = N/A", field)?;
+        return Ok(());
     }
     if let Some(jtid) = java_tid {
         if jtid > 0 {
-            return writeln!(out, "  {} = \"{}\" (javaThreadId = {})", field, name, jtid);
+            writeln!(
+                out_file,
+                "  {} = \"{}\" (javaThreadId = {})",
+                field, name, jtid
+            )?;
+            return Ok(());
         }
     }
-    writeln!(out, "  {} = \"{}\" (osThreadId = {})", field, name, tid)
+    writeln!(
+        out_file,
+        "  {} = \"{}\" (osThreadId = {})",
+        field, name, tid
+    )?;
+
+    Ok(())
 }
 
 fn jvm_type_to_human(name: &str) -> String {
@@ -277,156 +440,6 @@ fn parse_type(chars: &mut std::iter::Peekable<std::str::Chars>) -> String {
         }
         _ => "?".into(),
     }
-}
-
-/// This function uses JfrReader to parse async-profiler generated JFR files into
-/// APerf Profiler.
-pub fn jfr_to_profiler(path: &Path) -> Result<Profiler> {
-    let mut reader = JfrReader::open(path.to_str().unwrap())?;
-    let start_time_ms = reader.start_nanos / 1_000_000;
-
-    let frame_type_suffix: HashMap<u8, &str> = reader
-        .enums
-        .get("jdk.types.FrameType")
-        .map(|m| {
-            m.iter()
-                .map(|(&k, v)| (k as u8, FrameType::from_jfr_name(v).literal_suffix()))
-                .collect()
-        })
-        .unwrap_or_default();
-
-    let thread_state_map = reader
-        .enums
-        .get("jdk.types.ThreadState")
-        .cloned()
-        .unwrap_or_default();
-
-    let mut profiler = Profiler::new(start_time_ms);
-    // Computed lazily after settings are populated from ActiveSetting events
-    let mut wall_interval_ms: Option<i64> = None;
-
-    // Cache: (method_id, frame_type) -> formatted frame string
-    let mut frame_cache: HashMap<(i64, u8), String> = HashMap::new();
-    // Cache: class_id -> formatted alloc class string
-    let mut alloc_class_cache: HashMap<i64, String> = HashMap::new();
-
-    loop {
-        match reader.read_event() {
-            Ok(JfrEvent::EndOfChunk) => {
-                if !reader.has_more_chunks().unwrap_or(false) {
-                    break;
-                }
-            }
-            Ok(event) => {
-                let sample_time_ms = reader.chunk_info.event_time_to_millis(event.time());
-
-                let (profile_type, thread_state, samples) = match &event {
-                    JfrEvent::ExecutionSample(e) => {
-                        let ptype = match e.sample_type {
-                            ExecSampleType::Execution
-                            | ExecSampleType::NativeMethod
-                            | ExecSampleType::CpuTime => "cpu",
-                            ExecSampleType::WallClock => "wall",
-                        };
-                        let state_name = thread_state_map
-                            .get(&e.thread_state)
-                            .map(|s| s.as_str())
-                            .unwrap_or("");
-                        (ptype, ThreadState::from_str(state_name), e.samples as u64)
-                    }
-                    JfrEvent::AllocationSample(_) => ("alloc", ThreadState::None, 1u64),
-                    _ => continue,
-                };
-
-                if let Some(trace) = reader.stack_traces.get(&(event.stack_trace_id() as i64)) {
-                    let mut frames: Vec<String> = trace
-                        .methods
-                        .iter()
-                        .zip(trace.types.iter())
-                        .rev()
-                        .map(|(&mid, &ftype)| {
-                            frame_cache
-                                .entry((mid, ftype))
-                                .or_insert_with(|| {
-                                    let suffix =
-                                        frame_type_suffix.get(&ftype).copied().unwrap_or("");
-                                    if let Some((cls, method, _)) = reader.resolve_method(mid) {
-                                        if ftype == 3 || ftype == 4 || cls.is_empty() {
-                                            format!("{}{}", method, suffix)
-                                        } else if method.is_empty() {
-                                            format!("{}{}", cls.replace('/', "."), suffix)
-                                        } else {
-                                            format!(
-                                                "{}.{}{}",
-                                                cls.replace('/', "."),
-                                                method,
-                                                suffix
-                                            )
-                                        }
-                                    } else {
-                                        format!("[unknown:{}]{}", mid, suffix)
-                                    }
-                                })
-                                .clone()
-                        })
-                        .collect();
-
-                    if let JfrEvent::AllocationSample(e) = &event {
-                        let frame = alloc_class_cache
-                            .entry(e.class_id as i64)
-                            .or_insert_with(|| {
-                                let cls =
-                                    jvm_type_to_human(&reader.resolve_class(e.class_id as i64));
-                                format!("{}{}", cls, FrameType::Inlined.literal_suffix())
-                            })
-                            .clone();
-                        frames.push(frame);
-                    }
-
-                    if !frames.is_empty() {
-                        // Wall clock events with samples > 1 represent consecutive sampling
-                        // intervals. Spread them across time blocks to match async-profiler
-                        // heatmap behavior.
-                        // Source https://github.com/async-profiler/async-profiler/blob/20e0b5cfc344bf5e32e5554750c2b08462c353b8/src/converter/one/convert/JfrToHeatmap.java#L34
-                        if profile_type == "wall" && samples > 1 {
-                            let interval = *wall_interval_ms.get_or_insert_with(|| {
-                                reader
-                                    .settings
-                                    .get("wall")
-                                    .or_else(|| reader.settings.get("interval"))
-                                    .and_then(|s| s.parse::<i64>().ok())
-                                    .filter(|&v| v > 0)
-                                    .unwrap_or(50_000_000)
-                                    / 1_000_000
-                            });
-                            let mut time_ms = sample_time_ms;
-                            for _ in 0..samples {
-                                profiler.insert_stack(
-                                    profile_type,
-                                    time_ms,
-                                    thread_state,
-                                    &frames,
-                                    1,
-                                );
-                                time_ms += interval;
-                            }
-                        } else {
-                            profiler.insert_stack(
-                                profile_type,
-                                sample_time_ms,
-                                thread_state,
-                                &frames,
-                                samples,
-                            );
-                        }
-                    }
-                }
-            }
-            Err(e) => return Err(e.into()),
-        }
-    }
-
-    Ok(profiler)
 }
 
 // Reference: https://github.com/async-profiler/async-profiler/blob/master/src/jfrMetadata.h#L46-L70

@@ -136,10 +136,18 @@ impl CollectData for PerfProfileRaw {
             Ok(_) => debug!("'perf record' executed successfully."),
         }
 
+        let event_out_path_buf = params.data_dir.join("parsed_perf_data.out");
+        let events_out_path = if params.save_profile_events {
+            Some(event_out_path_buf.as_path())
+        } else {
+            None
+        };
+
         // Parse raw Perf profile and build ProfilingData
         let perf_profiler_data = build_perf_profiler_data(
             &params.data_file_path,
             *PROFILE_START_TIME_MS.lock().unwrap(),
+            events_out_path,
         );
         let perf_profiler_data_path = params
             .data_dir

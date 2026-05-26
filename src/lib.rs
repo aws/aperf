@@ -543,6 +543,7 @@ pub struct InitParams {
     pub tmp_dir: PathBuf,
     pub runlog: PathBuf,
     pub perf_frequency: u32,
+    pub save_profile_events: bool,
     pub hotline_frequency: u32,
     pub num_to_report: u32,
     /// Wall-clock start of `collect_data_serial`. `None` for archives
@@ -592,6 +593,7 @@ impl InitParams {
             tmp_dir: PathBuf::from(APERF_TMP),
             runlog: PathBuf::new(),
             perf_frequency: 99,
+            save_profile_events: false,
             hotline_frequency: 1000,
             num_to_report: 5000,
             collection_start: None,
