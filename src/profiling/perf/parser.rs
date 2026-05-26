@@ -8,17 +8,18 @@ use crate::profiling::ThreadState;
 use anyhow::Result;
 use linux_perf_data::{PerfFileReader, PerfFileRecord};
 use linux_perf_event_reader::{EventRecord, RawData, SampleRecord};
-use log::{debug, error};
+use log::{debug, error, warn};
 use std::env;
 use std::fs::File;
 use std::io::{BufReader, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 /// Parse the raw Perf profile and build the Profiler Data.
 pub fn build_perf_profiler_data(
     perf_data_path: &PathBuf,
     profile_start_timestamp_ms: i64,
+    events_output_path: Option<&Path>,
 ) -> Profiler {
     debug!("Start parsing raw Perf profile...");
 
@@ -33,7 +34,8 @@ pub fn build_perf_profiler_data(
         }
     };
     debug!(
-        "Raw Perf Data was parsed in {:?}",
+        "Finished parsing {} Perf samples in {:?}",
+        perf_samples.len(),
         perf_parse_start_time.elapsed()
     );
 
@@ -54,17 +56,23 @@ pub fn build_perf_profiler_data(
         }
     };
 
-    // TODO: writing the stack output is for development only. Remove after verification step completes
-    let mut stack_output_file = perf_data_path
-        .parent()
-        .map(|parent_dir| {
-            File::create(PathBuf::from(parent_dir).join("parsed_perf_data.out")).unwrap()
-        })
-        .unwrap();
+    let mut stack_output_file = if let Some(events_output_path) = events_output_path {
+        if let Ok(file) = File::create(events_output_path) {
+            Some(file)
+        } else {
+            warn!(
+                "Failed to create file {} to save the Perf events",
+                events_output_path.display()
+            );
+            None
+        }
+    } else {
+        None
+    };
 
     let build_perf_profiler_data_start_time = Instant::now();
     let profile_type = "cpu";
-    for perf_sample in perf_samples {
+    for perf_sample in &perf_samples {
         let mut frames: Vec<String> = perf_sample
             .call_chain
             .iter()
@@ -80,14 +88,15 @@ pub fn build_perf_profiler_data(
         let sample_timestamp_ms =
             system_boot_timestamp_ms + (perf_sample.timestamp / 1_000_000) as i64;
 
-        // TODO: for development only. Remove after verification step completes.
-        writeln!(
-            stack_output_file,
-            "{}|{}|{}",
-            sample_timestamp_ms,
-            perf_sample.pid,
-            frames.join(";")
-        );
+        if let Some(file) = stack_output_file.as_mut() {
+            let _ = writeln!(
+                file,
+                "{}|{}|{}",
+                sample_timestamp_ms,
+                perf_sample.pid,
+                frames.join(";")
+            );
+        }
 
         profiler.insert_stack(
             profile_type,
@@ -98,7 +107,8 @@ pub fn build_perf_profiler_data(
         );
     }
     debug!(
-        "Perf Profiler Data was built in {:?}",
+        "Finished building Perf ProfilerData for {} samples in {:?}",
+        perf_samples.len(),
         build_perf_profiler_data_start_time.elapsed()
     );
 

@@ -60,12 +60,12 @@ pub struct Record {
     pub collect_only: Option<Vec<String>>,
 
     /// Gather profiling data using 'perf' binary.
-    #[clap(help_heading = "Perf Profiling", long, value_parser)]
+    #[clap(help_heading = "Profiling", long, value_parser)]
     pub profile: bool,
 
     /// Frequency for perf profiling (Hz).
     #[clap(
-        help_heading = "Perf Profiling",
+        help_heading = "Profiling",
         short = 'F',
         long,
         value_parser,
@@ -75,13 +75,17 @@ pub struct Record {
 
     /// Profile JVMs using async-profiler. Specify args using comma separated values. Profiles all JVMs if no args are provided.
     #[clap(
-        help_heading = "Java Profiling",
+        help_heading = "Profiling",
         long, value_parser,
         default_missing_value = Some("jps"),
         value_names = &["PID/Name>,<PID/Name>,...,<PID/Name"],
         num_args = 0..=1
     )]
     pub profile_java: Option<String>,
+
+    /// Save all profile events in the output file.
+    #[clap(help_heading = "Profiling", long, value_parser)]
+    pub save_profile_events: bool,
 
     /// Custom PMU config file to use.
     #[clap(help_heading = "PMU Options", long, value_parser)]
@@ -155,6 +159,7 @@ pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
     if record.profile {
         params.perf_frequency = record.perf_frequency;
     }
+    params.save_profile_events = record.save_profile_events;
 
     let mut performance_data = PerformanceData::new(params);
 

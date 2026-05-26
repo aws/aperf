@@ -20,20 +20,6 @@ enum State {
 /// JFR binary format reader. Iterates chunk-by-chunk, event-by-event.
 /// Based on async-profiler implementation: https://github.com/async-profiler/async-profiler/tree/master
 /// src/converter/one/jfr
-///
-/// Usage:
-///
-/// ```ignore
-/// let mut reader = JfrReader::open("recording.jfr")?;
-/// while reader.has_more_chunks()? {
-///     loop {
-///         match reader.read_event()? {
-///             JfrEvent::EndOfChunk => break,
-///             event => { /* process event */ }
-///         }
-///     }
-/// }
-/// ```
 #[derive(Default)]
 pub struct JfrReader {
     data: Vec<u8>,

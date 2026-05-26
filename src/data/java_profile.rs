@@ -343,7 +343,16 @@ impl CollectData for JavaProfileRaw {
                     "{}-java-profile-{}-profiler-data.json",
                     params.run_name, key
                 ));
-                match jfr::jfr_to_profiler(&jfr_path) {
+
+                let event_out_path_buf =
+                    params.data_dir.join(format!("parsed_jfr_events_{key}.out"));
+                let events_out_path = if params.save_profile_events {
+                    Some(event_out_path_buf.as_path())
+                } else {
+                    None
+                };
+
+                match jfr::build_java_profiler_data(&jfr_path, events_out_path) {
                     Ok(mut profiler) => {
                         profiler.metadata = jfr::parse_jfr_metadata(&metadata_json);
                         if let Ok(json) = serde_json::to_string(&profiler) {

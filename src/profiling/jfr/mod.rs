@@ -8,7 +8,7 @@ mod convert;
 mod reader;
 mod types;
 
-pub use convert::{format_jfr, jfr_to_profiler, parse_jfr_metadata};
+pub use convert::{build_java_profiler_data, parse_jfr_metadata};
 
 pub use reader::JfrReader;
 pub use types::*;

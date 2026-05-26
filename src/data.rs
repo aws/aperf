@@ -77,6 +77,7 @@ pub struct CollectorParams {
     pub runlog: PathBuf,
     pub pmu_config: Option<PathBuf>,
     pub perf_frequency: u32,
+    pub save_profile_events: bool,
     pub hotline_frequency: u32,
     pub interval: u64,
     pub num_to_report: u32,
@@ -97,6 +98,7 @@ impl CollectorParams {
             runlog: PathBuf::new(),
             pmu_config: None,
             perf_frequency: 99,
+            save_profile_events: false,
             hotline_frequency: 1000,
             interval: 1,
             num_to_report: 5000,
@@ -153,6 +155,8 @@ impl DataType {
         self.collector_params.profile = param.profile.clone();
         self.collector_params.tmp_dir = param.tmp_dir.clone();
         self.collector_params.runlog = param.runlog.clone();
+        self.collector_params.perf_frequency = param.perf_frequency;
+        self.collector_params.save_profile_events = param.save_profile_events;
         self.collector_params.pmu_config = param.pmu_config.clone();
         self.collector_params.interval = param.interval;
         self.collector_params.hotline_frequency = param.hotline_frequency;

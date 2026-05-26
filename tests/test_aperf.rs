@@ -753,6 +753,7 @@ fn record_with_name(
         collect_only,
         profile: false,
         perf_frequency: 99,
+        save_profile_events: false,
         profile_java: None,
         pmu_config: None,
         hotline_frequency: 1000,
@@ -768,6 +769,7 @@ fn record_with_name(
         collect_only,
         profile: false,
         perf_frequency: 99,
+        save_profile_events: false,
         profile_java: None,
         pmu_config: None,
     };
