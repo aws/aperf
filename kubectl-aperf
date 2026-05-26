@@ -199,11 +199,19 @@ ${TOLERATIONS}
 
       echo -e "Starting Aperf recording execution..."
       echo "Run: /usr/bin/aperf record --tmp-dir="/tmp/aperf/profile"  -r ${REPORT_NAME} ${APERF_OPTIONS}"
-      mkdir -p /tmp/aperf/profile 
+      mkdir -p /tmp/aperf/profile
       chmod -R 777 /tmp/aperf/profile
       /usr/bin/aperf record --tmp-dir="/tmp/aperf/profile" -r ${REPORT_NAME} ${APERF_OPTIONS}
       rm -rf  /tmp/aperf/profile
       echo "APerf record completed"
+
+      # Restore sysctls now that record is done. We do this explicitly here
+      # (not just via the trap) so the host doesn't stay relaxed during the
+      # long post-record sleep, where SIGKILL on pod deletion can prevent the
+      # EXIT trap from running.
+      restore_perf_sysctls
+      trap - EXIT INT TERM
+      echo "Kernel perf settings restored."
 
       echo -e "\nStarting Aperf report generation..."
       echo "Run: /usr/bin/aperf report -r ${REPORT_NAME} -n ${REPORT_NAME}_report"
