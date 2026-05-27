@@ -69,6 +69,7 @@ pub struct TimeSeriesData {
     /// A map from the metric name to the metric's contents.
     pub metrics: HashMap<String, TimeSeriesMetric>,
     /// A list of all metric names to provide ordering for the graphs in the frontend.
+    #[serde(default)]
     pub sorted_metric_names: Vec<String>,
 }
 
@@ -114,6 +115,7 @@ pub struct Series {
     #[serde(serialize_with = "serialize_f64_vec_fixed2")]
     pub values: Vec<f64>,
     /// Indicate whether the series is aggregate.
+    #[serde(default)]
     #[serde(skip_serializing_if = "is_false")]
     pub is_aggregate: bool,
 }

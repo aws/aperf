@@ -298,6 +298,31 @@ Shell to generate completions for [possible values: bash, elvish, fish, powershe
 
 Install the auto complete script using sudo, or specify a download path
 
+## MCP Server (AI Assistant Integration)
+
+APerf includes a built-in [MCP](https://modelcontextprotocol.io/) server that lets AI assistants (Kiro, Claude Desktop, etc.) record data, generate reports, and analyze performance metrics interactively.
+
+```bash
+# Start the MCP server (used by AI clients, not run manually)
+aperf server --mcp
+```
+
+**Kiro setup** — add to `~/.kiro/settings/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "aperf-mcp": {
+      "command": "/path/to/aperf",
+      "args": ["server", "--mcp"],
+      "disabled": false
+    }
+  }
+}
+```
+
+The server exposes 8 tools: `load_report`, `get_metrics`, `get_metric_values`, `get_analytical_findings`, `get_statistical_findings`, `get_flamegraph`, `record`, and `generate_report`. See [MCP Server docs](./docs/MCP-SERVER.md) for full details.
+
 ## APerf Issues?
 
 > [!WARNING]
@@ -329,6 +354,7 @@ sudo sysctl -w kernel.kptr_restrict=0
 - [Dependencies Reference](./docs/DEPENDENCIES.md#aperf-dependencies)
 - [Development Guide](./docs/DEVELOPMENT.md)
 - [Example Usage](./docs/EXAMPLE.md#aperf-example)
+- [MCP Server (AI Assistant Integration)](./docs/MCP-SERVER.md)
 - [Running on EKS](./docs/README-EKS.md#running-aperf-on-ekskubernetes)
 
 ## Security
