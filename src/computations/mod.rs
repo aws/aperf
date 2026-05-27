@@ -3,6 +3,7 @@ use strum_macros::Display;
 
 /// Different statistics of the values contained in a Series
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
+#[serde(default)]
 pub struct Statistics {
     #[serde(serialize_with = "serialize_f64_fixed2")]
     pub avg: f64,

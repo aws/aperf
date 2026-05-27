@@ -11,6 +11,8 @@ pub mod profiling;
 #[cfg(target_os = "linux")]
 pub mod record;
 pub mod report;
+#[cfg(feature = "mcp-server")]
+pub mod server;
 pub mod visualizer;
 
 use crate::analytics::{AnalyticalEngine, DataFindings};

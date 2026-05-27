@@ -1,6 +1,8 @@
 use anyhow::Result;
 use aperf::completions::{setup_shell_completions, SetupShellCompletions};
 use aperf::report::{report, Report};
+#[cfg(feature = "mcp-server")]
+use aperf::server::Server;
 use aperf::{PDError, APERF_RUNLOG, APERF_TMP};
 use clap::{CommandFactory, Parser, Subcommand};
 use log::LevelFilter;
@@ -54,6 +56,10 @@ enum Commands {
 
     /// Setup shell completions for APerf commands.
     SetupShellCompletions(SetupShellCompletions),
+
+    /// Start a server (e.g. MCP for AI assistant integration).
+    #[cfg(feature = "mcp-server")]
+    Server(Server),
 }
 
 fn init_logger(verbose: u8, runlog: &PathBuf) -> Result<()> {
@@ -101,6 +107,12 @@ fn init_logger(verbose: u8, runlog: &PathBuf) -> Result<()> {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
+    // Server subcommand doesn't need temp dirs or log4rs — handle it early.
+    #[cfg(feature = "mcp-server")]
+    if let Commands::Server(ref s) = cli.command {
+        return aperf::server::run_server(s);
+    }
+
     let tmp_dir = TempBuilder::new()
         .prefix("aperf-tmp-")
         .tempdir_in(&cli.tmp_dir)?;
@@ -123,6 +135,9 @@ fn main() -> Result<()> {
         Commands::CustomPMU(r) => custom_pmu(&r),
 
         Commands::SetupShellCompletions(r) => setup_shell_completions(&r, &mut Cli::command()),
+
+        #[cfg(feature = "mcp-server")]
+        Commands::Server(_) => unreachable!(), // handled above
     }?;
     fs::remove_dir_all(tmp_dir_path_buf)?;
     Ok(())
