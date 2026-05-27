@@ -169,14 +169,49 @@ ${TOLERATIONS}
       [ ! -L "/usr/bin/asprof" ] && ln -sf /tmp/aperf/async-profiler/bin/asprof /usr/bin/asprof > /dev/null
       [ ! -L "/usr/bin/jfrconv" ] && ln -sf /tmp/aperf/async-profiler/bin/jfrconv /usr/bin/jfrconv > /dev/null
       export LD_LIBRARY_PATH="/tmp/aperf/async-profiler/lib:${LD_LIBRARY_PATH}"
-      
+
+      # Some distros (e.g. Bottlerocket on EKS Auto Mode) ship with
+      # perf_event_paranoid=2 and a non-zero kptr_restrict, which causes
+      # 'aperf record' to fail. The pod is privileged with hostPID, so it can
+      # relax these on the host's /proc/sys for the duration of the recording,
+      # then restore the original values so the host is left as we found it.
+      # Note: \$ is escaped so these expand inside the pod, not at heredoc time.
+      ORIG_PARANOID=""
+      ORIG_KPTR=""
+      [ -r /proc/sys/kernel/perf_event_paranoid ] && ORIG_PARANOID=\$(cat /proc/sys/kernel/perf_event_paranoid 2>/dev/null || true)
+      [ -r /proc/sys/kernel/kptr_restrict ] && ORIG_KPTR=\$(cat /proc/sys/kernel/kptr_restrict 2>/dev/null || true)
+
+      restore_perf_sysctls() {
+        if [ -n "\$ORIG_PARANOID" ]; then
+          echo "\$ORIG_PARANOID" > /proc/sys/kernel/perf_event_paranoid 2>/dev/null \\
+            || echo "  Warning: could not restore perf_event_paranoid to \$ORIG_PARANOID"
+        fi
+        if [ -n "\$ORIG_KPTR" ]; then
+          echo "\$ORIG_KPTR" > /proc/sys/kernel/kptr_restrict 2>/dev/null \\
+            || echo "  Warning: could not restore kptr_restrict to \$ORIG_KPTR"
+        fi
+      }
+      trap restore_perf_sysctls EXIT INT TERM
+
+      echo -e "Relaxing kernel perf settings for aperf record (orig perf_event_paranoid=\${ORIG_PARANOID:-?}, kptr_restrict=\${ORIG_KPTR:-?})..."
+      echo -1 > /proc/sys/kernel/perf_event_paranoid 2>/dev/null || echo "  Warning: could not write perf_event_paranoid"
+      echo 0 > /proc/sys/kernel/kptr_restrict 2>/dev/null || echo "  Warning: could not write kptr_restrict"
+
       echo -e "Starting Aperf recording execution..."
       echo "Run: /usr/bin/aperf record --tmp-dir="/tmp/aperf/profile"  -r ${REPORT_NAME} ${APERF_OPTIONS}"
-      mkdir -p /tmp/aperf/profile 
+      mkdir -p /tmp/aperf/profile
       chmod -R 777 /tmp/aperf/profile
       /usr/bin/aperf record --tmp-dir="/tmp/aperf/profile" -r ${REPORT_NAME} ${APERF_OPTIONS}
       rm -rf  /tmp/aperf/profile
       echo "APerf record completed"
+
+      # Restore sysctls now that record is done. We do this explicitly here
+      # (not just via the trap) so the host doesn't stay relaxed during the
+      # long post-record sleep, where SIGKILL on pod deletion can prevent the
+      # EXIT trap from running.
+      restore_perf_sysctls
+      trap - EXIT INT TERM
+      echo "Kernel perf settings restored."
 
       echo -e "\nStarting Aperf report generation..."
       echo "Run: /usr/bin/aperf report -r ${REPORT_NAME} -n ${REPORT_NAME}_report"
