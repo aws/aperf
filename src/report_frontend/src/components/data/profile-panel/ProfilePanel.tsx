@@ -4,7 +4,7 @@ import { useReportState } from "../../ReportStateProvider";
 import { useProfilePanelState, ViewMode } from "./ProfilePanelStateProvider";
 import { DataType, ProfilingData } from "../../../definitions/types";
 import { PROCESSED_DATA, RUNS } from "../../../definitions/data-config";
-import { Checkbox, Input, SegmentedControl, SpaceBetween } from "@cloudscape-design/components";
+import { Box, Checkbox, Input, SegmentedControl, SpaceBetween, StatusIndicator } from "@cloudscape-design/components";
 import { RunHeader } from "../RunSystemInfo";
 import { ProfilePanelStateProvider } from "./ProfilePanelStateProvider";
 import { useRegex, useContainerWidth, useHeatmapLayout, useHeatmapSelection } from "./utils";
@@ -49,19 +49,23 @@ export default function ProfilePanel({ dataType, instanceName, selectedProfile }
           const runData = PROCESSED_DATA[dataType]?.runs[runName] as ProfilingData | undefined;
           const profiler = runData?.profilers?.[instanceName];
           const profile = profiler?.profiles?.[selectedProfile];
-          if (!profiler || !profile || !profile.blocks?.length) return null;
 
           return (
             <div key={runName} style={{ width: `${widthPercent}%`, paddingTop: "10px", paddingRight: "30px" }}>
               <SpaceBetween size="xs">
                 <RunHeader runName={runName} />
-                <ProfilePanelView
-                  analytics={profile}
-                  baseline={runIdx > 0 ? validBaseline : undefined}
-                  isBaseRun={runIdx === 0}
-                  startTimeMs={profiler.start_time_ms}
-                  blockWidthMs={profiler.block_width_ms}
-                />
+                {profiler && profile ? (
+                  <ProfilePanelView
+                    key={selectedProfile}
+                    analytics={profile}
+                    baseline={runIdx > 0 ? validBaseline : undefined}
+                    isBaseRun={runIdx === 0}
+                    startTimeMs={profiler.start_time_ms}
+                    blockWidthMs={profiler.block_width_ms}
+                  />
+                ) : (
+                  <EmptyProfileState message="No profile data available for this run." />
+                )}
               </SpaceBetween>
             </div>
           );
@@ -98,7 +102,7 @@ function ProfilePanelView({ analytics, baseline, isBaseRun, startTimeMs, blockWi
   const containerWidth = useContainerWidth(containerRef);
 
   const alignedStartTimeMs = startTimeMs - (startTimeMs % blockWidthMs);
-  const numBlocks = analytics.blocks.length;
+  const numBlocks = analytics.blocks?.length ?? 0;
 
   const layout = useHeatmapLayout(numBlocks, blockWidthMs, alignedStartTimeMs, containerWidth);
   const sel = useHeatmapSelection(numBlocks, layout.groupSize, isBaseRun, setBaseRunSelection);
@@ -106,7 +110,7 @@ function ProfilePanelView({ analytics, baseline, isBaseRun, startTimeMs, blockWi
   const [tooltip, setTooltip] = React.useState<{ x: number; y: number; text: string } | null>(null);
   const [zoomedNode, setZoomedNode] = React.useState<FlamegraphNode | null>(null);
 
-  const blockTotals = React.useMemo(() => analytics.blocks.map(blockTotal), [analytics.blocks]);
+  const blockTotals = React.useMemo(() => (analytics.blocks ?? []).map(blockTotal), [analytics.blocks]);
 
   const cellTotals = React.useMemo(() => {
     if (layout.groupSize === 1) return blockTotals;
@@ -226,7 +230,7 @@ function ProfilePanelView({ analytics, baseline, isBaseRun, startTimeMs, blockWi
   }, [flatNodes, flamegraphRoot]);
 
   if (numBlocks === 0) {
-    return <div style={{ padding: 8, color: theme.textMuted }}>No profiler data available.</div>;
+    return <EmptyProfileState message="No samples recorded for this profile." />;
   }
 
   return (
@@ -396,5 +400,19 @@ function FrameTypeLegend() {
         </span>
       ))}
     </div>
+  );
+}
+
+/**
+ * Placeholder rendered in place of the heatmap+flamegraph when a run has no
+ * samples for the selected profile (e.g. allocation profiling on a workload
+ * that allocates very little). Keeps the per-run column framing so the user
+ * can still see which run is empty alongside runs that have data.
+ */
+function EmptyProfileState({ message }: { readonly message: string }) {
+  return (
+    <Box padding="m" textAlign="center" color="text-status-inactive">
+      <StatusIndicator type="info">{message}</StatusIndicator>
+    </Box>
   );
 }

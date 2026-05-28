@@ -4657,17 +4657,10 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
     defaultHelpfulLinks: ["https://docs.kernel.org/admin-guide/sysctl/kernel.html"],
     fieldDescriptions: {},
   },
-  flamegraphs: {
-    readableName: "Flamegraphs",
-    summary:
-      "Kernel profiling flamegraphs visualize the call stack hierarchies and the amount of CPU time consumed by different functions. It supports viewing in both the normal (bottom-top) and reverse (top-bottom) order.",
-    defaultHelpfulLinks: ["https://perfwiki.github.io/main/"],
-    fieldDescriptions: {},
-  },
   perf_profile: {
-    readableName: "Top Functions",
+    readableName: "Perf Profiling",
     summary:
-      "Kernel profiling top functions are the text-based version of the flamegraphs and show the percentage of CPU time spent in each function. It only includes functions with at least 1% of CPU time.",
+      "Perf profiling is system-wide CPU profiling performed through Linux's Perf tool.",
     defaultHelpfulLinks: ["https://perfwiki.github.io/main/"],
     fieldDescriptions: {},
   },

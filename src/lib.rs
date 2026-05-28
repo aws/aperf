@@ -32,6 +32,7 @@ use thiserror::Error;
 #[cfg(target_os = "linux")]
 use {
     crate::data::aperf_stats::AperfStat,
+    crate::data::Data,
     flate2::{write::GzEncoder, Compression},
     nix::poll::{poll, PollFd, PollFlags, PollTimeout},
     nix::sys::{
@@ -186,6 +187,10 @@ impl PerformanceData {
     }
 
     pub fn add_datatype(&mut self, name: String, dt: data::DataType) {
+        // Ignore dummy data type.
+        if matches!(dt.data, Data::FlamegraphRaw(_)) {
+            return;
+        }
         self.collectors.insert(name, dt);
     }
 
@@ -362,9 +367,6 @@ impl PerformanceData {
         for (_name, datatype) in self.collectors.iter_mut() {
             datatype.set_signal(datatype_signal);
             datatype.finish_data_collection()?;
-        }
-        for (_name, datatype) in self.collectors.iter_mut() {
-            datatype.after_data_collection()?;
         }
         tfd.set_state(TimerState::Disarmed, SetTimeFlags::Default);
         Ok(())

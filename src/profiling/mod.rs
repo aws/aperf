@@ -20,8 +20,6 @@ use std::collections::HashMap;
 /// A single profiling type's data (e.g., cpu, wall, allocation).
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Profile {
-    /// Profile graph visualization (to be removed after native visualization is supported)
-    pub profile_graph: ProfileGraph,
     /// Time-ordered blocks of sample data, [thread_state_id -> node_id (index into context_tree) -> sample count]
     pub blocks: Vec<HashMap<u8, HashMap<usize, u64>>>,
     /// Block number time range where profile node aggregate counts are calculated
@@ -33,27 +31,6 @@ pub struct Profile {
     /// Cache: thread_state_id -> total self_samples across all nodes (lazily computed in report time)
     #[serde(skip)]
     total_samples_per_thread_state: OnceCell<HashMap<u8, u64>>,
-}
-
-/// Information about a graph. TODO: Will remove after native profiler visualization is implemented
-#[derive(Serialize, Deserialize, Debug, Default, Clone)]
-pub struct ProfileGraph {
-    /// The name of the graph.
-    pub graph_name: String,
-    /// The relative path to graph (value of the IFrame's src attribute).
-    pub graph_path: String,
-    /// The size of the graph, which can be used for graph ordering in the report.
-    pub graph_size: Option<u64>,
-}
-
-impl ProfileGraph {
-    pub fn new(graph_name: String, graph_path: String, graph_size: Option<u64>) -> Self {
-        ProfileGraph {
-            graph_name,
-            graph_path,
-            graph_size,
-        }
-    }
 }
 
 /// A node in the call tree. Each node represents a unique call path.
@@ -216,7 +193,6 @@ impl Profile {
         let mut frame_map = FrameMap::new();
         frame_map.get_or_insert("[root]");
         Self {
-            profile_graph: ProfileGraph::default(),
             blocks: Vec::new(),
             time_range: (0, 0),
             context_tree: vec![CCTreeNode {
@@ -228,12 +204,6 @@ impl Profile {
             frame_map,
             total_samples_per_thread_state: OnceCell::new(),
         }
-    }
-
-    pub fn with_graph(profile_graph: ProfileGraph) -> Self {
-        let mut p = Self::new();
-        p.profile_graph = profile_graph;
-        p
     }
 
     /// Returns sum of sample counts for call graph nodes matching a stack pattern.

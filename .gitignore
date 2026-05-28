@@ -1,5 +1,6 @@
 /target
 /node_modules
+/dist
 .idea
 pmu_config.json
 .kiro/

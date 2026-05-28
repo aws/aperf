@@ -18,7 +18,6 @@ declare let processed_ena_stat_data;
 declare let processed_efa_stat_data;
 declare let processed_numastat_data;
 declare let processed_perf_profile_data;
-declare let processed_flamegraphs_data;
 declare let processed_aperf_stats_data;
 declare let processed_java_profile_data;
 declare let processed_aperf_runlog_data;
@@ -39,7 +38,6 @@ declare let ena_stat_findings;
 declare let efa_stat_findings;
 declare let numastat_findings;
 declare let perf_profile_findings;
-declare let flamegraphs_findings;
 declare let aperf_stats_findings;
 declare let java_profile_findings;
 declare let aperf_runlog_findings;
@@ -61,7 +59,6 @@ export const PROCESSED_DATA: { [key in DataType]: ReportData } = {
   numastat: processed_numastat_data,
   kernel_config: processed_kernel_config_data,
   sysctl: processed_sysctl_data,
-  flamegraphs: processed_flamegraphs_data,
   perf_profile: processed_perf_profile_data,
   java_profile: processed_java_profile_data,
   hotline: processed_hotline_data,
@@ -85,7 +82,6 @@ export const PER_DATA_ANALYTICAL_FINDINGS: { [key in DataType]: DataFindings } =
   numastat: numastat_findings,
   kernel_config: kernel_config_findings,
   sysctl: sysctl_findings,
-  flamegraphs: flamegraphs_findings,
   perf_profile: perf_profile_findings,
   java_profile: java_profile_findings,
   hotline: hotline_findings,
@@ -143,10 +139,7 @@ export const NAVIGATION_SECTIONS: NavigationSection[] = [
   {
     sectionName: "Profiling",
     items: [
-      {
-        sectionName: "Perf Profile",
-        items: ["flamegraphs", "perf_profile"],
-      },
+      "perf_profile",
       "java_profile",
       "hotline",
     ],

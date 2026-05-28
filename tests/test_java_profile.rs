@@ -50,7 +50,7 @@ fn create_html_file(data_dir: &PathBuf, run_name: &str, pid: &str, metric: &str)
 
 #[test]
 fn test_process_raw_data_with_valid_files() {
-    let (_temp_dir, data_dir, _report_dir, params) = setup_test_env();
+    let (_temp_dir, data_dir, report_dir, params) = setup_test_env();
 
     let mut process_map = HashMap::new();
     process_map.insert("12345".to_string(), vec!["TestApp".to_string()]);
@@ -69,12 +69,33 @@ fn test_process_raw_data_with_valid_files() {
 
     assert!(result.is_ok());
     if let Ok(AperfData::Profile(profiling_data)) = result {
-        // 2 JVMs
+        // 2 JVMs from the jps map.
         assert_eq!(profiling_data.profilers.len(), 2);
-        // Each JVM has 4 metrics
+        // No JFR profiler-data files were created in this test, but the processor
+        // seeds an empty Profile for each metric in PROFILE_METRICS so the frontend
+        // renders a tab for each of them.
         for (_name, profiler) in &profiling_data.profilers {
-            assert_eq!(profiler.profiles.len(), 4);
+            assert_eq!(profiler.profiles.len(), 3);
+            assert!(profiler.profiles.contains_key("cpu"));
+            assert!(profiler.profiles.contains_key("wall"));
+            assert!(profiler.profiles.contains_key("alloc"));
         }
+    }
+
+    // Verify the jfrconv-generated HTML files were copied to the report data dir.
+    for metric in &["cpu", "alloc", "wall"] {
+        for pid in &["12345", "67890"] {
+            assert!(report_dir
+                .join("data/js")
+                .join(format!("test_run-java-profile-{}-{}.html", pid, metric))
+                .exists());
+        }
+    }
+    for pid in &["12345", "67890"] {
+        assert!(report_dir
+            .join("data/js")
+            .join(format!("test_run-java-flamegraph-{}.html", pid))
+            .exists());
     }
 }
 
@@ -134,13 +155,22 @@ fn test_process_raw_data_with_no_html_files() {
 
     assert!(result.is_ok());
     if let Ok(AperfData::Profile(profiling_data)) = result {
-        assert!(profiling_data.profilers.is_empty());
+        // Even with no graphs and no profiler-data JSON, every JVM in the jps map
+        // gets a default Profiler with one empty Profile per metric. Frontend
+        // ProfilingDataPage will treat each as "no data".
+        assert_eq!(profiling_data.profilers.len(), 1);
+        let (_name, profiler) = profiling_data.profilers.iter().next().unwrap();
+        assert_eq!(profiler.profiles.len(), 3);
+        for metric in &["cpu", "wall", "alloc"] {
+            let profile = profiler.profiles.get(*metric).unwrap();
+            assert!(profile.blocks.is_empty());
+        }
     }
 }
 
 #[test]
 fn test_process_raw_data_with_complex_duplicate_names_and_missing_files() {
-    let (_temp_dir, data_dir, _report_dir, params) = setup_test_env();
+    let (_temp_dir, data_dir, report_dir, params) = setup_test_env();
 
     let mut process_map = HashMap::new();
     process_map.insert("1001".to_string(), vec!["App".to_string()]);
@@ -179,37 +209,9 @@ fn test_process_raw_data_with_complex_duplicate_names_and_missing_files() {
 
     assert!(result.is_ok());
     if let Ok(AperfData::Profile(profiling_data)) = result {
-        // 8 JVMs total (6 App deduped + 2 Service deduped)
+        // 8 JVMs total (6 App deduped + 2 Service deduped). Each PID had at least
+        // one jfrconv HTML graph, so all of them are recorded.
         assert_eq!(profiling_data.profilers.len(), 8);
-
-        // Count total profiles per metric across all JVMs
-        let cpu_count: usize = profiling_data
-            .profilers
-            .values()
-            .filter(|pd| pd.profiles.contains_key("cpu"))
-            .count();
-        assert_eq!(cpu_count, 7); // 6 App + 1 Service
-
-        let alloc_count: usize = profiling_data
-            .profilers
-            .values()
-            .filter(|pd| pd.profiles.contains_key("alloc"))
-            .count();
-        assert_eq!(alloc_count, 5); // 3 App + 2 Service
-
-        let wall_count: usize = profiling_data
-            .profilers
-            .values()
-            .filter(|pd| pd.profiles.contains_key("wall"))
-            .count();
-        assert_eq!(wall_count, 4); // 3 App + 1 Service
-
-        let legacy_count: usize = profiling_data
-            .profilers
-            .values()
-            .filter(|pd| pd.profiles.contains_key("legacy"))
-            .count();
-        assert_eq!(legacy_count, 2); // 2 Service
 
         // Verify deduped App names exist
         let names: Vec<String> = profiling_data.profilers.keys().cloned().collect();
@@ -221,4 +223,47 @@ fn test_process_raw_data_with_complex_duplicate_names_and_missing_files() {
         assert!(names.iter().any(|n| n == "App (5)"));
         assert!(names.iter().any(|n| n == "Service"));
     }
+
+    // Verify the jfrconv-generated HTML files were copied to the report data dir.
+    // Counts mirror the per-metric file creations above.
+    let js_dir = report_dir.join("data/js");
+    let cpu_files: Vec<_> = ["1001", "1002", "1003", "1004", "1005", "1006", "2002"]
+        .iter()
+        .filter(|pid| {
+            js_dir
+                .join(format!("test_run-java-profile-{}-cpu.html", pid))
+                .exists()
+        })
+        .collect();
+    assert_eq!(cpu_files.len(), 7);
+
+    let alloc_files: Vec<_> = ["1001", "1004", "1005", "2001", "2002"]
+        .iter()
+        .filter(|pid| {
+            js_dir
+                .join(format!("test_run-java-profile-{}-alloc.html", pid))
+                .exists()
+        })
+        .collect();
+    assert_eq!(alloc_files.len(), 5);
+
+    let wall_files: Vec<_> = ["1003", "1004", "1006", "2002"]
+        .iter()
+        .filter(|pid| {
+            js_dir
+                .join(format!("test_run-java-profile-{}-wall.html", pid))
+                .exists()
+        })
+        .collect();
+    assert_eq!(wall_files.len(), 4);
+
+    let legacy_files: Vec<_> = ["2001", "2002"]
+        .iter()
+        .filter(|pid| {
+            js_dir
+                .join(format!("test_run-java-flamegraph-{}.html", pid))
+                .exists()
+        })
+        .collect();
+    assert_eq!(legacy_files.len(), 2);
 }

@@ -17,8 +17,10 @@ export function blockTotal(block: { [ts: string]: { [nodeId: string]: number } }
 /** Aggregate self_samples per node_id from blocks in [start,end) */
 export function computeNodeSelfSamples(analytics: Profile, blockStart: number, blockEnd: number): Map<number, number> {
   const nodeSamples = new Map<number, number>();
+  const blocks = analytics.blocks;
+  if (!blocks) return nodeSamples;
   for (let bi = blockStart; bi < blockEnd; bi++) {
-    const block = analytics.blocks[bi];
+    const block = blocks[bi];
     if (!block) continue;
     for (const ts in block) {
       for (const nid in block[ts]) {
@@ -35,8 +37,10 @@ export function aggregateByFrame(
   analytics: Profile,
   nodeSelf: Map<number, number>,
 ): Map<string, { self: number; total: number }> {
+  const byFrameEmpty = new Map<string, { self: number; total: number }>();
   const tree = analytics.context_tree;
-  const frames = analytics.frame_map.frame_id_to_frame;
+  const frames = analytics.frame_map?.frame_id_to_frame;
+  if (!tree || !frames) return byFrameEmpty;
 
   const nodeTotal = new Map<number, number>();
   function total(nid: number): number {
@@ -65,8 +69,10 @@ export function aggregateByStack(
   nodeSelf: Map<number, number>,
   reverse?: boolean,
 ): Map<string, { self: number; total: number }> {
+  const byStackEmpty = new Map<string, { self: number; total: number }>();
   const tree = analytics.context_tree;
-  const frames = analytics.frame_map.frame_id_to_frame;
+  const frames = analytics.frame_map?.frame_id_to_frame;
+  if (!tree || !frames) return byStackEmpty;
 
   const nodeTotal = new Map<number, number>();
   function total(nid: number): number {
@@ -156,8 +162,8 @@ export function buildFlamegraph(
   reverse: boolean,
 ): FlamegraphNode | null {
   const tree = analytics.context_tree;
-  const frames = analytics.frame_map.frame_id_to_frame;
-  if (tree.length === 0) return null;
+  const frames = analytics.frame_map?.frame_id_to_frame;
+  if (!tree || !frames || tree.length === 0) return null;
 
   const nodeSelf = computeNodeSelfSamples(analytics, blockStart, blockEnd);
 
@@ -487,11 +493,16 @@ export function useHeatmapSelection(
 
   React.useEffect(() => {
     setSelection(([s, e]) => {
-      const alignedS = Math.floor(s / groupSize) * groupSize;
-      const alignedE = Math.min(numBlocks, Math.ceil(e / groupSize) * groupSize);
-      if (alignedS >= numBlocks) return [0, numBlocks];
-      if (alignedS === s && alignedE === e) return [s, e];
-      return [alignedS, alignedE];
+      if (numBlocks === 0) return [0, 0];
+      const alignedStart = Math.floor(s / groupSize) * groupSize;
+      const alignedEnd = Math.min(numBlocks, Math.ceil(e / groupSize) * groupSize);
+      // Reset to full range when the previous selection has gone out of bounds
+      // OR realigning has produced an empty range (e.g. switching from an empty
+      // profile back to a non-empty one would otherwise leave selection at [0,0]
+      // and render an empty flamegraph).
+      if (alignedStart >= numBlocks || alignedEnd <= alignedStart) return [0, numBlocks];
+      if (alignedStart === s && alignedEnd === e) return [s, e];
+      return [alignedStart, alignedEnd];
     });
   }, [groupSize, numBlocks]);
 

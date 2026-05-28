@@ -84,7 +84,7 @@ pub struct Record {
     pub profile_java: Option<String>,
 
     /// Save all profile events in the output file.
-    #[clap(help_heading = "Profiling", long, value_parser)]
+    #[clap(help_heading = "Profiling", long, value_parser, hide = true)]
     pub save_profile_events: bool,
 
     /// Custom PMU config file to use.
