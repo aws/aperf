@@ -1,9 +1,12 @@
 use anyhow::{Error, Result};
+use log::error;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
+
+use crate::data::common::data_formats::{Graph, GraphData};
 
 pub fn get_data_name_from_type<T>() -> &'static str {
     let full_data_module_path = std::any::type_name::<T>();
@@ -77,6 +80,43 @@ pub fn no_tar_gz_file_name(path: &PathBuf) -> Option<String> {
         return Some(file_name_str.strip_suffix(".tar.gz")?.to_string());
     }
     Some(file_name_str)
+}
+
+/// Copy a graph file to the report data dir and update the GraphData with its info.
+pub fn copy_graph_and_update_graph_data(
+    source_dir: &PathBuf,
+    dest_dir: &PathBuf,
+    filename: &str,
+    graph_group_name: &str,
+    graph_key: &str,
+    graph_name: String,
+    graph_data: &mut GraphData,
+) {
+    let source_graph_path = source_dir.join(&filename);
+    if !source_graph_path.exists() {
+        return;
+    }
+    let relative_graph_path = PathBuf::from("data").join("js").join(&filename);
+    let dest_graph_path = dest_dir.join(&relative_graph_path);
+
+    if let Err(e) = std::fs::copy(&source_graph_path, &dest_graph_path) {
+        error!("Failed to copy graph file: {e}");
+    } else {
+        graph_data
+            .graph_groups
+            .iter_mut()
+            .find(|graph_group| graph_group.group_name == graph_group_name)
+            .map(|graph_group| {
+                graph_group.graphs.insert(
+                    graph_key.to_string(),
+                    Graph {
+                        graph_name,
+                        graph_path: relative_graph_path.to_string_lossy().into_owned(),
+                        graph_size: None,
+                    },
+                );
+            });
+    }
 }
 
 /// Collects the paths of all files in a dir and returns a map from file names to file paths,

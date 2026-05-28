@@ -1,23 +1,27 @@
 import React from "react";
-import { DataType, ProfilingData, GraphInfo } from "../../definitions/types";
+import { DataType, GraphData, GraphInfo } from "../../definitions/types";
 import { PROCESSED_DATA } from "../../definitions/data-config";
 import { Container, Icon, Link } from "@cloudscape-design/components";
 import Header from "@cloudscape-design/components/header";
 
+// TODO: IframeGraph is a temporary component used only by GraphDataPage (hotline).
 export interface IframeGraphProps {
   readonly dataType: DataType;
   readonly runName: string;
-  readonly profilerName: string;
+  readonly graphGroup: string;
   readonly graphName: string;
 }
 
 export default function (props: IframeGraphProps) {
-  const profilingData: ProfilingData | undefined = PROCESSED_DATA[props.dataType].runs[props.runName] as ProfilingData;
-  const graphInfo: GraphInfo | undefined =
-    profilingData?.profilers?.[props.profilerName]?.profiles?.[props.graphName]?.profile_graph;
+  const graphData: GraphData | undefined = PROCESSED_DATA[props.dataType]?.runs?.[props.runName] as
+    | GraphData
+    | undefined;
+  const graphInfo: GraphInfo | undefined = graphData?.graph_groups?.find(
+    (graph_group) => graph_group.group_name == props.graphGroup,
+  )?.graphs?.[props.graphName];
 
   if (!graphInfo) {
-    return <Container>This graph was not collected in this APerf run.</Container>;
+    return <Container>This data was not collected in the APerf run.</Container>;
   } else {
     return (
       <Container

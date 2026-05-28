@@ -10,6 +10,7 @@ import { NumCpusPerRun, SelectedCpusPerRun } from "../definitions/types";
 import TimeSeriesDataPage from "./pages/TimeSeriesDataPage";
 import KeyValueDataPage from "./pages/KeyValueDataPage";
 import ProfilingDataPage from "./pages/ProfilingDataPage";
+import GraphDataPage from "./pages/GraphDataPage";
 import TextDataPage from "./pages/TextDataPage";
 import ReportHomePage from "./pages/ReportHomePage";
 import { MAX_NUM_CPU_SHOW_DEFAULT } from "../definitions/constants";
@@ -113,6 +114,7 @@ export default function () {
           {!preprocessing && dataFormat == "profile" && (
             <ProfilingDataPage dataType={dataComponent} key={dataComponent} />
           )}
+          {!preprocessing && dataFormat == "graph" && <GraphDataPage dataType={dataComponent} key={dataComponent} />}
           {!preprocessing && dataFormat == "text" && <TextDataPage dataType={dataComponent} key={dataComponent} />}
           {!preprocessing && (dataFormat == "unknown" || (dataFormat as string) === "" || dataFormat === undefined) && (
             <Box textAlign="center" color="inherit">

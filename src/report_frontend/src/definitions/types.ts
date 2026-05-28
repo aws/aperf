@@ -14,7 +14,6 @@ export const ALL_DATA_TYPES = [
   "numastat",
   "kernel_config",
   "sysctl",
-  "flamegraphs",
   "perf_profile",
   "java_profile",
   "hotline",
@@ -23,10 +22,10 @@ export const ALL_DATA_TYPES = [
 ] as const;
 export type DataType = (typeof ALL_DATA_TYPES)[number];
 
-export type DataFormat = "time_series" | "key_value" | "text" | "profile" | "unknown";
+export type DataFormat = "time_series" | "key_value" | "text" | "profile" | "graph" | "unknown";
 
 // See src/data/data_formats.rs
-export type AperfData = TimeSeriesData | KeyValueData | TextData | ProfilingData;
+export type AperfData = TimeSeriesData | KeyValueData | TextData | ProfilingData | GraphData;
 
 export interface ReportData {
   readonly data_name: DataType;
@@ -77,11 +76,21 @@ export interface Profiler {
 }
 
 export interface Profile {
-  readonly profile_graph: GraphInfo;
   readonly blocks: { [threadStateId: string]: { [nodeId: string]: number } }[];
   readonly time_range: [number, number];
   readonly context_tree: CCTreeNode[];
   readonly frame_map: FrameMap;
+}
+
+// TODO: GraphData is a temporary format used only by hotline. It will be
+//       replaced by new data format.
+export interface GraphData {
+  readonly graph_groups: GraphGroup[];
+}
+
+export interface GraphGroup {
+  readonly group_name: string;
+  readonly graphs: { [key in string]: GraphInfo };
 }
 
 export interface CCTreeNode {

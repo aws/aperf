@@ -156,6 +156,9 @@ impl DataVisualizer {
     pub fn post_process_data(&mut self) {
         match self.processed_data.data_format {
             DataFormat::TimeSeries => post_process_time_series_data(&mut self.processed_data),
+            DataFormat::Profile | DataFormat::Graph => {
+                post_process_profiling_data(&mut self.processed_data)
+            }
             _ => return,
         }
     }
@@ -229,5 +232,125 @@ fn post_process_time_series_data(processed_data: &mut ProcessedData) {
                 time_series_metric.value_range = combined_value_range.to_owned();
             }
         }
+    }
+}
+
+/// Run post-processing for ProfilingData:
+/// - if any run produced ProfilingData, ensure that the data_format of the ProcessedData
+///   is profile (the legacy GraphData runs won't be shown in the frontend).
+fn post_process_profiling_data(processed_data: &mut ProcessedData) {
+    let any_profile = processed_data
+        .runs
+        .values()
+        .any(|aperf_data| matches!(aperf_data, AperfData::Profile(_)));
+    processed_data.data_format = if any_profile {
+        DataFormat::Profile
+    } else {
+        DataFormat::Graph
+    };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::data::common::data_formats::{
+        GraphData, GraphGroup, ProfilingData, Series, TimeSeriesData, TimeSeriesMetric,
+    };
+
+    fn make_metric(name: &str, value_range: (u64, u64)) -> TimeSeriesMetric {
+        let mut metric = TimeSeriesMetric::new(name.to_string());
+        metric.value_range = value_range;
+        metric.series = vec![Series {
+            series_name: "agg".to_string(),
+            time_diff: vec![0, 10],
+            values: vec![value_range.0 as f64, value_range.1 as f64],
+            is_aggregate: true,
+        }];
+        metric
+    }
+
+    fn make_time_series_data(
+        sorted_metric_names: Vec<&str>,
+        metrics: Vec<(&str, (u64, u64))>,
+    ) -> TimeSeriesData {
+        let mut ts = TimeSeriesData::default();
+        ts.sorted_metric_names = sorted_metric_names.into_iter().map(String::from).collect();
+        for (name, value_range) in metrics {
+            ts.metrics
+                .insert(name.to_string(), make_metric(name, value_range));
+        }
+        ts
+    }
+
+    #[test]
+    fn test_post_process_time_series_data() {
+        let mut pd = ProcessedData::new("test".to_string());
+        pd.data_format = DataFormat::TimeSeries;
+
+        // run1 has metrics [a, b] with ranges (0,10) and (5,15)
+        pd.runs.insert(
+            "run1".to_string(),
+            AperfData::TimeSeries(make_time_series_data(
+                vec!["a", "b"],
+                vec![("a", (0, 10)), ("b", (5, 15))],
+            )),
+        );
+        // run2 has metrics [b, c] with ranges (3, 12) and (20, 30)
+        pd.runs.insert(
+            "run2".to_string(),
+            AperfData::TimeSeries(make_time_series_data(
+                vec!["b", "c"],
+                vec![("b", (3, 12)), ("c", (20, 30))],
+            )),
+        );
+
+        post_process_time_series_data(&mut pd);
+
+        // Both runs end up with the same consolidated sorted_metric_names and value_ranges.
+        for run_name in &["run1", "run2"] {
+            let ts = match pd.runs.get(*run_name).unwrap() {
+                AperfData::TimeSeries(ts) => ts,
+                _ => panic!("expected TimeSeriesData"),
+            };
+            // Topological sort of [[a,b], [b,c]] yields [a,b,c].
+            assert_eq!(ts.sorted_metric_names, vec!["a", "b", "c"]);
+            // Per-metric ranges combined: min of starts, max of ends across the runs.
+            // a only in run1: (0,10); b in both: (min(5,3), max(15,12)) = (3,15);
+            // c only in run2: (20,30).
+            if let Some(a) = ts.metrics.get("a") {
+                assert_eq!(a.value_range, (0, 10));
+            }
+            assert_eq!(ts.metrics.get("b").unwrap().value_range, (3, 15));
+            if let Some(c) = ts.metrics.get("c") {
+                assert_eq!(c.value_range, (20, 30));
+            }
+        }
+    }
+
+    #[test]
+    fn test_post_process_profiling_data() {
+        // Branch 1: mixed Profile + Graph -> Profile wins (regardless of insertion order).
+        let mut pd = ProcessedData::new("java_profile".to_string());
+        pd.data_format = DataFormat::Graph;
+        pd.runs
+            .insert("run1".to_string(), AperfData::Graph(GraphData::default()));
+        pd.runs.insert(
+            "run2".to_string(),
+            AperfData::Profile(ProfilingData::default()),
+        );
+        post_process_profiling_data(&mut pd);
+        assert!(matches!(pd.data_format, DataFormat::Profile));
+
+        // Branch 2: all runs are Graph -> ProcessedData stays Graph.
+        let mut pd = ProcessedData::new("hotline".to_string());
+        pd.data_format = DataFormat::Profile;
+        let mut graph_data = GraphData::default();
+        graph_data.graph_groups.push(GraphGroup::new("table_id_1"));
+        pd.runs
+            .insert("run1".to_string(), AperfData::Graph(graph_data));
+        pd.runs
+            .insert("run2".to_string(), AperfData::Graph(GraphData::default()));
+        post_process_profiling_data(&mut pd);
+        assert!(matches!(pd.data_format, DataFormat::Graph));
     }
 }

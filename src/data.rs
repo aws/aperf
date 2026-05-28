@@ -5,7 +5,6 @@ pub mod cpu_utilization;
 pub mod diskstats;
 pub mod efa_stat;
 pub mod ena_stat;
-pub mod flamegraphs;
 pub mod hotline;
 pub mod interrupts;
 pub mod java_profile;
@@ -33,7 +32,6 @@ use cpu_utilization::{CpuUtilization, CpuUtilizationRaw};
 use diskstats::{Diskstats, DiskstatsRaw};
 use efa_stat::{EfaStat, EfaStatRaw};
 use ena_stat::{EnaStat, EnaStatRaw};
-use flamegraphs::{Flamegraph, FlamegraphRaw};
 use hotline::{Hotline, HotlineRaw};
 use include_directory::{include_directory, Dir};
 use interrupts::{InterruptData, InterruptDataRaw};
@@ -43,7 +41,7 @@ use memalloc::{MemallocData, MemallocDataRaw};
 use meminfo::{MeminfoData, MeminfoDataRaw};
 use netstat::{Netstat, NetstatRaw};
 use numastat::{Numastat, NumastatRaw};
-use perf_profile::{PerfProfile, PerfProfileRaw};
+use perf_profile::{FlamegraphRaw, PerfProfile, PerfProfileRaw};
 use perf_stat::{PerfStat, PerfStatRaw};
 use processes::{Processes, ProcessesRaw};
 use serde::{Deserialize, Serialize};
@@ -194,11 +192,6 @@ impl DataType {
         self.data.finish_data_collection(&self.collector_params)?;
         Ok(())
     }
-
-    pub fn after_data_collection(&mut self) -> Result<()> {
-        self.data.after_data_collection(&self.collector_params)?;
-        Ok(())
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Eq, Ord, PartialEq, PartialOrd, Hash)]
@@ -288,15 +281,6 @@ macro_rules! data {
                 match self {
                     $(
                         Data::$data(ref mut value) => value.finish_data_collection(params)?,
-                    )*
-                }
-                Ok(())
-            }
-
-            fn after_data_collection(&mut self, params: &CollectorParams) -> Result<()> {
-                match self {
-                    $(
-                        Data::$data(ref mut value) => value.after_data_collection(params)?,
                     )*
                 }
                 Ok(())
@@ -414,7 +398,7 @@ data!(
     NetstatRaw,
     NumastatRaw,
     PerfProfileRaw,
-    FlamegraphRaw,
+    FlamegraphRaw, // Dummy one to maintain the order
     JavaProfileRaw,
     HotlineRaw,
     MemallocDataRaw,
@@ -437,7 +421,6 @@ report_data!(
     Numastat,
     PerfProfile,
     Hotline,
-    Flamegraph,
     AperfStat,
     AperfRunlog,
     JavaProfile,
@@ -459,11 +442,6 @@ pub trait CollectData {
     }
 
     fn finish_data_collection(&mut self, _params: &CollectorParams) -> Result<()> {
-        noop!();
-        Ok(())
-    }
-
-    fn after_data_collection(&mut self, _params: &CollectorParams) -> Result<()> {
         noop!();
         Ok(())
     }

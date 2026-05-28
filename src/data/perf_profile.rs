@@ -1,4 +1,7 @@
-use crate::data::common::data_formats::{AperfData, Profiler, TextData};
+use crate::data::common::data_formats::{
+    AperfData, GraphData, GraphGroup, Profiler, ProfilingData,
+};
+use crate::data::common::utils::copy_graph_and_update_graph_data;
 use crate::data::{Data, ProcessData};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
@@ -10,14 +13,37 @@ use {
     crate::profiling::perf::parser::build_perf_profiler_data,
     crate::PDError,
     chrono::Utc,
+    inferno::collapse::{perf::Folder, Collapse},
+    inferno::flamegraph::{self, Direction, Options},
     log::{debug, error, warn},
     nix::{sys::signal, unistd, unistd::Pid},
+    std::fs::File,
     std::io::Write,
     std::process::{Command, Stdio},
     std::{process::Child, sync::Mutex},
 };
 
-pub const PERF_TOP_FUNCTIONS_FILE_NAME: &str = "top_functions";
+// Dummy struct used to maintain the Data enum order after the flamegraph
+// data type was removed. This is to avoid deserialization failure and
+// maintain backward compatibility.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct FlamegraphRaw {
+    pub data: String,
+}
+#[cfg(target_os = "linux")]
+impl FlamegraphRaw {
+    pub fn new() -> Self {
+        FlamegraphRaw {
+            data: String::new(),
+        }
+    }
+}
+#[cfg(target_os = "linux")]
+impl CollectData for FlamegraphRaw {
+    fn is_static() -> bool {
+        true
+    }
+}
 
 #[cfg(target_os = "linux")]
 lazy_static! {
@@ -136,6 +162,84 @@ impl CollectData for PerfProfileRaw {
             Ok(_) => debug!("'perf record' executed successfully."),
         }
 
+        debug!("Running Perf inject...");
+        let perf_jit_loc = params.data_dir.join("perf.data.jit");
+        let out_jit = Command::new("perf")
+            .args([
+                "inject",
+                "-j",
+                "-i",
+                params.data_file_path.to_str().unwrap(),
+                "-o",
+                perf_jit_loc.to_str().unwrap(),
+            ])
+            .status();
+
+        let fg_out = File::create(
+            params
+                .data_dir
+                .join(format!("{}-flamegraph.svg", params.run_name)),
+        )?;
+        let reverse_fg_out = File::create(
+            params
+                .data_dir
+                .join(format!("{}-reverse-flamegraph.svg", params.run_name)),
+        )?;
+
+        match out_jit {
+            Err(e) => {
+                let out = format!("Perf inject failed due to: {e}");
+                error!("{}", out);
+                write_msg_to_svg(fg_out, out)?;
+            }
+            Ok(_) => {
+                debug!("Creating flamegraph...");
+                // TODO: extract metadata from perf record and generate script -> ProfilingData
+                let script_loc = params.data_dir.join("script.out");
+                let out = Command::new("perf")
+                    .stdout(File::create(&script_loc)?)
+                    .args(["script", "-f", "-i", perf_jit_loc.to_str().unwrap()])
+                    .output();
+                match out {
+                    Err(e) => {
+                        let out = format!("Perf script failed due to: {}", e);
+                        error!("{}", out);
+                        write_msg_to_svg(fg_out, out)?;
+                    }
+                    Ok(_) => {
+                        let collapse_loc = params.data_dir.join("collapse.out");
+                        Folder::default().collapse_file(
+                            Some(script_loc.clone()),
+                            File::create(&collapse_loc)?,
+                        )?;
+
+                        // Generate icicle graph as default
+                        let mut reverse_options = Options::default();
+                        reverse_options.direction = Direction::Inverted;
+                        reverse_options.reverse_stack_order = false;
+                        flamegraph::from_files(
+                            &mut reverse_options,
+                            &[collapse_loc.to_path_buf()],
+                            fg_out,
+                        )?;
+
+                        // Generate reverse icicle graph
+                        reverse_options.reverse_stack_order = true;
+                        flamegraph::from_files(
+                            &mut reverse_options,
+                            &[collapse_loc.to_path_buf()],
+                            reverse_fg_out,
+                        )?;
+
+                        // Clean up intermediate files after creating flamegraphs and saving
+                        for file in [&script_loc, &perf_jit_loc, &collapse_loc] {
+                            fs::remove_file(file).ok();
+                        }
+                    }
+                }
+            }
+        }
+
         let event_out_path_buf = params.data_dir.join("parsed_perf_data.out");
         let events_out_path = if params.save_profile_events {
             Some(event_out_path_buf.as_path())
@@ -143,53 +247,40 @@ impl CollectData for PerfProfileRaw {
             None
         };
 
-        // Parse raw Perf profile and build ProfilingData
-        let perf_profiler_data = build_perf_profiler_data(
-            &params.data_file_path,
-            *PROFILE_START_TIME_MS.lock().unwrap(),
-            events_out_path,
-        );
-        let perf_profiler_data_path = params
-            .data_dir
-            .join(format!("{}-perf-profiler-data.json", params.run_name));
-        if let Ok(json) = serde_json::to_string(&perf_profiler_data) {
-            fs::write(&perf_profiler_data_path, json)?;
-        }
-
-        let mut top_functions_file =
-            fs::File::create(params.data_dir.join(PERF_TOP_FUNCTIONS_FILE_NAME))?;
-
-        let out = Command::new("perf")
-            .args([
-                "report",
-                "--stdio",
-                "--percent-limit",
-                "1",
-                "-i",
-                &params.data_file_path.display().to_string(),
-            ])
-            .output();
-
-        match out {
-            Err(e) => {
-                let out = format!("Skipped processing profiling data due to : {}", e);
-                error!("{}", out);
-                write!(top_functions_file, "{}", out)?;
-            }
-            Ok(v) => {
-                let mut top_functions = "No data collected";
-                if !v.stdout.is_empty() {
-                    top_functions = std::str::from_utf8(&v.stdout)?;
-                }
-                write!(top_functions_file, "{}", top_functions)?;
+        // TODO: Guard the new profile processing logic by the save_profile_events flag,
+        //       so that the new flow is only executed in tests. Remove the guardrail
+        //       after the feature is ready to launch.
+        if params.save_profile_events {
+            // Parse raw Perf profile and build ProfilingData
+            let perf_profiler_data = build_perf_profiler_data(
+                &params.data_file_path,
+                *PROFILE_START_TIME_MS.lock().unwrap(),
+                events_out_path,
+            );
+            let perf_profiler_data_path = params
+                .data_dir
+                .join(format!("{}-perf-profiler-data.json", params.run_name));
+            if let Ok(json) = serde_json::to_string(&perf_profiler_data) {
+                fs::write(&perf_profiler_data_path, json)?;
             }
         }
+
         Ok(())
     }
 
     fn is_profile() -> bool {
         true
     }
+}
+
+#[cfg(target_os = "linux")]
+fn write_msg_to_svg(mut file: File, msg: String) -> Result<()> {
+    write!(
+        file,
+        "<svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" width=\"100%\" height=\"100%\"><text x=\"0%\" y=\"1%\">{}</text></svg>",
+        msg
+    )?;
+    Ok(())
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -207,22 +298,47 @@ impl ProcessData for PerfProfile {
         params: ReportParams,
         _raw_data: Vec<Data>,
     ) -> Result<AperfData> {
+        // Still attempt to process perf script + inferno generated flamegraphs for
+        // backward compatibility
+        let mut graph_data = GraphData::default();
+        graph_data.graph_groups.push(GraphGroup::new("default"));
+        graph_data.graph_groups.push(GraphGroup::new("reverse"));
+        [false, true].iter().for_each(|&is_reverse| {
+            let filename = if is_reverse {
+                format!("{}-reverse-flamegraph.svg", params.run_name)
+            } else {
+                format!("{}-flamegraph.svg", params.run_name)
+            };
+            copy_graph_and_update_graph_data(
+                &params.data_dir,
+                &params.report_dir,
+                &filename,
+                if is_reverse { "reverse" } else { "default" },
+                "cpu",
+                "Perf CPU Profile".to_string(),
+                &mut graph_data,
+            );
+        });
+
         // Deserialize the ProfilerData generated at the end of record.
-        // TODO: build ProfilingData from the ProfilerData and return it to replace top_function data.
         let perf_profiler_data_path = params
             .data_dir
             .join(format!("{}-perf-profiler-data.json", params.run_name));
-        let json_string = fs::read_to_string(perf_profiler_data_path)?;
-        let _perf_profiler_data = serde_json::from_str::<Profiler>(&json_string)?;
+        let perf_profiler_data = match fs::read_to_string(&perf_profiler_data_path)
+            .ok()
+            .and_then(|json| serde_json::from_str::<Profiler>(&json).ok())
+        {
+            Some(perf_profiler_data) => perf_profiler_data,
+            // If ProfilerData could not be read, chaces are this run was created before the
+            // introduction of ProfilingData, so fall back to the old GraphData.
+            None => return Ok(AperfData::Graph(graph_data)),
+        };
 
-        let mut text_data = TextData::default();
-        let file_loc = params.data_dir.join(PERF_TOP_FUNCTIONS_FILE_NAME);
-        if file_loc.exists() {
-            text_data.lines = fs::read_to_string(&file_loc)?
-                .split('\n')
-                .map(|x| x.to_string())
-                .collect();
-        }
-        Ok(AperfData::Text(text_data))
+        let mut profiling_data = ProfilingData::default();
+        profiling_data
+            .profilers
+            .insert(String::from("cpu"), perf_profiler_data);
+
+        Ok(AperfData::Profile(profiling_data))
     }
 }

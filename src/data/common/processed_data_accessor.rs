@@ -171,6 +171,7 @@ impl ProcessedDataAccessor {
             DataFormat::KeyValue => self.key_value_data_json_string(processed_data),
             DataFormat::Text => self.text_data_json_string(processed_data),
             DataFormat::Profile => self.profiler_data_json_string(processed_data),
+            DataFormat::Graph => serde_json::to_string(processed_data).unwrap(),
             DataFormat::Unknown => serde_json::to_string(processed_data).unwrap(),
         }
     }

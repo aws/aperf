@@ -18,6 +18,7 @@ pub enum DataFormat {
     Text,
     KeyValue,
     Profile,
+    Graph,
     Unknown,
 }
 
@@ -46,6 +47,7 @@ pub enum AperfData {
     Text(TextData),
     KeyValue(KeyValueData),
     Profile(ProfilingData),
+    Graph(GraphData),
 }
 
 impl AperfData {
@@ -55,6 +57,7 @@ impl AperfData {
             AperfData::Text(_) => DataFormat::Text,
             AperfData::KeyValue(_) => DataFormat::KeyValue,
             AperfData::Profile(_) => DataFormat::Profile,
+            AperfData::Graph(_) => DataFormat::Graph,
         }
     }
 }
@@ -163,6 +166,57 @@ pub struct TextData {
     pub lines: Vec<String>,
 }
 
+// ------------------------------------------ GRAPH DATA -------------------------------------------
+/// TODO: Temporary format only used by hotline to ship pre-rendered HTML/SVG tables to the frontend.
+///
+/// Data types falling into this format produce one or more HTML or SVG files at the end of a
+/// recording run, which are to be rendered through IFrame in the report. The graphs can be
+/// categorized into different groups, so that only one group of graphs are shown in the report
+/// at a time.
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+pub struct GraphData {
+    pub graph_groups: Vec<GraphGroup>,
+}
+
+/// Contents of a graph group, which contains all graphs to be displayed together.
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+pub struct GraphGroup {
+    /// Name of the graph group.
+    pub group_name: String,
+    /// A map from graph names to all graphs within the group.
+    pub graphs: HashMap<String, Graph>,
+}
+
+impl GraphGroup {
+    pub fn new(graph_group_name: &str) -> Self {
+        GraphGroup {
+            group_name: graph_group_name.to_string(),
+            graphs: HashMap::new(),
+        }
+    }
+}
+
+/// Information about a graph.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Graph {
+    /// The name of the graph.
+    pub graph_name: String,
+    /// The relative path to graph (value of the IFrame's src attribute).
+    pub graph_path: String,
+    /// The size of the graph, which can be used for graph ordering in the report.
+    pub graph_size: Option<u64>,
+}
+
+impl Graph {
+    pub fn new(graph_name: String, graph_path: String, graph_size: Option<u64>) -> Self {
+        Graph {
+            graph_name,
+            graph_path,
+            graph_size,
+        }
+    }
+}
+
 // ---------------------------------------- PROFILING DATA ------------------------------------------
 /// Data types falling into this format collect profiling data from one or more profiled
 /// targets (e.g. JVMs for java profiling, and system for perf profiling). Each target is
@@ -170,9 +224,6 @@ pub struct TextData {
 /// type (e.g. "cpu", "wall", "allocation"). Each [`Profile`] carries:
 ///     - Time bucketed sample data with total counts for the entire profile
 ///     - Calling context tree used to analyze a selected time range
-///     - A [`ProfileGraph`](crate::profiling::ProfileGraph) pointing to a pre-rendered HTML/SVG
-///       file displayed via IFrame in the report (legacy path, to be removed once native
-///       rendering is complete).
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct ProfilingData {
     /// Map from profiler name to its profiler data
