@@ -22,7 +22,7 @@ pub use rule_templates::{
     time_series_stat_intra_run_comparison_rule, time_series_stat_run_comparison_rule,
     time_series_stat_threshold_rule,
 };
-use rules::multi_data_rules::get_multi_data_rules;
+use rules::multi_data_rules::{get_multi_data_rules, PreemptLazyDetectedRule};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Mutex};
 
@@ -79,11 +79,12 @@ impl<'a> AnalyticalEngine<'a> {
         }
 
         for multi_data_rule in &self.multi_data_rules {
-            multi_data_rule.analyze(
-                &mut self.findings,
-                &self.all_processed_data,
-                processed_data_accessor,
-            );
+            let immutable_data: HashMap<String, &ProcessedData> = self
+                .all_processed_data
+                .iter()
+                .map(|(k, v)| (k.clone(), &**v))
+                .collect();
+            multi_data_rule.analyze(&mut self.findings, &immutable_data, processed_data_accessor);
         }
     }
 
@@ -205,8 +206,8 @@ pub trait Analyze {
 pub trait MultiDataAnalyze {
     fn analyze(
         &self,
-        findings: &HashMap<String, DataFindings>,
-        all_processed_data: &HashMap<String, &mut ProcessedData>,
+        findings: &mut HashMap<String, DataFindings>,
+        all_processed_data: &HashMap<String, &ProcessedData>,
         processed_data_accessor: &mut ProcessedDataAccessor,
     );
 }
@@ -253,12 +254,11 @@ macro_rules! multi_data_analytical_rules {
         }
 
         impl MultiDataAnalyticalRule {
-            pub fn analyze(&self, _findings: &mut HashMap<String, DataFindings>, _all_processed_data: &HashMap<String, &mut ProcessedData>, _processed_data_accessor: &mut ProcessedDataAccessor) {
+            pub fn analyze(&self, findings: &mut HashMap<String, DataFindings>, all_processed_data: &HashMap<String, &ProcessedData>, processed_data_accessor: &mut ProcessedDataAccessor) {
                 match self {
                     $(
                         MultiDataAnalyticalRule::$multi_data_analytical_rule(ref multi_data_analytical_rule) => multi_data_analytical_rule.analyze(findings, all_processed_data, processed_data_accessor),
                     )*
-                    _ => todo!(),
                 }
             }
         }
@@ -266,7 +266,7 @@ macro_rules! multi_data_analytical_rules {
 }
 
 // Register all multi-data-type rule templates here
-multi_data_analytical_rules!();
+multi_data_analytical_rules!(PreemptLazyDetectedRule);
 
 #[cfg(test)]
 mod tests {
