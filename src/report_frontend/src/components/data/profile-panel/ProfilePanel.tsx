@@ -4,14 +4,23 @@ import { useReportState } from "../../ReportStateProvider";
 import { useProfilePanelState, ViewMode } from "./ProfilePanelStateProvider";
 import { DataType, ProfilingData } from "../../../definitions/types";
 import { PROCESSED_DATA, RUNS } from "../../../definitions/data-config";
-import { Box, Checkbox, Input, SegmentedControl, SpaceBetween, StatusIndicator } from "@cloudscape-design/components";
+import {
+  Box,
+  Checkbox,
+  Input,
+  SegmentedControl,
+  SpaceBetween,
+  StatusIndicator,
+  Table,
+} from "@cloudscape-design/components";
 import { RunHeader } from "../RunSystemInfo";
 import { ProfilePanelStateProvider } from "./ProfilePanelStateProvider";
 import { useRegex, useContainerWidth, useHeatmapLayout, useHeatmapSelection } from "./utils";
 import { FlamegraphCanvas } from "./FlamegraphCanvas";
 import { HeatmapCanvas, HeatmapInfoBar } from "./Heatmap";
-import { MethodsTable } from "./MethodsTable";
-import { FrameType, FRAME_TYPE_COLORS, FRAME_TYPE_LABELS, getThemeColors, getFrameType } from "./colors";
+import { TopFunctionsTable } from "./TopFunctionsTable";
+import { buildKeyValueTable } from "../KeyValueTable";
+import { FrameType, FRAME_TYPE_COLORS, FRAME_TYPE_LABELS, getFrameType, getThemeColors } from "./colors";
 import {
   blockTotal,
   computeNodeSelfSamples,
@@ -20,6 +29,8 @@ import {
   FlamegraphNode,
   buildFlamegraph,
   flattenFlamegraph,
+  frameKey,
+  strippedFrameName,
 } from "./utils";
 
 // Height in pixels reserved for the time axis label above the heatmap grid
@@ -27,51 +38,112 @@ const AXIS_HEIGHT = 20;
 
 interface ProfilePanelProps {
   readonly dataType: DataType;
-  readonly instanceName: string;
+  readonly profilerName: string;
   readonly selectedProfile: string;
 }
 
-export default function ProfilePanel({ dataType, instanceName, selectedProfile }: ProfilePanelProps) {
+export default function ProfilePanel({ dataType, profilerName, selectedProfile }: ProfilePanelProps) {
+  return (
+    <ProfilePanelStateProvider>
+      <ProfilePanelBody dataType={dataType} profilerName={profilerName} selectedProfile={selectedProfile} />
+    </ProfilePanelStateProvider>
+  );
+}
+
+/**
+ * Reads viewMode from the provider and either renders the per-run heatmap+flamegraph
+ * grid (for "flamegraph" / "top_functions") or a single full-width metadata table
+ * (for "metadata"). Sits inside the provider so the toolbar's segmented control
+ * controls both branches.
+ */
+function ProfilePanelBody({ dataType, profilerName, selectedProfile }: ProfilePanelProps) {
+  const { viewMode } = useProfilePanelState();
   const widthPercent = Math.floor(100 / RUNS.length);
 
   // Find base run profile
   const baseRunData = PROCESSED_DATA[dataType]?.runs[RUNS[0]] as ProfilingData | undefined;
-  const baseProfile = baseRunData?.profilers?.[instanceName]?.profiles?.[selectedProfile];
+  const baseProfile = baseRunData?.profilers?.[profilerName]?.profiles?.[selectedProfile];
   const validBaseline = baseProfile && baseProfile.blocks?.length > 0 ? baseProfile : undefined;
 
   return (
-    <ProfilePanelStateProvider>
+    <>
       <div style={{ marginBottom: 12 }}>
         <ProfilePanelToolbar />
       </div>
-      <div style={{ display: "flex" }}>
-        {RUNS.map((runName, runIdx) => {
-          const runData = PROCESSED_DATA[dataType]?.runs[runName] as ProfilingData | undefined;
-          const profiler = runData?.profilers?.[instanceName];
-          const profile = profiler?.profiles?.[selectedProfile];
+      {viewMode === "metadata" ? (
+        <MetadataTable dataType={dataType} profilerName={profilerName} />
+      ) : (
+        <div style={{ display: "flex", width: "100%" }}>
+          {RUNS.map((runName, runIdx) => {
+            const runData = PROCESSED_DATA[dataType]?.runs[runName] as ProfilingData | undefined;
+            const profiler = runData?.profilers?.[profilerName];
+            const profile = profiler?.profiles?.[selectedProfile];
 
-          return (
-            <div key={runName} style={{ width: `${widthPercent}%`, paddingTop: "10px", paddingRight: "30px" }}>
-              <SpaceBetween size="xs">
-                <RunHeader runName={runName} />
-                {profiler && profile ? (
-                  <ProfilePanelView
-                    key={selectedProfile}
-                    analytics={profile}
-                    baseline={runIdx > 0 ? validBaseline : undefined}
-                    isBaseRun={runIdx === 0}
-                    startTimeMs={profiler.start_time_ms}
-                    blockWidthMs={profiler.block_width_ms}
-                  />
-                ) : (
-                  <EmptyProfileState message="No profile data available for this run." />
-                )}
-              </SpaceBetween>
-            </div>
-          );
-        })}
-      </div>
-    </ProfilePanelStateProvider>
+            return (
+              <div
+                key={runName}
+                style={{
+                  flex: `0 0 ${widthPercent}%`,
+                  minWidth: 0,
+                  overflow: "hidden",
+                  paddingTop: "10px",
+                  paddingRight: "30px",
+                  boxSizing: "border-box",
+                }}
+              >
+                <SpaceBetween size="xs">
+                  <RunHeader runName={runName} />
+                  {profiler && profile ? (
+                    <ProfilePanelView
+                      key={selectedProfile}
+                      analytics={profile}
+                      baseline={runIdx > 0 ? validBaseline : undefined}
+                      isBaseRun={runIdx === 0}
+                      startTimeMs={profiler.start_time_ms}
+                      blockWidthMs={profiler.block_width_ms}
+                    />
+                  ) : (
+                    <EmptyProfileState message="No profile data available for this run." />
+                  )}
+                </SpaceBetween>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
+ * Full-width per-profiler metadata table, rendered when viewMode === "metadata".
+ * Builds a one-row-per-key cross-run table from each run's `Profiler.metadata`.
+ */
+function MetadataTable({ dataType, profilerName }: { readonly dataType: DataType; readonly profilerName: string }) {
+  const { tableItems, tableColumnDefinitions } = React.useMemo(() => {
+    const dataByRun = new Map(
+      RUNS.map((runName) => {
+        const runData = PROCESSED_DATA[dataType]?.runs?.[runName] as ProfilingData | undefined;
+        const metadata = runData?.profilers?.[profilerName]?.metadata;
+        return [runName, metadata] as const;
+      }),
+    );
+    return buildKeyValueTable(dataByRun);
+  }, [dataType, profilerName]);
+
+  if (tableItems.length === 0) {
+    return <EmptyProfileState message="No metadata available for this profiler." />;
+  }
+  return (
+    <Table
+      variant="embedded"
+      columnDefinitions={tableColumnDefinitions}
+      items={tableItems}
+      sortingDisabled={false}
+      enableKeyboardNavigation={true}
+      resizableColumns={true}
+      wrapLines={true}
+    />
   );
 }
 
@@ -132,18 +204,35 @@ function ProfilePanelView({ analytics, baseline, isBaseRun, startTimeMs, blockWi
     setZoomedNode(null);
   }, [flamegraphRoot]);
 
-  // Baseline diff: compute per-frame sample aggregation for the baseline profile.
+  // Baseline diff: compute per-frame `totalPercent` for the baseline profile.
   // Priority: intra-profile ctrl-drag selection > cross-profile diff (when showDiff is on).
+  // Only `totalPercent` is needed because the table's diff is a percent-vs-percent
+  // delta — comparing raw counts would be misleading when the baseline and
+  // current selections cover different durations.
   const baselineByFrame = React.useMemo(() => {
+    let nodeSelf: Map<number, number> | null = null;
+    let target: Profile | null = null;
     if (sel.baselineSelection) {
-      const baseSelf = computeNodeSelfSamples(analytics, sel.baselineSelection[0], sel.baselineSelection[1]);
-      return aggregateByFrame(analytics, baseSelf);
+      target = analytics;
+      nodeSelf = computeNodeSelfSamples(analytics, sel.baselineSelection[0], sel.baselineSelection[1]);
+    } else if (showDiff && baseline && baseline !== analytics) {
+      target = baseline;
+      const start = baseRunSelection ? baseRunSelection[0] : 0;
+      const end = baseRunSelection ? baseRunSelection[1] : baseline.blocks.length;
+      nodeSelf = computeNodeSelfSamples(baseline, start, end);
     }
-    if (!showDiff || !baseline || baseline === analytics) return null;
-    const start = baseRunSelection ? baseRunSelection[0] : 0;
-    const end = baseRunSelection ? baseRunSelection[1] : baseline.blocks.length;
-    const baseSelf = computeNodeSelfSamples(baseline, start, end);
-    return aggregateByFrame(baseline, baseSelf);
+    if (!target || !nodeSelf) return null;
+
+    let rootTotal = 0;
+    for (const v of nodeSelf.values()) rootTotal += v;
+    if (rootTotal === 0) rootTotal = 1;
+
+    const byFrame = aggregateByFrame(target, nodeSelf);
+    const result = new Map<string, number>();
+    for (const [key, stats] of byFrame) {
+      result.set(key, (stats.total / rootTotal) * 100);
+    }
+    return result;
   }, [baseline, analytics, sel.baselineSelection, showDiff, baseRunSelection]);
 
   // Per-stack aggregation for flamegraph diff coloring (difffolded.pl semantics)
@@ -189,52 +278,63 @@ function ProfilePanelView({ analytics, baseline, isBaseRun, startTimeMs, blockWi
     return { count, totalSamples };
   }, [flatNodes, searchRe]);
 
-  // Aggregate flat nodes into a per-method summary for the Methods table view.
-  // Deduplicates by frame name+type, avoids double-counting recursive calls in "total".
-  const methodsList = React.useMemo(() => {
-    if (!flamegraphRoot) return [];
-    const byKey = new Map<
-      string,
-      { name: string; type: ReturnType<typeof getFrameType>; self: number; total: number }
-    >();
-    for (const n of flatNodes) {
-      if (n.depth === 0) continue;
-      const type = getFrameType(n.name);
-      const stripped = type === "native" ? n.name : n.name.slice(0, -4);
-      const key = `${stripped}\u0000${type}`;
-      const entry = byKey.get(key) || { name: stripped, type, self: 0, total: 0 };
-      entry.self += n.selfSamples;
-      let ancestorHasSameFrame = false;
-      let cur = n.parent;
-      while (cur) {
-        if (cur.name === n.name) {
-          ancestorHasSameFrame = true;
-          break;
-        }
-        cur = cur.parent;
-      }
-      if (!ancestorHasSameFrame) entry.total += n.totalSamples;
-      byKey.set(key, entry);
+  // Per-frame summary for the Top Functions table.
+  // Each row carries the display name + type (cached once here, derived from
+  // the raw frame name in `frame_map`); `frameKey(name, type)` is the row id.
+  const framesList = React.useMemo(() => {
+    const frames = analytics.frame_map?.frame_id_to_frame;
+    if (!frames) return [];
+
+    const curSelf = computeNodeSelfSamples(analytics, sel.selection[0], sel.selection[1]);
+    const byFrame = aggregateByFrame(analytics, curSelf);
+
+    let rootTotal = 0;
+    for (const v of curSelf.values()) rootTotal += v;
+    if (rootTotal === 0) rootTotal = 1;
+
+    const rows: {
+      name: string;
+      type: FrameType;
+      self: number;
+      total: number;
+      selfPercent: number;
+      totalPercent: number;
+    }[] = [];
+    const seen = new Set<string>();
+    for (const frame of frames) {
+      const name = strippedFrameName(frame.name);
+      const type = getFrameType(frame.name);
+      const key = frameKey(name, type);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const stats = byFrame.get(key);
+      if (!stats || (stats.self === 0 && stats.total === 0)) continue;
+      rows.push({
+        name,
+        type,
+        self: stats.self,
+        total: stats.total,
+        selfPercent: (stats.self / rootTotal) * 100,
+        totalPercent: (stats.total / rootTotal) * 100,
+      });
     }
-    const rootTotal = flamegraphRoot.totalSamples || 1;
-    return Array.from(byKey.values())
-      .map((v) => ({
-        name: v.name,
-        type: v.type,
-        self: v.self,
-        total: v.total,
-        selfPct: (v.self / rootTotal) * 100,
-        totalPct: (v.total / rootTotal) * 100,
-      }))
-      .sort((a, b) => b.self - a.self);
-  }, [flatNodes, flamegraphRoot]);
+    return rows.sort((a, b) => b.self - a.self);
+  }, [analytics, sel.selection]);
 
   if (numBlocks === 0) {
     return <EmptyProfileState message="No samples recorded for this profile." />;
   }
 
   return (
-    <div ref={containerRef} style={{ position: "relative", width: "100%" }}>
+    <div
+      ref={containerRef}
+      style={{
+        position: "relative",
+        width: "100%",
+        minWidth: 0,
+        overflow: "hidden",
+      }}
+    >
       {/* Info bar: selection stats, search match count, zoom controls */}
       <HeatmapInfoBar
         selection={sel.selection}
@@ -283,7 +383,6 @@ function ProfilePanelView({ analytics, baseline, isBaseRun, startTimeMs, blockWi
         onDoubleClick={sel.resetSelection}
       />
 
-      {/* Flamegraph (click to zoom) or Methods table, toggled by provider viewMode */}
       {viewMode === "flamegraph" ? (
         <FlamegraphCanvas
           flatNodes={flatNodes}
@@ -299,7 +398,7 @@ function ProfilePanelView({ analytics, baseline, isBaseRun, startTimeMs, blockWi
           axisHeight={AXIS_HEIGHT}
         />
       ) : (
-        <MethodsTable methodsList={methodsList} searchRe={searchRe} baselineByFrame={baselineByFrame} />
+        <TopFunctionsTable framesList={framesList} searchRe={searchRe} baselineByFrame={baselineByFrame} />
       )}
 
       {/* Floating tooltip positioned near the cursor */}
@@ -370,10 +469,11 @@ function ProfilePanelToolbar() {
           options={[
             { id: "flamegraph", text: "Flamegraph" },
             { id: "top_functions", text: "Top Functions" },
+            { id: "metadata", text: "Metadata" },
           ]}
         />
       </SpaceBetween>
-      <FrameTypeLegend />
+      {viewMode !== "metadata" && <FrameTypeLegend />}
     </SpaceBetween>
   );
 }
@@ -381,7 +481,7 @@ function ProfilePanelToolbar() {
 function FrameTypeLegend() {
   const { darkMode } = useReportState();
   const theme = getThemeColors(darkMode);
-  const order: FrameType[] = ["interpreted", "jit", "inlined", "native", "kernel", "c1"];
+  const order: FrameType[] = ["interpreted", "jit", "inlined", "native", "vdso", "kernel", "c1"];
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 10, fontSize: 11, color: theme.textSubtle }}>
       {order.map((t) => (

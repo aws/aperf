@@ -1,6 +1,6 @@
 import React from "react";
 
-export type ViewMode = "flamegraph" | "top_functions";
+export type ViewMode = "flamegraph" | "top_functions" | "metadata";
 
 export interface ProfilePanelState {
   searchRegex: string;

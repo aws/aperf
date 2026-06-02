@@ -4,7 +4,8 @@ use crate::profiling::symbols::jit_symbols::JitSymbols;
 use crate::profiling::symbols::kernel_symbols::KernelSymbols;
 use crate::profiling::symbols::mmap_resolver::MmapResolver;
 use crate::profiling::symbols::vdso_symbols::read_vdso_elf_data;
-use crate::profiling::symbols::ResolvedSymbol;
+use crate::profiling::symbols::{ResolvedSymbol, VDSO_ELF_FILE_PATH};
+use crate::profiling::FrameType;
 use log::{debug, error, warn};
 use std::collections::HashMap;
 use std::fs;
@@ -109,14 +110,16 @@ impl SymbolResolver {
     /// 2. If the resolution failed, try to translate the address into file offset and ELF file
     ///    through Kernel MMAP entries, and then resolve it using ELF symbol table.
     fn resolve_kernel_addr(&mut self, addr: u64) -> Option<ResolvedSymbol> {
-        if let Some(resolved_symbol) = self.kernel_symbols.resolve(addr) {
-            return Some(resolved_symbol);
-        }
-        if let Some((file_offset, elf_file_path)) = self.mmap_resolver.resolve_kernel_addr(addr) {
-            self.resolve_by_elf_symbols(-1, file_offset, &elf_file_path)
-        } else {
-            None
-        }
+        let mut resolved_symbol = self.kernel_symbols.resolve(addr).or_else(|| {
+            match self.mmap_resolver.resolve_kernel_addr(addr) {
+                Some((file_offset, elf_file_path)) => {
+                    self.resolve_by_elf_symbols(-1, file_offset, &elf_file_path)
+                }
+                None => None,
+            }
+        })?;
+        resolved_symbol.frame_type = FrameType::Kernel;
+        Some(resolved_symbol)
     }
 
     /// Resolve an userspace instruction address through the following steps:
@@ -142,13 +145,16 @@ impl SymbolResolver {
     fn resolve_by_jit_symbols(&mut self, pid: i32, addr: u64) -> Option<ResolvedSymbol> {
         // Still insert a dummy symbol table in case it could not be built, so that
         // the resolver does not attempt to keep rebuilding the symbol table.
-        self.jit_symbol_tables
+        let mut resolved_symbol = self
+            .jit_symbol_tables
             .entry(pid)
             .or_insert_with(|| {
                 JitSymbols::from_perf_map(pid, self.mmap_resolver.is_pid_hotspot_jvm(pid))
                     .unwrap_or_default()
             })
-            .resolve(addr)
+            .resolve(addr)?;
+        resolved_symbol.frame_type = FrameType::Jit;
+        Some(resolved_symbol)
     }
 
     /// Resolve a file offset from the corresponding ELF symbol table. If the symbol table does not
@@ -160,11 +166,16 @@ impl SymbolResolver {
         elf_file_path: &str,
     ) -> Option<ResolvedSymbol> {
         self.lazy_load_elf_file(pid, elf_file_path);
-        self.elf_symbol_tables
+        let mut resolved_symbol = self
+            .elf_symbol_tables
             .get(elf_file_path)
             .map_or(None, |elf_symbol_table| {
                 elf_symbol_table.resolve(file_offset)
-            })
+            })?;
+        if elf_file_path == VDSO_ELF_FILE_PATH {
+            resolved_symbol.frame_type = FrameType::Vdso;
+        }
+        Some(resolved_symbol)
     }
 
     /// Attempt to load the data of an ELF file and use it to build the ELF symbol table. If leaf
@@ -186,8 +197,9 @@ impl SymbolResolver {
             }
             // If dealing with VDSO symbols, load them from APerf's memory - all processes
             // running on the same Kernel share the same VDSO symbol table.
-            if elf_file_path == "[vdso]" {
-                return read_vdso_elf_data().map(|vdso_data| (vdso_data, String::from("[vdso]")));
+            if elf_file_path == VDSO_ELF_FILE_PATH {
+                return read_vdso_elf_data()
+                    .map(|vdso_data| (vdso_data, VDSO_ELF_FILE_PATH.to_string()));
             }
             // If failed to find the original ELF file using the Build-ID, attempt to read
             // the ELF file path directly.

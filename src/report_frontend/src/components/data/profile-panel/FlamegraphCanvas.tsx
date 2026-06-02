@@ -114,7 +114,11 @@ export function FlamegraphCanvas({
       if (node.depth === 0) {
         fill = theme.bgRoot;
       } else if (nodeDeltaMap) {
-        fill = diffFlamegraphColor(nodeDeltaMap.get(node) || 0);
+        // diffFlamegraphColor returns "transparent" for ~zero deltas; canvases
+        // can't paint transparent fills usefully, so fall back to the
+        // frame-type color so unchanged frames stay visible at their base color.
+        const diff = diffFlamegraphColor(nodeDeltaMap.get(node) || 0);
+        fill = diff === "transparent" ? defaultFlamegraphColor(node.name) : diff;
       } else {
         fill = defaultFlamegraphColor(node.name);
       }
@@ -247,10 +251,10 @@ export function FlamegraphCanvas({
   const onMouseLeave = React.useCallback(() => setTooltip(null), [setTooltip]);
 
   return (
-    <div style={{ marginTop: 8, overflowY: "auto", maxHeight: "60vh" }}>
+    <div style={{ marginTop: 8, overflowX: "hidden", overflowY: "auto", maxHeight: "60vh" }}>
       <canvas
         ref={canvasRef}
-        style={{ display: "block", width: "100%", cursor: "pointer" }}
+        style={{ display: "block", width: "100%", maxWidth: "100%", cursor: "pointer" }}
         onMouseMove={onMouseMove}
         onMouseLeave={onMouseLeave}
         onClick={onClick}

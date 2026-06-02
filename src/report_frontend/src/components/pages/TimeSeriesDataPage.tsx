@@ -14,7 +14,7 @@ import { RunHeader } from "../data/RunSystemInfo";
 import CombinedMetricGraph from "../data/CombinedMetricGraph";
 import { ShowFindingsPanelButton } from "../analytics/FindingsSplitPanel";
 import MetricStatsDisplay from "../data/MetricStatsDisplay";
-import { MetricAnalyticalFindings } from "../analytics/AnalyticalFindings";
+import { PerKeyAnalyticalFindings } from "../analytics/AnalyticalFindings";
 
 const NON_ZERO_METRIC_NAMES_CACHE = new Map<DataType, string[]>();
 
@@ -76,7 +76,7 @@ export default function (props: DataPageProps) {
               <SpaceBetween size={"xxs"}>
                 <MetricStatsDisplay dataType={props.dataType} runName={runName} metricName={metricName} />
                 <MetricGraph dataType={props.dataType} runName={runName} metricName={metricName} key={props.dataType} />
-                <MetricAnalyticalFindings dataType={props.dataType} runName={runName} metricName={metricName} />
+                <PerKeyAnalyticalFindings dataType={props.dataType} runName={runName} dataKey={metricName} />
               </SpaceBetween>
             </div>
           ),

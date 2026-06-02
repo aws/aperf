@@ -11,6 +11,7 @@ use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::Write;
 use std::path::PathBuf;
 use std::{env, fs};
@@ -372,9 +373,13 @@ pub fn extract_archive(archive_path: &PathBuf, tmp_dir: &PathBuf) -> Result<Path
     let archive_file = File::open(&archive_path)?;
     let gz_decoder = GzDecoder::new(archive_file);
     let mut tar = tar::Archive::new(gz_decoder);
-    tar.unpack(tmp_dir)?;
+    // To prevent conflicts caused by archives with the same top-level dir name, add hash to the path.
+    let mut hasher = DefaultHasher::new();
+    archive_path.hash(&mut hasher);
+    let extract_dest_path = tmp_dir.join(format!("{:016x}", hasher.finish()));
+    tar.unpack(&extract_dest_path)?;
 
-    let extracted_dir_path = tmp_dir.join(&dir_name);
+    let extracted_dir_path = extract_dest_path.join(&dir_name);
     if !extracted_dir_path.exists() {
         return Err(PDError::InvalidDirectory(extracted_dir_path).into());
     }
