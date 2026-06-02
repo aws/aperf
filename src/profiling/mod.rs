@@ -504,14 +504,16 @@ impl Profile {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum FrameType {
     Jit,         // _[j]
     Inlined,     // _[i]
     Kernel,      // _[k]
     Interpreted, // _[0]
     C1,          // _[1]
-    Native,      // no suffix
+    Vdso,        // _[v]
+    #[default]
+    Native, // no suffix
 }
 
 impl FrameType {
@@ -522,6 +524,7 @@ impl FrameType {
             FrameType::Kernel => "_[k]",
             FrameType::Interpreted => "_[0]",
             FrameType::C1 => "_[1]",
+            FrameType::Vdso => "_[v]",
             FrameType::Native => "",
         }
     }
@@ -533,13 +536,14 @@ impl FrameType {
             FrameType::Kernel => "_\\[k\\]",
             FrameType::Interpreted => "_\\[0\\]",
             FrameType::C1 => "_\\[1\\]",
+            FrameType::Vdso => "_\\[v\\]",
             FrameType::Native => "",
         }
     }
 
     /// Regex pattern that matches any frame type suffix (including none).
     pub(crate) fn any_regex_suffix() -> &'static str {
-        "(_\\[(0|j|i|k|1)\\])?"
+        "(_\\[(0|j|i|k|1|v)\\])?"
     }
 
     pub(crate) fn from_jfr_name(name: &str) -> Self {

@@ -79,7 +79,9 @@ pub fn build_perf_profiler_data(
             .map(|resolved_symbol| {
                 resolved_symbol
                     .as_ref()
-                    .map_or("[unknown]".to_string(), |s| s.name.to_string())
+                    .map_or("[unknown]".to_string(), |s| {
+                        format!("{}{}", s.name, s.frame_type.literal_suffix())
+                    })
             })
             .collect();
         // Perf sample's call chain is from leaf to root, so reverse the frames

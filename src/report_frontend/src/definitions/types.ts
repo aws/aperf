@@ -140,12 +140,6 @@ export interface TimeSeriesMetricProps {
   readonly metricName: string;
 }
 
-export interface ProfilingDataMetricProps {
-  readonly dataType: DataType;
-  readonly runName: string;
-  readonly profileInstance: string;
-}
-
 export type NumCpusPerRun = { [key in string]: number };
 export type SelectedCpusPerRun = { [key in string]: { aggregate: boolean; cpus: boolean[] } };
 

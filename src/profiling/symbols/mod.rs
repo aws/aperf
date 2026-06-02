@@ -1,5 +1,7 @@
 #![cfg(target_os = "linux")]
 
+use crate::profiling::FrameType;
+
 mod elf_build_ids;
 mod elf_symbols;
 mod jit_symbols;
@@ -7,6 +9,8 @@ mod kernel_symbols;
 mod mmap_resolver;
 pub mod symbol_resolver;
 mod vdso_symbols;
+
+pub const VDSO_ELF_FILE_PATH: &str = "[vdso]";
 
 /// A single entry in the symbol table, indicating that all addresses within
 /// [addr, addr + size) should be resolved to name.
@@ -25,6 +29,8 @@ pub struct ResolvedSymbol {
     pub offset: u64,
     /// The source file or module that the symbol belongs to.
     pub source: String,
+    /// The type of the frame.
+    pub frame_type: FrameType,
 }
 
 /// Attempt to resolve an address into a symbol in the symbol table. Entries in the symbol
@@ -64,6 +70,8 @@ pub fn resolve_symbol(
         name: symbol_table_entry.name.clone(),
         offset: symbol_offset,
         source: source.to_string(),
+        // To be overriden by the caller.
+        frame_type: FrameType::default(),
     })
 }
 

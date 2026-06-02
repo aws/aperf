@@ -1,7 +1,20 @@
 import React from "react";
 import { Profile } from "../../../definitions/types";
+import { getFrameType } from "./colors";
 
 // --- Block/sample aggregation ---
+
+/**
+ * Composite key used by the Top Functions table and aggregateByFrame
+ */
+export function frameKey(name: string, type: ReturnType<typeof getFrameType>): string {
+  return `${name} ${type}`;
+}
+
+/** Strip the four-character frame-type suffix (`_[j]` / `_[k]` / etc.) for display. */
+export function strippedFrameName(rawName: string): string {
+  return getFrameType(rawName) === "native" ? rawName : rawName.slice(0, -4);
+}
 
 /** Sum all samples across all thread states in a block */
 export function blockTotal(block: { [ts: string]: { [nodeId: string]: number } }): number {
@@ -32,7 +45,9 @@ export function computeNodeSelfSamples(analytics: Profile, blockStart: number, b
   return nodeSamples;
 }
 
-/** Compute per-frame aggregated samples across all nodes with the same frame_id */
+/**
+ * Compute per-frame aggregated samples for the Top Functions table.
+ */
 export function aggregateByFrame(
   analytics: Profile,
   nodeSelf: Map<number, number>,
@@ -54,11 +69,23 @@ export function aggregateByFrame(
 
   const byFrame = new Map<string, { self: number; total: number }>();
   for (let nid = 0; nid < tree.length; nid++) {
-    const name = frames[tree[nid].frame_id]?.name || "[unknown]";
-    const entry = byFrame.get(name) || { self: 0, total: 0 };
+    const rawName = frames[tree[nid].frame_id]?.name || "[unknown]";
+    const key = frameKey(strippedFrameName(rawName), getFrameType(rawName));
+    const entry = byFrame.get(key) || { self: 0, total: 0 };
     entry.self += nodeSelf.get(nid) || 0;
-    entry.total += nodeTotal.get(nid) || 0;
-    byFrame.set(name, entry);
+    // Skip this node's total if any ancestor has the same frame_id, so a
+    // recursive frame counts once at its outermost call site.
+    let ancestorHasSameFrame = false;
+    let cur = tree[nid].parent;
+    while (cur != null) {
+      if (tree[cur].frame_id === tree[nid].frame_id) {
+        ancestorHasSameFrame = true;
+        break;
+      }
+      cur = tree[cur].parent;
+    }
+    if (!ancestorHasSameFrame) entry.total += nodeTotal.get(nid) || 0;
+    byFrame.set(key, entry);
   }
   return byFrame;
 }

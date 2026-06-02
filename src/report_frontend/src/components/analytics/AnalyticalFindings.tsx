@@ -1,11 +1,5 @@
 import React from "react";
-import {
-  AnalyticalFinding,
-  DataType,
-  FindingType,
-  TimeSeriesMetricProps,
-  ProfilingDataMetricProps,
-} from "../../definitions/types";
+import { AnalyticalFinding, DataType, FindingType } from "../../definitions/types";
 import {
   Icon,
   SpaceBetween,
@@ -137,48 +131,31 @@ function Finding(props: FindingProps) {
 }
 
 /**
- * This component renders all analytica findings of a specific time-series metric.
+ * Renders all analytical findings keyed by `dataKey` within a single run for a single
+ * data type. The Rust analytics engine groups findings into a `HashMap<String, Vec<...>>`
+ * where the key is whatever identifies the finding's subject — a metric name for
+ * time-series data, a profiler name for profiling data, etc. — so the same lookup
+ * works for both.
  */
-export function MetricAnalyticalFindings(props: TimeSeriesMetricProps) {
+export function PerKeyAnalyticalFindings(props: {
+  readonly dataType: DataType;
+  readonly runName: string;
+  readonly dataKey: string;
+}) {
   const dataFindings = PER_DATA_ANALYTICAL_FINDINGS[props.dataType];
   if (dataFindings == undefined) return null;
   const curRunFindings = dataFindings.per_run_findings[props.runName];
   if (curRunFindings == undefined) return null;
-  const metricFindings = curRunFindings.findings[props.metricName];
-  if (metricFindings == undefined) return null;
+  const findings = curRunFindings.findings[props.dataKey];
+  if (findings == undefined) return null;
 
-  const sortedMetricFindings = [...metricFindings];
-  // The findings with low scores ("bad findings") are put at top
-  sortedMetricFindings.sort((a, b) => a.score - b.score);
-
-  return (
-    <SpaceBetween size={"xxxs"}>
-      {sortedMetricFindings.map((finding) => (
-        <Finding finding={finding} dataType={props.dataType} dataKey={props.metricName} />
-      ))}
-    </SpaceBetween>
-  );
-}
-
-/**
- * This component renders all analytical findings of a specific profiler instance.
- */
-export function ProfileAnalyticalFindings(props: ProfilingDataMetricProps) {
-  const dataFindings = PER_DATA_ANALYTICAL_FINDINGS[props.dataType];
-  if (dataFindings == undefined) return null;
-  const curRunFindings = dataFindings.per_run_findings[props.runName];
-  if (curRunFindings == undefined) return null;
-
-  const profileFindings = curRunFindings.findings[props.profileInstance];
-  if (profileFindings == undefined) return null;
-
-  const sortedProfileFindings = [...profileFindings];
-  sortedProfileFindings.sort((a, b) => a.score - b.score);
+  // The findings with low scores ("bad findings") are put at top.
+  const sortedFindings = [...findings].sort((a, b) => a.score - b.score);
 
   return (
     <SpaceBetween size={"xxxs"}>
-      {sortedProfileFindings.map((finding) => (
-        <Finding finding={finding} dataType={props.dataType} dataKey={props.profileInstance} />
+      {sortedFindings.map((finding) => (
+        <Finding finding={finding} dataType={props.dataType} dataKey={props.dataKey} />
       ))}
     </SpaceBetween>
   );

@@ -93,10 +93,10 @@ export function heatmapColor(ratio: number): string {
 
 /**
  * Map frame name suffix to frame type color. Suffixes follow async-profiler convention:
- *   _[j] JIT, _[i] Inlined, _[k] Kernel, _[0] Interpreted, _[1] C1, no suffix Native.
- * Colors match async-profiler's palette.
+ *   _[j] JIT, _[i] Inlined, _[k] Kernel, _[0] Interpreted, _[1] C1, _[v] vDSO,
+ *   no suffix Native.
  */
-export type FrameType = "jit" | "inlined" | "kernel" | "interpreted" | "c1" | "native";
+export type FrameType = "jit" | "inlined" | "kernel" | "interpreted" | "c1" | "vdso" | "native";
 
 export function getFrameType(name: string): FrameType {
   if (name.endsWith("_[j]")) return "jit";
@@ -104,6 +104,7 @@ export function getFrameType(name: string): FrameType {
   if (name.endsWith("_[k]")) return "kernel";
   if (name.endsWith("_[0]")) return "interpreted";
   if (name.endsWith("_[1]")) return "c1";
+  if (name.endsWith("_[v]")) return "vdso";
   return "native";
 }
 
@@ -114,6 +115,7 @@ export const FRAME_TYPE_COLORS: Record<FrameType, string> = {
   native: "#e15a5a",
   kernel: "#e17d00",
   c1: "#cce880",
+  vdso: "#918984",
 };
 
 export const FRAME_TYPE_LABELS: Record<FrameType, string> = {
@@ -123,6 +125,7 @@ export const FRAME_TYPE_LABELS: Record<FrameType, string> = {
   native: "Native",
   kernel: "Kernel",
   c1: "C1-Compiled",
+  vdso: "vDSO",
 };
 
 export function defaultFlamegraphColor(name: string): string {

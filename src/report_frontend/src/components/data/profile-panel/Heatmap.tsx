@@ -312,10 +312,10 @@ export function HeatmapCanvas({
   }, [dragStart, setTooltip, setDragStart, setDragEnd]);
 
   return (
-    <div style={{ overflowX: "auto", overflowY: "hidden" }}>
+    <div style={{ overflow: "hidden", maxWidth: "100%" }}>
       <canvas
         ref={canvasRef}
-        style={{ display: "block", cursor: "crosshair" }}
+        style={{ display: "block", cursor: "crosshair", maxWidth: "100%" }}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
@@ -419,10 +419,14 @@ export function HeatmapInfoBar({
         color: theme.textMuted,
         marginBottom: 4,
         display: "flex",
+        flexWrap: "wrap",
         justifyContent: "space-between",
+        gap: 8,
+        minWidth: 0,
+        width: "100%",
       }}
     >
-      <span>
+      <span style={{ minWidth: 0, wordBreak: "break-word" }}>
         Selected: blocks {selection[0]}–{selection[1]} ({selTimeSec}s, {selSamples.toLocaleString()} samples)
         {searchRe && flamegraphRoot && (
           <span style={{ marginLeft: 12, color: theme.accent }}>
@@ -439,7 +443,7 @@ export function HeatmapInfoBar({
           </span>
         )}
       </span>
-      <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <span style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
           Zoom:
           <select

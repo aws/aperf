@@ -178,7 +178,7 @@ impl CollectData for JavaProfileRaw {
                 continue;
             }
             self.process_map
-                .insert(pid.clone(), vec![String::from("Could not resolve name!")]);
+                .insert(pid.clone(), vec![format!("Unknown_JVM_{pid}")]);
         }
 
         let jps_str = self.update_process_map()?;
@@ -226,7 +226,7 @@ impl CollectData for JavaProfileRaw {
                 continue;
             }
             self.process_map
-                .insert(pid.clone(), vec![String::from("Could not resolve name!")]);
+                .insert(pid.clone(), vec![format!("Unknown_JVM_{pid}")]);
             jids.push(pid.clone());
         }
 
