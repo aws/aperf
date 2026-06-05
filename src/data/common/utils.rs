@@ -84,10 +84,13 @@ pub fn no_tar_gz_file_name(path: &PathBuf) -> Option<String> {
 }
 
 /// Copy a graph file to the report data dir and update the GraphData with its info.
+/// The destination file is prefixed with the (deduplicated, hence unique) `run_name` so that
+/// graphs from different runs do not collide in the flat `data/js/` report directory.
 pub fn copy_graph_and_update_graph_data(
     source_dir: &PathBuf,
     dest_dir: &PathBuf,
     filename: &str,
+    run_name: &str,
     graph_group_name: &str,
     graph_key: &str,
     graph_name: String,
@@ -97,7 +100,13 @@ pub fn copy_graph_and_update_graph_data(
     if !source_graph_path.exists() {
         return;
     }
-    let relative_graph_path = PathBuf::from("data").join("js").join(&filename);
+    let run_prefix = format!("{run_name}-");
+    let dest_filename = if filename.starts_with(&run_prefix) {
+        filename.to_string()
+    } else {
+        format!("{run_prefix}{filename}")
+    };
+    let relative_graph_path = PathBuf::from("data").join("js").join(&dest_filename);
     let dest_graph_path = dest_dir.join(&relative_graph_path);
 
     if let Err(e) = std::fs::copy(&source_graph_path, &dest_graph_path) {

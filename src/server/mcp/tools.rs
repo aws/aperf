@@ -954,7 +954,10 @@ impl AperfMcpServer {
         if is_diff {
             let min_delta = req.min_pct.unwrap_or(0.5);
 
-            // Resolve the two run IDs for diff
+            // Resolve the two run IDs for diff. When omitted, default to the first two runs that
+            // have flamegraph SVGs (passing None to find_flamegraph_svg would resolve both sides
+            // to the same first-alphabetical SVG).
+            let default_ids = find_all_flamegraph_run_ids(loaded, svg_type);
             let (rid1, rid2) = match &req.run_id {
                 Some(ids) if ids.len() == 2 => (Some(ids[0].as_str()), Some(ids[1].as_str())),
                 Some(ids) if ids.len() > 2 => {
@@ -967,7 +970,14 @@ impl AperfMcpServer {
                         json!({"status": "error", "message": "Error: diff/reverse-diff mode requires exactly 2 run IDs in run_id array. Got 1."}),
                     );
                 }
-                _ => (None, None), // Use defaults (first and second run)
+                _ => {
+                    if default_ids.len() < 2 {
+                        return ok_json(
+                            json!({"status": "error", "message": format!("Error: diff/reverse-diff mode needs at least 2 runs with flamegraphs; found {}.", default_ids.len())}),
+                        );
+                    }
+                    (Some(default_ids[0].as_str()), Some(default_ids[1].as_str()))
+                }
             };
 
             // Find both SVGs
@@ -1471,6 +1481,23 @@ struct AnnotatedFrame {
     parent: String,
 }
 
+/// Whether an SVG `filename` is the flamegraph of `run_id` for the given `fg_type`
+/// ("reverse" => `<run_id>-reverse-flamegraph.svg`, else forward `<run_id>-flamegraph.svg`).
+/// Anchored on the `<run_id>-` prefix so run ids that are substrings of one another don't
+/// cross-match.
+fn svg_matches_run_and_type(filename: &str, run_id: &str, fg_type: &str) -> bool {
+    let prefix = format!("{run_id}-");
+    if !filename.starts_with(&prefix) {
+        return false;
+    }
+    let is_reverse = filename.ends_with("reverse-flamegraph.svg");
+    if fg_type == "reverse" {
+        is_reverse
+    } else {
+        filename.ends_with("flamegraph.svg") && !is_reverse
+    }
+}
+
 /// Find the flamegraph SVG file for a given run and type.
 fn find_flamegraph_svg(
     loaded: &LoadedReport,
@@ -1481,19 +1508,14 @@ fn find_flamegraph_svg(
     let search_dir = &loaded.data_dir;
     let not_reverse = "reverse-flamegraph.svg";
 
-    // If run_id specified, look for files containing run_id and matching the type
+    // If run_id specified, look for the run's SVG of the requested type. The report names graphs
+    // `<run_id>-flamegraph.svg` / `<run_id>-reverse-flamegraph.svg`, so anchor on the run-id
+    // prefix rather than a loose substring match (which would mis-match e.g. `run` vs `run_1`).
     if let Some(rid) = run_id {
         if let Ok(entries) = std::fs::read_dir(search_dir) {
             for entry in entries.flatten() {
                 let name = entry.file_name().to_string_lossy().to_string();
-                let matches = if fg_type == "reverse" {
-                    name.contains(rid) && name.ends_with(not_reverse)
-                } else {
-                    name.contains(rid)
-                        && name.ends_with("flamegraph.svg")
-                        && !name.ends_with(not_reverse)
-                };
-                if matches {
+                if svg_matches_run_and_type(&name, rid, fg_type) {
                     return Ok(entry.path());
                 }
             }
@@ -1537,54 +1559,50 @@ fn find_flamegraph_svg(
     ))
 }
 
-/// Find all run IDs that have flamegraph SVGs available.
-/// Extracts run IDs from SVG filenames by matching against known run IDs from metadata.
+/// Find all run IDs that have a flamegraph SVG of the given type, in a deterministic order.
+/// The report names graphs `<run_id>-flamegraph.svg` / `<run_id>-reverse-flamegraph.svg`.
 fn find_all_flamegraph_run_ids(loaded: &LoadedReport, fg_type: &str) -> Vec<String> {
     let search_dir = &loaded.data_dir;
-    let not_reverse = "reverse-flamegraph.svg";
 
-    // Get known run IDs from metadata
-    let known_run_ids: Vec<String> = loaded.metadata.run_ids.clone().unwrap_or_default();
-
-    // Find all matching SVG files
-    let svgs: Vec<String> = match std::fs::read_dir(search_dir) {
+    // SVG filenames of the requested type present in the report.
+    let mut svgs: Vec<String> = match std::fs::read_dir(search_dir) {
         Ok(entries) => entries
             .filter_map(|e| e.ok())
             .map(|e| e.file_name().to_string_lossy().to_string())
             .filter(|name| {
+                let is_reverse = name.ends_with("reverse-flamegraph.svg");
                 if fg_type == "reverse" {
-                    name.ends_with(not_reverse)
+                    is_reverse
                 } else {
-                    name.ends_with("flamegraph.svg") && !name.ends_with(not_reverse)
+                    name.ends_with("flamegraph.svg") && !is_reverse
                 }
             })
             .collect(),
         Err(_) => return Vec::new(),
     };
+    svgs.sort();
 
-    // Match SVG filenames to known run IDs
+    // Prefer known run IDs from metadata (preserves their order), matched precisely against the
+    // `<run_id>-` prefix. Fall back to deriving the id from the filename for any SVG not matched
+    // (e.g. a report whose metadata is incomplete).
+    let known_run_ids: Vec<String> = loaded.metadata.run_ids.clone().unwrap_or_default();
     let mut matched_ids: Vec<String> = Vec::new();
     for rid in &known_run_ids {
-        if svgs.iter().any(|svg| svg.contains(rid.as_str())) {
+        if svgs
+            .iter()
+            .any(|svg| svg_matches_run_and_type(svg, rid, fg_type))
+        {
             matched_ids.push(rid.clone());
         }
     }
-
-    // If no known run IDs matched (e.g., single-run report), fall back to returning
-    // a synthetic ID based on the SVG filename
-    if matched_ids.is_empty() && !svgs.is_empty() {
-        // Use the SVG filenames themselves as identifiers — extract the part before "-flamegraph.svg"
-        let mut sorted_svgs = svgs;
-        sorted_svgs.sort();
-        for svg_name in &sorted_svgs {
-            let stem = if fg_type == "reverse" {
-                svg_name.trim_end_matches("-reverse-flamegraph.svg")
-            } else {
-                svg_name.trim_end_matches("-flamegraph.svg")
-            };
-            if !stem.is_empty() && stem != svg_name {
-                matched_ids.push(stem.to_string());
-            }
+    for svg_name in &svgs {
+        let stem = if fg_type == "reverse" {
+            svg_name.trim_end_matches("-reverse-flamegraph.svg")
+        } else {
+            svg_name.trim_end_matches("-flamegraph.svg")
+        };
+        if !stem.is_empty() && stem != svg_name.as_str() && !matched_ids.iter().any(|m| m == stem) {
+            matched_ids.push(stem.to_string());
         }
     }
 
@@ -2741,5 +2759,49 @@ mod tests {
         let top = &annotated[0];
         assert!(!top.parent.is_empty());
         assert!(top.pct > 10.0);
+    }
+
+    #[test]
+    fn test_svg_matches_run_and_type() {
+        // Reports name graphs `<run_id>-flamegraph.svg` / `<run_id>-reverse-flamegraph.svg`.
+        assert!(svg_matches_run_and_type(
+            "run1-flamegraph.svg",
+            "run1",
+            "normal"
+        ));
+        assert!(svg_matches_run_and_type(
+            "run1-reverse-flamegraph.svg",
+            "run1",
+            "reverse"
+        ));
+        // Forward must not match the reverse file, and vice-versa.
+        assert!(!svg_matches_run_and_type(
+            "run1-reverse-flamegraph.svg",
+            "run1",
+            "normal"
+        ));
+        assert!(!svg_matches_run_and_type(
+            "run1-flamegraph.svg",
+            "run1",
+            "reverse"
+        ));
+        // Anchored on the `<run_id>-` prefix: a run id that is a substring/prefix of another
+        // must not cross-match.
+        assert!(!svg_matches_run_and_type(
+            "run1-flamegraph.svg",
+            "run",
+            "normal"
+        ));
+        assert!(!svg_matches_run_and_type(
+            "run11-flamegraph.svg",
+            "run1",
+            "normal"
+        ));
+        // Wrong run id entirely.
+        assert!(!svg_matches_run_and_type(
+            "run2-flamegraph.svg",
+            "run1",
+            "normal"
+        ));
     }
 }
