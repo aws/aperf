@@ -1,7 +1,7 @@
 use crate::data::common::data_formats::{
     AperfData, GraphData, GraphGroup, Profiler, ProfilingData,
 };
-use crate::data::common::utils::copy_graph_and_update_graph_data;
+use crate::data::common::utils::{copy_graph_and_update_graph_data, find_file};
 use crate::data::{Data, ProcessData};
 use crate::visualizer::ReportParams;
 use anyhow::Result;
@@ -49,6 +49,10 @@ impl CollectData for FlamegraphRaw {
 lazy_static! {
     pub static ref PERF_CHILD: Mutex<Option<Child>> = Mutex::new(None);
     pub static ref PROFILE_START_TIME_MS: Mutex<i64> = Mutex::new(0);
+}
+
+fn perf_profiler_data_filename() -> String {
+    "perf_profiler_data.json".to_string()
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -175,16 +179,8 @@ impl CollectData for PerfProfileRaw {
             ])
             .status();
 
-        let fg_out = File::create(
-            params
-                .data_dir
-                .join(format!("{}-flamegraph.svg", params.run_name)),
-        )?;
-        let reverse_fg_out = File::create(
-            params
-                .data_dir
-                .join(format!("{}-reverse-flamegraph.svg", params.run_name)),
-        )?;
+        let fg_out = File::create(params.data_dir.join("flamegraph.svg"))?;
+        let reverse_fg_out = File::create(params.data_dir.join("reverse-flamegraph.svg"))?;
 
         match out_jit {
             Err(e) => {
@@ -257,11 +253,8 @@ impl CollectData for PerfProfileRaw {
                 *PROFILE_START_TIME_MS.lock().unwrap(),
                 events_out_path,
             );
-            let perf_profiler_data_path = params
-                .data_dir
-                .join(format!("{}-perf-profiler-data.json", params.run_name));
             if let Ok(json) = serde_json::to_string(&perf_profiler_data) {
-                fs::write(&perf_profiler_data_path, json)?;
+                fs::write(params.data_dir.join(perf_profiler_data_filename()), json)?;
             }
         }
 
@@ -304,35 +297,40 @@ impl ProcessData for PerfProfile {
         graph_data.graph_groups.push(GraphGroup::new("default"));
         graph_data.graph_groups.push(GraphGroup::new("reverse"));
         [false, true].iter().for_each(|&is_reverse| {
+            // Match both the current (`flamegraph.svg`) and legacy (`<run>-flamegraph.svg`) naming.
             let filename = if is_reverse {
-                format!("{}-reverse-flamegraph.svg", params.run_name)
+                find_file(&params.data_dir, r"reverse-flamegraph\.svg$", None)
             } else {
-                format!("{}-flamegraph.svg", params.run_name)
+                find_file(
+                    &params.data_dir,
+                    r"flamegraph\.svg$",
+                    Some(r"reverse-flamegraph\.svg$"),
+                )
             };
-            copy_graph_and_update_graph_data(
-                &params.data_dir,
-                &params.report_dir,
-                &filename,
-                if is_reverse { "reverse" } else { "default" },
-                "cpu",
-                "Perf CPU Profile".to_string(),
-                &mut graph_data,
-            );
+            if let Ok(filename) = filename {
+                copy_graph_and_update_graph_data(
+                    &params.data_dir,
+                    &params.report_dir,
+                    &filename,
+                    if is_reverse { "reverse" } else { "default" },
+                    "cpu",
+                    "Perf CPU Profile".to_string(),
+                    &mut graph_data,
+                );
+            }
         });
 
         // Deserialize the ProfilerData generated at the end of record.
-        let perf_profiler_data_path = params
-            .data_dir
-            .join(format!("{}-perf-profiler-data.json", params.run_name));
-        let perf_profiler_data = match fs::read_to_string(&perf_profiler_data_path)
-            .ok()
-            .and_then(|json| serde_json::from_str::<Profiler>(&json).ok())
-        {
-            Some(perf_profiler_data) => perf_profiler_data,
-            // If ProfilerData could not be read, chaces are this run was created before the
-            // introduction of ProfilingData, so fall back to the old GraphData.
-            None => return Ok(AperfData::Graph(graph_data)),
-        };
+        let perf_profiler_data =
+            match fs::read_to_string(params.data_dir.join(perf_profiler_data_filename()))
+                .ok()
+                .and_then(|json| serde_json::from_str::<Profiler>(&json).ok())
+            {
+                Some(perf_profiler_data) => perf_profiler_data,
+                // If ProfilerData could not be read, chaces are this run was created before the
+                // introduction of ProfilingData, so fall back to the old GraphData.
+                None => return Ok(AperfData::Graph(graph_data)),
+            };
 
         let mut profiling_data = ProfilingData::default();
         profiling_data

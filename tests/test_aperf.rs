@@ -423,6 +423,98 @@ fn test_report_renamed_run() {
     })
 }
 
+/// Backward compatibility: a run recorded by a much older APerf release (v0.1.15-alpha) with
+/// `--profile --profile-java` must still produce a valid report with the current build.
+#[test]
+fn test_report_backward_compatibility() {
+    run_test(|work_dir, tmp_dir| {
+        let run_name = String::from("aperf_v0_1_15_alpha_run");
+        let run_path = get_test_data_path(format!("{}.tar.gz", run_name));
+
+        let report_name = String::from("legacy_v0_1_15_report");
+        let rep = Report {
+            run: vec![run_path.into_os_string().into_string().unwrap()],
+            name: Some(
+                work_dir
+                    .join(&report_name)
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+            ),
+            time_range: vec![],
+        };
+        assert!(report(&rep, &tmp_dir).is_ok());
+
+        verify_report_structure(&work_dir, &report_name, vec![run_name.clone()]);
+
+        // Verify the backward-compatibility data-name mappings produced data under the CURRENT
+        // names, even though the legacy run stored them under old names.
+        let report_js_dir = work_dir.join(&report_name).join("data").join("js");
+        for current_name in [
+            "diskstats",   // legacy: disk_stats
+            "systeminfo",  // legacy: system_info
+            "aperf_stats", // legacy: aperf_run_stats
+            "cpu_utilization",
+            "meminfo",
+            "vmstat",
+            "netstat",
+            "interrupts",
+            "perf_stat",
+            "processes",
+            "sysctl",
+            "kernel_config",
+        ] {
+            let js_path = report_js_dir.join(format!("{current_name}.js"));
+            assert!(
+                js_path.exists(),
+                "Expected processed data file {current_name}.js to exist for the legacy run",
+            );
+            let contents = fs::read_to_string(&js_path).unwrap();
+            assert!(
+                contents.contains(&run_name),
+                "{current_name}.js should contain data keyed by the legacy run name",
+            );
+        }
+
+        // Legacy profiling back-compat: the old run carries a single forward flamegraph SVG
+        // (`<run>-flamegraph.svg`). The report must copy that SVG into data/js and wire it into
+        // the perf_profile "default" graph group. (v0.1.15-alpha produced no reverse graph.)
+        let legacy_flamegraph = report_js_dir.join(format!("{run_name}-flamegraph.svg"));
+        assert!(
+            legacy_flamegraph.exists(),
+            "legacy flamegraph SVG should be copied into the report's data/js dir",
+        );
+        let perf_profile = fs::read_to_string(report_js_dir.join("perf_profile.js")).unwrap();
+        assert!(
+            perf_profile.contains(&format!("{run_name}-flamegraph.svg")),
+            "perf_profile.js should reference the legacy flamegraph SVG in a graph group",
+        );
+
+        // Legacy Java profiling back-compat: the old run carries a per-JVM flamegraph HTML
+        // (`<run>-java-flamegraph-<pid>.html`) resolved via the `<run>-jps-map.json` PID->name
+        // map. The report must copy that HTML into data/js and wire it into the java_profile
+        // "legacy" graph group, keyed by the JVM name ("Busy").
+        let java_flamegraph = report_js_dir.join(format!("{run_name}-java-flamegraph-26848.html"));
+        assert!(
+            java_flamegraph.exists(),
+            "legacy Java flamegraph HTML should be copied into the report's data/js dir",
+        );
+        let java_profile = fs::read_to_string(report_js_dir.join("java_profile.js")).unwrap();
+        assert!(
+            java_profile.contains(&format!("{run_name}-java-flamegraph-26848.html")),
+            "java_profile.js should reference the legacy Java flamegraph HTML in a graph group",
+        );
+        assert!(
+            java_profile.contains("Busy"),
+            "java_profile.js should resolve the JVM name from the legacy jps-map",
+        );
+
+        clean_dir_and_archive(&work_dir, &report_name);
+
+        Ok(())
+    })
+}
+
 #[test]
 fn test_duplicate_run_names() {
     run_test(|work_dir, tmp_dir| {
@@ -650,6 +742,73 @@ fn test_run_data_not_exists() {
 
         assert!(!report_dir_path.exists());
         assert!(!report_archive_path.exists());
+
+        Ok(())
+    })
+}
+
+#[test]
+fn test_report_duplicate_run_path() {
+    run_test(|work_dir, tmp_dir| {
+        let run_name = String::from("test_run_1");
+        let run_path = get_test_data_path(format!("{}.tar.gz", run_name));
+        let run_path_str = run_path.clone().into_os_string().into_string().unwrap();
+
+        // Case 1: exact same string passed twice.
+        let report_name = String::from("dup_path_report");
+        let report_dir_path = work_dir.join(&report_name);
+        let report_archive_path = work_dir.join(format!("{}.tar.gz", report_name));
+        let rep = Report {
+            run: vec![run_path_str.clone(), run_path_str.clone()],
+            name: Some(
+                report_dir_path
+                    .clone()
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+            ),
+            time_range: vec![],
+        };
+        let error = report(&rep, &tmp_dir).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            format!("The run {:?} was specified more than once.", run_path),
+        );
+        // Report should not have been created.
+        assert!(!report_dir_path.exists());
+        assert!(!report_archive_path.exists());
+
+        // Case 2: same path through a different surface form. `./` prefix
+        // resolves to the same canonical path, which canonicalize() should
+        // collapse so the duplicate check still fires.
+        let alt_run_path_str = format!(
+            "./{}",
+            run_path.clone().into_os_string().into_string().unwrap()
+        );
+        let report_name_2 = String::from("dup_path_report_2");
+        let report_dir_path_2 = work_dir.join(&report_name_2);
+        let report_archive_path_2 = work_dir.join(format!("{}.tar.gz", report_name_2));
+        let rep_alt = Report {
+            run: vec![run_path_str.clone(), alt_run_path_str],
+            name: Some(
+                report_dir_path_2
+                    .clone()
+                    .into_os_string()
+                    .into_string()
+                    .unwrap(),
+            ),
+            time_range: vec![],
+        };
+        let error_alt = report(&rep_alt, &tmp_dir).unwrap_err();
+        assert!(
+            error_alt
+                .to_string()
+                .contains("was specified more than once"),
+            "Error should report a duplicate run path, got: {}",
+            error_alt,
+        );
+        assert!(!report_dir_path_2.exists());
+        assert!(!report_archive_path_2.exists());
 
         Ok(())
     })
