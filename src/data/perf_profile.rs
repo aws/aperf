@@ -312,6 +312,7 @@ impl ProcessData for PerfProfile {
                     &params.data_dir,
                     &params.report_dir,
                     &filename,
+                    &params.run_name,
                     if is_reverse { "reverse" } else { "default" },
                     "cpu",
                     "Perf CPU Profile".to_string(),

@@ -458,6 +458,7 @@ impl ProcessData for JavaProfile {
                         &params.data_dir,
                         &params.report_dir,
                         &filename,
+                        &params.run_name,
                         metric,
                         &deduped_name,
                         format!("({}) JVM: {}", metric, deduped_name),
