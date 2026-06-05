@@ -9,7 +9,7 @@ use clap::Args;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::Write;
@@ -240,12 +240,19 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
     }
 
     let mut runs_info = RunsInfo::new();
+    let mut seen_run_paths: HashSet<PathBuf> = HashSet::new();
 
     for run in &report.run {
         let run_path = PathBuf::from(run);
 
         if !run_path.exists() {
             return Err(PDError::RunNotFound(run_path).into());
+        }
+
+        if let Ok(canonical_path) = fs::canonicalize(&run_path) {
+            if !seen_run_paths.insert(canonical_path) {
+                return Err(PDError::DuplicateRunPath(run_path).into());
+            }
         }
 
         let is_run_path_dir = run_path.is_dir();

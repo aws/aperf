@@ -109,6 +109,9 @@ pub enum PDError {
     #[error("The run {0:?} does not exist.")]
     RunNotFound(PathBuf),
 
+    #[error("The run {0:?} was specified more than once.")]
+    DuplicateRunPath(PathBuf),
+
     #[error("The report {0} already exists in current directory.")]
     ReportExists(String),
 
@@ -413,32 +416,6 @@ impl Default for PerformanceData {
     fn default() -> Self {
         Self::new(Default::default())
     }
-}
-
-pub fn get_file(dir: &PathBuf, name: String) -> Result<(PathBuf, fs::File)> {
-    for path in fs::read_dir(dir.clone())? {
-        let file_name = path?.file_name().into_string().unwrap();
-        if file_name.starts_with(&name) {
-            let file_path = dir.join(file_name.clone());
-            let file = fs::OpenOptions::new()
-                .read(true)
-                .open(file_path.clone())
-                .expect("Could not open file");
-            // file_name = file_path.to_str().unwrap().to_string();
-            return Ok((file_path, file));
-        }
-    }
-    Err(PDError::VisualizerFileNotFound(name).into())
-}
-
-pub fn get_file_name(dir: String, name: String) -> Result<String> {
-    for path in fs::read_dir(dir.clone())? {
-        let file_name = path?.file_name().into_string().unwrap();
-        if file_name.contains(&name) {
-            return Ok(file_name);
-        }
-    }
-    Err(PDError::VisualizerFileNotFound(name).into())
 }
 
 #[derive(Default)]

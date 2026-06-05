@@ -1,9 +1,10 @@
 use crate::data::common::data_formats::{AperfData, DataFormat, ProcessedData};
-use crate::data::common::utils::{combine_value_ranges, topological_sort};
+use crate::data::common::utils::{combine_value_ranges, find_file, topological_sort};
 use crate::data::TimeEnum;
-use crate::{data::Data, data::ReportData, get_file};
+use crate::{data::Data, data::ReportData};
 use anyhow::Result;
 use log::{debug, error};
+use std::fs;
 use std::io::{Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::{collections::HashMap, fs::File};
@@ -64,25 +65,32 @@ impl DataVisualizer {
     ) -> Result<()> {
         self.report_params.run_name = run_name.clone();
         self.report_params.collection_start = collection_start;
-        let (file_path, file) =
-            get_file(&run_data_dir, self.data_name.to_string()).or_else(|e| {
-                // Backward compatibility: if file is not found using the data's name,
-                // see if files with compatible names exist
-                for compatible_name in self.data.compatible_filenames() {
-                    match get_file(&run_data_dir, String::from(compatible_name)) {
-                        Ok(compatible_file) => {
-                            debug!(
-                                "Data file {} not found, use compatible file name {}",
-                                self.data_name, compatible_name
-                            );
-                            return Ok(compatible_file);
-                        }
-                        Err(_) => {}
-                    }
+        let file_path = find_file(
+            &run_data_dir,
+            &format!("^{}", regex::escape(self.data_name)),
+            None,
+        )
+        .map(|filename| run_data_dir.join(filename))
+        .or_else(|e| {
+            // Backward compatibility: if file is not found using the data's name,
+            // see if files with compatible names exist
+            for compatible_name in self.data.compatible_filenames() {
+                if let Ok(filename) = find_file(
+                    &run_data_dir,
+                    &format!("^{}", regex::escape(compatible_name)),
+                    None,
+                ) {
+                    debug!(
+                        "Data file {} not found, use compatible file name {}",
+                        self.data_name, compatible_name
+                    );
+                    return Ok(run_data_dir.join(filename));
                 }
-                self.data_available.insert(run_name.clone(), false);
-                Err(e)
-            })?;
+            }
+            self.data_available.insert(run_name.clone(), false);
+            Err(e)
+        })?;
+        let file = fs::OpenOptions::new().read(true).open(&file_path)?;
         self.report_params.data_dir = run_data_dir;
         self.report_params.tmp_dir = tmp_dir.to_path_buf();
         self.report_params.report_dir = report_dir.to_path_buf();
