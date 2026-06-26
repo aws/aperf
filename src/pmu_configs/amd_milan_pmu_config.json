@@ -1,0 +1,10 @@
+{
+  "events": {
+    "Backend_Stalls_1": "cpu/event=0xae,umask=0xf7/",
+    "Backend_Stalls_2": "cpu/event=0xaf,umask=0x27/",
+    "Cycles": "cpu/event=0x76,umask=0x0/"
+  },
+  "metrics": {
+    "stall-backend-pkc": "(Backend_Stalls_1 + Backend_Stalls_2) / Cycles * 1000"
+  }
+}

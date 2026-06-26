@@ -33,7 +33,7 @@ use diskstats::{Diskstats, DiskstatsRaw};
 use efa_stat::{EfaStat, EfaStatRaw};
 use ena_stat::{EnaStat, EnaStatRaw};
 use hotline::{Hotline, HotlineRaw};
-use include_directory::{include_directory, Dir};
+use include_dir::{include_dir, Dir};
 use interrupts::{InterruptData, InterruptDataRaw};
 use java_profile::{JavaProfile, JavaProfileRaw};
 use kernel_config::KernelConfig;
@@ -74,6 +74,7 @@ pub struct CollectorParams {
     pub signal: Signal,
     pub runlog: PathBuf,
     pub pmu_config: Option<PathBuf>,
+    pub pmu_counter_mode: String,
     pub perf_frequency: u32,
     pub save_profile_events: bool,
     pub hotline_frequency: u32,
@@ -95,6 +96,7 @@ impl CollectorParams {
             signal: signal::SIGTERM,
             runlog: PathBuf::new(),
             pmu_config: None,
+            pmu_counter_mode: String::new(),
             perf_frequency: 99,
             save_profile_events: false,
             hotline_frequency: 1000,
@@ -156,6 +158,7 @@ impl DataType {
         self.collector_params.perf_frequency = param.perf_frequency;
         self.collector_params.save_profile_events = param.save_profile_events;
         self.collector_params.pmu_config = param.pmu_config.clone();
+        self.collector_params.pmu_counter_mode = param.pmu_counter_mode.clone();
         self.collector_params.interval = param.interval;
         self.collector_params.hotline_frequency = param.hotline_frequency;
         self.collector_params.num_to_report = param.num_to_report;
@@ -329,7 +332,7 @@ macro_rules! data {
 /// creates the VisualizationData object and invokes the function.
 macro_rules! report_data {
     ( $( $report_data:ident ),* ) => {
-        pub static JS_DIR: Dir<'_> = include_directory!("$JS_DIR");
+        pub static JS_DIR: Dir<'_> = include_dir!("$JS_DIR");
 
         #[derive(Clone, Debug, Deserialize, Serialize)]
         pub enum ReportData {

@@ -21,6 +21,7 @@ fn setup_test_env() -> (TempDir, PathBuf, PathBuf, ReportParams) {
         run_name: "test_run".to_string(),
         data_file_path: PathBuf::new(),
         collection_start: None,
+        pmu_counter_mode: String::new(),
     };
 
     (temp_dir, data_dir, report_dir, params)

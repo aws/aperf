@@ -6,6 +6,8 @@ use std::fs;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
+#[cfg(target_os = "linux")]
+use {anyhow::Context, log::debug};
 
 use crate::data::common::data_formats::{Graph, GraphData};
 
@@ -31,43 +33,137 @@ pub fn get_data_name_from_type<T>() -> &'static str {
 #[cfg(target_os = "linux")]
 #[derive(Clone, Debug)]
 pub struct CpuInfo {
-    pub vendor: String,
-    pub model_name: String,
+    pub part: Option<String>,
+    pub vendor_id: Option<String>,
+    pub model_name: Option<String>,
 }
 
 #[cfg(target_os = "linux")]
 impl CpuInfo {
-    fn new() -> Self {
-        CpuInfo {
-            vendor: String::new(),
-            model_name: String::new(),
+    pub fn new() -> Result<Self> {
+        let cpu_info_file = File::open("/proc/cpuinfo")?;
+        let cpu_info_reader = BufReader::new(cpu_info_file);
+        let mut part = None;
+        let mut vendor_id = None;
+        let mut model_name = None;
+        for line in cpu_info_reader.lines() {
+            let info_line = line?;
+            if info_line.is_empty() {
+                break;
+            }
+            let key_value: Vec<&str> = info_line.split(':').collect();
+            if key_value.len() < 2 {
+                continue;
+            }
+            let key = key_value[0].trim().to_string();
+            let value = key_value[1].trim().to_string();
+            match key.as_str() {
+                "CPU part" => part = Some(value),
+                "vendor_id" => vendor_id = Some(value),
+                "model name" => model_name = Some(value),
+                _ => continue,
+            }
         }
+
+        Ok(Self {
+            part,
+            vendor_id,
+            model_name,
+        })
+    }
+
+    pub fn is_graviton(&self) -> bool {
+        self.part.is_some()
+    }
+
+    pub fn is_graviton_5(&self) -> bool {
+        self.part.as_ref().map_or(false, |part| part == "0xd84")
+    }
+
+    pub fn is_intel(&self) -> bool {
+        self.vendor_id
+            .as_ref()
+            .map_or(false, |vendor_id| vendor_id == "GenuineIntel")
+    }
+
+    pub fn is_intel_icelake(&self) -> bool {
+        self.model_name.as_ref().map_or(false, |model_name| {
+            model_name == "Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz"
+        })
+    }
+
+    pub fn is_intel_sapphire_rapids(&self) -> bool {
+        self.model_name.as_ref().map_or(false, |model_name| {
+            model_name == "Intel(R) Xeon(R) Platinum 8488C"
+        })
+    }
+
+    pub fn is_amd(&self) -> bool {
+        self.vendor_id
+            .as_ref()
+            .map_or(false, |vendor_id| vendor_id == "AuthenticAMD")
+    }
+
+    pub fn is_amd_genoa(&self) -> bool {
+        self.model_name
+            .as_ref()
+            .map_or(false, |model_name| model_name == "AMD EPYC 9R14")
+    }
+
+    pub fn is_amd_milan(&self) -> bool {
+        self.model_name
+            .as_ref()
+            .map_or(false, |model_name| model_name == "AMD EPYC 7R13")
     }
 }
 
 #[cfg(target_os = "linux")]
-pub fn get_cpu_info() -> Result<CpuInfo> {
-    let file = File::open("/proc/cpuinfo")?;
-    let proc_cpuinfo = BufReader::new(file);
-    let mut cpu_info = CpuInfo::new();
-    for line in proc_cpuinfo.lines() {
-        let info_line = line?;
-        if info_line.is_empty() {
-            break;
-        }
-        let key_value: Vec<&str> = info_line.split(':').collect();
-        if key_value.len() < 2 {
+/// Return the IDs of all online CPUs by parsing /sys/devices/system/cpu/online,
+/// a comma-separated list of single CPUs and inclusive ranges, e.g. "0-1,3-5,7".
+pub fn get_online_cpu_ids() -> Result<Vec<usize>> {
+    let mut ids = Vec::new();
+    let cpu_list = fs::read_to_string("/sys/devices/system/cpu/online")?;
+    let cpu_list = cpu_list.trim();
+    if cpu_list.is_empty() {
+        return Ok(ids);
+    }
+    for part in cpu_list.split(',') {
+        let part = part.trim();
+        if part.is_empty() {
             continue;
         }
-        let key = key_value[0].trim().to_string();
-        let value = key_value[1].trim().to_string();
-        match key.as_str() {
-            "vendor_id" => cpu_info.vendor = value,
-            "model name" => cpu_info.model_name = value,
-            _ => {}
+        match part.split_once('-') {
+            Some((low, high)) => {
+                let low: usize = low.trim().parse()?;
+                let high: usize = high.trim().parse()?;
+                if high < low {
+                    bail!("invalid CPU range '{part}' in cpu list '{cpu_list}'");
+                }
+                ids.extend(low..=high);
+            }
+            None => ids.push(part.parse()?),
         }
     }
-    Ok(cpu_info)
+    ids.sort_unstable();
+    ids.dedup();
+    Ok(ids)
+}
+
+/// Check the current fd limit and raise it if the number of required fd is larger.
+#[cfg(target_os = "linux")]
+pub fn raise_fd_limit(num_required_fds: u64) -> Result<()> {
+    let (cur_fd_limit, max_fd_limit) = rlimit::Resource::NOFILE
+        .get()
+        .context("Failed to read fd limit")?;
+    if num_required_fds > cur_fd_limit {
+        if num_required_fds >= max_fd_limit {
+            bail!("The number of required fds ({num_required_fds}) is larger than the max fds ({max_fd_limit}).")
+        }
+        debug!("Increasing fd limit from {cur_fd_limit} to {num_required_fds}");
+        rlimit::increase_nofile_limit(num_required_fds)
+            .with_context(|| format!("Failed to increase the fd limit to {num_required_fds}"))?;
+    }
+    Ok(())
 }
 
 pub fn no_tar_gz_file_name(path: &PathBuf) -> Option<String> {
@@ -271,6 +367,37 @@ mod utils_test {
     use std::fs;
     use std::path::PathBuf;
     use tempfile::TempDir;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_get_online_cpu_ids() {
+        use super::get_online_cpu_ids;
+        let ids = get_online_cpu_ids().expect("should read /sys/devices/system/cpu/online");
+        // At least CPU 0 is always online.
+        assert!(!ids.is_empty(), "expected at least one online CPU");
+        assert!(ids.contains(&0), "CPU 0 should be online");
+        // Result is sorted and de-duplicated.
+        let mut sorted = ids.clone();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(ids, sorted, "ids should be sorted and unique");
+        // Count should match sysconf(_SC_NPROCESSORS_ONLN) on a normal system.
+        let nproc = unsafe { libc::sysconf(libc::_SC_NPROCESSORS_ONLN as libc::c_int) } as usize;
+        assert_eq!(ids.len(), nproc, "online CPU count should match sysconf");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_cpu_info() {
+        use super::CpuInfo;
+
+        let cpu_info = CpuInfo::new().expect("Should read and parse /proc/cpuinfo");
+
+        assert!(
+            cpu_info.is_graviton() || cpu_info.is_intel() || cpu_info.is_amd(),
+            "The CPU should be recognized as one of Graviton, Intel, and AMD"
+        );
+    }
 
     #[test]
     fn test_find_file_prefix_match() {

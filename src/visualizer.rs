@@ -19,6 +19,9 @@ pub struct ReportParams {
     /// Wall-clock start of `collect_data_serial`. Used to anchor time_diff=0 in
     /// time-series data to the actual collection start rather than the first sample time.
     pub collection_start: Option<TimeEnum>,
+    /// Whether the collection of PMU counters is "grouped" or "ungrouped". An empty \
+    /// string means a legacy run before PMU config revamp.
+    pub pmu_counter_mode: String,
 }
 
 impl ReportParams {
@@ -30,6 +33,7 @@ impl ReportParams {
             run_name: String::new(),
             data_file_path: PathBuf::new(),
             collection_start: None,
+            pmu_counter_mode: String::new(),
         }
     }
 }
@@ -62,9 +66,12 @@ impl DataVisualizer {
         tmp_dir: &Path,
         report_dir: &Path,
         collection_start: Option<TimeEnum>,
+        pmu_counter_mode: String,
     ) -> Result<()> {
         self.report_params.run_name = run_name.clone();
         self.report_params.collection_start = collection_start;
+        self.report_params.pmu_counter_mode = pmu_counter_mode;
+
         let file_path = find_file(
             &run_data_dir,
             &format!("^{}", regex::escape(self.data_name)),

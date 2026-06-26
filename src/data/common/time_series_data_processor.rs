@@ -42,6 +42,9 @@ pub struct TimeSeriesDataProcessor {
     time_zero: Option<TimeEnum>,
     // The current time_diff to be added to every series
     cur_time_diff: u64,
+    // Whether the first accumulative value, where there is no previous value to compute the delta,
+    // should be ignored (the delta is 0) or used (the delta is the value itself).
+    ignore_first_accumulative_value: bool,
     // Map<metric_name.series_name, number of decreasing accumulative data> - used to count the
     // number of unexpected decreases of accumulative data, which are to be logged as warning
     // at the end of collection
@@ -67,9 +70,16 @@ impl TimeSeriesDataProcessor {
             per_metric_sum_count: HashMap::new(),
             time_zero,
             cur_time_diff: 0,
+            ignore_first_accumulative_value: true,
             decreasing_accumulative_data: HashMap::new(),
             fixed_value_range: None,
         }
+    }
+
+    /// Force to use the accumulative value itself, instead of 0, when there is no
+    /// previous value to compute the delta.
+    pub fn use_first_accumulative_value(&mut self) {
+        self.ignore_first_accumulative_value = false;
     }
 
     /// Override the name of the auto-generated aggregate series
@@ -210,7 +220,11 @@ impl TimeSeriesDataProcessor {
                 }
                 Some(data_value - prev_value)
             }
-            None => Some(0.0),
+            None => Some(if self.ignore_first_accumulative_value {
+                0.0
+            } else {
+                data_value
+            }),
         }
     }
 

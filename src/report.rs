@@ -38,17 +38,6 @@ impl VersionInfo {
     }
 }
 
-/// Reads `meta_data.bin` from a run's data directory and returns the run's
-/// wall-clock collection start and end times. Returns `None` if the file is
-/// missing, fails to deserialize, or was produced by an older aperf that did
-/// not stamp collection start/end.
-fn read_collection_times(run_dir_path: &PathBuf) -> Option<(TimeEnum, TimeEnum)> {
-    let meta_data_path = run_dir_path.join(format!("meta_data.{}", APERF_FILE_FORMAT));
-    let bytes = fs::read(&meta_data_path).ok()?;
-    let params: InitParams = bincode::deserialize(&bytes).ok()?;
-    Some((params.collection_start?, params.collection_end?))
-}
-
 /// Stores the information of all runs to be included in the report
 #[derive(Default)]
 struct RunsInfo {
@@ -70,6 +59,9 @@ struct RunsInfo {
     per_run_start_time: HashMap<String, TimeEnum>,
     /// Wall-clock end of `collect_data_serial`.
     per_run_end_time: HashMap<String, TimeEnum>,
+    /// Whether the PMU counters were collected with or without groups.
+    /// Empty string means legacy runs before PMU config revamp.
+    per_run_pmu_counter_mode: HashMap<String, String>,
 }
 
 impl RunsInfo {
@@ -87,11 +79,24 @@ impl RunsInfo {
         self.run_names.push(deduped_run_name.clone());
         self.run_archive_paths
             .insert(deduped_run_name.clone(), run_archive_path);
-        if let Some((start, end)) = read_collection_times(&run_dir_path) {
-            self.per_run_start_time
-                .insert(deduped_run_name.clone(), start);
-            self.per_run_end_time.insert(deduped_run_name.clone(), end);
+
+        // Reads meta_data.bin from a run's data directory for info about the collector.
+        let meta_data_path = run_dir_path.join(format!("meta_data.{}", APERF_FILE_FORMAT));
+        if let Ok(meta_data_bytes) = fs::read(&meta_data_path) {
+            if let Ok(meta_data) = bincode::deserialize::<InitParams>(&meta_data_bytes) {
+                self.per_run_pmu_counter_mode
+                    .insert(deduped_run_name.clone(), meta_data.pmu_counter_mode);
+                if let Some(collection_start) = meta_data.collection_start {
+                    self.per_run_start_time
+                        .insert(deduped_run_name.clone(), collection_start);
+                }
+                if let Some(collection_end) = meta_data.collection_end {
+                    self.per_run_end_time
+                        .insert(deduped_run_name.clone(), collection_end);
+                }
+            }
         }
+
         self.run_dir_paths.insert(deduped_run_name, run_dir_path);
 
         Ok(())
@@ -441,9 +446,15 @@ fn generate_report_files(report_dir: PathBuf, runs_info: RunsInfo, tmp_dir: &Pat
     info!("Processing collected data...");
     let mut visualization_data = VisualizationData::new();
     data::add_all_visualization_data(&mut visualization_data);
-    /* Init visualizers */
+
     for (run_name, run_data_dir) in runs_info.run_dir_paths {
         let collection_start = runs_info.per_run_start_time.get(&run_name).copied();
+        let pmu_counter_mode = runs_info
+            .per_run_pmu_counter_mode
+            .get(&run_name)
+            .cloned()
+            .unwrap_or_default();
+
         visualization_data
             .init_visualizers(
                 run_name.clone(),
@@ -451,8 +462,10 @@ fn generate_report_files(report_dir: PathBuf, runs_info: RunsInfo, tmp_dir: &Pat
                 tmp_dir,
                 &report_dir,
                 collection_start,
+                pmu_counter_mode,
             )
             .unwrap();
+
         visualization_data.process_raw_data().unwrap();
     }
 

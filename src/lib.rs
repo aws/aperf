@@ -61,50 +61,11 @@ lazy_static! {
 
 #[derive(Error, Debug)]
 pub enum PDError {
-    #[error("Error initializing logger")]
-    LoggerInitError,
-
-    #[error("Error getting JavaScript file for {}", .0)]
-    VisualizerJSFileGetError(String),
-
-    #[error("Error getting HashMap entry for {}", .0)]
-    VisualizerHashMapEntryError(String),
-
-    #[error("Error getting run values for {}", .0)]
-    VisualizerRunValueGetError(String),
-
-    #[error("Error getting Vmstat value for {}", .0)]
-    VisualizerVmstatValueGetError(String),
-
-    #[error("Error getting interrupt line count for CPU {}", .0)]
-    VisualizerInterruptLineCPUCountError(String),
-
-    #[error("Error getting Netstat value for {}", .0)]
-    VisualizerNetstatValueGetError(String),
-
-    #[error("{} data is not available for run {}", .0, .1)]
-    DataUnavailableError(String, String),
-
     #[error("Error getting Line Name Error")]
     CollectorLineNameError,
 
     #[error("Error getting Line Value Error")]
     CollectorLineValueError,
-
-    #[error("Error getting value from Option")]
-    ProcessorOptionExtractError,
-
-    #[error("Unsupported CPU")]
-    CollectorPerfUnsupportedCPU,
-
-    #[error("Unsupported API")]
-    VisualizerUnsupportedAPI,
-
-    #[error("Visualizer Init error")]
-    VisualizerInitError,
-
-    #[error("Multiple runs with the same name: {0}")]
-    DuplicateRunNames(String),
 
     #[error("The run {0:?} does not exist.")]
     RunNotFound(PathBuf),
@@ -127,24 +88,6 @@ pub enum PDError {
     #[error("Invalid time-range option: {}", .0)]
     InvalidRunTimeRangeOption(String),
 
-    #[error("All processes collection error")]
-    CollectorAllProcessError,
-
-    #[error("Could not get the total number of online CPUs with sysconf")]
-    CollectorPMUCPUError,
-
-    #[error("Generating report from other reports. Name must be given.")]
-    VisualizerReportFromReportNoNameError,
-
-    #[error("File not found {}", .0)]
-    VisualizerFileNotFound(String),
-
-    #[error("Custom PMU config file not provided.")]
-    PMUCustomFileNotFound,
-
-    #[error("PMU config file is invalid.")]
-    PMUFileInvalid,
-
     #[error("Failed to detect network interfaces: {}", .0)]
     NetworkInterfaceDetectionFailure(String),
 
@@ -153,9 +96,6 @@ pub enum PDError {
 
     #[error("Run data not available")]
     InvalidRunData,
-
-    #[error("Error getting Meminfo values for {}", .0)]
-    VisualizerMeminfoValueGetError(String),
 
     #[error("Dependency error: {}", .0)]
     DependencyError(String),
@@ -240,7 +180,7 @@ impl PerformanceData {
                             process::exit(1);
                         }
                         let msg = format!(
-                            "Excluding {} from collection, data preparation failed. Error msg: {}",
+                            "Excluding {} from collection, data preparation failed: {:?}",
                             name, e
                         );
                         if matches!(
@@ -437,6 +377,7 @@ impl VisualizationData {
         tmp_dir: &Path,
         report_dir: &Path,
         collection_start: Option<TimeEnum>,
+        pmu_counter_mode: String,
     ) -> Result<()> {
         let visualizers_len = self.visualizers.len();
         let mut error_count = 0;
@@ -448,6 +389,7 @@ impl VisualizationData {
                 tmp_dir,
                 report_dir,
                 collection_start,
+                pmu_counter_mode.clone(),
             ) {
                 debug!("{:#?}", e);
                 error_count += 1;
@@ -511,16 +453,26 @@ impl VisualizationData {
     }
 }
 
+pub const GROUPED_PMU_MODE: &str = "grouped";
+pub const UNGROUPED_PMU_MODE: &str = "ungrouped";
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
 pub struct InitParams {
     pub dir_name: String,
     pub period: u64,
     pub profile: HashMap<String, String>,
     pub pmu_config: Option<PathBuf>,
+    /// Whether the collection of PMU counters is "grouped" or
+    /// "ungrouped". An empty string means a legacy run before
+    /// PMU config revamp.
+    pub pmu_counter_mode: String,
     pub interval: u64,
     pub run_name: String,
+    /// The version of APerf that performed the collection.
     pub collector_version: String,
-    pub commit_sha_short: String,
+    /// The short commit SHA of APerf that performed the collection.
+    pub collector_commit_sha: String,
     pub tmp_dir: PathBuf,
     pub runlog: PathBuf,
     pub perf_frequency: u32,
@@ -560,17 +512,18 @@ impl InitParams {
             );
         }
         let collector_version = env!("CARGO_PKG_VERSION").to_string();
-        let commit_sha_short = env!("VERGEN_GIT_SHA").to_string();
+        let collector_commit_sha = env!("VERGEN_GIT_SHA").to_string();
 
         InitParams {
             dir_name,
             period: 0,
             profile: HashMap::new(),
             pmu_config: Option::None,
+            pmu_counter_mode: GROUPED_PMU_MODE.to_string(),
             interval: 0,
             run_name,
             collector_version,
-            commit_sha_short,
+            collector_commit_sha,
             tmp_dir: PathBuf::from(APERF_TMP),
             runlog: PathBuf::new(),
             perf_frequency: 99,
