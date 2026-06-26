@@ -1,0 +1,27 @@
+{
+  "events": {
+    "L2": "cpu/event=0x25,umask=0x1f/",
+    "Instructions": "cpu/event=0xc0,umask=0x0/",
+    "Instruction_TLB": "cpu/event=0x11,umask=0x20/",
+    "Instruction_TLB_TW": "cpu/event=0x11,umask=0xe/",
+    "Data_RD_TLB": "cpu/event=0x12,umask=0x20/",
+    "Data_ST_TLB": "cpu/event=0x13,umask=0x20/",
+    "Data_RD_TLB_TW": "cpu/event=0x12,umask=0xe/",
+    "Data_ST_TLB_TW": "cpu/event=0x13,umask=0xe/",
+    "Frontend_Stalls": "cpu/event=0x9c,umask=0x1,cmask=0x6/",
+    "Cycles": "cpu/event=0x3c,umask=0x0/",
+    "Backend_Stalls": "cpu/event=0xa4,umask=0x2/",
+    "Slots": "cpu/event=0xa4,umask=0x1/"
+  },
+  "metrics": {
+    "stall-frontend-pkc": "Frontend_Stalls / Cycles * 1000",
+    "stall-backend-pkc": "Backend_Stalls / Slots * 1000",
+    "inst-tlb-mpki": "Instruction_TLB / Instructions * 1000",
+    "inst-tlb-tw-pki": "Instruction_TLB_TW / Instructions * 1000",
+    "l2-mpki": "L2 / Instructions * 1000",
+    "data-st-tlb-mpki": "Data_ST_TLB / Instructions * 1000",
+    "data-st-tlb-tw-pki": "Data_ST_TLB_TW / Instructions * 1000",
+    "data-rd-tlb-mpki": "Data_RD_TLB / Instructions * 1000",
+    "data-rd-tlb-tw-pki": "Data_RD_TLB_TW / Instructions * 1000"
+  }
+}

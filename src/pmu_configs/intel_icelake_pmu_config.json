@@ -1,0 +1,12 @@
+{
+  "events": {
+    "Frontend_Stalls": "cpu/event=0x9c,umask=0x1,cmask=0x5/",
+    "Cycles": "cpu/event=0x3c,umask=0x0/",
+    "Backend_Stalls": "cpu/event=0xa4,umask=0x2/",
+    "Slots": "cpu/event=0xa4,umask=0x1/"
+  },
+  "metrics": {
+    "stall-frontend-pkc": "Frontend_Stalls / Cycles * 1000",
+    "stall-backend-pkc": "Backend_Stalls / Slots * 1000"
+  }
+}

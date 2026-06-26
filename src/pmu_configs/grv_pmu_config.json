@@ -1,0 +1,35 @@
+{
+  "events": {
+    "Instructions": "armv8_pmuv3_0/event=0x8/",
+    "Cycles": "armv8_pmuv3_0/event=0x11/",
+    "Frontend_Stalls": "armv8_pmuv3_0/event=0x23/",
+    "Backend_Stalls": "armv8_pmuv3_0/event=0x24/",
+    "Branches": "armv8_pmuv3_0/event=0x10/",
+    "Code_Sparsity": "armv8_pmuv3_0/event=0x11c/",
+    "Instruction_TLB": "armv8_pmuv3_0/event=0x2/",
+    "Instruction_TLB_TW": "armv8_pmuv3_0/event=0x35/",
+    "L1_Instructions": "armv8_pmuv3_0/event=0x1/",
+    "L1_Data": "armv8_pmuv3_0/event=0x3/",
+    "L2": "armv8_pmuv3_0/event=0x17/",
+    "L3": "armv8_pmuv3_0/event=0x37/",
+    "Data_TLB": "armv8_pmuv3_0/event=0x5/",
+    "Data_TLB_TW": "armv8_pmuv3_0/event=0x34/",
+    "STREX_SPEC": "armv8_pmuv3_0/event=0x6f/"
+  },
+  "metrics": {
+    "ipc": "Instructions / Cycles",
+    "stall-frontend-pkc": "Frontend_Stalls / Cycles * 1000",
+    "stall-backend-pkc": "Backend_Stalls / Cycles * 1000",
+    "branch-mpki": "Branches / Instructions * 1000",
+    "inst-l1-mpki": "L1_Instructions / Instructions * 1000",
+    "inst-tlb-mpki": "Instruction_TLB / Instructions * 1000",
+    "inst-tlb-tw-pki": "Instruction_TLB_TW / Instructions * 1000",
+    "code-sparsity": "Code_Sparsity / Instructions * 1000",
+    "data-l1-mpki": "L1_Data / Instructions * 1000",
+    "l2-mpki": "L2 / Instructions * 1000",
+    "l3-mpki": "L3 / Instructions * 1000",
+    "data-tlb-mpki": "Data_TLB / Instructions * 1000",
+    "data-tlb-tw-pki": "Data_TLB_TW / Instructions * 1000",
+    "strex-spec-pki": "STREX_SPEC / Instructions * 1000"
+  }
+}

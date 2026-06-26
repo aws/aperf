@@ -528,7 +528,13 @@ fn write_series_json_string(
         if i > 0 {
             buf.push(',');
         }
-        buf.push_str(ryu_buf.format(f64_to_fixed_2(v)));
+        if v.is_finite() {
+            buf.push_str(ryu_buf.format(f64_to_fixed_2(v)));
+        } else {
+            // ryu formats non-finite floats as bare `NaN`/`inf`/`-inf` tokens, which
+            // are invalid JSON. Emit `null` instead (matching serde_json's behavior).
+            buf.push_str("null");
+        }
     }
     buf.push(']');
 
@@ -1187,6 +1193,20 @@ mod tests {
         write_series_json_string(&mut buf, &series, None, None, None);
         let v: serde_json::Value = serde_json::from_str(&buf).unwrap();
         assert_eq!(v["is_aggregate"], true);
+    }
+
+    #[test]
+    fn test_write_series_non_finite_values_are_null() {
+        let series = make_series(
+            "total",
+            vec![0, 10, 20, 30, 40],
+            vec![1.5, f64::NAN, f64::INFINITY, f64::NEG_INFINITY, 2.5],
+        );
+        let mut buf = String::new();
+        write_series_json_string(&mut buf, &series, None, None, None);
+        // The whole line must be valid JSON.
+        let v: serde_json::Value = serde_json::from_str(&buf).unwrap();
+        assert_eq!(v["values"], serde_json::json!([1.5, null, null, null, 2.5]));
     }
 
     // ---- time_series_metric_json_string tests ----

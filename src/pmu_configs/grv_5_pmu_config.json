@@ -1,0 +1,8 @@
+{
+    "events": {
+        "L3_READ": "armv8_pmuv3_0/event=0x36/"
+    },
+    "metrics": {
+        "l3-mpki": "(L3 / L3_READ * L2) / Instructions * 1000"
+    }
+}

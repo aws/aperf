@@ -29,6 +29,7 @@ mod aperf_stats_tests {
             run_name: String::new(),
             data_file_path: PathBuf::from(data_file_path),
             collection_start: None,
+            pmu_counter_mode: String::new(),
         }
     }
 

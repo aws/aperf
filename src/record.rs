@@ -2,7 +2,7 @@
 
 use crate::data::common::utils::get_data_name_from_type;
 use crate::data::java_profile::JavaProfile;
-use crate::{data, InitParams, PerformanceData};
+use crate::{data, InitParams, PerformanceData, UNGROUPED_PMU_MODE};
 use anyhow::anyhow;
 use anyhow::Result;
 use clap::{builder::PossibleValuesParser, ArgGroup, Args};
@@ -91,6 +91,15 @@ pub struct Record {
     #[clap(help_heading = "PMU Options", long, value_parser)]
     pub pmu_config: Option<String>,
 
+    /// Avoid creating a PMU counter group for each metric defined in the
+    /// PMU config. It reduces multiplexing and file descriptor usage, but
+    /// counters used by a metric are no longer guaranteed to be collected
+    /// together. Recommend to use the option when the total number of
+    /// counters (events) to be collected is less than or equal to that of
+    /// the PMU counter registers.
+    #[clap(help_heading = "PMU Options", long, value_parser, verbatim_doc_comment)]
+    pub ungroup_pmu_events: bool,
+
     #[cfg(feature = "hotline")]
     /// SPE sampling frequency, defaulted to 1kHz on Grv4.
     #[clap(
@@ -139,6 +148,9 @@ pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
     params.runlog = runlog.to_path_buf();
     if let Some(p) = &record.pmu_config {
         params.pmu_config = Some(PathBuf::from(p));
+    }
+    if record.ungroup_pmu_events {
+        params.pmu_counter_mode = UNGROUPED_PMU_MODE.to_string();
     }
 
     #[cfg(feature = "hotline")]
