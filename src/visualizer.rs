@@ -6,7 +6,7 @@ use anyhow::Result;
 use log::{debug, error};
 use std::fs;
 use std::io::{Seek, SeekFrom};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::{collections::HashMap, fs::File};
 
 #[derive(Clone, Debug)]
@@ -22,6 +22,8 @@ pub struct ReportParams {
     /// Whether the collection of PMU counters is "grouped" or "ungrouped". An empty \
     /// string means a legacy run before PMU config revamp.
     pub pmu_counter_mode: String,
+    /// PID of the aperf process that performed the collection. "None" for legacy runs.
+    pub pid: Option<u32>,
 }
 
 impl ReportParams {
@@ -34,6 +36,7 @@ impl ReportParams {
             data_file_path: PathBuf::new(),
             collection_start: None,
             pmu_counter_mode: String::new(),
+            pid: None,
         }
     }
 }
@@ -59,18 +62,10 @@ impl DataVisualizer {
         }
     }
 
-    pub fn init_visualizer(
-        &mut self,
-        run_name: String,
-        run_data_dir: PathBuf,
-        tmp_dir: &Path,
-        report_dir: &Path,
-        collection_start: Option<TimeEnum>,
-        pmu_counter_mode: String,
-    ) -> Result<()> {
-        self.report_params.run_name = run_name.clone();
-        self.report_params.collection_start = collection_start;
-        self.report_params.pmu_counter_mode = pmu_counter_mode;
+    pub fn init_visualizer(&mut self, report_params: ReportParams) -> Result<()> {
+        self.report_params = report_params;
+        let run_name = self.report_params.run_name.clone();
+        let run_data_dir = self.report_params.data_dir.clone();
 
         let file_path = find_file(
             &run_data_dir,
@@ -98,9 +93,6 @@ impl DataVisualizer {
             Err(e)
         })?;
         let file = fs::OpenOptions::new().read(true).open(&file_path)?;
-        self.report_params.data_dir = run_data_dir;
-        self.report_params.tmp_dir = tmp_dir.to_path_buf();
-        self.report_params.report_dir = report_dir.to_path_buf();
         self.report_params.data_file_path = file_path;
         self.file_handle = Some(file);
         self.data_available.insert(run_name, true);

@@ -205,11 +205,13 @@ impl ProcessData for Processes {
 
                     let stat = match process_key {
                         ProcessKey::UserSpaceTime | ProcessKey::KernelSpaceTime => {
-                            // CPU time: cumulative value, convert to aggregate percentage
+                            // CPU time: represents the CPU time that a process consumes, e.g.
+                            // 3.5 means the process's execution was equivalently scheduled on
+                            // 3 CPUs the whole time and an additional CPU for half of the time.
                             let value_diff = current_value - prev_value;
                             let time_diff = current_time - prev_time;
                             let s = if time_diff > 0 {
-                                (value_diff / (ticks_per_second as f64 * time_diff as f64)) * 100.0
+                                value_diff / (ticks_per_second as f64 * time_diff as f64)
                             } else {
                                 0.0
                             };
@@ -241,14 +243,28 @@ impl ProcessData for Processes {
             .map(|(k, v)| (k.clone(), *v))
             .collect();
         ranking.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
-        let top_cpu_time_processes: Vec<String> =
+        // Only retain the top 16 processes of cpu utilization.
+        let mut processes_to_include: Vec<String> =
             ranking.into_iter().take(16).map(|(name, _)| name).collect();
 
-        // Add top processes for each metric to time_series_data
+        // Also retain the metrics of the APerf process, located by the saved pid.
+        if let Some(aperf_pid) = params.pid {
+            let pid_prefix = format!("{aperf_pid}_");
+            if let Some(aperf_process) = process_cpu_time_map
+                .keys()
+                .find(|name| name.starts_with(&pid_prefix))
+            {
+                if !processes_to_include.contains(aperf_process) {
+                    processes_to_include.push(aperf_process.clone());
+                }
+            }
+        }
+
+        // Add the selected processes for each metric to time_series_data
         for (process_key, process_map) in per_field_per_process_series {
             let mut series_vec = Vec::new();
 
-            for process_name in &top_cpu_time_processes {
+            for process_name in &processes_to_include {
                 if let Some(series) = process_map.get(process_name) {
                     series_vec.push(series.clone());
                 }

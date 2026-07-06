@@ -30,6 +30,7 @@ mod aperf_stats_tests {
             data_file_path: PathBuf::from(data_file_path),
             collection_start: None,
             pmu_counter_mode: String::new(),
+            pid: None,
         }
     }
 

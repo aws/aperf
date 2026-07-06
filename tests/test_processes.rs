@@ -198,7 +198,7 @@ fn test_process_processes_raw_data_complex() {
                                         [sample_idx - 1][process_name];
                                     let delta =
                                         expected_stats.user_space_time - prev_stats.user_space_time;
-                                    (delta as f64) / (ticks_per_second as f64 * 2.0) * 100.0
+                                    (delta as f64) / (ticks_per_second as f64 * 2.0)
                                 }
                             }
                             ProcessKey::KernelSpaceTime => {
@@ -209,7 +209,7 @@ fn test_process_processes_raw_data_complex() {
                                         [sample_idx - 1][process_name];
                                     let delta = expected_stats.kernel_space_time
                                         - prev_stats.kernel_space_time;
-                                    (delta as f64) / (ticks_per_second as f64 * 2.0) * 100.0
+                                    (delta as f64) / (ticks_per_second as f64 * 2.0)
                                 }
                             }
                             ProcessKey::NumberThreads => expected_stats.number_threads as f64,
@@ -304,7 +304,7 @@ fn test_process_processes_raw_data_simple() {
                             let prev_stats = &expected_per_sample_per_process_stats[sample_idx - 1]
                                 [process_name];
                             let delta = expected_stats.user_space_time - prev_stats.user_space_time;
-                            (delta as f64) / (ticks_per_second as f64 * 1.0) * 100.0
+                            (delta as f64) / (ticks_per_second as f64 * 1.0)
                         }
                     }
                     ProcessKey::KernelSpaceTime => {
@@ -315,7 +315,7 @@ fn test_process_processes_raw_data_simple() {
                                 [process_name];
                             let delta =
                                 expected_stats.kernel_space_time - prev_stats.kernel_space_time;
-                            (delta as f64) / (ticks_per_second as f64 * 1.0) * 100.0
+                            (delta as f64) / (ticks_per_second as f64 * 1.0)
                         }
                     }
                     ProcessKey::NumberThreads => expected_stats.number_threads as f64,

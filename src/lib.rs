@@ -16,11 +16,15 @@ pub mod server;
 pub mod visualizer;
 
 use crate::analytics::{AnalyticalEngine, DataFindings};
+use crate::computations::Statistics;
 use crate::data::aperf_runlog::AperfRunlog;
+use crate::data::aperf_stats::AperfStat;
+use crate::data::common::data_formats::{AperfData, TimeSeriesMetric};
 use crate::data::common::processed_data_accessor::ProcessedDataAccessor;
+use crate::data::processes::Processes;
 use crate::data::TimeEnum;
-use crate::visualizer::DataVisualizer;
-use anyhow::Result;
+use crate::visualizer::{DataVisualizer, ReportParams};
+use anyhow::{Context, Result};
 use chrono::prelude::*;
 use data::common::utils::get_data_name_from_type;
 use log::{debug, error, info};
@@ -31,7 +35,6 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 #[cfg(target_os = "linux")]
 use {
-    crate::data::aperf_stats::AperfStat,
     crate::data::Data,
     flate2::{write::GzEncoder, Compression},
     nix::poll::{poll, PollFd, PollFlags, PollTimeout},
@@ -218,11 +221,10 @@ impl PerformanceData {
     }
 
     pub fn collect_data_serial(&mut self) -> Result<()> {
-        let start = time::Instant::now();
+        let start_time = time::Instant::now();
         self.init_params.collection_start = Some(TimeEnum::DateTime(Utc::now()));
-        let mut aperf_collect_data = AperfStat::new();
-        let mut current = time::Instant::now();
-        let end = current + time::Duration::from_secs(self.init_params.period);
+        let mut aperf_stat = AperfStat::new();
+        let end_time = start_time + time::Duration::from_secs(self.init_params.period);
 
         // TimerFd
         let mut tfd = TimerFd::new()?;
@@ -244,58 +246,66 @@ impl PerformanceData {
         let signal_pollfd = PollFd::new(sfd.as_fd(), PollFlags::POLLIN);
 
         let mut poll_fds = [timer_pollfd, signal_pollfd];
-        let mut datatype_signal = signal::SIGTERM;
+        let mut data_type_signal = signal::SIGTERM;
 
-        while current <= end {
-            aperf_collect_data.time = TimeEnum::DateTime(Utc::now());
-            aperf_collect_data.data = HashMap::new();
+        let mut current_time = start_time;
+
+        while current_time <= end_time {
             if poll(&mut poll_fds, PollTimeout::NONE)? <= 0 {
-                error!("Poll error.");
+                error!("Failed to poll timer or signal fds");
             }
+
             if let Some(ev) = poll_fds[0].revents() {
                 if ev.contains(PollFlags::POLLIN) {
                     let ret = tfd.read();
                     if ret > 1 {
                         error!("Missed {} interval(s)", ret - 1);
                     }
-                    debug!("Time elapsed: {:?}", start.elapsed());
-                    current += time::Duration::from_secs(ret * self.init_params.interval);
-                    for (name, datatype) in self.collectors.iter_mut() {
-                        if datatype.is_static {
+                    debug!("Time elapsed: {:?}", start_time.elapsed());
+
+                    let cur_collection_start = time::Instant::now();
+                    aperf_stat.time = TimeEnum::DateTime(Utc::now());
+                    aperf_stat.data = HashMap::new();
+
+                    for (name, data_type) in self.collectors.iter_mut() {
+                        if data_type.is_static {
                             continue;
                         }
 
-                        datatype.collector_params.elapsed_time = start.elapsed().as_secs();
+                        data_type.collector_params.elapsed_time = start_time.elapsed().as_secs();
 
-                        aperf_collect_data.measure(
-                            name.clone() + "-collect",
-                            || -> Result<()> {
-                                datatype.collect_data()?;
-                                Ok(())
-                            },
-                        )?;
-                        aperf_collect_data.measure(name.clone() + "-print", || -> Result<()> {
-                            datatype.write_to_file()?;
+                        aperf_stat.measure(name.clone() + "-collect", || -> Result<()> {
+                            data_type.collect_data()?;
+                            Ok(())
+                        })?;
+                        aperf_stat.measure(name.clone() + "-print", || -> Result<()> {
+                            data_type.write_to_file()?;
                             Ok(())
                         })?;
                     }
-                    let data_collection_time = time::Instant::now() - current;
-                    aperf_collect_data
+                    let cur_collection_end = time::Instant::now();
+
+                    let cur_collection_time = cur_collection_end - cur_collection_start;
+                    aperf_stat
                         .data
-                        .insert("aperf".to_string(), data_collection_time.as_micros() as u64);
-                    debug!("Collection time: {:?}", data_collection_time);
+                        .insert("aperf".to_string(), cur_collection_time.as_micros() as u64);
+                    debug!("Collection time: {:?}", cur_collection_time);
+
                     bincode::serialize_into(
                         self.aperf_stats_handle.as_ref().unwrap(),
-                        &aperf_collect_data,
+                        &aperf_stat,
                     )?;
+
+                    current_time = cur_collection_end;
                 }
             }
+
             if let Some(ev) = poll_fds[1].revents() {
                 if ev.contains(PollFlags::POLLIN) {
                     if let Ok(Some(siginfo)) = sfd.read_signal() {
                         if siginfo.ssi_signo == signal::SIGINT as u32 {
                             info!("Caught SIGINT. Exiting...");
-                            datatype_signal = signal::SIGINT;
+                            data_type_signal = signal::SIGINT;
                         } else if siginfo.ssi_signo == signal::SIGTERM as u32 {
                             info!("Caught SIGTERM. Exiting...");
                         } else {
@@ -306,12 +316,16 @@ impl PerformanceData {
                 }
             }
         }
+
         self.init_params.collection_end = Some(TimeEnum::DateTime(Utc::now()));
+
         for (_name, datatype) in self.collectors.iter_mut() {
-            datatype.set_signal(datatype_signal);
+            datatype.set_signal(data_type_signal);
             datatype.finish_data_collection()?;
         }
+
         tfd.set_state(TimerState::Disarmed, SetTimeFlags::Default);
+
         Ok(())
     }
 
@@ -360,37 +374,31 @@ impl Default for PerformanceData {
 
 #[derive(Default)]
 pub struct VisualizationData {
+    per_run_report_params: HashMap<String, ReportParams>,
     pub visualizers: HashMap<String, DataVisualizer>,
 }
 
 impl VisualizationData {
-    pub fn new() -> Self {
+    pub fn new(per_run_report_params: HashMap<String, ReportParams>) -> Self {
         VisualizationData {
+            per_run_report_params,
             visualizers: HashMap::new(),
         }
     }
 
-    pub fn init_visualizers(
-        &mut self,
-        run_name: String,
-        run_data_dir: PathBuf,
-        tmp_dir: &Path,
-        report_dir: &Path,
-        collection_start: Option<TimeEnum>,
-        pmu_counter_mode: String,
-    ) -> Result<()> {
+    pub fn init_visualizers(&mut self, run_name: &str) -> Result<()> {
         let visualizers_len = self.visualizers.len();
         let mut error_count = 0;
 
+        let cur_run_report_params =
+            self.per_run_report_params
+                .get_mut(run_name)
+                .with_context(|| {
+                    format!("Unrecognized run name {run_name} when initializing report data.")
+                })?;
+
         for data_visualizer in self.visualizers.values_mut() {
-            if let Err(e) = data_visualizer.init_visualizer(
-                run_name.clone(),
-                run_data_dir.clone(),
-                tmp_dir,
-                report_dir,
-                collection_start,
-                pmu_counter_mode.clone(),
-            ) {
+            if let Err(e) = data_visualizer.init_visualizer(cur_run_report_params.clone()) {
                 debug!("{:#?}", e);
                 error_count += 1;
             }
@@ -451,6 +459,111 @@ impl VisualizationData {
                     .is_some_and(|&value| value)
             })
     }
+
+    /// Logics to be run after all raw data has been processed.
+    pub fn post_process_data(&mut self) {
+        // Perform the inter-data post-processing logics first.
+        copy_aperf_process_metrics_to_aperf_stats(
+            &mut self.visualizers,
+            &self.per_run_report_params,
+        );
+
+        // Perform the intra-data logics for each data type.
+        for data_visualizer in self.visualizers.values_mut() {
+            data_visualizer.post_process_data();
+        }
+    }
+}
+
+/// Extract the APerf process's metric from processes data and add them to the
+/// aperf_stats data, to monitor APerf performance in the report.
+fn copy_aperf_process_metrics_to_aperf_stats(
+    visualizers: &mut HashMap<String, DataVisualizer>,
+    per_run_report_params: &HashMap<String, ReportParams>,
+) {
+    // A map from a run name to the sorted list of APerf process metrics
+    let mut per_run_aperf_process_metrics: HashMap<String, Vec<TimeSeriesMetric>> = HashMap::new();
+
+    let processes_data_visualizer = match visualizers.get(get_data_name_from_type::<Processes>()) {
+        Some(processes_data_visualizer) => processes_data_visualizer,
+        None => return,
+    };
+
+    for (run_name, cur_run_data) in &processes_data_visualizer.processed_data.runs {
+        let cur_run_pid = match per_run_report_params.get(run_name) {
+            Some(report_params) => {
+                if let Some(pid) = report_params.pid {
+                    pid
+                } else {
+                    continue;
+                }
+            }
+            None => continue,
+        };
+
+        let cur_run_processes_data = match cur_run_data {
+            AperfData::TimeSeries(time_series_data) => time_series_data,
+            _ => continue,
+        };
+
+        let aperf_series_name = format!("{cur_run_pid}_aperf");
+
+        for metric_name in &cur_run_processes_data.sorted_metric_names {
+            // For every processes metric, locate the corresponding series for the APerf process and
+            // create a new dedicated metric for it.
+            if let Some(metric) = cur_run_processes_data.metrics.get(metric_name) {
+                if let Some(series) = metric
+                    .series
+                    .iter()
+                    .find(|s| s.series_name == aperf_series_name)
+                {
+                    let aperf_process_metric_name = format!("process_{metric_name}");
+                    let mut aperf_process_metric =
+                        TimeSeriesMetric::new(aperf_process_metric_name.clone());
+                    let stats = Statistics::from_values(&series.values);
+                    aperf_process_metric.value_range =
+                        (stats.min.floor() as u64, stats.max.ceil() as u64);
+                    aperf_process_metric.stats = stats;
+                    aperf_process_metric.series = vec![series.clone()];
+                    per_run_aperf_process_metrics
+                        .entry(run_name.clone())
+                        .or_default()
+                        .push(aperf_process_metric);
+                }
+            }
+        }
+    }
+
+    if per_run_aperf_process_metrics.is_empty() {
+        return;
+    }
+
+    let aperf_stat_data_visualizer =
+        match visualizers.get_mut(get_data_name_from_type::<AperfStat>()) {
+            Some(aperf_stats_visualizer) => aperf_stats_visualizer,
+            None => return,
+        };
+
+    for (run_name, aperf_process_metrics) in per_run_aperf_process_metrics {
+        if let Some(AperfData::TimeSeries(cur_run_aperf_stats_data)) = aperf_stat_data_visualizer
+            .processed_data
+            .runs
+            .get_mut(&run_name)
+        {
+            // The APerf process metrics should be showing upfront
+            let mut insert_pos = 0;
+            for aperf_process_metric in aperf_process_metrics {
+                cur_run_aperf_stats_data
+                    .sorted_metric_names
+                    .insert(insert_pos, aperf_process_metric.metric_name.clone());
+                cur_run_aperf_stats_data.metrics.insert(
+                    aperf_process_metric.metric_name.clone(),
+                    aperf_process_metric,
+                );
+                insert_pos += 1;
+            }
+        }
+    }
 }
 
 pub const GROUPED_PMU_MODE: &str = "grouped";
@@ -487,6 +600,10 @@ pub struct InitParams {
     /// produced by versions of aperf that did not record this.
     #[serde(default)]
     pub collection_end: Option<TimeEnum>,
+    /// PID of the aperf process that performed the collection. `None`
+    /// for archives produced by versions of aperf that did not record this.
+    #[serde(default)]
+    pub pid: Option<u32>,
 }
 
 impl InitParams {
@@ -532,6 +649,7 @@ impl InitParams {
             num_to_report: 5000,
             collection_start: None,
             collection_end: None,
+            pid: Some(std::process::id()),
         }
     }
 }
