@@ -160,31 +160,32 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
     fieldDescriptions: {
       user_space_time: {
         readableName: "User Space Time (utime)",
-        description: "The aggregate percent CPU time spent executing application code for each process.",
+        description:
+          "The aggregate CPU time spent executing application code for each process. The values are represented as the equivalent number of cores consumed by the process.",
         desired: "higher",
-        unit: "Utilization (%)",
+        unit: "Number of cores",
       },
       kernel_space_time: {
         readableName: "Kernel Space Time (stime)",
-        description: "The aggregate percent CPU time spent executing in kernel mode (system calls).",
+        description:
+          "The aggregate CPU time spent executing in kernel mode (system calls). The values are represented as the equivalent number of cores consumed by the process.",
         desired: "lower",
-        unit: "Utilization (%)",
+        unit: "Number of cores",
       },
       number_threads: {
         readableName: "Number of Threads (num_threads)",
-        description: "Current number of threads in the process.",
+        description: "The number of threads spawned by a process.",
         desired: "depends",
       },
       virtual_memory_size: {
         readableName: "Virtual Memory Size (vsize)",
-        description: "Total virtual memory used by the process in Bytes.",
+        description: "Total virtual memory used by a process.",
         desired: "lower",
         unit: "Bytes",
       },
       resident_set_size: {
         readableName: "Resident Set Size (rss)",
-        description:
-          "Physical memory currently used by the process in pages, multiply by page size to convert to bytes.",
+        description: "Physical memory in number of pages used by a process. Multiply by page size to convert to bytes.",
         desired: "lower",
         unit: "Pages",
       },
@@ -4659,8 +4660,7 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
   },
   perf_profile: {
     readableName: "Perf Profiling",
-    summary:
-      "Perf profiling is system-wide CPU profiling performed through Linux's Perf tool.",
+    summary: "Perf profiling is system-wide CPU profiling performed through Linux's Perf tool.",
     defaultHelpfulLinks: ["https://perfwiki.github.io/main/"],
     fieldDescriptions: {},
   },
@@ -4705,6 +4705,38 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       "APerf stats metrics measure the amount of time APerf spent on recording each data. Every graph contains the time of collecting the data from the system, the time of writing the data to the archive file, and the sum of both as the aggregate. The statistics of a metric graph accounts for the aggregate series.",
     defaultUnit: "Time (us)",
     fieldDescriptions: {
+      process_user_space_time: {
+        readableName: "APerf Process User Space Time (utime)",
+        description:
+          "The aggregate CPU time consumed by the APerf process executing application code. The values are represented as the equivalent number of cores consumed by the process.",
+        desired: "lower",
+        unit: "Number of Cores",
+      },
+      process_kernel_space_time: {
+        readableName: "APerf Process Kernel Space Time (stime)",
+        description:
+          "The aggregate CPU time consumed by the APerf process in kernel mode (system calls). The values are represented as the equivalent number of cores consumed by the process.",
+        desired: "lower",
+        unit: "Number of Cores",
+      },
+      process_number_threads: {
+        readableName: "APerf Process Number of Threads (num_threads)",
+        description: "The number of threads spwaned by the APerf process.",
+        desired: "fixed",
+      },
+      process_virtual_memory_size: {
+        readableName: "APerf Process Virtual Memory Size (vsize)",
+        description: "Total virtual memory used by the APerf process.",
+        desired: "lower",
+        unit: "Bytes",
+      },
+      process_resident_set_size: {
+        readableName: "APerf Process Resident Set Size (rss)",
+        description:
+          "Physical memory in number of pages used by the APerf process. Multiply by page size to convert to bytes.",
+        desired: "lower",
+        unit: "Pages",
+      },
       aperf: {
         readableName: "Total collection time",
         description: "The total time in us for APerf to collect all data during one interval.",

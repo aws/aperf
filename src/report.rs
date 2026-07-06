@@ -2,6 +2,7 @@ use crate::analytics::BASE_RUN_NAME;
 use crate::data::common::processed_data_accessor::ProcessedDataAccessor;
 use crate::data::common::utils::no_tar_gz_file_name;
 use crate::data::{TimeEnum, JS_DIR};
+use crate::visualizer::ReportParams;
 use crate::{data, InitParams, PDError, VisualizationData, APERF_FILE_FORMAT};
 use anyhow::{Context, Result};
 use chrono::Utc;
@@ -41,17 +42,19 @@ impl VersionInfo {
 /// Stores the information of all runs to be included in the report
 #[derive(Default)]
 struct RunsInfo {
-    /// The list of run names (the run dir/archive file name minus the file format)
+    /// The path to the report directory.
+    report_dir: PathBuf,
+    /// The path to the temp working directory.
+    tmp_dir: PathBuf,
+    /// The list of run names (the run dir/archive file name minus the file format).
     run_names: Vec<String>,
-    /// The index used to deduplicate each unique run name
+    /// The index used to deduplicate each unique run name.
     run_name_dedup_indices: HashMap<String, u8>,
-    /// The map from run names to paths to the run archives (run data tar files)
+    /// The map from run names to paths to the run archives (run data tar files).
     run_archive_paths: HashMap<String, PathBuf>,
-    /// The map from run names to paths to the run data directory (where data are available for read and processing)
-    run_dir_paths: HashMap<String, PathBuf>,
-    /// The specified start time of every run's time range
+    /// The specified start time of every run's time range.
     per_run_from_time: HashMap<String, i64>,
-    /// The specified end time of every run's time range
+    /// The specified end time of every run's time range.
     per_run_to_time: HashMap<String, i64>,
     /// Wall-clock start of `collect_data_serial`, derived from the run's
     /// `meta_data.bin`. Missing entry => archive was recorded by an older
@@ -59,14 +62,19 @@ struct RunsInfo {
     per_run_start_time: HashMap<String, TimeEnum>,
     /// Wall-clock end of `collect_data_serial`.
     per_run_end_time: HashMap<String, TimeEnum>,
-    /// Whether the PMU counters were collected with or without groups.
-    /// Empty string means legacy runs before PMU config revamp.
-    per_run_pmu_counter_mode: HashMap<String, String>,
+    /// Per-run report params initialized from meta_data.bin, which is a
+    /// serialization of InitParams, used to pass parameters between
+    /// record and report.
+    per_run_report_params: HashMap<String, ReportParams>,
 }
 
 impl RunsInfo {
-    fn new() -> Self {
-        RunsInfo::default()
+    fn new(report_dir: PathBuf, tmp_dir: PathBuf) -> Self {
+        RunsInfo {
+            report_dir,
+            tmp_dir,
+            ..Default::default()
+        }
     }
 
     fn add_run(
@@ -80,13 +88,20 @@ impl RunsInfo {
         self.run_archive_paths
             .insert(deduped_run_name.clone(), run_archive_path);
 
+        let mut report_params = ReportParams::new();
+        report_params.report_dir = self.report_dir.clone();
+        report_params.tmp_dir = self.tmp_dir.clone();
+        report_params.run_name = deduped_run_name.clone();
+        report_params.data_dir = run_dir_path.clone();
+
         // Reads meta_data.bin from a run's data directory for info about the collector.
         let meta_data_path = run_dir_path.join(format!("meta_data.{}", APERF_FILE_FORMAT));
         if let Ok(meta_data_bytes) = fs::read(&meta_data_path) {
             if let Ok(meta_data) = bincode::deserialize::<InitParams>(&meta_data_bytes) {
-                self.per_run_pmu_counter_mode
-                    .insert(deduped_run_name.clone(), meta_data.pmu_counter_mode);
+                report_params.pmu_counter_mode = meta_data.pmu_counter_mode;
+                report_params.pid = meta_data.pid;
                 if let Some(collection_start) = meta_data.collection_start {
+                    report_params.collection_start = Some(collection_start);
                     self.per_run_start_time
                         .insert(deduped_run_name.clone(), collection_start);
                 }
@@ -97,7 +112,8 @@ impl RunsInfo {
             }
         }
 
-        self.run_dir_paths.insert(deduped_run_name, run_dir_path);
+        self.per_run_report_params
+            .insert(deduped_run_name, report_params);
 
         Ok(())
     }
@@ -244,7 +260,7 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
         return Err(PDError::ReportExists(report_path_str).into());
     }
 
-    let mut runs_info = RunsInfo::new();
+    let mut runs_info = RunsInfo::new(report_dir_path, tmp_dir.clone());
     let mut seen_run_paths: HashSet<PathBuf> = HashSet::new();
 
     for run in &report.run {
@@ -298,7 +314,7 @@ pub fn report(report: &Report, tmp_dir: &PathBuf) -> Result<()> {
 
     runs_info.process_per_run_time_range(&report.time_range)?;
 
-    generate_report_files(report_dir_path, runs_info, tmp_dir);
+    generate_report_files(runs_info);
 
     Ok(())
 }
@@ -431,41 +447,26 @@ pub fn get_report_run_archive_paths(report_path: &PathBuf) -> Option<Vec<PathBuf
 }
 
 /// Processes all the raw data, executes analytical rules, and produces all required report files
-fn generate_report_files(report_dir: PathBuf, runs_info: RunsInfo, tmp_dir: &PathBuf) {
+fn generate_report_files(runs_info: RunsInfo) {
     {
         let mut base_run_name = BASE_RUN_NAME.lock().unwrap();
         *base_run_name = runs_info.run_names.get(0).unwrap().to_string();
     }
 
     info!("Creating APerf report...");
+    let report_dir = runs_info.report_dir;
+
     let report_data_dir = report_dir.join("data");
     fs::create_dir_all(report_data_dir.join("archive")).unwrap();
     let processed_data_js_dir = report_data_dir.join("js");
     fs::create_dir_all(processed_data_js_dir.clone()).unwrap();
 
     info!("Processing collected data...");
-    let mut visualization_data = VisualizationData::new();
+    let mut visualization_data = VisualizationData::new(runs_info.per_run_report_params);
     data::add_all_visualization_data(&mut visualization_data);
 
-    for (run_name, run_data_dir) in runs_info.run_dir_paths {
-        let collection_start = runs_info.per_run_start_time.get(&run_name).copied();
-        let pmu_counter_mode = runs_info
-            .per_run_pmu_counter_mode
-            .get(&run_name)
-            .cloned()
-            .unwrap_or_default();
-
-        visualization_data
-            .init_visualizers(
-                run_name.clone(),
-                run_data_dir.clone(),
-                tmp_dir,
-                &report_dir,
-                collection_start,
-                pmu_counter_mode,
-            )
-            .unwrap();
-
+    for run_name in &runs_info.run_names {
+        visualization_data.init_visualizers(run_name).unwrap();
         visualization_data.process_raw_data().unwrap();
     }
 
@@ -521,10 +522,10 @@ fn generate_report_files(report_dir: PathBuf, runs_info: RunsInfo, tmp_dir: &Pat
         .extract(&report_dir)
         .expect("Failed to copy frontend files");
 
+    visualization_data.post_process_data();
+
     info!("Writing processed data into report");
     for (data_name, visualizer) in &mut visualization_data.visualizers {
-        visualizer.post_process_data();
-
         let processed_data_js_path = processed_data_js_dir.join(format!("{}.js", data_name));
         let mut processed_data_js_file = File::create(processed_data_js_path).unwrap();
         write!(
