@@ -107,13 +107,13 @@ impl CpuInfo {
     pub fn is_amd_genoa(&self) -> bool {
         self.model_name
             .as_ref()
-            .map_or(false, |model_name| model_name == "AMD EPYC 9R14")
+            .map_or(false, |model_name| model_name.starts_with("AMD EPYC 9R14"))
     }
 
     pub fn is_amd_milan(&self) -> bool {
         self.model_name
             .as_ref()
-            .map_or(false, |model_name| model_name == "AMD EPYC 7R13")
+            .map_or(false, |model_name| model_name.starts_with("AMD EPYC 7R13"))
     }
 }
 
