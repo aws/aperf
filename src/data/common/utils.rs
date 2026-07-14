@@ -1,34 +1,16 @@
 use anyhow::{bail, Error, Result};
 use log::error;
-use regex::Regex;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
+use std::time::Instant;
 #[cfg(target_os = "linux")]
 use {anyhow::Context, log::debug};
 
 use crate::data::common::data_formats::{Graph, GraphData};
-
-pub fn get_data_name_from_type<T>() -> &'static str {
-    let full_data_module_path = std::any::type_name::<T>();
-
-    let mut data_identifier_found = false;
-    let mut data_name: Option<&str> = None;
-    for data_module_part in full_data_module_path.split("::") {
-        if data_identifier_found {
-            data_name = Some(data_module_part);
-            break;
-        }
-        data_identifier_found = data_module_part == "data";
-    }
-
-    match data_name {
-        Some(value) => value,
-        None => panic!("Could not get data name"),
-    }
-}
+use crate::data_collection::InitParams;
 
 #[cfg(target_os = "linux")]
 #[derive(Clone, Debug)]
@@ -166,17 +148,16 @@ pub fn raise_fd_limit(num_required_fds: u64) -> Result<()> {
     Ok(())
 }
 
-pub fn no_tar_gz_file_name(path: &PathBuf) -> Option<String> {
-    if path.file_name().is_none() {
-        return None;
+/// Compute how long a subprocess should run for, based on the current time
+/// and the expected end time of the run.
+pub fn get_sub_process_duration_seconds(init_params: &InitParams) -> u64 {
+    let current_time = Instant::now();
+    if current_time >= init_params.expected_end_time {
+        return 0;
     }
-
-    let file_name_str = path.file_name()?.to_str()?.to_string();
-
-    if file_name_str.ends_with(".tar.gz") {
-        return Some(file_name_str.strip_suffix(".tar.gz")?.to_string());
-    }
-    Some(file_name_str)
+    let duration = init_params.expected_end_time - current_time;
+    // Round up the seconds
+    return duration.as_secs() + 1;
 }
 
 /// Copy a graph file to the report data dir and update the GraphData with its info.
@@ -222,33 +203,6 @@ pub fn copy_graph_and_update_graph_data(
                     },
                 );
             });
-    }
-}
-
-/// Returns the name of the first file in dir whose name matches the pattern regex but does
-/// not match the optional exclude regex.
-pub fn find_file(dir: &PathBuf, pattern: &str, exclude_pattern: Option<&str>) -> Result<String> {
-    let regex = Regex::new(pattern)?;
-    let exclude_regex = exclude_pattern.map(Regex::new).transpose()?;
-    for entry in fs::read_dir(dir)? {
-        let filename = entry?.file_name().into_string().unwrap();
-        if regex.is_match(&filename)
-            && !exclude_regex
-                .as_ref()
-                .is_some_and(|ex| ex.is_match(&filename))
-        {
-            return Ok(filename);
-        }
-    }
-    match exclude_pattern {
-        Some(exclude_pattern) => bail!(
-            "Could not find any file matching /{pattern}/ (excluding /{exclude_pattern}/) in {}",
-            dir.display()
-        ),
-        None => bail!(
-            "Could not find any file matching /{pattern}/ in {}",
-            dir.display()
-        ),
     }
 }
 
@@ -363,10 +317,7 @@ pub fn combine_value_ranges(value_ranges: Vec<(u64, u64)>) -> (u64, u64) {
 
 #[cfg(test)]
 mod utils_test {
-    use super::{combine_value_ranges, find_file, topological_sort};
-    use std::fs;
-    use std::path::PathBuf;
-    use tempfile::TempDir;
+    use super::{combine_value_ranges, topological_sort};
 
     #[cfg(target_os = "linux")]
     #[test]
@@ -396,94 +347,6 @@ mod utils_test {
         assert!(
             cpu_info.is_graviton() || cpu_info.is_intel() || cpu_info.is_amd(),
             "The CPU should be recognized as one of Graviton, Intel, and AMD"
-        );
-    }
-
-    #[test]
-    fn test_find_file_prefix_match() {
-        let dir = TempDir::new().unwrap();
-        for f in &[
-            "cpu_utilization.bin",
-            "other_cpu_utilization.bin",
-            "noise.txt",
-        ] {
-            fs::File::create(dir.path().join(f)).unwrap();
-        }
-        let path = PathBuf::from(dir.path());
-        // Anchored at the start with `^`.
-        assert_eq!(
-            find_file(&path, "^cpu_utilization", None).unwrap(),
-            "cpu_utilization.bin",
-        );
-        // No match returns Err.
-        assert!(find_file(&path, "^missing", None).is_err());
-    }
-
-    #[test]
-    fn test_find_file_suffix_match() {
-        let dir = TempDir::new().unwrap();
-        for f in &["data.bin", "data.bin.bak", "noise.txt"] {
-            fs::File::create(dir.path().join(f)).unwrap();
-        }
-        let path = PathBuf::from(dir.path());
-        // Anchored at the end with `$` (".bin" mid-name in "data.bin.bak" doesn't match).
-        assert_eq!(find_file(&path, r"\.bin$", None).unwrap(), "data.bin");
-        // No match returns Err.
-        assert!(find_file(&path, r"\.missing$", None).is_err());
-    }
-
-    #[test]
-    fn test_find_file_excludes_substring_collision() {
-        // Regression test: the forward flamegraph lookup must not pick up
-        // `reverse-flamegraph.svg`, whose name also ends in `flamegraph.svg`. Create the files
-        // in both orders to defeat any reliance on directory read ordering.
-        for order in [
-            ["flamegraph.svg", "reverse-flamegraph.svg"],
-            ["reverse-flamegraph.svg", "flamegraph.svg"],
-        ] {
-            let dir = TempDir::new().unwrap();
-            for f in order {
-                fs::File::create(dir.path().join(f)).unwrap();
-            }
-            let path = PathBuf::from(dir.path());
-            // Forward: match `flamegraph.svg` but exclude the reverse variant.
-            assert_eq!(
-                find_file(
-                    &path,
-                    r"flamegraph\.svg$",
-                    Some(r"reverse-flamegraph\.svg$")
-                )
-                .unwrap(),
-                "flamegraph.svg",
-            );
-            // Reverse: matches only the reverse variant.
-            assert_eq!(
-                find_file(&path, r"reverse-flamegraph\.svg$", None).unwrap(),
-                "reverse-flamegraph.svg",
-            );
-        }
-    }
-
-    #[test]
-    fn test_find_file_excludes_legacy_run_prefixed_names() {
-        // The same disambiguation must hold for the legacy `<run>-flamegraph.svg` naming.
-        let dir = TempDir::new().unwrap();
-        for f in &["myrun-flamegraph.svg", "myrun-reverse-flamegraph.svg"] {
-            fs::File::create(dir.path().join(f)).unwrap();
-        }
-        let path = PathBuf::from(dir.path());
-        assert_eq!(
-            find_file(
-                &path,
-                r"flamegraph\.svg$",
-                Some(r"reverse-flamegraph\.svg$")
-            )
-            .unwrap(),
-            "myrun-flamegraph.svg",
-        );
-        assert_eq!(
-            find_file(&path, r"reverse-flamegraph\.svg$", None).unwrap(),
-            "myrun-reverse-flamegraph.svg",
         );
     }
 

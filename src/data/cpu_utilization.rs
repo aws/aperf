@@ -2,17 +2,14 @@ use crate::data::common::data_formats::AperfData;
 use crate::data::common::time_series_data_processor::time_series_data_processor_with_custom_aggregate;
 use crate::data::common::utils::{get_aggregate_series_name, get_cpu_series_name};
 use crate::data::{Data, ProcessData, TimeEnum};
-use crate::visualizer::ReportParams;
+use crate::data_processing::ReportParams;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
 #[cfg(target_os = "linux")]
-use {
-    crate::data::{CollectData, CollectorParams},
-    chrono::prelude::*,
-};
+use {crate::data::CollectData, crate::data_collection::InitParams, chrono::prelude::*};
 
 /// Gather CPU Utilization raw data.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -40,7 +37,7 @@ impl Default for CpuUtilizationRaw {
 
 #[cfg(target_os = "linux")]
 impl CollectData for CpuUtilizationRaw {
-    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
+    fn collect_data(&mut self, _init_params: &InitParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
         self.data = std::fs::read_to_string("/proc/stat")?;
@@ -126,9 +123,13 @@ fn get_cpu_time(cpu_state: &CpuState, cpu_time: &Vec<u64>) -> u64 {
 }
 
 impl ProcessData for CpuUtilization {
-    fn process_raw_data(&mut self, params: ReportParams, raw_data: Vec<Data>) -> Result<AperfData> {
+    fn process_raw_data(
+        &mut self,
+        report_params: &ReportParams,
+        raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
         let mut time_series_data_processor =
-            time_series_data_processor_with_custom_aggregate!(params.collection_start);
+            time_series_data_processor_with_custom_aggregate!(report_params.collection_start);
         // Override the value ranges - we want every metric graph to show from 0 to 100
         time_series_data_processor.set_fixed_value_range((0, 100));
         // CPU utils have a dedicated aggregate metric to hold the aggregate of every CPU-state metric, as well as
@@ -248,16 +249,13 @@ impl ProcessData for CpuUtilization {
 #[cfg(test)]
 mod cpu_tests {
     #[cfg(target_os = "linux")]
-    use {
-        super::CpuUtilizationRaw,
-        crate::data::{CollectData, CollectorParams},
-    };
+    use {super::CpuUtilizationRaw, crate::data::CollectData, crate::data_collection::InitParams};
 
     #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut cpu_utilization = CpuUtilizationRaw::new();
-        let params = CollectorParams::new();
+        let params = InitParams::default();
 
         cpu_utilization.collect_data(&params).unwrap();
         assert!(!cpu_utilization.data.is_empty());

@@ -1,12 +1,12 @@
 use crate::data::common::data_formats::AperfData;
 use crate::data::common::time_series_data_processor::time_series_data_processor_with_sum_aggregate;
 use crate::data::{Data, ProcessData, TimeEnum};
-use crate::visualizer::ReportParams;
-use anyhow::Result;
+use crate::data_processing::ReportParams;
+use anyhow::{bail, Result};
 use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::{fs, time};
+use std::time;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AperfStat {
@@ -43,20 +43,21 @@ impl ProcessData for AperfStat {
 
     fn process_raw_data(
         &mut self,
-        params: ReportParams,
+        report_params: &ReportParams,
         _raw_data: Vec<Data>,
     ) -> Result<AperfData> {
         let mut time_series_data_processor =
-            time_series_data_processor_with_sum_aggregate!(params.collection_start);
+            time_series_data_processor_with_sum_aggregate!(report_params.collection_start);
         time_series_data_processor.set_aggregate_series_name("total");
 
+        let (raw_aperf_stats_file, _) = match self.get_raw_data_file(&report_params.run_data_dir) {
+            Ok(rs) => rs,
+            Err(e) => bail!("Failed to open raw APerf Stats file: {:?}", e),
+        };
+
         let mut values = Vec::new();
-        let file: Result<fs::File> = Ok(fs::OpenOptions::new()
-            .read(true)
-            .open(params.data_file_path)
-            .expect("Could not open APerf Stats file"));
         loop {
-            match bincode::deserialize_from::<_, AperfStat>(file.as_ref().unwrap()) {
+            match bincode::deserialize_from::<_, AperfStat>(&raw_aperf_stats_file) {
                 Ok(v) => values.push(v),
                 Err(e) => match *e {
                     // EOF

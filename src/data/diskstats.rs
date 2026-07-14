@@ -1,17 +1,14 @@
 use crate::data::common::data_formats::AperfData;
 use crate::data::common::time_series_data_processor::time_series_data_processor_with_max_series_aggregate;
 use crate::data::{Data, ProcessData, TimeEnum};
-use crate::visualizer::ReportParams;
+use crate::data_processing::ReportParams;
 use anyhow::Result;
 use log::error;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
 #[cfg(target_os = "linux")]
-use {
-    crate::data::{CollectData, CollectorParams},
-    chrono::prelude::*,
-};
+use {crate::data::CollectData, crate::data_collection::InitParams, chrono::prelude::*};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DiskstatsRaw {
@@ -31,7 +28,7 @@ impl DiskstatsRaw {
 
 #[cfg(target_os = "linux")]
 impl CollectData for DiskstatsRaw {
-    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
+    fn collect_data(&mut self, _init_params: &InitParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
         self.data = std::fs::read_to_string("/proc/diskstats")?;
@@ -134,11 +131,15 @@ impl ProcessData for Diskstats {
         vec!["disk_stats"]
     }
 
-    fn process_raw_data(&mut self, params: ReportParams, raw_data: Vec<Data>) -> Result<AperfData> {
+    fn process_raw_data(
+        &mut self,
+        report_params: &ReportParams,
+        raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
         // For diskstats there is no easy way to compute or find the aggregate metric, so to assign
         // stats to a metric, we use the stats of the series with the largest average value
         let mut time_series_data_processor =
-            time_series_data_processor_with_max_series_aggregate!(params.collection_start);
+            time_series_data_processor_with_max_series_aggregate!(report_params.collection_start);
 
         for buffer in raw_data {
             let raw_value = match buffer {
@@ -191,16 +192,13 @@ impl ProcessData for Diskstats {
 #[cfg(test)]
 mod tests {
     #[cfg(target_os = "linux")]
-    use {
-        super::DiskstatsRaw,
-        crate::data::{CollectData, CollectorParams},
-    };
+    use {super::DiskstatsRaw, crate::data::CollectData, crate::data_collection::InitParams};
 
     #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut diskstats = DiskstatsRaw::new();
-        let params = CollectorParams::new();
+        let params = InitParams::default();
 
         diskstats.collect_data(&params).unwrap();
         assert!(!diskstats.data.is_empty());

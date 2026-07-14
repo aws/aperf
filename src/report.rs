@@ -1,14 +1,14 @@
 use crate::analytics::BASE_RUN_NAME;
 use crate::data::common::processed_data_accessor::ProcessedDataAccessor;
-use crate::data::common::utils::no_tar_gz_file_name;
 use crate::data::{TimeEnum, JS_DIR};
-use crate::visualizer::ReportParams;
-use crate::{data, InitParams, PDError, VisualizationData, APERF_FILE_FORMAT};
+use crate::data_collection::InitParams;
+use crate::data_processing::{DataProcessingEngine, ReportParams};
+use crate::{data, no_tar_gz_file_name, PDError};
 use anyhow::{Context, Result};
 use chrono::Utc;
 use clap::Args;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
-use log::{info, warn};
+use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
@@ -57,14 +57,12 @@ struct RunsInfo {
     /// The specified end time of every run's time range.
     per_run_to_time: HashMap<String, i64>,
     /// Wall-clock start of `collect_data_serial`, derived from the run's
-    /// `meta_data.bin`. Missing entry => archive was recorded by an older
+    /// metadata (InitParams). Missing entry => archive was recorded by an older
     /// aperf that did not stamp collection start/end times.
     per_run_start_time: HashMap<String, TimeEnum>,
     /// Wall-clock end of `collect_data_serial`.
     per_run_end_time: HashMap<String, TimeEnum>,
-    /// Per-run report params initialized from meta_data.bin, which is a
-    /// serialization of InitParams, used to pass parameters between
-    /// record and report.
+    /// Per-run report params initialized from the run's InitParams.
     per_run_report_params: HashMap<String, ReportParams>,
 }
 
@@ -92,12 +90,11 @@ impl RunsInfo {
         report_params.report_dir = self.report_dir.clone();
         report_params.tmp_dir = self.tmp_dir.clone();
         report_params.run_name = deduped_run_name.clone();
-        report_params.data_dir = run_dir_path.clone();
+        report_params.run_data_dir = run_dir_path.clone();
 
-        // Reads meta_data.bin from a run's data directory for info about the collector.
-        let meta_data_path = run_dir_path.join(format!("meta_data.{}", APERF_FILE_FORMAT));
-        if let Ok(meta_data_bytes) = fs::read(&meta_data_path) {
-            if let Ok(meta_data) = bincode::deserialize::<InitParams>(&meta_data_bytes) {
+        // Reads metadata (serialized InitParams) from a run's data directory.
+        match InitParams::from_json(&run_dir_path) {
+            Ok(meta_data) => {
                 report_params.pmu_counter_mode = meta_data.pmu_counter_mode;
                 report_params.pid = meta_data.pid;
                 if let Some(collection_start) = meta_data.collection_start {
@@ -109,6 +106,9 @@ impl RunsInfo {
                     self.per_run_end_time
                         .insert(deduped_run_name.clone(), collection_end);
                 }
+            }
+            Err(e) => {
+                error!("Failed to parse run meta data: {e}");
             }
         }
 
@@ -462,12 +462,11 @@ fn generate_report_files(runs_info: RunsInfo) {
     fs::create_dir_all(processed_data_js_dir.clone()).unwrap();
 
     info!("Processing collected data...");
-    let mut visualization_data = VisualizationData::new(runs_info.per_run_report_params);
-    data::add_all_visualization_data(&mut visualization_data);
+    let mut data_processing_engine = DataProcessingEngine::new(runs_info.per_run_report_params);
+    data::initialize_data_processing_engine(&mut data_processing_engine);
 
     for run_name in &runs_info.run_names {
-        visualization_data.init_visualizers(run_name).unwrap();
-        visualization_data.process_raw_data().unwrap();
+        data_processing_engine.process_raw_data(run_name).unwrap();
     }
 
     /* Generate run.js, containing run name and metadata (currently only start and end wall time) */
@@ -505,7 +504,7 @@ fn generate_report_files(runs_info: RunsInfo) {
         runs_info.per_run_end_time,
     );
 
-    let analytical_findings = visualization_data.run_analytics(&mut processed_data_accessor);
+    let analytical_findings = data_processing_engine.run_analytics(&mut processed_data_accessor);
 
     /* Generate version.js */
     let version_js_path = processed_data_js_dir.join("version.js");
@@ -522,17 +521,22 @@ fn generate_report_files(runs_info: RunsInfo) {
         .extract(&report_dir)
         .expect("Failed to copy frontend files");
 
-    visualization_data.post_process_data();
+    data_processing_engine.post_process_data();
 
     info!("Writing processed data into report");
-    for (data_name, visualizer) in &mut visualization_data.visualizers {
+    for data_name in data_processing_engine.all_data_names() {
+        let processed_data = match data_processing_engine.get_processed_data(data_name) {
+            Some(processed_data) => processed_data,
+            None => continue,
+        };
+
         let processed_data_js_path = processed_data_js_dir.join(format!("{}.js", data_name));
         let mut processed_data_js_file = File::create(processed_data_js_path).unwrap();
         write!(
             processed_data_js_file,
             "processed_{}_data = {}\n\n",
             data_name,
-            processed_data_accessor.json_string(&visualizer.processed_data)
+            processed_data_accessor.json_string(processed_data)
         )
         .unwrap();
 

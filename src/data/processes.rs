@@ -3,9 +3,8 @@ extern crate lazy_static;
 use crate::computations::Statistics;
 use crate::data::common::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
 use crate::data::{Data, ProcessData, TimeEnum};
-use crate::visualizer::ReportParams;
+use crate::data_processing::ReportParams;
 use anyhow::Result;
-use chrono::Utc;
 use core::f64;
 use log::warn;
 use serde::{Deserialize, Serialize};
@@ -15,8 +14,7 @@ use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
 #[cfg(target_os = "linux")]
 use {
-    crate::data::{CollectData, CollectorParams},
-    std::fs,
+    crate::data::CollectData, crate::data_collection::InitParams, chrono::Utc, std::fs,
     std::sync::Mutex,
 };
 
@@ -57,12 +55,12 @@ impl Default for ProcessesRaw {
 
 #[cfg(target_os = "linux")]
 impl CollectData for ProcessesRaw {
-    fn prepare_data_collector(&mut self, _params: &CollectorParams) -> Result<()> {
+    fn prepare_data_collector(&mut self, _init_params: &InitParams) -> Result<()> {
         *TICKS_PER_SECOND.lock().unwrap() = procfs::ticks_per_second()? as u64;
         Ok(())
     }
 
-    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
+    fn collect_data(&mut self, _init_params: &InitParams) -> Result<()> {
         let ticks_per_second: u64 = *TICKS_PER_SECOND.lock().unwrap();
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
@@ -118,14 +116,18 @@ fn get_process_key_stat(process_key: ProcessKey, values: Vec<&str>) -> Option<u6
 }
 
 impl ProcessData for Processes {
-    fn process_raw_data(&mut self, params: ReportParams, raw_data: Vec<Data>) -> Result<AperfData> {
+    fn process_raw_data(
+        &mut self,
+        report_params: &ReportParams,
+        raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
         let mut time_series_data = TimeSeriesData::default();
 
         // map process field -> process -> series
         let mut per_field_per_process_series: HashMap<ProcessKey, HashMap<String, Series>> =
             HashMap::new();
 
-        let time_zero = if let Some(t) = params.collection_start {
+        let time_zero = if let Some(t) = report_params.collection_start {
             t
         } else if let Some(first_buffer) = raw_data.first() {
             match first_buffer {
@@ -248,7 +250,7 @@ impl ProcessData for Processes {
             ranking.into_iter().take(16).map(|(name, _)| name).collect();
 
         // Also retain the metrics of the APerf process, located by the saved pid.
-        if let Some(aperf_pid) = params.pid {
+        if let Some(aperf_pid) = report_params.pid {
             let pid_prefix = format!("{aperf_pid}_");
             if let Some(aperf_process) = process_cpu_time_map
                 .keys()
@@ -315,16 +317,13 @@ impl ProcessData for Processes {
 #[cfg(test)]
 mod process_test {
     #[cfg(target_os = "linux")]
-    use {
-        super::ProcessesRaw,
-        crate::data::{CollectData, CollectorParams},
-    };
+    use {super::ProcessesRaw, crate::data::CollectData, crate::data_collection::InitParams};
 
     #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut processes = ProcessesRaw::new();
-        let params = CollectorParams::new();
+        let params = InitParams::default();
         processes.prepare_data_collector(&params).unwrap();
         processes.collect_data(&params).unwrap();
         assert!(!processes.data.is_empty());

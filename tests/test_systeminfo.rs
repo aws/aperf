@@ -1,7 +1,7 @@
 use aperf::data::common::data_formats::AperfData;
 use aperf::data::systeminfo::{EC2Metadata, SystemInfo};
 use aperf::data::{Data, ProcessData, TimeEnum};
-use aperf::visualizer::ReportParams;
+use aperf::data_processing::ReportParams;
 use chrono::Utc;
 
 fn create_test_systeminfo() -> SystemInfo {
@@ -29,7 +29,7 @@ fn test_process_raw_data() {
     let raw_data = vec![Data::SystemInfo(test_data.clone())];
     let params = ReportParams::new();
 
-    let result = systeminfo.process_raw_data(params, raw_data).unwrap();
+    let result = systeminfo.process_raw_data(&params, raw_data).unwrap();
 
     match result {
         AperfData::KeyValue(key_value_data) => {
@@ -83,7 +83,7 @@ fn test_process_raw_data_empty_data() {
     let raw_data = vec![];
     let params = ReportParams::new();
 
-    let result = systeminfo.process_raw_data(params, raw_data).unwrap();
+    let result = systeminfo.process_raw_data(&params, raw_data).unwrap();
 
     match result {
         AperfData::KeyValue(key_value_data) => {
@@ -109,7 +109,7 @@ fn test_process_raw_data_na_metadata() {
     let raw_data = vec![Data::SystemInfo(test_data)];
     let params = ReportParams::new();
 
-    let result = systeminfo.process_raw_data(params, raw_data).unwrap();
+    let result = systeminfo.process_raw_data(&params, raw_data).unwrap();
 
     match result {
         AperfData::KeyValue(key_value_data) => {

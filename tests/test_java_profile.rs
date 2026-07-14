@@ -1,7 +1,7 @@
 use aperf::data::common::data_formats::AperfData;
 use aperf::data::java_profile::JavaProfile;
 use aperf::data::ProcessData;
-use aperf::visualizer::ReportParams;
+use aperf::data_processing::ReportParams;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -15,11 +15,10 @@ fn setup_test_env() -> (TempDir, PathBuf, PathBuf, ReportParams) {
     fs::create_dir_all(report_dir.join("data/js")).unwrap();
 
     let params = ReportParams {
-        data_dir: data_dir.clone(),
+        run_data_dir: data_dir.clone(),
         tmp_dir: temp_dir.path().to_path_buf(),
         report_dir: report_dir.clone(),
         run_name: "test_run".to_string(),
-        data_file_path: PathBuf::new(),
         collection_start: None,
         pmu_counter_mode: String::new(),
         pid: None,
@@ -67,7 +66,7 @@ fn test_process_raw_data_with_valid_files() {
     }
 
     let mut java_profile = JavaProfile::new();
-    let result = java_profile.process_raw_data(params, vec![]);
+    let result = java_profile.process_raw_data(&params, vec![]);
 
     assert!(result.is_ok());
     if let Ok(AperfData::Profile(profiling_data)) = result {
@@ -106,7 +105,7 @@ fn test_process_raw_data_with_missing_jps_map() {
     let (_temp_dir, _data_dir, _report_dir, params) = setup_test_env();
 
     let mut java_profile = JavaProfile::new();
-    let result = java_profile.process_raw_data(params, vec![]);
+    let result = java_profile.process_raw_data(&params, vec![]);
 
     assert!(result.is_ok());
     if let Ok(AperfData::Profile(profiling_data)) = result {
@@ -130,7 +129,7 @@ fn test_process_raw_data_with_duplicate_jvm_names() {
     }
 
     let mut java_profile = JavaProfile::new();
-    let result = java_profile.process_raw_data(params, vec![]);
+    let result = java_profile.process_raw_data(&params, vec![]);
 
     assert!(result.is_ok());
     if let Ok(AperfData::Profile(profiling_data)) = result {
@@ -153,7 +152,7 @@ fn test_process_raw_data_with_no_html_files() {
     create_jps_map(&data_dir, &params.run_name, process_map);
 
     let mut java_profile = JavaProfile::new();
-    let result = java_profile.process_raw_data(params, vec![]);
+    let result = java_profile.process_raw_data(&params, vec![]);
 
     assert!(result.is_ok());
     if let Ok(AperfData::Profile(profiling_data)) = result {
@@ -207,7 +206,7 @@ fn test_process_raw_data_with_complex_duplicate_names_and_missing_files() {
     create_html_file(&data_dir, &params.run_name, "2002", "legacy");
 
     let mut java_profile = JavaProfile::new();
-    let result = java_profile.process_raw_data(params, vec![]);
+    let result = java_profile.process_raw_data(&params, vec![]);
 
     assert!(result.is_ok());
     if let Ok(AperfData::Profile(profiling_data)) = result {

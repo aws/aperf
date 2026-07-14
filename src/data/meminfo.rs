@@ -1,16 +1,13 @@
 use crate::data::common::data_formats::AperfData;
 use crate::data::common::time_series_data_processor::time_series_data_processor_with_custom_aggregate;
 use crate::data::{Data, ProcessData, TimeEnum};
-use crate::visualizer::ReportParams;
+use crate::data_processing::ReportParams;
 use anyhow::Result;
 use indexmap::IndexMap;
 use log::error;
 use serde::{Deserialize, Serialize};
 #[cfg(target_os = "linux")]
-use {
-    crate::data::{CollectData, CollectorParams},
-    chrono::prelude::*,
-};
+use {crate::data::CollectData, crate::data_collection::InitParams, chrono::prelude::*};
 
 /// Gather Meminfo raw data.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -38,7 +35,7 @@ impl MeminfoDataRaw {
 
 #[cfg(target_os = "linux")]
 impl CollectData for MeminfoDataRaw {
-    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
+    fn collect_data(&mut self, _init_params: &InitParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
         self.data = std::fs::read_to_string("/proc/meminfo")?;
@@ -97,9 +94,13 @@ fn parse_meminfo(raw_data: &String) -> IndexMap<String, u64> {
 }
 
 impl ProcessData for MeminfoData {
-    fn process_raw_data(&mut self, params: ReportParams, raw_data: Vec<Data>) -> Result<AperfData> {
+    fn process_raw_data(
+        &mut self,
+        report_params: &ReportParams,
+        raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
         let mut time_series_data_processor =
-            time_series_data_processor_with_custom_aggregate!(params.collection_start);
+            time_series_data_processor_with_custom_aggregate!(report_params.collection_start);
 
         let mut metric_name_order: Vec<String> = Vec::new();
 
@@ -135,16 +136,13 @@ impl ProcessData for MeminfoData {
 #[cfg(test)]
 mod tests {
     #[cfg(target_os = "linux")]
-    use {
-        super::MeminfoDataRaw,
-        crate::data::{CollectData, CollectorParams},
-    };
+    use {super::MeminfoDataRaw, crate::data::CollectData, crate::data_collection::InitParams};
 
     #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut meminfodata_raw = MeminfoDataRaw::new();
-        let params = CollectorParams::new();
+        let params = InitParams::default();
 
         meminfodata_raw.collect_data(&params).unwrap();
         assert!(!meminfodata_raw.data.is_empty());

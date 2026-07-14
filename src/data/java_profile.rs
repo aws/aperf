@@ -1,26 +1,31 @@
 use crate::data::common::data_formats::{
     AperfData, GraphData, GraphGroup, Profiler, ProfilingData,
 };
-use crate::data::common::utils::{copy_graph_and_update_graph_data, find_file};
+use crate::data::common::utils::copy_graph_and_update_graph_data;
 use crate::data::{Data, ProcessData};
-use crate::profiling::{jfr, Profile};
-use crate::visualizer::ReportParams;
+use crate::data_processing::ReportParams;
+use crate::find_file;
+use crate::profiling::Profile;
 use anyhow::Result;
 use log::error;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
 #[cfg(target_os = "linux")]
 use {
-    crate::data::common::utils::get_data_name_from_type,
-    crate::data::{CollectData, CollectorParams},
-    crate::PDError,
+    crate::data::common::utils::get_sub_process_duration_seconds,
+    crate::data::CollectData,
+    crate::data_collection::InitParams,
+    crate::profiling::jfr,
+    crate::{get_data_name_from_type, PDError},
     log::debug,
     nix::{sys::signal, unistd::Pid},
+    serde_json::Value,
     std::fs::File,
     std::io::Write,
+    std::path::PathBuf,
     std::process::{Child, Command},
+    std::str::FromStr,
     std::sync::Mutex,
 };
 
@@ -55,12 +60,18 @@ impl JavaProfileRaw {
         }
     }
 
-    fn launch_asprof(&self, jids: Vec<String>, params: &CollectorParams) -> Result<()> {
+    fn launch_asprof(
+        &self,
+        jids: Vec<String>,
+        run_name: &str,
+        duration: u64,
+        tmp_dir: &PathBuf,
+    ) -> Result<()> {
         for jid in &jids {
             match Command::new("asprof")
                 .args([
                     "-d",
-                    &(params.collection_time - params.elapsed_time).to_string(),
+                    &duration.to_string(),
                     "-o",
                     "jfr",
                     "-e",
@@ -74,9 +85,8 @@ impl JavaProfileRaw {
                     "-F",
                     "vtable",
                     "-f",
-                    &params
-                        .tmp_dir
-                        .join(format!("{}-java-profile-{}.jfr", params.run_name, jid))
+                    &tmp_dir
+                        .join(format!("{}-java-profile-{}.jfr", run_name, jid))
                         .to_string_lossy(),
                     jid.as_str(),
                 ])
@@ -164,7 +174,7 @@ impl JavaProfileRaw {
 
 #[cfg(target_os = "linux")]
 impl CollectData for JavaProfileRaw {
-    fn prepare_data_collector(&mut self, params: &CollectorParams) -> Result<()> {
+    fn prepare_data_collector(&mut self, init_params: &InitParams) -> Result<()> {
         // Check if asprof is installed
         match Command::new("asprof").args(["--version"]).output() {
             Ok(_) => {},
@@ -187,7 +197,7 @@ impl CollectData for JavaProfileRaw {
         let jps_str = self.update_process_map()?;
         let jps: Vec<&str> = jps_str.split_whitespace().collect();
 
-        let jprofile_value = params.profile.get(get_data_name_from_type::<Self>());
+        let jprofile_value = init_params.profile.get(get_data_name_from_type::<Self>());
         if let Some(value) = jprofile_value {
             match value.as_str() {
                 "jps" => {
@@ -208,11 +218,17 @@ impl CollectData for JavaProfileRaw {
         }
         jids.sort();
         jids.dedup();
-        self.launch_asprof(jids, params)
+
+        self.launch_asprof(
+            jids,
+            &init_params.run_name,
+            get_sub_process_duration_seconds(init_params),
+            &init_params.tmp_dir,
+        )
     }
 
-    fn collect_data(&mut self, params: &CollectorParams) -> Result<()> {
-        let jprofile = params
+    fn collect_data(&mut self, init_params: &InitParams) -> Result<()> {
+        let jprofile = init_params
             .profile
             .get(get_data_name_from_type::<Self>())
             .unwrap()
@@ -233,17 +249,20 @@ impl CollectData for JavaProfileRaw {
             jids.push(pid.clone());
         }
 
-        if jids.is_empty() || params.elapsed_time >= params.collection_time {
+        let duration = get_sub_process_duration_seconds(init_params);
+        if jids.is_empty() || duration == 0 {
             return Ok(());
         }
 
         self.update_process_map()?;
-        self.launch_asprof(jids, params)
+        self.launch_asprof(jids, &init_params.run_name, duration, &init_params.tmp_dir)
     }
 
-    fn finish_data_collection(&mut self, params: &CollectorParams) -> Result<()> {
+    fn finish_data_collection(&mut self, init_params: &InitParams) -> Result<()> {
+        let signal =
+            signal::Signal::from_str(&init_params.end_signal).unwrap_or(signal::Signal::SIGTERM);
         for child in ASPROF_CHILDREN.lock().unwrap().iter() {
-            signal::kill(Pid::from_raw(child.id() as i32), params.signal)?;
+            signal::kill(Pid::from_raw(child.id() as i32), signal)?;
         }
 
         debug!("Waiting for asprof profile collection to complete...");
@@ -257,11 +276,10 @@ impl CollectData for JavaProfileRaw {
             }
         }
 
-        let data_dir = params.data_dir.clone();
         for key in self.process_map.keys() {
-            let jfr_path = params
+            let jfr_path = init_params
                 .tmp_dir
-                .join(format!("{}-java-profile-{}.jfr", params.run_name, key));
+                .join(format!("{}-java-profile-{}.jfr", init_params.run_name, key));
 
             if fs::exists(&jfr_path).expect("Can't check existence of jfr file") {
                 // Extract metadata JSON string from JFR
@@ -303,7 +321,9 @@ impl CollectData for JavaProfileRaw {
 
                 // Generate heatmaps for each profiling type
                 for metric in PROFILE_METRICS {
-                    let html_path = data_dir.join(format!("java-profile-{}-{}.html", key, metric));
+                    let html_path = init_params
+                        .run_data_dir
+                        .join(format!("java-profile-{}-{}.html", key, metric));
 
                     match Command::new("jfrconv")
                         .args([
@@ -340,9 +360,10 @@ impl CollectData for JavaProfileRaw {
                     }
                 }
 
-                let event_out_path_buf =
-                    params.data_dir.join(format!("parsed_jfr_events_{key}.out"));
-                let events_out_path = if params.save_profile_events {
+                let event_out_path_buf = init_params
+                    .run_data_dir
+                    .join(format!("parsed_jfr_events_{key}.out"));
+                let events_out_path = if init_params.save_profile_events {
                     Some(event_out_path_buf.as_path())
                 } else {
                     None
@@ -351,14 +372,16 @@ impl CollectData for JavaProfileRaw {
                 // TODO: Guard the new profile processing logic by the save_profile_events flag,
                 //       so that the new flow is only executed in tests. Remove the guardrail
                 //       after the feature is ready to launch.
-                if params.save_profile_events {
+                if init_params.save_profile_events {
                     // Generate Profiler from JFR
                     match jfr::build_java_profiler_data(&jfr_path, events_out_path) {
                         Ok(mut profiler) => {
                             profiler.metadata = jfr::parse_jfr_metadata(&metadata_json);
                             if let Ok(json) = serde_json::to_string(&profiler) {
                                 fs::write(
-                                    params.data_dir.join(java_profiler_data_filename(key)),
+                                    init_params
+                                        .run_data_dir
+                                        .join(java_profiler_data_filename(key)),
                                     json,
                                 )
                                 .ok();
@@ -370,12 +393,14 @@ impl CollectData for JavaProfileRaw {
                     }
                 }
 
-                let jfr_dest = data_dir.join(format!("java-profile-{}.jfr", key));
+                let jfr_dest = init_params
+                    .run_data_dir
+                    .join(format!("java-profile-{}.jfr", key));
                 fs::copy(&jfr_path, jfr_dest).ok();
             }
         }
 
-        let mut jps_map = File::create(data_dir.clone().join("jps-map.json"))?;
+        let mut jps_map = File::create(init_params.run_data_dir.join("jps-map.json"))?;
         write!(jps_map, "{}", serde_json::to_string(&self.process_map)?)?;
 
         Ok(())
@@ -398,7 +423,7 @@ impl JavaProfile {
 impl ProcessData for JavaProfile {
     fn process_raw_data(
         &mut self,
-        params: ReportParams,
+        report_params: &ReportParams,
         _raw_data: Vec<Data>,
     ) -> Result<AperfData> {
         let mut profiling_data = ProfilingData::default();
@@ -407,9 +432,10 @@ impl ProcessData for JavaProfile {
 
         // Look up the jps map by suffix to support both the current `jps-map.json` and the
         // legacy `<run_name>-jps-map.json` naming.
-        let processes_json = match find_file(&params.data_dir, r"jps-map\.json$", None) {
+        let processes_json = match find_file(&report_params.run_data_dir, r"jps-map\.json$", None) {
             Ok(processes_json_path) => {
-                fs::read_to_string(params.data_dir.join(processes_json_path)).unwrap_or_default()
+                fs::read_to_string(report_params.run_data_dir.join(processes_json_path))
+                    .unwrap_or_default()
             }
             Err(e) => {
                 error!("{e}");
@@ -453,12 +479,14 @@ impl ProcessData for JavaProfile {
                     format!("java-profile-{}-{}.html", process, metric)
                 };
                 let filename_pattern = format!("{}$", regex::escape(&filename_suffix));
-                if let Ok(filename) = find_file(&params.data_dir, &filename_pattern, None) {
+                if let Ok(filename) =
+                    find_file(&report_params.run_data_dir, &filename_pattern, None)
+                {
                     copy_graph_and_update_graph_data(
-                        &params.data_dir,
-                        &params.report_dir,
+                        &report_params.run_data_dir,
+                        &report_params.report_dir,
                         &filename,
-                        &params.run_name,
+                        &report_params.run_name,
                         metric,
                         &deduped_name,
                         format!("({}) JVM: {}", metric, deduped_name),
@@ -469,7 +497,9 @@ impl ProcessData for JavaProfile {
 
             // Deserialize the ProfilerData generated at the end of recording.
             let mut profiler = match fs::read_to_string(
-                params.data_dir.join(java_profiler_data_filename(process)),
+                report_params
+                    .run_data_dir
+                    .join(java_profiler_data_filename(process)),
             )
             .ok()
             .and_then(|json| serde_json::from_str::<Profiler>(&json).ok())

@@ -3,7 +3,7 @@ use aperf::completions::{setup_shell_completions, SetupShellCompletions};
 use aperf::report::{report, Report};
 #[cfg(feature = "mcp-server")]
 use aperf::server::Server;
-use aperf::{PDError, APERF_RUNLOG, APERF_TMP};
+use aperf::{aperf_runlog_file_path, PDError, APERF_TMP};
 use clap::{CommandFactory, Parser, Subcommand};
 use log::LevelFilter;
 use log4rs::{
@@ -121,7 +121,7 @@ fn main() -> Result<()> {
     fs::set_permissions(&tmp_dir, fs::Permissions::from_mode(0o1777))?;
 
     let tmp_dir_path_buf = tmp_dir.path().to_path_buf();
-    let runlog = tmp_dir_path_buf.join(*APERF_RUNLOG);
+    let runlog = aperf_runlog_file_path(&tmp_dir_path_buf);
 
     init_logger(cli.verbose, &runlog)?;
 

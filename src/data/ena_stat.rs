@@ -4,15 +4,11 @@ use crate::data::common::common_raw_data::parse_common_raw_time_series_data;
 use crate::data::common::data_formats::AperfData;
 use crate::data::common::time_series_data_processor::time_series_data_processor_with_average_aggregate;
 use crate::data::{Data, ProcessData, TimeEnum};
-use crate::visualizer::ReportParams;
+use crate::data_processing::ReportParams;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 #[cfg(target_os = "linux")]
-use {
-    crate::data::{CollectData, CollectorParams},
-    chrono::Utc,
-    ethtool::Ethtool,
-};
+use {crate::data::CollectData, crate::data_collection::InitParams, chrono::Utc, ethtool::Ethtool};
 
 #[cfg(target_os = "linux")]
 mod ethtool {
@@ -281,7 +277,7 @@ impl EnaStatRaw {
 
 #[cfg(target_os = "linux")]
 impl CollectData for EnaStatRaw {
-    fn prepare_data_collector(&mut self, _params: &CollectorParams) -> Result<()> {
+    fn prepare_data_collector(&mut self, _init_params: &InitParams) -> Result<()> {
         match Ethtool::new() {
             Ok(ethtool) => self.ethtool = Some(ethtool),
             Err(e) => {
@@ -292,7 +288,7 @@ impl CollectData for EnaStatRaw {
         Ok(())
     }
 
-    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
+    fn collect_data(&mut self, _init_params: &InitParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = self.ethtool.as_ref().unwrap().get_stats();
 
@@ -310,9 +306,13 @@ impl EnaStat {
 }
 
 impl ProcessData for EnaStat {
-    fn process_raw_data(&mut self, params: ReportParams, raw_data: Vec<Data>) -> Result<AperfData> {
+    fn process_raw_data(
+        &mut self,
+        report_params: &ReportParams,
+        raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
         let mut time_series_data_processor =
-            time_series_data_processor_with_average_aggregate!(params.collection_start);
+            time_series_data_processor_with_average_aggregate!(report_params.collection_start);
 
         for buffer in raw_data {
             let raw_value = match buffer {
@@ -368,16 +368,13 @@ impl ProcessData for EnaStat {
 #[cfg(test)]
 mod ena_tests {
     #[cfg(target_os = "linux")]
-    use {
-        super::EnaStatRaw,
-        crate::data::{CollectData, CollectorParams},
-    };
+    use {super::EnaStatRaw, crate::data::CollectData, crate::data_collection::InitParams};
 
     #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut ena = EnaStatRaw::new();
-        let params = CollectorParams::new();
+        let params = InitParams::default();
 
         ena.prepare_data_collector(&params).unwrap();
         assert!(ena.ethtool.is_some());

@@ -2,15 +2,16 @@ use crate::data::common::common_raw_data::parse_common_raw_time_series_data;
 use crate::data::common::data_formats::AperfData;
 use crate::data::common::time_series_data_processor::time_series_data_processor_with_average_aggregate;
 use crate::data::{Data, ProcessData, TimeEnum};
-use crate::visualizer::ReportParams;
+use crate::data_processing::ReportParams;
 use anyhow::Result;
-use log::warn;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 #[cfg(target_os = "linux")]
 use {
-    crate::data::{CollectData, CollectorParams},
+    crate::data::CollectData,
+    crate::data_collection::InitParams,
     chrono::prelude::*,
+    log::warn,
+    std::collections::HashMap,
     std::fs,
     std::path::{Path, PathBuf},
 };
@@ -69,12 +70,12 @@ impl NumastatRaw {
 
 #[cfg(target_os = "linux")]
 impl CollectData for NumastatRaw {
-    fn prepare_data_collector(&mut self, _params: &CollectorParams) -> Result<()> {
+    fn prepare_data_collector(&mut self, _init_params: &InitParams) -> Result<()> {
         let _ = &*NAME_PATH_MAP; // Force initialization before collection time
         Ok(())
     }
 
-    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
+    fn collect_data(&mut self, _init_params: &InitParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
 
@@ -99,9 +100,13 @@ impl Numastat {
 }
 
 impl ProcessData for Numastat {
-    fn process_raw_data(&mut self, params: ReportParams, raw_data: Vec<Data>) -> Result<AperfData> {
+    fn process_raw_data(
+        &mut self,
+        report_params: &ReportParams,
+        raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
         let mut time_series_data_processor =
-            time_series_data_processor_with_average_aggregate!(params.collection_start);
+            time_series_data_processor_with_average_aggregate!(report_params.collection_start);
 
         for buffer in raw_data {
             let raw_value = match buffer {
@@ -143,16 +148,13 @@ impl ProcessData for Numastat {
 #[cfg(test)]
 mod tests {
     #[cfg(target_os = "linux")]
-    use {
-        super::NumastatRaw,
-        crate::data::{CollectData, CollectorParams},
-    };
+    use {super::NumastatRaw, crate::data::CollectData, crate::data_collection::InitParams};
 
     #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut numastat_raw = NumastatRaw::new();
-        let params = CollectorParams::new();
+        let params = InitParams::default();
 
         // This test may fail on systems without NUMA support, which is expected
         let result = numastat_raw.collect_data(&params);
