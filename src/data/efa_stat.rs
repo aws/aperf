@@ -1,19 +1,19 @@
-use crate::data::common::common_raw_data::{
-    parse_common_raw_time_series_data, TimeSeriesDataBuilder,
-};
+use crate::data::common::common_raw_data::parse_common_raw_time_series_data;
 use crate::data::common::data_formats::AperfData;
 use crate::data::common::time_series_data_processor::time_series_data_processor_with_average_aggregate;
 #[cfg(target_os = "linux")]
 use crate::data::common::utils::collect_file_paths_in_dir;
 use crate::data::{Data, ProcessData, TimeEnum};
-use crate::visualizer::ReportParams;
+use crate::data_processing::ReportParams;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
 #[cfg(target_os = "linux")]
 use {
-    crate::data::{CollectData, CollectorParams},
+    crate::data::common::common_raw_data::TimeSeriesDataBuilder,
+    crate::data::CollectData,
+    crate::data_collection::InitParams,
     crate::PDError,
     chrono::Utc,
     log::{debug, warn},
@@ -160,7 +160,7 @@ impl EfaStatRaw {
 
 #[cfg(target_os = "linux")]
 impl CollectData for EfaStatRaw {
-    fn prepare_data_collector(&mut self, _params: &CollectorParams) -> Result<()> {
+    fn prepare_data_collector(&mut self, _init_params: &InitParams) -> Result<()> {
         // Map from EFA drivers (hardware name or hardware name plus port) to all the counter metrics
         // (another map from counter names to the file descriptor)
         let efa_metric_file_paths: HashMap<String, HashMap<String, File>> =
@@ -178,7 +178,7 @@ impl CollectData for EfaStatRaw {
         Ok(())
     }
 
-    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
+    fn collect_data(&mut self, _init_params: &InitParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
 
         let mut common_raw_data_builder = TimeSeriesDataBuilder::new();
@@ -207,9 +207,13 @@ impl EfaStat {
 }
 
 impl ProcessData for EfaStat {
-    fn process_raw_data(&mut self, params: ReportParams, raw_data: Vec<Data>) -> Result<AperfData> {
+    fn process_raw_data(
+        &mut self,
+        report_params: &ReportParams,
+        raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
         let mut time_series_data_processor =
-            time_series_data_processor_with_average_aggregate!(params.collection_start);
+            time_series_data_processor_with_average_aggregate!(report_params.collection_start);
 
         for buffer in raw_data {
             let raw_value = match buffer {

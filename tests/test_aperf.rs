@@ -12,7 +12,6 @@ use tempfile::TempDir;
 use {
     aperf::data::DEFAULT_DATA_NAMES,
     aperf::record::{record, Record},
-    aperf::APERF_RUNLOG,
 };
 
 #[cfg(feature = "hotline")]
@@ -935,7 +934,7 @@ fn record_with_name(
         ungroup_pmu_events: false,
     };
 
-    let runlog = work_dir.join(*APERF_RUNLOG);
+    let runlog = work_dir.join("aperf_runlog");
     fs::File::create(&runlog)?;
 
     record(&rec, tmp_dir, &runlog)?;

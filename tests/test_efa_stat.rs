@@ -3,7 +3,7 @@ use aperf::data::common::data_formats::AperfData;
 use aperf::data::efa_stat::collect_efa_metrics_file_paths;
 use aperf::data::efa_stat::{EfaStat, EfaStatRaw};
 use aperf::data::{Data, ProcessData, TimeEnum};
-use aperf::visualizer::ReportParams;
+use aperf::data_processing::ReportParams;
 use chrono::Utc;
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
@@ -67,7 +67,7 @@ fn data_series(
 #[test]
 fn test_efa_empty_data() {
     let mut efa = EfaStat::new();
-    let ts = unwrap_time_series(efa.process_raw_data(ReportParams::new(), vec![]).unwrap());
+    let ts = unwrap_time_series(efa.process_raw_data(&ReportParams::new(), vec![]).unwrap());
     assert!(ts.metrics.is_empty());
     assert!(ts.sorted_metric_names.is_empty());
 }
@@ -83,7 +83,7 @@ fn test_efa_single_sample_single_driver() {
     );
 
     let mut efa = EfaStat::new();
-    let ts = unwrap_time_series(efa.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(efa.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     assert!(ts.metrics.contains_key("tx_bytes"));
     assert!(ts.metrics.contains_key("rx_bytes"));
@@ -120,7 +120,7 @@ fn test_efa_two_drivers_accumulative_deltas() {
     );
 
     let mut efa = EfaStat::new();
-    let ts = unwrap_time_series(efa.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(efa.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     let tx = data_series(&ts.metrics["tx_bytes"]);
     assert_eq!(tx.len(), 2, "Expected 2 series for tx_bytes");
@@ -157,7 +157,7 @@ fn test_efa_three_drivers_aggregate() {
     );
 
     let mut efa = EfaStat::new();
-    let ts = unwrap_time_series(efa.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(efa.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     let tx = &ts.metrics["tx_bytes"];
     let non_agg = data_series(tx);
@@ -199,7 +199,7 @@ fn test_efa_multi_driver_different_metrics() {
     );
 
     let mut efa = EfaStat::new();
-    let ts = unwrap_time_series(efa.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(efa.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     // tx_bytes from both drivers
     let tx = data_series(&ts.metrics["tx_bytes"]);
@@ -249,7 +249,7 @@ fn test_efa_driver_appearing_later() {
     );
 
     let mut efa = EfaStat::new();
-    let ts = unwrap_time_series(efa.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(efa.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     let tx = data_series(&ts.metrics["tx_bytes"]);
     let efa0 = tx.iter().find(|s| s.series_name == "efa0").unwrap();
@@ -283,7 +283,7 @@ fn test_efa_decreasing_counter_multi_driver() {
     );
 
     let mut efa = EfaStat::new();
-    let ts = unwrap_time_series(efa.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(efa.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     let tx = data_series(&ts.metrics["tx_bytes"]);
     let efa0 = tx.iter().find(|s| s.series_name == "efa0").unwrap();
@@ -309,7 +309,7 @@ fn test_efa_no_queue_transformation() {
     );
 
     let mut efa = EfaStat::new();
-    let ts = unwrap_time_series(efa.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(efa.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     assert!(
         ts.metrics.contains_key("queue_0_tx_bytes"),
@@ -343,7 +343,7 @@ fn test_efa_metric_ordering_multi_driver() {
     );
 
     let mut efa = EfaStat::new();
-    let ts = unwrap_time_series(efa.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(efa.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     let official = ["tx_bytes", "rx_bytes", "send_bytes", "rdma_write_wrs"];
     let custom = ["another_custom", "custom_counter"];
@@ -389,7 +389,7 @@ fn test_efa_all_official_metrics() {
     let raw = make_efa_raw_data(&[vec![("efa0", official_metrics.clone())]], 1);
 
     let mut efa = EfaStat::new();
-    let ts = unwrap_time_series(efa.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(efa.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     for (name, _) in &official_metrics {
         assert!(
@@ -501,7 +501,7 @@ fn test_efa_time_progression_multi_driver() {
     );
 
     let mut efa = EfaStat::new();
-    let ts = unwrap_time_series(efa.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(efa.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     for s in &ts.metrics["tx_bytes"].series {
         assert_eq!(s.time_diff, vec![0, 3, 6]);
@@ -521,7 +521,7 @@ fn test_efa_many_samples_multi_driver() {
 
     let raw = make_efa_raw_data(&samples, 2);
     let mut efa = EfaStat::new();
-    let ts = unwrap_time_series(efa.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(efa.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     let tx = data_series(&ts.metrics["tx_bytes"]);
     assert_eq!(tx.len(), 2);
@@ -554,7 +554,7 @@ fn test_efa_zero_counters_multi_driver() {
     );
 
     let mut efa = EfaStat::new();
-    let ts = unwrap_time_series(efa.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(efa.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     for metric in ts.metrics.values() {
         for s in &metric.series {
@@ -582,7 +582,7 @@ fn test_efa_avg_bytes_per_wr_correct_division() {
     );
 
     let mut efa = EfaStat::new();
-    let ts = unwrap_time_series(efa.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(efa.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     let avg = data_series(&ts.metrics["avg_bytes_per_send_wr"]);
     assert_eq!(avg.len(), 1);
@@ -607,7 +607,7 @@ fn test_efa_avg_bytes_per_wr_zero_when_no_wrs() {
     );
 
     let mut efa = EfaStat::new();
-    let ts = unwrap_time_series(efa.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(efa.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     let avg = data_series(&ts.metrics["avg_bytes_per_send_wr"]);
     // t0: first sample → 0.0; t1: wrs_delta=0 → 0.0
@@ -632,7 +632,7 @@ fn test_efa_avg_bytes_per_wr_per_device_independence() {
     );
 
     let mut efa = EfaStat::new();
-    let ts = unwrap_time_series(efa.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(efa.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     let avg = data_series(&ts.metrics["avg_bytes_per_send_wr"]);
     assert_eq!(avg.len(), 2);
@@ -680,7 +680,7 @@ fn test_efa_avg_bytes_per_wr_all_four_types() {
     );
 
     let mut efa = EfaStat::new();
-    let ts = unwrap_time_series(efa.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(efa.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     let check = |metric: &str, expected: f64| {
         let s = data_series(&ts.metrics[metric]);
@@ -709,7 +709,7 @@ fn test_efa_avg_bytes_per_wr_with_counter_decrease() {
     );
 
     let mut efa = EfaStat::new();
-    let ts = unwrap_time_series(efa.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(efa.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     // send_bytes was skipped due to decrease, so avg_bytes_per_send_wr should have
     // wrs_delta=10 but bytes=0 → avg=0.0

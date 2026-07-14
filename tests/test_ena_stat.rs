@@ -1,7 +1,7 @@
 use aperf::data::common::data_formats::AperfData;
 use aperf::data::ena_stat::{EnaStat, EnaStatRaw};
 use aperf::data::{Data, ProcessData, TimeEnum};
-use aperf::visualizer::ReportParams;
+use aperf::data_processing::ReportParams;
 use chrono::Utc;
 
 /// Build raw data in the common time-series format used by ENA/EFA collectors:
@@ -67,7 +67,7 @@ fn data_series(
 #[test]
 fn test_ena_empty_data() {
     let mut ena = EnaStat::new();
-    let ts = unwrap_time_series(ena.process_raw_data(ReportParams::new(), vec![]).unwrap());
+    let ts = unwrap_time_series(ena.process_raw_data(&ReportParams::new(), vec![]).unwrap());
     assert!(ts.metrics.is_empty());
     assert!(ts.sorted_metric_names.is_empty());
 }
@@ -83,7 +83,7 @@ fn test_ena_single_sample_single_interface() {
     );
 
     let mut ena = EnaStat::new();
-    let ts = unwrap_time_series(ena.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(ena.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     assert!(ts.metrics.contains_key("bw_in_allowance_exceeded"));
     assert!(ts.metrics.contains_key("rx_bytes"));
@@ -121,7 +121,7 @@ fn test_ena_two_interfaces_accumulative_deltas() {
     );
 
     let mut ena = EnaStat::new();
-    let ts = unwrap_time_series(ena.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(ena.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     // rx_bytes should have two data series: eth0 and eth1
     let rx = data_series(&ts.metrics["rx_bytes"]);
@@ -162,7 +162,7 @@ fn test_ena_three_interfaces_aggregate() {
     );
 
     let mut ena = EnaStat::new();
-    let ts = unwrap_time_series(ena.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(ena.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     let rx = &ts.metrics["rx_bytes"];
     let non_agg = data_series(rx);
@@ -202,7 +202,7 @@ fn test_ena_multi_interface_different_metrics() {
     );
 
     let mut ena = EnaStat::new();
-    let ts = unwrap_time_series(ena.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(ena.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     // rx_bytes has both interfaces
     let rx = data_series(&ts.metrics["rx_bytes"]);
@@ -241,7 +241,7 @@ fn test_ena_interface_appearing_later() {
     );
 
     let mut ena = EnaStat::new();
-    let ts = unwrap_time_series(ena.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(ena.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     let rx = data_series(&ts.metrics["rx_bytes"]);
     let eth0 = rx.iter().find(|s| s.series_name == "eth0").unwrap();
@@ -277,7 +277,7 @@ fn test_ena_decreasing_counter() {
     );
 
     let mut ena = EnaStat::new();
-    let ts = unwrap_time_series(ena.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(ena.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     let rx = data_series(&ts.metrics["rx_bytes"]);
     let eth0 = rx.iter().find(|s| s.series_name == "eth0").unwrap();
@@ -322,7 +322,7 @@ fn test_ena_queue_metric_transformation_multi_interface() {
     );
 
     let mut ena = EnaStat::new();
-    let ts = unwrap_time_series(ena.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(ena.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     // All queue_N_tx_bytes should be merged into "tx_bytes"
     assert!(ts.metrics.contains_key("tx_bytes"));
@@ -368,7 +368,7 @@ fn test_ena_queue_series_naming() {
     );
 
     let mut ena = EnaStat::new();
-    let ts = unwrap_time_series(ena.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(ena.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     assert!(ts.metrics.contains_key("tx_cnt"));
     let series_names: Vec<_> = data_series(&ts.metrics["tx_cnt"])
@@ -406,7 +406,7 @@ fn test_ena_non_queue_metric_not_transformed() {
     );
 
     let mut ena = EnaStat::new();
-    let ts = unwrap_time_series(ena.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(ena.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     assert!(ts.metrics.contains_key("bw_in_allowance_exceeded"));
     assert!(ts.metrics.contains_key("queue_info"));
@@ -438,7 +438,7 @@ fn test_ena_metric_ordering() {
     );
 
     let mut ena = EnaStat::new();
-    let ts = unwrap_time_series(ena.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(ena.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     let official = [
         "bw_in_allowance_exceeded",
@@ -482,7 +482,7 @@ fn test_ena_time_progression_multi_interface() {
     );
 
     let mut ena = EnaStat::new();
-    let ts = unwrap_time_series(ena.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(ena.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     for s in &ts.metrics["rx_bytes"].series {
         assert_eq!(s.time_diff, vec![0, 5, 10]);
@@ -502,7 +502,7 @@ fn test_ena_many_samples_multi_interface() {
 
     let raw = make_ena_raw_data(&samples, 2);
     let mut ena = EnaStat::new();
-    let ts = unwrap_time_series(ena.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(ena.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     let rx = data_series(&ts.metrics["rx_bytes"]);
     assert_eq!(rx.len(), 2);
@@ -543,7 +543,7 @@ fn test_ena_metric_appearing_later_multi_interface() {
     );
 
     let mut ena = EnaStat::new();
-    let ts = unwrap_time_series(ena.process_raw_data(ReportParams::new(), raw).unwrap());
+    let ts = unwrap_time_series(ena.process_raw_data(&ReportParams::new(), raw).unwrap());
 
     let rx = data_series(&ts.metrics["rx_bytes"]);
     assert_eq!(rx[0].values.len(), 4);

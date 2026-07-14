@@ -4,7 +4,7 @@ use crate::data::common::time_series_data_processor::{
 };
 use crate::data::common::utils::{get_aggregate_series_name, get_cpu_series_name};
 use crate::data::{Data, ProcessData, TimeEnum};
-use crate::visualizer::ReportParams;
+use crate::data_processing::ReportParams;
 use crate::UNGROUPED_PMU_MODE;
 use anyhow::{Context, Result};
 use exmex::{Express, FlatEx};
@@ -19,7 +19,8 @@ use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
 use {
     crate::data::common::utils::{get_online_cpu_ids, raise_fd_limit, CpuInfo},
-    crate::data::{CollectData, CollectorParams},
+    crate::data::CollectData,
+    crate::data_collection::InitParams,
     anyhow::{anyhow, bail},
     chrono::prelude::*,
     log::info,
@@ -603,10 +604,10 @@ impl PerfStatRaw {
 
 #[cfg(target_os = "linux")]
 impl CollectData for PerfStatRaw {
-    fn prepare_data_collector(&mut self, params: &CollectorParams) -> Result<()> {
+    fn prepare_data_collector(&mut self, init_params: &InitParams) -> Result<()> {
         // Read and parse the PMU config. If user did not provide a PMU config file, use the default one
         // based on the CPU type.
-        let pmu_config = if let Some(custom_pmu_config_path) = &params.pmu_config {
+        let pmu_config = if let Some(custom_pmu_config_path) = &init_params.pmu_config {
             match PmuConfig::from_file(custom_pmu_config_path) {
                 Ok(custom_pmu_config) => {
                     info!(
@@ -664,11 +665,11 @@ impl CollectData for PerfStatRaw {
         };
 
         // Write the selected PMU config to the run archive.
-        pmu_config.save_to_file(&get_saved_pmu_config_path(&params.data_dir))?;
+        pmu_config.save_to_file(&get_saved_pmu_config_path(&init_params.run_data_dir))?;
 
         // Depending on the counter mode, either creates ungrouped event counters or per-metric
         // counter groups for collection.
-        let mut pmu_collectors = if params.pmu_counter_mode == UNGROUPED_PMU_MODE {
+        let mut pmu_collectors = if init_params.pmu_counter_mode == UNGROUPED_PMU_MODE {
             pmu_config
                 .create_event_counters()
                 .context("Failed to create PMU event counters")?
@@ -687,7 +688,7 @@ impl CollectData for PerfStatRaw {
         Ok(())
     }
 
-    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
+    fn collect_data(&mut self, _init_params: &InitParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
 
@@ -1077,11 +1078,15 @@ fn process_single_raw_pmu_event_counter_data(
 }
 
 impl ProcessData for PerfStat {
-    fn process_raw_data(&mut self, params: ReportParams, raw_data: Vec<Data>) -> Result<AperfData> {
+    fn process_raw_data(
+        &mut self,
+        report_params: &ReportParams,
+        raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
         let mut time_series_data_processor =
-            time_series_data_processor_with_custom_aggregate!(params.collection_start);
+            time_series_data_processor_with_custom_aggregate!(report_params.collection_start);
 
-        if params.pmu_counter_mode.is_empty() {
+        if report_params.pmu_counter_mode.is_empty() {
             return process_legacy_raw_pmu_stat_data(time_series_data_processor, &raw_data);
         }
 
@@ -1089,16 +1094,17 @@ impl ProcessData for PerfStat {
         // been collected at the first collection.
         time_series_data_processor.use_first_accumulative_value();
 
-        let pmu_config = PmuConfig::from_file(&get_saved_pmu_config_path(&params.data_dir))
-            .with_context(|| {
-                format!(
-                    "Failed to open saved PMU config for run {}",
-                    params.run_name
-                )
-            })?;
+        let pmu_config =
+            PmuConfig::from_file(&get_saved_pmu_config_path(&report_params.run_data_dir))
+                .with_context(|| {
+                    format!(
+                        "Failed to open saved PMU config for run {}",
+                        report_params.run_name
+                    )
+                })?;
         let pmu_metric_expressions = pmu_config.get_metric_expressions()?;
 
-        if params.pmu_counter_mode == UNGROUPED_PMU_MODE {
+        if report_params.pmu_counter_mode == UNGROUPED_PMU_MODE {
             for buffer in raw_data {
                 let raw_value = match buffer {
                     Data::PerfStatRaw(ref value) => value,
@@ -1143,8 +1149,7 @@ impl ProcessData for PerfStat {
 mod tests {
     #[cfg(target_os = "linux")]
     use {
-        super::PerfStatRaw,
-        crate::data::{CollectData, CollectorParams},
+        super::PerfStatRaw, crate::data::CollectData, crate::data_collection::InitParams,
         std::io::ErrorKind,
     };
 
@@ -1152,7 +1157,7 @@ mod tests {
     #[test]
     fn test_collect_data() {
         let mut perf_stat = PerfStatRaw::new();
-        let params = CollectorParams::new();
+        let params = InitParams::default();
 
         match perf_stat.prepare_data_collector(&params) {
             Err(e) => {

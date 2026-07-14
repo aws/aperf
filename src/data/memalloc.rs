@@ -1,14 +1,14 @@
 use crate::data::common::data_formats::AperfData;
 use crate::data::common::time_series_data_processor::time_series_data_processor_with_average_aggregate;
-#[cfg(target_os = "linux")]
-use crate::data::{CollectData, CollectorParams};
 use crate::data::{Data, ProcessData, TimeEnum};
-use crate::visualizer::ReportParams;
-#[cfg(target_os = "linux")]
-use crate::PDError;
+use crate::data_processing::ReportParams;
 use anyhow::Result;
-use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "linux")]
+use {
+    crate::data::CollectData, crate::data_collection::InitParams, crate::PDError,
+    chrono::prelude::*,
+};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MemallocDataRaw {
@@ -39,7 +39,7 @@ impl MemallocDataRaw {
 
 #[cfg(target_os = "linux")]
 impl CollectData for MemallocDataRaw {
-    fn prepare_data_collector(&mut self, _params: &CollectorParams) -> Result<()> {
+    fn prepare_data_collector(&mut self, _init_params: &InitParams) -> Result<()> {
         if std::fs::read_to_string("/proc/buddyinfo").is_err()
             && std::fs::read_to_string("/proc/pagetypeinfo").is_err()
             && std::fs::read_to_string("/proc/slabinfo").is_err()
@@ -52,7 +52,7 @@ impl CollectData for MemallocDataRaw {
         Ok(())
     }
 
-    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
+    fn collect_data(&mut self, _init_params: &InitParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.buddyinfo_data = std::fs::read_to_string("/proc/buddyinfo").unwrap_or_default();
         self.pagetypeinfo_data = std::fs::read_to_string("/proc/pagetypeinfo").unwrap_or_default();
@@ -116,9 +116,13 @@ impl MemallocData {
 }
 
 impl ProcessData for MemallocData {
-    fn process_raw_data(&mut self, params: ReportParams, raw_data: Vec<Data>) -> Result<AperfData> {
+    fn process_raw_data(
+        &mut self,
+        report_params: &ReportParams,
+        raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
         let mut time_series_data_processor =
-            time_series_data_processor_with_average_aggregate!(params.collection_start);
+            time_series_data_processor_with_average_aggregate!(report_params.collection_start);
 
         for buffer in raw_data {
             let raw_value = match buffer {

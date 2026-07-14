@@ -2,14 +2,11 @@ use crate::data::common::data_formats::AperfData;
 use crate::data::common::time_series_data_processor::time_series_data_processor_with_average_aggregate;
 use crate::data::common::utils::get_cpu_series_name;
 use crate::data::{Data, ProcessData, TimeEnum};
-use crate::visualizer::ReportParams;
+use crate::data_processing::ReportParams;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 #[cfg(target_os = "linux")]
-use {
-    crate::data::{CollectData, CollectorParams},
-    chrono::prelude::*,
-};
+use {crate::data::CollectData, crate::data_collection::InitParams, chrono::prelude::*};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct InterruptDataRaw {
@@ -29,7 +26,7 @@ impl InterruptDataRaw {
 
 #[cfg(target_os = "linux")]
 impl CollectData for InterruptDataRaw {
-    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
+    fn collect_data(&mut self, _init_params: &InitParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
         self.data = std::fs::read_to_string("/proc/interrupts")?;
@@ -140,9 +137,13 @@ fn is_interrupt_name_mis_err(interrupt_name: &String) -> bool {
 }
 
 impl ProcessData for InterruptData {
-    fn process_raw_data(&mut self, params: ReportParams, raw_data: Vec<Data>) -> Result<AperfData> {
+    fn process_raw_data(
+        &mut self,
+        report_params: &ReportParams,
+        raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
         let mut time_series_data_processor =
-            time_series_data_processor_with_average_aggregate!(params.collection_start);
+            time_series_data_processor_with_average_aggregate!(report_params.collection_start);
 
         for buffer in raw_data {
             let raw_value = match buffer {
@@ -181,16 +182,13 @@ impl ProcessData for InterruptData {
 #[cfg(test)]
 mod tests {
     #[cfg(target_os = "linux")]
-    use {
-        super::InterruptDataRaw,
-        crate::data::{CollectData, CollectorParams},
-    };
+    use {super::InterruptDataRaw, crate::data::CollectData, crate::data_collection::InitParams};
 
     #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut id = InterruptDataRaw::new();
-        let params = CollectorParams::new();
+        let params = InitParams::default();
 
         id.collect_data(&params).unwrap();
         assert!(!id.data.is_empty());

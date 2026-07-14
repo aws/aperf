@@ -9,7 +9,7 @@
 use aperf::data::common::data_formats::{AperfData, Series, TimeSeriesMetric};
 use aperf::data::perf_stat::{PerfStat, PerfStatRaw};
 use aperf::data::{Data, ProcessData, TimeEnum};
-use aperf::visualizer::ReportParams;
+use aperf::data_processing::ReportParams;
 use aperf::{GROUPED_PMU_MODE, UNGROUPED_PMU_MODE};
 use chrono::prelude::*;
 use std::collections::HashMap;
@@ -161,7 +161,7 @@ fn test_legacy_format_comprehensive() {
     let raw_data = generate_legacy_raw_data(&expected_data, 1);
     // Legacy path: pmu_counter_mode is empty.
     let result = PerfStat::new()
-        .process_raw_data(ReportParams::new(), raw_data)
+        .process_raw_data(&ReportParams::new(), raw_data)
         .unwrap();
 
     let ts = match result {
@@ -256,7 +256,7 @@ fn write_pmu_config(dir: &Path, events: &[(&str, &str)], metrics: &[(&str, &str)
 
 fn report_params(data_dir: &Path, mode: &str) -> ReportParams {
     let mut params = ReportParams::new();
-    params.data_dir = data_dir.to_path_buf();
+    params.run_data_dir = data_dir.to_path_buf();
     params.pmu_counter_mode = mode.to_string();
     params
 }
@@ -300,7 +300,7 @@ fn process(
     params: ReportParams,
     raw_data: Vec<Data>,
 ) -> aperf::data::common::data_formats::TimeSeriesData {
-    match PerfStat::new().process_raw_data(params, raw_data).unwrap() {
+    match PerfStat::new().process_raw_data(&params, raw_data).unwrap() {
         AperfData::TimeSeries(ts) => ts,
         _ => panic!("Expected TimeSeries data"),
     }

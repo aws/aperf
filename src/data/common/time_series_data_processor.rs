@@ -421,7 +421,7 @@ fn compress_all_zero_time_series_metric(time_series_metric: &mut TimeSeriesMetri
 macro_rules! time_series_data_processor_with_average_aggregate {
     ($time_zero:expr) => {{
         crate::data::common::time_series_data_processor::TimeSeriesDataProcessor::new(
-            crate::data::common::utils::get_data_name_from_type::<Self>(),
+            crate::get_data_name_from_type::<Self>(),
             crate::data::common::time_series_data_processor::TimeSeriesDataAggregateMode::Average,
             $time_zero,
         )
@@ -433,7 +433,7 @@ macro_rules! time_series_data_processor_with_average_aggregate {
 macro_rules! time_series_data_processor_with_sum_aggregate {
     ($time_zero:expr) => {{
         crate::data::common::time_series_data_processor::TimeSeriesDataProcessor::new(
-            crate::data::common::utils::get_data_name_from_type::<Self>(),
+            crate::get_data_name_from_type::<Self>(),
             crate::data::common::time_series_data_processor::TimeSeriesDataAggregateMode::Sum,
             $time_zero,
         )
@@ -447,7 +447,7 @@ macro_rules! time_series_data_processor_with_sum_aggregate {
 macro_rules! time_series_data_processor_with_max_series_aggregate {
     ($time_zero:expr) => {{
         crate::data::common::time_series_data_processor::TimeSeriesDataProcessor::new(
-            crate::data::common::utils::get_data_name_from_type::<Self>(),
+            crate::get_data_name_from_type::<Self>(),
             crate::data::common::time_series_data_processor::TimeSeriesDataAggregateMode::MaxSeries,
             $time_zero,
         )
@@ -458,7 +458,7 @@ macro_rules! time_series_data_processor_with_max_series_aggregate {
 macro_rules! time_series_data_processor_with_custom_aggregate {
     ($time_zero:expr) => {{
         crate::data::common::time_series_data_processor::TimeSeriesDataProcessor::new(
-            crate::data::common::utils::get_data_name_from_type::<Self>(),
+            crate::get_data_name_from_type::<Self>(),
             crate::data::common::time_series_data_processor::TimeSeriesDataAggregateMode::Custom,
             $time_zero,
         )

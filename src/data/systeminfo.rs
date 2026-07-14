@@ -1,13 +1,14 @@
 use crate::data::common::data_formats::{AperfData, KeyValueData, KeyValueGroup};
 use crate::data::{Data, ProcessData, TimeEnum};
-use crate::visualizer::ReportParams;
+use crate::data_processing::ReportParams;
 use anyhow::Result;
 use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
 use {
-    crate::data::{CollectData, CollectorParams},
+    crate::data::CollectData,
+    crate::data_collection::InitParams,
     log::warn,
     sysinfo::{System, SystemExt},
 };
@@ -113,7 +114,7 @@ impl EC2Metadata {
 
 #[cfg(target_os = "linux")]
 impl CollectData for SystemInfo {
-    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
+    fn collect_data(&mut self, _init_params: &InitParams) -> Result<()> {
         let mut sys = System::new();
         sys.refresh_system();
 
@@ -155,7 +156,7 @@ impl ProcessData for SystemInfo {
 
     fn process_raw_data(
         &mut self,
-        _params: ReportParams,
+        _report_params: &ReportParams,
         raw_data: Vec<Data>,
     ) -> Result<AperfData> {
         let mut key_value_data = KeyValueData::default();
@@ -211,16 +212,13 @@ impl ProcessData for SystemInfo {
 #[cfg(test)]
 mod tests {
     #[cfg(target_os = "linux")]
-    use {
-        super::SystemInfo,
-        crate::data::{CollectData, CollectorParams},
-    };
+    use {super::SystemInfo, crate::data::CollectData, crate::data_collection::InitParams};
 
     #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut systeminfo = SystemInfo::new();
-        let params = CollectorParams::new();
+        let params = InitParams::default();
 
         systeminfo.collect_data(&params).unwrap();
         assert_ne!(systeminfo.total_cpus, 0);

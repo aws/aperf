@@ -126,7 +126,7 @@ mod diskstats_tests {
     use aperf::data::common::data_formats::AperfData;
     use aperf::data::diskstats::{DiskStatKey, Diskstats};
     use aperf::data::{Data, ProcessData};
-    use aperf::visualizer::ReportParams;
+    use aperf::data_processing::ReportParams;
     use std::collections::HashMap;
     use strum::IntoEnumIterator;
 
@@ -187,7 +187,7 @@ mod diskstats_tests {
 
         let mut diskstats = Diskstats::new();
         let result = diskstats
-            .process_raw_data(ReportParams::new(), raw_data)
+            .process_raw_data(&ReportParams::new(), raw_data)
             .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
@@ -273,7 +273,7 @@ mod diskstats_tests {
 
         let mut diskstats = Diskstats::new();
         let result = diskstats
-            .process_raw_data(ReportParams::new(), raw_data)
+            .process_raw_data(&ReportParams::new(), raw_data)
             .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
@@ -343,7 +343,7 @@ mod diskstats_tests {
 
         let mut diskstats = Diskstats::new();
         let result = diskstats
-            .process_raw_data(ReportParams::new(), raw_data)
+            .process_raw_data(&ReportParams::new(), raw_data)
             .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
@@ -425,7 +425,7 @@ mod diskstats_tests {
 
         let mut diskstats = Diskstats::new();
         let result = diskstats
-            .process_raw_data(ReportParams::new(), raw_data)
+            .process_raw_data(&ReportParams::new(), raw_data)
             .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
@@ -483,7 +483,7 @@ mod diskstats_tests {
 
         let mut diskstats = Diskstats::new();
         let result = diskstats
-            .process_raw_data(ReportParams::new(), raw_data)
+            .process_raw_data(&ReportParams::new(), raw_data)
             .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {

@@ -1,8 +1,9 @@
 extern crate ctor;
 
 use crate::data::common::data_formats::{AperfData, Graph, GraphData, GraphGroup};
+use crate::data::Data;
 use crate::data::ProcessData;
-use crate::{data::Data, visualizer::ReportParams};
+use crate::data_processing::ReportParams;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -11,12 +12,14 @@ use std::io::Write;
 use std::path::PathBuf;
 
 #[cfg(target_os = "linux")]
-use crate::data::{CollectData, CollectorParams};
+use {crate::data::CollectData, crate::data_collection::InitParams};
 
 #[cfg(feature = "hotline")]
 use {
+    crate::data::common::utils::get_sub_process_duration_seconds,
     libc::{_exit, fork, geteuid, killpg, setpgid, waitpid, SIGTERM},
     log::{info, warn},
+    std::time::Instant,
     std::{
         ffi::CString,
         os::raw::{c_char, c_int},
@@ -138,7 +141,7 @@ impl HotlineRaw {
 #[cfg(target_os = "linux")]
 impl CollectData for HotlineRaw {
     #[cfg(feature = "hotline")]
-    fn prepare_data_collector(&mut self, params: &CollectorParams) -> Result<()> {
+    fn prepare_data_collector(&mut self, init_params: &InitParams) -> Result<()> {
         match check_preconditions() {
             Ok(false) => {
                 warn!("Skipping Hotline.");
@@ -156,13 +159,13 @@ impl CollectData for HotlineRaw {
         let args = vec![
             CString::new("hotline").unwrap(),
             CString::new("--wakeup_period").unwrap(),
-            CString::new(params.interval.to_string()).unwrap(),
+            CString::new(init_params.interval.to_string()).unwrap(),
             CString::new("--hotline_frequency").unwrap(),
-            CString::new(params.hotline_frequency.to_string()).unwrap(),
+            CString::new(init_params.hotline_frequency.to_string()).unwrap(),
             CString::new("--timeout").unwrap(),
-            CString::new(params.collection_time.to_string()).unwrap(),
+            CString::new(get_sub_process_duration_seconds(init_params).to_string()).unwrap(),
             CString::new("--data_dir").unwrap(),
-            CString::new(params.data_dir.to_str().unwrap()).unwrap(),
+            CString::new(init_params.run_data_dir.to_str().unwrap()).unwrap(),
         ];
 
         let argv: Vec<*const c_char> = args.iter().map(|arg| arg.as_ptr()).collect();
@@ -199,12 +202,12 @@ impl CollectData for HotlineRaw {
         }
     }
 
-    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
+    fn collect_data(&mut self, _init_params: &InitParams) -> Result<()> {
         Ok(())
     }
 
     #[cfg(feature = "hotline")]
-    fn finish_data_collection(&mut self, params: &CollectorParams) -> Result<()> {
+    fn finish_data_collection(&mut self, init_params: &InitParams) -> Result<()> {
         if !self.launched {
             return Ok(());
         }
@@ -235,9 +238,9 @@ impl CollectData for HotlineRaw {
         let args = vec![
             CString::new("hotline").unwrap(),
             CString::new("--num_to_report").unwrap(),
-            CString::new(params.num_to_report.to_string()).unwrap(),
+            CString::new(init_params.num_to_report.to_string()).unwrap(),
             CString::new("--data_dir").unwrap(),
-            CString::new(params.data_dir.to_str().unwrap()).unwrap(),
+            CString::new(init_params.run_data_dir.to_str().unwrap()).unwrap(),
         ];
 
         let argv: Vec<*const c_char> = args.iter().map(|arg| arg.as_ptr()).collect();
@@ -283,7 +286,7 @@ impl Hotline {
 impl ProcessData for Hotline {
     fn process_raw_data(
         &mut self,
-        params: ReportParams,
+        report_params: &ReportParams,
         _raw_data: Vec<Data>,
     ) -> Result<AperfData> {
         use crate::data::hotline::hotline_reports::REPORT_CONFIGS;
@@ -293,7 +296,7 @@ impl ProcessData for Hotline {
         let mut graph_data = GraphData::default();
 
         for config in REPORT_CONFIGS {
-            let csv_string = fs::read_to_string(params.data_dir.join(config.filename))?;
+            let csv_string = fs::read_to_string(report_params.run_data_dir.join(config.filename))?;
             let table_html = csv_to_html::convert(&csv_string, &b',', &true);
 
             // Use relative path to CSS file
@@ -316,9 +319,11 @@ impl ProcessData for Hotline {
                 table_html
             );
 
-            let relative_dest_path = PathBuf::from("data/js")
-                .join(format!("{}_{}.html", params.run_name, config.table_id));
-            let dest_path = params.report_dir.join(relative_dest_path.clone());
+            let relative_dest_path = PathBuf::from("data/js").join(format!(
+                "{}_{}.html",
+                report_params.run_name, config.table_id
+            ));
+            let dest_path = report_params.report_dir.join(relative_dest_path.clone());
             let mut file = File::create(dest_path)?;
             file.write_all(full_html.as_bytes())?;
 

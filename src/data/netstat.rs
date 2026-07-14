@@ -1,16 +1,13 @@
 use crate::data::common::data_formats::AperfData;
 use crate::data::common::time_series_data_processor::time_series_data_processor_with_custom_aggregate;
 use crate::data::{Data, ProcessData, TimeEnum};
-use crate::visualizer::ReportParams;
+use crate::data_processing::ReportParams;
 use anyhow::Result;
 use log::error;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
-use {
-    crate::data::{CollectData, CollectorParams},
-    chrono::prelude::*,
-};
+use {crate::data::CollectData, crate::data_collection::InitParams, chrono::prelude::*};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NetstatRaw {
@@ -30,7 +27,7 @@ impl NetstatRaw {
 
 #[cfg(target_os = "linux")]
 impl CollectData for NetstatRaw {
-    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
+    fn collect_data(&mut self, _init_params: &InitParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
         self.data = std::fs::read_to_string("/proc/net/netstat")?;
@@ -85,9 +82,13 @@ fn parse_raw_netstat_data(raw_netstat_data: &String) -> Result<HashMap<String, u
 }
 
 impl ProcessData for Netstat {
-    fn process_raw_data(&mut self, params: ReportParams, raw_data: Vec<Data>) -> Result<AperfData> {
+    fn process_raw_data(
+        &mut self,
+        report_params: &ReportParams,
+        raw_data: Vec<Data>,
+    ) -> Result<AperfData> {
         let mut time_series_data_processor =
-            time_series_data_processor_with_custom_aggregate!(params.collection_start);
+            time_series_data_processor_with_custom_aggregate!(report_params.collection_start);
 
         for buffer in raw_data {
             let raw_value = match buffer {
@@ -121,16 +122,13 @@ impl ProcessData for Netstat {
 #[cfg(test)]
 mod tests {
     #[cfg(target_os = "linux")]
-    use {
-        super::NetstatRaw,
-        crate::data::{CollectData, CollectorParams},
-    };
+    use {super::NetstatRaw, crate::data::CollectData, crate::data_collection::InitParams};
 
     #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut netstat = NetstatRaw::new();
-        let params = CollectorParams::new();
+        let params = InitParams::default();
 
         netstat.collect_data(&params).unwrap();
         assert!(!netstat.data.is_empty());

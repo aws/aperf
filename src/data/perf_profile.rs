@@ -1,15 +1,19 @@
 use crate::data::common::data_formats::{
     AperfData, GraphData, GraphGroup, Profiler, ProfilingData,
 };
-use crate::data::common::utils::{copy_graph_and_update_graph_data, find_file};
+use crate::data::common::utils::copy_graph_and_update_graph_data;
 use crate::data::{Data, ProcessData};
-use crate::visualizer::ReportParams;
+use crate::data_processing::ReportParams;
+use crate::find_file;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::path::PathBuf;
 #[cfg(target_os = "linux")]
 use {
-    crate::data::{CollectData, CollectorParams},
+    crate::data::common::utils::get_sub_process_duration_seconds,
+    crate::data::CollectData,
+    crate::data_collection::InitParams,
     crate::profiling::perf::parser::build_perf_profiler_data,
     crate::PDError,
     chrono::Utc,
@@ -20,6 +24,7 @@ use {
     std::fs::File,
     std::io::Write,
     std::process::{Command, Stdio},
+    std::str::FromStr,
     std::{process::Child, sync::Mutex},
 };
 
@@ -51,8 +56,16 @@ lazy_static! {
     pub static ref PROFILE_START_TIME_MS: Mutex<i64> = Mutex::new(0);
 }
 
-fn perf_profiler_data_filename() -> String {
-    "perf_profiler_data.json".to_string()
+fn raw_perf_profile_path(run_data_dir: &PathBuf, profile_type: &str) -> PathBuf {
+    run_data_dir.join(format!("raw_perf_{profile_type}_profile"))
+}
+
+fn raw_perf_on_cpu_profile_path(run_data_dir: &PathBuf) -> PathBuf {
+    raw_perf_profile_path(run_data_dir, "cpu")
+}
+
+fn perf_profiler_data_path(run_data_dir: &PathBuf) -> PathBuf {
+    run_data_dir.join("perf_profiler_data.json")
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -71,7 +84,7 @@ impl PerfProfileRaw {
 
 #[cfg(target_os = "linux")]
 impl CollectData for PerfProfileRaw {
-    fn prepare_data_collector(&mut self, params: &CollectorParams) -> Result<()> {
+    fn prepare_data_collector(&mut self, init_params: &InitParams) -> Result<()> {
         let is_root = unistd::geteuid().is_root();
 
         // Check kernel configs for the following perf command
@@ -107,6 +120,7 @@ impl CollectData for PerfProfileRaw {
         }
 
         *PROFILE_START_TIME_MS.lock().unwrap() = Utc::now().timestamp_millis();
+
         match Command::new("perf")
             .stdout(Stdio::null())
             .args([
@@ -117,14 +131,14 @@ impl CollectData for PerfProfileRaw {
                 "-k",
                 "1",
                 "-F",
-                &params.perf_frequency.to_string(),
+                &init_params.perf_frequency.to_string(),
                 "-e",
                 "cpu-clock:pppH",
                 "-o",
-                &params.data_file_path.display().to_string(),
+                &raw_perf_on_cpu_profile_path(&init_params.run_data_dir).to_string_lossy(),
                 "--",
                 "sleep",
-                &params.collection_time.to_string(),
+                &get_sub_process_duration_seconds(init_params).to_string(),
             ])
             .spawn()
         {
@@ -141,11 +155,11 @@ impl CollectData for PerfProfileRaw {
         }
     }
 
-    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
+    fn collect_data(&mut self, _init_params: &InitParams) -> Result<()> {
         Ok(())
     }
 
-    fn finish_data_collection(&mut self, params: &CollectorParams) -> Result<()> {
+    fn finish_data_collection(&mut self, init_params: &InitParams) -> Result<()> {
         let mut child = PERF_CHILD.lock().unwrap();
         match child.as_ref() {
             None => return Ok(()),
@@ -154,7 +168,7 @@ impl CollectData for PerfProfileRaw {
 
         signal::kill(
             Pid::from_raw(child.as_mut().unwrap().id() as i32),
-            params.signal,
+            signal::Signal::from_str(&init_params.end_signal).unwrap_or(signal::Signal::SIGTERM),
         )?;
 
         debug!("Waiting for perf profile collection to complete...");
@@ -167,20 +181,20 @@ impl CollectData for PerfProfileRaw {
         }
 
         debug!("Running Perf inject...");
-        let perf_jit_loc = params.data_dir.join("perf.data.jit");
+        let perf_jit_loc = init_params.run_data_dir.join("perf.data.jit");
         let out_jit = Command::new("perf")
             .args([
                 "inject",
                 "-j",
                 "-i",
-                params.data_file_path.to_str().unwrap(),
+                &raw_perf_on_cpu_profile_path(&init_params.run_data_dir).to_string_lossy(),
                 "-o",
                 perf_jit_loc.to_str().unwrap(),
             ])
             .status();
 
-        let fg_out = File::create(params.data_dir.join("flamegraph.svg"))?;
-        let reverse_fg_out = File::create(params.data_dir.join("reverse-flamegraph.svg"))?;
+        let fg_out = File::create(init_params.run_data_dir.join("flamegraph.svg"))?;
+        let reverse_fg_out = File::create(init_params.run_data_dir.join("reverse-flamegraph.svg"))?;
 
         match out_jit {
             Err(e) => {
@@ -191,7 +205,7 @@ impl CollectData for PerfProfileRaw {
             Ok(_) => {
                 debug!("Creating flamegraph...");
                 // TODO: extract metadata from perf record and generate script -> ProfilingData
-                let script_loc = params.data_dir.join("script.out");
+                let script_loc = init_params.run_data_dir.join("script.out");
                 let out = Command::new("perf")
                     .stdout(File::create(&script_loc)?)
                     .args(["script", "-f", "-i", perf_jit_loc.to_str().unwrap()])
@@ -203,7 +217,7 @@ impl CollectData for PerfProfileRaw {
                         write_msg_to_svg(fg_out, out)?;
                     }
                     Ok(_) => {
-                        let collapse_loc = params.data_dir.join("collapse.out");
+                        let collapse_loc = init_params.run_data_dir.join("collapse.out");
                         Folder::default().collapse_file(
                             Some(script_loc.clone()),
                             File::create(&collapse_loc)?,
@@ -236,8 +250,8 @@ impl CollectData for PerfProfileRaw {
             }
         }
 
-        let event_out_path_buf = params.data_dir.join("parsed_perf_data.out");
-        let events_out_path = if params.save_profile_events {
+        let event_out_path_buf = init_params.run_data_dir.join("parsed_perf_data.out");
+        let events_out_path = if init_params.save_profile_events {
             Some(event_out_path_buf.as_path())
         } else {
             None
@@ -246,22 +260,22 @@ impl CollectData for PerfProfileRaw {
         // TODO: Guard the new profile processing logic by the save_profile_events flag,
         //       so that the new flow is only executed in tests. Remove the guardrail
         //       after the feature is ready to launch.
-        if params.save_profile_events {
+        if init_params.save_profile_events {
             // Parse raw Perf profile and build ProfilingData
             let perf_profiler_data = build_perf_profiler_data(
-                &params.data_file_path,
+                &raw_perf_on_cpu_profile_path(&init_params.run_data_dir),
                 *PROFILE_START_TIME_MS.lock().unwrap(),
                 events_out_path,
             );
             if let Ok(json) = serde_json::to_string(&perf_profiler_data) {
-                fs::write(params.data_dir.join(perf_profiler_data_filename()), json)?;
+                fs::write(perf_profiler_data_path(&init_params.run_data_dir), json)?;
             }
         }
 
         Ok(())
     }
 
-    fn is_profile() -> bool {
+    fn is_perf_profile() -> bool {
         true
     }
 }
@@ -288,7 +302,7 @@ impl PerfProfile {
 impl ProcessData for PerfProfile {
     fn process_raw_data(
         &mut self,
-        params: ReportParams,
+        report_params: &ReportParams,
         _raw_data: Vec<Data>,
     ) -> Result<AperfData> {
         // Still attempt to process perf script + inferno generated flamegraphs for
@@ -299,20 +313,24 @@ impl ProcessData for PerfProfile {
         [false, true].iter().for_each(|&is_reverse| {
             // Match both the current (`flamegraph.svg`) and legacy (`<run>-flamegraph.svg`) naming.
             let filename = if is_reverse {
-                find_file(&params.data_dir, r"reverse-flamegraph\.svg$", None)
+                find_file(
+                    &report_params.run_data_dir,
+                    r"reverse-flamegraph\.svg$",
+                    None,
+                )
             } else {
                 find_file(
-                    &params.data_dir,
+                    &report_params.run_data_dir,
                     r"flamegraph\.svg$",
                     Some(r"reverse-flamegraph\.svg$"),
                 )
             };
             if let Ok(filename) = filename {
                 copy_graph_and_update_graph_data(
-                    &params.data_dir,
-                    &params.report_dir,
+                    &report_params.run_data_dir,
+                    &report_params.report_dir,
                     &filename,
-                    &params.run_name,
+                    &report_params.run_name,
                     if is_reverse { "reverse" } else { "default" },
                     "cpu",
                     "Perf CPU Profile".to_string(),
@@ -323,7 +341,7 @@ impl ProcessData for PerfProfile {
 
         // Deserialize the ProfilerData generated at the end of record.
         let perf_profiler_data =
-            match fs::read_to_string(params.data_dir.join(perf_profiler_data_filename()))
+            match fs::read_to_string(perf_profiler_data_path(&report_params.run_data_dir))
                 .ok()
                 .and_then(|json| serde_json::from_str::<Profiler>(&json).ok())
             {

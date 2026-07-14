@@ -1,6 +1,6 @@
 use aperf::data::numastat::{Numastat, NumastatRaw};
 use aperf::data::{Data, ProcessData, TimeEnum};
-use aperf::visualizer::ReportParams;
+use aperf::data_processing::ReportParams;
 use chrono::Utc;
 use std::collections::HashMap;
 
@@ -81,7 +81,7 @@ fn test_numastat_process_raw_data_single_node() {
     let mut numastat = Numastat::new();
     let report_params = ReportParams::new();
 
-    let result = numastat.process_raw_data(report_params, raw_data);
+    let result = numastat.process_raw_data(&report_params, raw_data);
     assert!(result.is_ok());
 
     let aperf_data = result.unwrap();
@@ -129,7 +129,7 @@ fn test_numastat_process_raw_data_multiple_nodes() {
     let mut numastat = Numastat::new();
     let report_params = ReportParams::new();
 
-    let result = numastat.process_raw_data(report_params, raw_data);
+    let result = numastat.process_raw_data(&report_params, raw_data);
     assert!(result.is_ok());
 
     let aperf_data = result.unwrap();
@@ -186,7 +186,7 @@ fn test_numastat_empty_data() {
     let mut numastat = Numastat::new();
     let report_params = ReportParams::new();
 
-    let result = numastat.process_raw_data(report_params, raw_data);
+    let result = numastat.process_raw_data(&report_params, raw_data);
     assert!(result.is_ok());
 
     let aperf_data = result.unwrap();
@@ -207,7 +207,7 @@ fn test_numastat_malformed_data() {
     let mut numastat = Numastat::new();
     let report_params = ReportParams::new();
 
-    let result = numastat.process_raw_data(report_params, raw_data);
+    let result = numastat.process_raw_data(&report_params, raw_data);
     assert!(result.is_ok());
 
     let aperf_data = result.unwrap();
@@ -245,7 +245,7 @@ fn test_decreasing_counter() {
 
     let mut numastat = Numastat::new();
     let result = numastat
-        .process_raw_data(ReportParams::new(), raw_data)
+        .process_raw_data(&ReportParams::new(), raw_data)
         .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {

@@ -1,19 +1,26 @@
 #![cfg(target_os = "linux")]
 
-use crate::data::common::utils::get_data_name_from_type;
+use crate::data;
 use crate::data::java_profile::JavaProfile;
-use crate::{data, InitParams, PerformanceData, UNGROUPED_PMU_MODE};
-use anyhow::anyhow;
+use crate::data_collection::DataCollectionEngine;
+use crate::data_collection::InitParams;
+use crate::no_tar_gz_file_name;
+use crate::{get_data_name_from_type, UNGROUPED_PMU_MODE};
+use anyhow::bail;
 use anyhow::Result;
+use chrono::Utc;
 use clap::{builder::PossibleValuesParser, ArgGroup, Args};
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use log::{debug, error, info};
 use std::collections::HashSet;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 #[derive(Args, Debug)]
 #[clap(group(ArgGroup::new("customized-collection").args(&["dont_collect", "collect_only"])))]
 pub struct Record {
-    /// Name of the run.
+    /// Name or path of the run.
     #[clap(help_heading = "Basic Options", short, long, value_parser)]
     pub run_name: Option<String>,
 
@@ -122,46 +129,71 @@ pub struct Record {
 }
 
 pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
-    let mut run_name = String::new();
     if record.period == 0 {
         error!("Collection period cannot be 0.");
-        return Err(anyhow!("Cannot start recording with the given parameters."));
+        bail!("Cannot start recording with the given parameters.");
     }
     if record.interval == 0 {
         error!("Collection interval cannot be 0.");
-        return Err(anyhow!("Cannot start recording with the given parameters."));
+        bail!("Cannot start recording with the given parameters.");
     }
     // Check if interval > period , if so give error user and exit.
     if record.interval >= record.period {
         error!("The overall recording period of {period} seconds needs to be longer than the interval of {interval} seconds.\
                 Please increase the overall recording period or decrease the interval.", interval = record.interval, period =record.period);
-        return Err(anyhow!("Cannot start recording with the given parameters."));
+        bail!("Cannot start recording with the given parameters.");
     }
-    match &record.run_name {
-        Some(r) => run_name = r.clone(),
-        None => {}
-    }
-    let mut params = InitParams::new(run_name);
-    params.period = record.period;
-    params.interval = record.interval;
-    params.tmp_dir = tmp_dir.to_path_buf();
-    params.runlog = runlog.to_path_buf();
+
+    // Parse and validate the provided run name or path. If it is not provided or invalid,
+    // use the default name and path.
+    let (run_name, run_data_dir) = match &record.run_name {
+        Some(run_name_arg) => {
+            // Reassemble the components to discard the trailing slash.
+            let run_data_dir: PathBuf = PathBuf::from(run_name_arg).components().collect();
+            match run_data_dir.file_name() {
+                Some(file_name) => (file_name.to_string_lossy().into_owned(), run_data_dir),
+                None => {
+                    let run_name_and_dir = get_default_run_name_and_dir();
+                    info!(
+                        "Invalid run name or path {}. Using default path {}",
+                        run_data_dir.display(),
+                        run_name_and_dir.1.display()
+                    );
+                    run_name_and_dir
+                }
+            }
+        }
+        None => {
+            let run_name_and_dir = get_default_run_name_and_dir();
+            info!(
+                "Run name or path not provided. Using default path {}",
+                run_name_and_dir.1.display()
+            );
+            run_name_and_dir
+        }
+    };
+
+    let mut init_params = InitParams::new(run_name, run_data_dir.clone());
+    init_params.period = record.period;
+    init_params.interval = record.interval;
+    init_params.tmp_dir = tmp_dir.to_path_buf();
+    init_params.runlog = runlog.to_path_buf();
     if let Some(p) = &record.pmu_config {
-        params.pmu_config = Some(PathBuf::from(p));
+        init_params.pmu_config = Some(PathBuf::from(p));
     }
     if record.ungroup_pmu_events {
-        params.pmu_counter_mode = UNGROUPED_PMU_MODE.to_string();
+        init_params.pmu_counter_mode = UNGROUPED_PMU_MODE.to_string();
     }
 
     #[cfg(feature = "hotline")]
     {
-        params.hotline_frequency = record.hotline_frequency;
-        params.num_to_report = record.num_to_report;
+        init_params.hotline_frequency = record.hotline_frequency;
+        init_params.num_to_report = record.num_to_report;
     }
 
     match &record.profile_java {
         Some(j) => {
-            params.profile.insert(
+            init_params.profile.insert(
                 String::from(get_data_name_from_type::<JavaProfile>()),
                 j.clone(),
             );
@@ -169,14 +201,21 @@ pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
         None => {}
     }
     if record.profile {
-        params.perf_frequency = record.perf_frequency;
+        init_params.perf_frequency = record.perf_frequency;
     }
-    params.save_profile_events = record.save_profile_events;
+    init_params.save_profile_events = record.save_profile_events;
 
-    let mut performance_data = PerformanceData::new(params);
+    if let Err(e) = fs::create_dir(&run_data_dir) {
+        panic!(
+            "Failed to create the run data directory at {}: {e}",
+            run_data_dir.display()
+        );
+    }
 
-    data::add_all_performance_data(
-        &mut performance_data,
+    let mut data_collection_engine = DataCollectionEngine::new(init_params);
+
+    data::initialize_data_collection_engine(
+        &mut data_collection_engine,
         get_data_names_to_collect(&record.collect_only, &record.dont_collect),
         record.profile,
         record
@@ -185,18 +224,19 @@ pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
             .map_or(false, |j| !j.is_empty()),
     );
 
-    performance_data.init_collectors()?;
     info!("Starting Data collection...");
 
     info!("Preparing data collectors...");
-    performance_data.prepare_data_collectors()?;
+    data_collection_engine.prepare_data_collectors()?;
     debug!("Collecting static data...");
-    performance_data.collect_static_data()?;
+    data_collection_engine.collect_static_data()?;
     info!("Collecting data...");
-    performance_data.collect_data_serial()?;
-
+    data_collection_engine.collect_data_serial()?;
+    info!("Finishing data collection...");
+    data_collection_engine.finish_data_collection()?;
     info!("Data collection complete.");
-    performance_data.create_record_archive()?;
+    info!("Creating run data archive...");
+    create_run_data_archive(&run_data_dir)?;
 
     Ok(())
 }
@@ -233,4 +273,29 @@ fn get_data_names_to_collect(
     };
 
     all_default_data_names_set
+}
+
+pub fn get_default_run_name_and_dir() -> (String, PathBuf) {
+    let default_run_name = format!(
+        "aperf_{}",
+        Utc::now().format("%Y-%m-%d_%H_%M_%S").to_string()
+    );
+    let default_run_data_dir = PathBuf::from(format!("./{default_run_name}"));
+
+    (default_run_name, default_run_data_dir)
+}
+
+pub fn create_run_data_archive(run_data_dir: &PathBuf) -> Result<()> {
+    let dir_name = no_tar_gz_file_name(run_data_dir).unwrap();
+    let archive_path = PathBuf::from(format!("{}.tar.gz", run_data_dir.display()));
+    let tar_gz = fs::File::create(&archive_path)?;
+    let enc = GzEncoder::new(tar_gz, Compression::default());
+    let mut tar = tar::Builder::new(enc);
+    tar.append_dir_all(dir_name, run_data_dir)?;
+    info!(
+        "Data collected in {}/ and archive available at {}",
+        run_data_dir.display(),
+        archive_path.display(),
+    );
+    Ok(())
 }

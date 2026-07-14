@@ -1,6 +1,6 @@
 use aperf::data::memalloc::MemallocDataRaw;
 use aperf::data::{Data, ProcessData, TimeEnum};
-use aperf::visualizer::ReportParams;
+use aperf::data_processing::ReportParams;
 use chrono::Utc;
 use std::collections::HashMap;
 
@@ -149,7 +149,7 @@ fn test_process_memalloc_empty_data() {
     let raw_data = Vec::new();
     let mut memalloc = aperf::data::memalloc::MemallocData::new();
     let result = memalloc
-        .process_raw_data(ReportParams::new(), raw_data)
+        .process_raw_data(&ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
@@ -175,7 +175,7 @@ fn test_process_buddyinfo_simple() {
     let raw_data = generate_memalloc_raw_data(&expected_per_sample_stats, 1);
     let mut memalloc = aperf::data::memalloc::MemallocData::new();
     let result = memalloc
-        .process_raw_data(ReportParams::new(), raw_data)
+        .process_raw_data(&ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
@@ -223,7 +223,7 @@ fn test_process_buddyinfo_complex() {
     let raw_data = generate_memalloc_raw_data(&expected_per_sample_stats, 2);
     let mut memalloc = aperf::data::memalloc::MemallocData::new();
     let result = memalloc
-        .process_raw_data(ReportParams::new(), raw_data)
+        .process_raw_data(&ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
@@ -266,7 +266,7 @@ fn test_process_pageblocks() {
     let raw_data = generate_memalloc_raw_data(&expected_per_sample_stats, 1);
     let mut memalloc = aperf::data::memalloc::MemallocData::new();
     let result = memalloc
-        .process_raw_data(ReportParams::new(), raw_data)
+        .process_raw_data(&ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
@@ -304,7 +304,7 @@ fn test_process_pagetype() {
     let raw_data = generate_memalloc_raw_data(&expected_per_sample_stats, 1);
     let mut memalloc = aperf::data::memalloc::MemallocData::new();
     let result = memalloc
-        .process_raw_data(ReportParams::new(), raw_data)
+        .process_raw_data(&ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
@@ -346,7 +346,7 @@ fn test_process_slabinfo_simple() {
     let raw_data = generate_memalloc_raw_data(&expected_per_sample_stats, 1);
     let mut memalloc = aperf::data::memalloc::MemallocData::new();
     let result = memalloc
-        .process_raw_data(ReportParams::new(), raw_data)
+        .process_raw_data(&ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
@@ -389,7 +389,7 @@ fn test_process_slabinfo_complex() {
     let raw_data = generate_memalloc_raw_data(&expected_per_sample_stats, 1);
     let mut memalloc = aperf::data::memalloc::MemallocData::new();
     let result = memalloc
-        .process_raw_data(ReportParams::new(), raw_data)
+        .process_raw_data(&ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
@@ -454,7 +454,7 @@ fn test_process_all_data_types() {
     let raw_data = generate_memalloc_raw_data(&expected_per_sample_stats, 1);
     let mut memalloc = aperf::data::memalloc::MemallocData::new();
     let result = memalloc
-        .process_raw_data(ReportParams::new(), raw_data)
+        .process_raw_data(&ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
@@ -499,7 +499,7 @@ fn test_metric_name_formatting() {
     let raw_data = generate_memalloc_raw_data(&[expected_stats], 1);
     let mut memalloc = aperf::data::memalloc::MemallocData::new();
     let result = memalloc
-        .process_raw_data(ReportParams::new(), raw_data)
+        .process_raw_data(&ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
@@ -529,7 +529,7 @@ fn test_sorted_metric_names() {
     let raw_data = generate_memalloc_raw_data(&[expected_stats], 1);
     let mut memalloc = aperf::data::memalloc::MemallocData::new();
     let result = memalloc
-        .process_raw_data(ReportParams::new(), raw_data)
+        .process_raw_data(&ReportParams::new(), raw_data)
         .unwrap();
 
     if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {

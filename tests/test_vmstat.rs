@@ -46,7 +46,7 @@ mod vmstat_tests {
     use aperf::data::common::data_formats::AperfData;
     use aperf::data::vmstat::Vmstat;
     use aperf::data::{Data, ProcessData};
-    use aperf::visualizer::ReportParams;
+    use aperf::data_processing::ReportParams;
     use std::collections::HashMap;
 
     #[test]
@@ -55,7 +55,7 @@ mod vmstat_tests {
 
         let mut vmstat = Vmstat::new();
         let result = vmstat
-            .process_raw_data(ReportParams::new(), raw_data)
+            .process_raw_data(&ReportParams::new(), raw_data)
             .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
@@ -98,7 +98,7 @@ mod vmstat_tests {
 
         let mut vmstat = Vmstat::new();
         let result = vmstat
-            .process_raw_data(ReportParams::new(), raw_data)
+            .process_raw_data(&ReportParams::new(), raw_data)
             .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
@@ -214,7 +214,7 @@ mod vmstat_tests {
 
         let mut vmstat = Vmstat::new();
         let result = vmstat
-            .process_raw_data(ReportParams::new(), raw_data)
+            .process_raw_data(&ReportParams::new(), raw_data)
             .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
@@ -350,7 +350,7 @@ mod vmstat_tests {
 
         let mut vmstat = Vmstat::new();
         let result = vmstat
-            .process_raw_data(ReportParams::new(), raw_data)
+            .process_raw_data(&ReportParams::new(), raw_data)
             .unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {

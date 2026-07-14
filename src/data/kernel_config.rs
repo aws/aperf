@@ -1,6 +1,6 @@
 use crate::data::common::data_formats::{AperfData, KeyValueData, KeyValueGroup};
 use crate::data::{Data, ProcessData, TimeEnum};
-use crate::visualizer::ReportParams;
+use crate::data_processing::ReportParams;
 use anyhow::Result;
 use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -8,7 +8,8 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 #[cfg(target_os = "linux")]
 use {
-    crate::data::{CollectData, CollectorParams},
+    crate::data::CollectData,
+    crate::data_collection::InitParams,
     crate::PDError,
     log::debug,
     std::fs::OpenOptions,
@@ -99,7 +100,7 @@ fn get_kernel_config_data() -> Result<Box<dyn BufRead>> {
 
 #[cfg(target_os = "linux")]
 impl CollectData for KernelConfig {
-    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
+    fn collect_data(&mut self, _init_params: &InitParams) -> Result<()> {
         let time_now = Utc::now();
         let mut kernel_data_processed: Vec<KernelConfigEntryGroup> = Vec::new();
         let mut comments = Vec::new();
@@ -232,7 +233,7 @@ fn parse_kernel_config(
 impl ProcessData for KernelConfig {
     fn process_raw_data(
         &mut self,
-        _params: ReportParams,
+        _report_params: &ReportParams,
         raw_data: Vec<Data>,
     ) -> Result<AperfData> {
         let mut key_value_data = KeyValueData::default();
@@ -261,16 +262,13 @@ impl ProcessData for KernelConfig {
 #[cfg(test)]
 mod tests {
     #[cfg(target_os = "linux")]
-    use {
-        super::KernelConfig,
-        crate::data::{CollectData, CollectorParams},
-    };
+    use {super::KernelConfig, crate::data::CollectData, crate::data_collection::InitParams};
 
     #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut kernel_config = KernelConfig::new();
-        let params = CollectorParams::new();
+        let params = InitParams::default();
 
         kernel_config.collect_data(&params).unwrap();
         assert!(!kernel_config.kernel_config_data.is_empty());

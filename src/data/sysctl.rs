@@ -1,15 +1,12 @@
 use crate::data::common::data_formats::{AperfData, KeyValueData, KeyValueGroup};
 use crate::data::{Data, ProcessData, TimeEnum};
-use crate::visualizer::ReportParams;
+use crate::data_processing::ReportParams;
 use anyhow::Result;
 use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 #[cfg(target_os = "linux")]
-use {
-    crate::data::{CollectData, CollectorParams},
-    sysctl::Sysctl,
-};
+use {crate::data::CollectData, crate::data_collection::InitParams, sysctl::Sysctl};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SysctlData {
@@ -46,7 +43,7 @@ fn can_collect(name: String) -> bool {
 
 #[cfg(target_os = "linux")]
 impl CollectData for SysctlData {
-    fn collect_data(&mut self, _params: &CollectorParams) -> Result<()> {
+    fn collect_data(&mut self, _init_params: &InitParams) -> Result<()> {
         let ctls = sysctl::CtlIter::root().filter_map(Result::ok);
         for ctl in ctls {
             let flags = match ctl.flags() {
@@ -76,7 +73,7 @@ impl CollectData for SysctlData {
 impl ProcessData for SysctlData {
     fn process_raw_data(
         &mut self,
-        _params: ReportParams,
+        _report_params: &ReportParams,
         raw_data: Vec<Data>,
     ) -> Result<AperfData> {
         let mut key_value_data = KeyValueData::default();
@@ -111,14 +108,15 @@ mod tests {
     #[cfg(target_os = "linux")]
     use {
         super::{SysctlData, DONT_COLLECT},
-        crate::data::{CollectData, CollectorParams},
+        crate::data::CollectData,
+        crate::data_collection::InitParams,
     };
 
     #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_data() {
         let mut sysctl = SysctlData::new();
-        let params = CollectorParams::new();
+        let params = InitParams::default();
 
         sysctl.collect_data(&params).unwrap();
         assert!(!sysctl.sysctl_data.is_empty());
@@ -128,7 +126,7 @@ mod tests {
     #[test]
     fn test_dont_collect() {
         let mut sysctl = SysctlData::new();
-        let params = CollectorParams::new();
+        let params = InitParams::default();
 
         sysctl.collect_data(&params).unwrap();
         let keys: Vec<String> = sysctl.sysctl_data.keys().cloned().collect();

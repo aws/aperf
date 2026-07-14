@@ -3,10 +3,11 @@ mod aperf_stats_tests {
     use aperf::data::aperf_stats::AperfStat;
     use aperf::data::common::data_formats::AperfData;
     use aperf::data::{ProcessData, TimeEnum};
-    use aperf::visualizer::ReportParams;
+    use aperf::data_processing::ReportParams;
+    use aperf::{data_file_path, get_data_name_from_type};
     use chrono::Utc;
     use std::collections::HashMap;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     #[derive(Clone, Debug)]
     struct ExpectedAperfStats {
@@ -21,20 +22,27 @@ mod aperf_stats_tests {
         }
     }
 
+    // The processor reads the aperf_stats file from `run_data_dir`, so point `run_data_dir` at
+    // the directory containing the temp file written by `write_aperf_stats_to_file`.
     fn create_named_report_params(data_file_path: String) -> ReportParams {
+        let run_data_dir = Path::new(&data_file_path)
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .to_path_buf();
         ReportParams {
-            data_dir: PathBuf::new(),
+            run_data_dir,
             tmp_dir: PathBuf::new(),
             report_dir: PathBuf::new(),
             run_name: String::new(),
-            data_file_path: PathBuf::from(data_file_path),
             collection_start: None,
             pmu_counter_mode: String::new(),
             pid: None,
         }
     }
 
-    /// Write aperf_stats data to a binary file for testing
+    /// Write aperf_stats data to a binary file for testing. `file_path` identifies the run
+    /// directory (via its parent); the data is written to that dir under the canonical
+    /// `aperf_stats.bin` name the processor expects.
     fn write_aperf_stats_to_file(
         expected_per_sample_stats: &Vec<ExpectedAperfStats>,
         interval_seconds: u64,
@@ -42,11 +50,18 @@ mod aperf_stats_tests {
     ) {
         let base_time = Utc::now();
 
+        let run_data_dir = Path::new(file_path)
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .to_path_buf();
         let mut file = std::fs::OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
-            .open(file_path)
+            .open(data_file_path(
+                get_data_name_from_type::<AperfStat>(),
+                &run_data_dir,
+            ))
             .unwrap();
 
         for (sample_idx, expected_stats) in expected_per_sample_stats.iter().enumerate() {
@@ -103,15 +118,16 @@ mod aperf_stats_tests {
             expected_stats.push(stats);
         }
 
-        let temp_file = tempfile::NamedTempFile::new().unwrap();
-        let temp_path = temp_file.path().to_str().unwrap();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let temp_file_path = temp_dir.path().join("aperf_stats_seed");
+        let temp_path = temp_file_path.to_str().unwrap();
 
         write_aperf_stats_to_file(&expected_stats, 2, temp_path);
 
         let mut aperf_stats = AperfStat::new();
         let params = create_named_report_params(temp_path.to_string());
 
-        let result = aperf_stats.process_raw_data(params, vec![]).unwrap();
+        let result = aperf_stats.process_raw_data(&params, vec![]).unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
             // Validate structure - should have 5 metrics (aperf + 4 data types)
@@ -203,15 +219,16 @@ mod aperf_stats_tests {
             expected_stats.push(stats);
         }
 
-        let temp_file = tempfile::NamedTempFile::new().unwrap();
-        let temp_path = temp_file.path().to_str().unwrap();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let temp_file_path = temp_dir.path().join("aperf_stats_seed");
+        let temp_path = temp_file_path.to_str().unwrap();
 
         write_aperf_stats_to_file(&expected_stats, 1, temp_path);
 
         let mut aperf_stats = AperfStat::new();
         let params = create_named_report_params(temp_path.to_string());
 
-        let result = aperf_stats.process_raw_data(params, vec![]).unwrap();
+        let result = aperf_stats.process_raw_data(&params, vec![]).unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
             assert_eq!(time_series_data.metrics.len(), 3); // aperf + cpu_utilization + diskstats
@@ -262,15 +279,16 @@ mod aperf_stats_tests {
             expected_stats.push(stats);
         }
 
-        let temp_file = tempfile::NamedTempFile::new().unwrap();
-        let temp_path = temp_file.path().to_str().unwrap();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let temp_file_path = temp_dir.path().join("aperf_stats_seed");
+        let temp_path = temp_file_path.to_str().unwrap();
 
         write_aperf_stats_to_file(&expected_stats, 2, temp_path);
 
         let mut aperf_stats = AperfStat::new();
         let params = create_named_report_params(temp_path.to_string());
 
-        let result = aperf_stats.process_raw_data(params, vec![]).unwrap();
+        let result = aperf_stats.process_raw_data(&params, vec![]).unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
             // Validate series lengths match appearance timing
@@ -315,15 +333,16 @@ mod aperf_stats_tests {
             expected_stats.push(stats);
         }
 
-        let temp_file = tempfile::NamedTempFile::new().unwrap();
-        let temp_path = temp_file.path().to_str().unwrap();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let temp_file_path = temp_dir.path().join("aperf_stats_seed");
+        let temp_path = temp_file_path.to_str().unwrap();
 
         write_aperf_stats_to_file(&expected_stats, 1, temp_path);
 
         let mut aperf_stats = AperfStat::new();
         let params = create_named_report_params(temp_path.to_string());
 
-        let result = aperf_stats.process_raw_data(params, vec![]).unwrap();
+        let result = aperf_stats.process_raw_data(&params, vec![]).unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
             assert_eq!(time_series_data.metrics.len(), 1);
@@ -339,16 +358,22 @@ mod aperf_stats_tests {
 
     #[test]
     fn test_process_aperf_stats_empty_data() {
-        let temp_file = tempfile::NamedTempFile::new().unwrap();
-        let temp_path = temp_file.path().to_str().unwrap();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let temp_file_path = temp_dir.path().join("aperf_stats_seed");
+        let temp_path = temp_file_path.to_str().unwrap();
 
-        // Create empty file
-        std::fs::File::create(temp_path).unwrap();
+        // Create an empty aperf_stats file in the run dir the processor reads from.
+        let run_data_dir = Path::new(temp_path).parent().unwrap().to_path_buf();
+        std::fs::File::create(data_file_path(
+            get_data_name_from_type::<AperfStat>(),
+            &run_data_dir,
+        ))
+        .unwrap();
 
         let mut aperf_stats = AperfStat::new();
         let params = create_named_report_params(temp_path.to_string());
 
-        let result = aperf_stats.process_raw_data(params, vec![]).unwrap();
+        let result = aperf_stats.process_raw_data(&params, vec![]).unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
             // Empty data should result in no metrics
@@ -398,15 +423,16 @@ mod aperf_stats_tests {
             expected_stats.push(stats);
         }
 
-        let temp_file = tempfile::NamedTempFile::new().unwrap();
-        let temp_path = temp_file.path().to_str().unwrap();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let temp_file_path = temp_dir.path().join("aperf_stats_seed");
+        let temp_path = temp_file_path.to_str().unwrap();
 
         write_aperf_stats_to_file(&expected_stats, 1, temp_path);
 
         let mut aperf_stats = AperfStat::new();
         let params = create_named_report_params(temp_path.to_string());
 
-        let result = aperf_stats.process_raw_data(params, vec![]).unwrap();
+        let result = aperf_stats.process_raw_data(&params, vec![]).unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
             // Should have 4 metrics: aperf + cpu_utilization + diskstats + vmstat
