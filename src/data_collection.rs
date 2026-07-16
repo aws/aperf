@@ -1,20 +1,20 @@
-use crate::data::aperf_stats::AperfStat;
 use crate::data::TimeEnum;
 use crate::PDError;
-#[cfg(target_os = "linux")]
-use crate::{aperf_runlog_file_path, data_file_path, AperfStatsWriter};
 use crate::{APERF_TMP, GROUPED_PMU_MODE};
 use anyhow::Result;
 use chrono::prelude::*;
 use log::{debug, error, info};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
 #[cfg(target_os = "linux")]
 use {
+    crate::data::processes::ProcessesRaw,
     crate::data::Data,
+    crate::{aperf_runlog_file_path, data_file_path, get_data_name_from_type},
+    crate::{aperf_stats_add, aperf_stats_measure, aperf_stats_proceed_to_next_stats},
     nix::poll::{poll, PollFd, PollFlags, PollTimeout},
     nix::sys::{
         signal,
@@ -22,7 +22,7 @@ use {
     },
     std::fs::{File, OpenOptions},
     std::os::unix::io::AsFd,
-    std::{process, time},
+    std::time,
     timerfd::{SetTimeFlags, TimerFd, TimerState},
 };
 
@@ -30,18 +30,14 @@ use {
 pub struct DataCollectionEngine {
     init_params: InitParams,
     data_collectors: HashMap<String, DataCollector>,
-    aperf_stats_writer: AperfStatsWriter,
 }
 
 #[cfg(target_os = "linux")]
 impl DataCollectionEngine {
     pub fn new(init_params: InitParams) -> Self {
-        let aperf_stats_writer = AperfStatsWriter::new(&init_params.run_data_dir).unwrap();
-
         DataCollectionEngine {
             init_params,
             data_collectors: HashMap::new(),
-            aperf_stats_writer,
         }
     }
 
@@ -65,7 +61,7 @@ impl DataCollectionEngine {
         // (perf_profile, java_profile) so they start as close to collect_data_serial as
         // possible and stay in sync with the collection period.
         for is_profile_pass in [false, true] {
-            for (name, data_collector) in self.data_collectors.iter_mut() {
+            for (data_name, data_collector) in self.data_collectors.iter_mut() {
                 if data_collector.is_static() || data_collector.is_profile() != is_profile_pass {
                     continue;
                 }
@@ -75,28 +71,23 @@ impl DataCollectionEngine {
                 self.init_params.expected_end_time =
                     Instant::now() + time::Duration::from_secs(self.init_params.period);
 
-                match data_collector.prepare_data_collector(&self.init_params) {
-                    Err(e) => {
-                        if data_collector.is_profile() {
-                            error!("{}", e.to_string());
-                            error!("Aperf exiting...");
-                            process::exit(1);
-                        }
-                        let msg = format!(
-                            "Excluding {} from collection, data preparation failed: {:?}",
-                            name, e
-                        );
-                        if matches!(
-                            e.downcast_ref::<PDError>(),
-                            Some(PDError::IgnoredDataPreparationError(_))
-                        ) {
-                            debug!("{}", msg);
-                        } else {
-                            error!("{}", msg);
-                        }
-                        remove_entries.push(name.clone());
+                if let Err(e) = data_collector.prepare_data_collector(&self.init_params) {
+                    if data_collector.is_profile() {
+                        panic!("{}", e.to_string());
                     }
-                    _ => continue,
+                    let msg = format!(
+                        "Excluding {} from collection, data preparation failed: {:?}",
+                        data_name, e
+                    );
+                    if matches!(
+                        e.downcast_ref::<PDError>(),
+                        Some(PDError::IgnoredDataPreparationError(_))
+                    ) {
+                        debug!("{}", msg);
+                    } else {
+                        error!("{}", msg);
+                    }
+                    remove_entries.push(data_name.clone());
                 }
             }
         }
@@ -122,7 +113,9 @@ impl DataCollectionEngine {
 
     pub fn collect_data_serial(&mut self) -> Result<()> {
         let start_time = time::Instant::now();
-        self.init_params.collection_start = Some(TimeEnum::DateTime(Utc::now()));
+        let collection_start_time = TimeEnum::DateTime(Utc::now());
+        self.init_params.collection_start = Some(collection_start_time);
+        aperf_stats_proceed_to_next_stats(collection_start_time);
         let end_time = start_time + time::Duration::from_secs(self.init_params.period);
         self.init_params.expected_end_time = end_time;
 
@@ -148,7 +141,6 @@ impl DataCollectionEngine {
         let mut poll_fds = [timer_pollfd, signal_pollfd];
         let mut end_signal = String::new();
 
-        let mut aperf_stats = AperfStat::new();
         let mut current_time = start_time;
 
         while current_time <= end_time {
@@ -165,32 +157,22 @@ impl DataCollectionEngine {
                     debug!("Time elapsed: {:?}", start_time.elapsed());
 
                     let cur_collection_start = time::Instant::now();
-                    aperf_stats.time = TimeEnum::DateTime(Utc::now());
-                    aperf_stats.data = HashMap::new();
 
-                    for (name, data_collector) in self.data_collectors.iter_mut() {
+                    for data_collector in self.data_collectors.values_mut() {
                         if data_collector.is_static() {
                             continue;
                         }
-
-                        aperf_stats.measure(name.clone() + "-collect", || -> Result<()> {
-                            data_collector.collect_data(&self.init_params)?;
-                            Ok(())
-                        })?;
-                        aperf_stats.measure(name.clone() + "-print", || -> Result<()> {
-                            data_collector.write_to_file()?;
-                            Ok(())
-                        })?;
+                        data_collector.collect_data(&self.init_params)?;
+                        data_collector.write_to_file()?;
                     }
                     let cur_collection_end = time::Instant::now();
 
                     let cur_collection_time = cur_collection_end - cur_collection_start;
-                    aperf_stats
-                        .data
-                        .insert("aperf".to_string(), cur_collection_time.as_micros() as u64);
+                    aperf_stats_add(
+                        "aperf-collect".to_string(),
+                        cur_collection_time.as_micros() as u64,
+                    );
                     debug!("Collection time: {:?}", cur_collection_time);
-
-                    self.aperf_stats_writer.write(&aperf_stats)?;
 
                     current_time = cur_collection_end;
                 }
@@ -238,6 +220,16 @@ impl DataCollectionEngine {
             error!("Failed to save run metadata: {e}");
         }
 
+        // Conduct another round of processes data collection to collect APerf performance
+        // data during the finish stage.
+        if let Some(processes_data_collector) = self
+            .data_collectors
+            .get_mut(get_data_name_from_type::<ProcessesRaw>())
+        {
+            processes_data_collector.collect_data(&self.init_params)?;
+            processes_data_collector.write_to_file()?;
+        };
+
         Ok(())
     }
 }
@@ -283,22 +275,44 @@ impl DataCollector {
     }
 
     pub fn prepare_data_collector(&mut self, init_params: &InitParams) -> Result<()> {
-        self.data.prepare_data_collector(init_params)?;
+        aperf_stats_measure(format!("{}-prepare", self.data_name), || -> Result<()> {
+            self.data.prepare_data_collector(init_params)?;
+            Ok(())
+        })?;
         Ok(())
     }
 
     pub fn collect_data(&mut self, init_params: &InitParams) -> Result<()> {
-        self.data.collect_data(init_params)?;
+        let aperf_stat_name = format!(
+            "{}-{}collect",
+            self.data_name,
+            if self.is_static() { "static_" } else { "" }
+        );
+        aperf_stats_measure(aperf_stat_name, || -> Result<()> {
+            self.data.collect_data(init_params)?;
+            Ok(())
+        })?;
         Ok(())
     }
 
     pub fn write_to_file(&mut self) -> Result<()> {
-        bincode::serialize_into(&mut self.data_file, &self.data)?;
+        let aperf_stat_name = format!(
+            "{}-{}write",
+            self.data_name,
+            if self.is_static() { "static_" } else { "" }
+        );
+        aperf_stats_measure(aperf_stat_name, || -> Result<()> {
+            bincode::serialize_into(&mut self.data_file, &self.data)?;
+            Ok(())
+        })?;
         Ok(())
     }
 
     pub fn finish_data_collection(&mut self, init_params: &InitParams) -> Result<()> {
-        self.data.finish_data_collection(init_params)?;
+        aperf_stats_measure(format!("{}-finish", self.data_name), || -> Result<()> {
+            self.data.finish_data_collection(init_params)?;
+            Ok(())
+        })?;
         Ok(())
     }
 }
@@ -339,6 +353,8 @@ pub struct InitParams {
     /// for archives produced by versions of aperf that did not record this.
     #[serde(default)]
     pub pid: Option<u32>,
+    /// The PIDs of all processes launched during data collection.
+    pub sub_process_pids: HashSet<u32>,
     /// The signal that ends the collection. An empty string means the collection
     /// followed the specified period and ended naturally.
     pub end_signal: String,
@@ -369,6 +385,7 @@ impl InitParams {
             collection_start: None,
             collection_end: None,
             pid: Some(std::process::id()),
+            sub_process_pids: HashSet::new(),
             end_signal: String::new(),
             expected_end_time: Instant::now(),
         }
@@ -403,7 +420,12 @@ impl Default for InitParams {
 #[cfg(test)]
 mod tests {
     #[cfg(target_os = "linux")]
-    use super::{DataCollectionEngine, InitParams};
+    use {
+        super::{DataCollectionEngine, DataCollector, InitParams},
+        crate::data::cpu_utilization::CpuUtilizationRaw,
+        crate::data::Data,
+        crate::data_file_path,
+    };
 
     #[cfg(target_os = "linux")]
     #[test]
@@ -420,5 +442,60 @@ mod tests {
             data_collection_engine.init_params.run_data_dir,
             run_data_dir
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_data_collector_init() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let run_data_dir = temp_dir.path().to_path_buf();
+
+        // Constructing a DataCollector creates and opens the data file.
+        let data = CpuUtilizationRaw::new();
+        let _dc = DataCollector::new(
+            "cpu_utilization",
+            Data::CpuUtilizationRaw(data),
+            &run_data_dir,
+        );
+
+        let expected_path = data_file_path("cpu_utilization", &run_data_dir);
+        assert!(expected_path.exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_write() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let run_data_dir = temp_dir.path().to_path_buf();
+
+        let data = CpuUtilizationRaw::new();
+        let mut dc = DataCollector::new(
+            "cpu_utilization",
+            Data::CpuUtilizationRaw(data),
+            &run_data_dir,
+        );
+
+        let data_file_path = data_file_path("cpu_utilization", &run_data_dir);
+        assert!(data_file_path.exists());
+
+        dc.write_to_file().unwrap();
+
+        // Re-open the file to read back what was serialized (the collector's own handle is in
+        // append mode).
+        let read_handle = std::fs::File::open(&data_file_path).unwrap();
+        loop {
+            match bincode::deserialize_from::<_, Data>(&read_handle) {
+                Ok(v) => match v {
+                    Data::CpuUtilizationRaw(ref value) => assert!(value.data.is_empty()),
+                    _ => unreachable!(),
+                },
+                Err(e) => match *e {
+                    bincode::ErrorKind::Io(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                        break
+                    }
+                    _ => unreachable!(),
+                },
+            };
+        }
     }
 }

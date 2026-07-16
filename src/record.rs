@@ -1,5 +1,7 @@
 #![cfg(target_os = "linux")]
 
+use crate::aperf_stats_flush;
+use crate::aperf_stats_initialize;
 use crate::data;
 use crate::data::java_profile::JavaProfile;
 use crate::data_collection::DataCollectionEngine;
@@ -173,6 +175,8 @@ pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
         }
     };
 
+    aperf_stats_initialize(run_data_dir.clone());
+
     let mut init_params = InitParams::new(run_name, run_data_dir.clone());
     init_params.period = record.period;
     init_params.interval = record.interval;
@@ -235,6 +239,11 @@ pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
     info!("Finishing data collection...");
     data_collection_engine.finish_data_collection()?;
     info!("Data collection complete.");
+
+    if let Err(e) = aperf_stats_flush() {
+        error!("Failed to write APerf stats: {e}");
+    }
+
     info!("Creating run data archive...");
     create_run_data_archive(&run_data_dir)?;
 

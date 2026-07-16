@@ -216,6 +216,11 @@ mod aperf_stats_tests {
             stats
                 .stats
                 .insert("aperf".to_string(), 5000 + (sample * 500));
+            // A non-collect/write stat (e.g. prepare) is grouped into a dummy metric named
+            // after the stat name, with a series per data name.
+            stats
+                .stats
+                .insert("cpu_utilization-prepare".to_string(), 100 + (sample * 10));
             expected_stats.push(stats);
         }
 
@@ -231,7 +236,8 @@ mod aperf_stats_tests {
         let result = aperf_stats.process_raw_data(&params, vec![]).unwrap();
 
         if let AperfData::TimeSeries(time_series_data) = result {
-            assert_eq!(time_series_data.metrics.len(), 3); // aperf + cpu_utilization + diskstats
+            // aperf + cpu_utilization + diskstats + the "prepare" dummy metric
+            assert_eq!(time_series_data.metrics.len(), 4);
 
             // Validate time progression (1-second intervals)
             let aperf_metric = &time_series_data.metrics["aperf"];
@@ -239,6 +245,16 @@ mod aperf_stats_tests {
 
             // Validate values
             assert_eq!(aperf_metric.series[0].values, vec![5000.0, 5500.0, 6000.0]);
+
+            // The prepare stat is grouped under a "prepare" metric, keyed by data name as the
+            // series name (single series, so the aggregate is stripped).
+            let prepare_metric = &time_series_data.metrics["prepare"];
+            assert_eq!(prepare_metric.series.len(), 1);
+            assert_eq!(
+                prepare_metric.series[0].series_name.as_str(),
+                "cpu_utilization"
+            );
+            assert_eq!(prepare_metric.series[0].values, vec![100.0, 110.0, 120.0]);
         } else {
             panic!("Expected TimeSeries data");
         }
