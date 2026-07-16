@@ -164,12 +164,7 @@ impl TimeSeriesDataProcessor {
         series.values.push(metric_value);
 
         // Every series value in the metric accounts for its value range
-        let (min, max) = self
-            .per_metric_value_range
-            .entry(metric_name.to_string())
-            .or_insert((metric_value, metric_value));
-        *min = (*min).min(metric_value);
-        *max = (*max).max(metric_value);
+        update_metric_value_range(&mut self.per_metric_value_range, metric_name, metric_value);
 
         if self.aggregate_mode == TimeSeriesDataAggregateMode::Average
             || self.aggregate_mode == TimeSeriesDataAggregateMode::Sum
@@ -243,7 +238,7 @@ impl TimeSeriesDataProcessor {
                     _ => "aggregate",
                 });
 
-        for (metric_name, (sum, count)) in &mut self.per_metric_sum_count {
+        for (metric_name, (sum, count)) in &self.per_metric_sum_count {
             let aggregate_series = self
                 .per_metric_series
                 .entry(metric_name.clone())
@@ -259,7 +254,10 @@ impl TimeSeriesDataProcessor {
                         0.0
                     }
                 }
-                TimeSeriesDataAggregateMode::Sum => *sum,
+                TimeSeriesDataAggregateMode::Sum => {
+                    update_metric_value_range(&mut self.per_metric_value_range, metric_name, *sum);
+                    *sum
+                }
                 _ => break,
             };
             aggregate_series.values.push(aggregate_value);
@@ -395,6 +393,18 @@ impl TimeSeriesDataProcessor {
 
         time_series_data
     }
+}
+
+fn update_metric_value_range(
+    per_metric_value_range: &mut HashMap<String, (f64, f64)>,
+    metric_name: &str,
+    metric_value: f64,
+) {
+    let (min, max) = per_metric_value_range
+        .entry(metric_name.to_string())
+        .or_insert_with(|| (metric_value, metric_value));
+    *min = (*min).min(metric_value);
+    *max = (*max).max(metric_value);
 }
 
 fn compress_all_zero_time_series_metric(time_series_metric: &mut TimeSeriesMetric) {
@@ -806,6 +816,9 @@ mod tests {
         // Sum: 10+20+30=60, 40+50+60=150
         assert_eq!(agg.values, vec![60.0, 150.0]);
         assert_eq!(agg.series_name.as_str(), "sum");
+        // The value range must account for the aggregate sum (max 150), not just the
+        // individual series data points (max 60).
+        assert_eq!(ts.metrics["m"].value_range, (10, 150));
     }
 
     #[test]

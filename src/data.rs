@@ -379,79 +379,8 @@ pub trait AnalyzeData {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(target_os = "linux")]
-    use crate::data_collection::DataCollector;
-
     use super::TimeEnum;
     use chrono::prelude::*;
-    #[cfg(target_os = "linux")]
-    use {
-        super::cpu_utilization::CpuUtilizationRaw, super::Data, crate::data_file_path, std::fs,
-        std::path::PathBuf,
-    };
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn test_data_type_init() {
-        let run_data_dir = PathBuf::from("./performance_data_init_test");
-        fs::DirBuilder::new()
-            .recursive(true)
-            .create(&run_data_dir)
-            .unwrap();
-
-        // Constructing a DataCollector creates and opens the data file.
-        let data = CpuUtilizationRaw::new();
-        let _dc = DataCollector::new(
-            "cpu_utilization",
-            Data::CpuUtilizationRaw(data),
-            &run_data_dir,
-        );
-
-        let expected_path = data_file_path("cpu_utilization", &run_data_dir);
-        assert!(expected_path.exists());
-
-        fs::remove_dir_all(&run_data_dir).unwrap();
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn test_print() {
-        let run_data_dir = PathBuf::from("./performance_data_print_test");
-        fs::DirBuilder::new()
-            .recursive(true)
-            .create(&run_data_dir)
-            .unwrap();
-
-        let data = CpuUtilizationRaw::new();
-        let mut dc = DataCollector::new(
-            "cpu_utilization",
-            Data::CpuUtilizationRaw(data),
-            &run_data_dir,
-        );
-
-        let data_file_path = data_file_path("cpu_utilization", &run_data_dir);
-        assert!(data_file_path.exists());
-        dc.write_to_file().unwrap();
-
-        // Re-open the file to read back what was serialized (the collector's own handle is in
-        // append mode).
-        let read_handle = fs::File::open(&data_file_path).unwrap();
-        loop {
-            match bincode::deserialize_from::<_, Data>(&read_handle) {
-                Ok(v) => match v {
-                    Data::CpuUtilizationRaw(ref value) => assert!(value.data.is_empty()),
-                    _ => unreachable!(),
-                },
-                Err(e) => match *e {
-                    bincode::ErrorKind::Io(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-                        break
-                    }
-                    _ => unreachable!(),
-                },
-            };
-        }
-        fs::remove_dir_all(&run_data_dir).unwrap();
-    }
 
     #[test]
     fn test_time_diff_second() {

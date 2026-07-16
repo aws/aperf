@@ -17,12 +17,14 @@ pub mod report;
 pub mod server;
 
 use crate::data::aperf_runlog::AperfRunlog;
-use crate::data::aperf_stats::AperfStat;
+use crate::data::TimeEnum;
 use anyhow::{bail, Result};
 use regex::Regex;
-use std::fs::{self, File};
+use std::fs;
 use std::path::PathBuf;
 use thiserror::Error;
+#[cfg(target_os = "linux")]
+use {crate::data::aperf_stats::AperfStat, chrono::Utc, log::error, std::cell::RefCell};
 
 pub const APERF_FILE_FORMAT: &str = "bin";
 
@@ -152,16 +154,134 @@ pub fn aperf_runlog_file_path(run_data_dir: &PathBuf) -> PathBuf {
     run_data_dir.join(get_data_name_from_type::<AperfRunlog>())
 }
 
-pub struct AperfStatsWriter {
-    aperf_stats_file: File,
+#[cfg(target_os = "linux")]
+thread_local! {
+    static APERF_STATS_COLLECTOR: RefCell<AperfStatsCollector> = RefCell::new(AperfStatsCollector::new());
 }
-impl AperfStatsWriter {
-    pub fn new(run_data_dir: &PathBuf) -> Result<Self> {
-        let aperf_stats_file_path =
-            data_file_path(get_data_name_from_type::<AperfStat>(), run_data_dir);
-        let aperf_stats_file = match fs::OpenOptions::new()
+
+#[cfg(target_os = "linux")]
+pub fn aperf_stats_initialize(run_data_dir: PathBuf) {
+    APERF_STATS_COLLECTOR.with(|aperf_stats_collector| {
+        aperf_stats_collector.borrow_mut().initialize(run_data_dir);
+    });
+}
+
+#[cfg(target_os = "linux")]
+pub fn aperf_stats_proceed_to_next_stats(next_stats_time: TimeEnum) {
+    APERF_STATS_COLLECTOR.with(|aperf_stats_collector| {
+        aperf_stats_collector
+            .borrow_mut()
+            .proceed_to_next_stats(next_stats_time);
+    });
+}
+
+#[cfg(target_os = "linux")]
+pub fn aperf_stats_measure<F>(stat_name: String, func: F) -> Result<()>
+where
+    F: FnMut() -> Result<()>,
+{
+    APERF_STATS_COLLECTOR.with(|aperf_stats_collector| {
+        aperf_stats_collector.borrow_mut().measure(stat_name, func)
+    })?;
+
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+pub fn aperf_stats_add(stat_key: String, stat_value: u64) {
+    APERF_STATS_COLLECTOR.with(|aperf_stats_collector| {
+        aperf_stats_collector
+            .borrow_mut()
+            .add_stat(stat_key, stat_value);
+    });
+}
+
+#[cfg(target_os = "linux")]
+pub fn aperf_stats_flush() -> Result<()> {
+    APERF_STATS_COLLECTOR
+        .with(|aperf_stats_collector| aperf_stats_collector.borrow_mut().flush())?;
+
+    Ok(())
+}
+
+/// Encapsulate all logics of collecting and writing APerf stats.
+/// The collected stats will be saved in memory in time order and be written to
+/// disk when flush() is called.
+#[cfg(target_os = "linux")]
+pub struct AperfStatsCollector {
+    cur_aperf_stats: AperfStat,
+    time_series_aperf_stats: Vec<AperfStat>,
+    run_data_dir: Option<PathBuf>,
+}
+
+#[cfg(target_os = "linux")]
+impl AperfStatsCollector {
+    pub fn new() -> Self {
+        Self {
+            cur_aperf_stats: AperfStat::new(),
+            time_series_aperf_stats: Vec::new(),
+            run_data_dir: None,
+        }
+    }
+
+    pub fn initialize(&mut self, run_data_dir: PathBuf) {
+        self.run_data_dir = Some(run_data_dir);
+    }
+
+    /// Check current time and if at next second, save the current stats and
+    /// proceed with a new empty stats.
+    /// If we get to a point where the stats is big and we want to limit APerf's
+    /// memory usage, we can also flush here.
+    fn update_time_series(&mut self) {
+        let cur_time = TimeEnum::DateTime(Utc::now());
+        let cur_time_diff = match cur_time - self.cur_aperf_stats.time {
+            TimeEnum::TimeDiff(time_diff) => time_diff,
+            _ => return,
+        };
+        if cur_time_diff >= 1 {
+            self.proceed_to_next_stats(cur_time);
+        }
+    }
+
+    /// Save current stats and proceed to the next new stats.
+    fn proceed_to_next_stats(&mut self, next_stats_time: TimeEnum) {
+        let cur_aperf_stats = std::mem::replace(
+            &mut self.cur_aperf_stats,
+            AperfStat::for_time(next_stats_time),
+        );
+        self.time_series_aperf_stats.push(cur_aperf_stats);
+    }
+
+    /// Measure the wall-clock time of executing a function and save as a stat.
+    pub fn measure<F>(&mut self, stat_name: String, func: F) -> Result<()>
+    where
+        F: FnMut() -> Result<()>,
+    {
+        self.update_time_series();
+
+        self.cur_aperf_stats.measure(stat_name, func)
+    }
+
+    /// Save a stat.
+    pub fn add_stat(&mut self, stat_key: String, stat_value: u64) {
+        self.update_time_series();
+
+        self.cur_aperf_stats.data.insert(stat_key, stat_value);
+    }
+
+    /// Write all saved stats to disk file.
+    pub fn flush(&mut self) -> Result<()> {
+        if self.run_data_dir.is_none() {
+            bail!("Failed to flush APerf stat since the run data directory path is uninitialized.");
+        }
+
+        let aperf_stats_file_path = data_file_path(
+            get_data_name_from_type::<AperfStat>(),
+            self.run_data_dir.as_ref().unwrap(),
+        );
+        let mut aperf_stats_file = match fs::OpenOptions::new()
             .create(true)
-            .write(true)
+            .append(true)
             .open(&aperf_stats_file_path)
         {
             Ok(aperf_stats_file) => aperf_stats_file,
@@ -172,13 +292,26 @@ impl AperfStatsWriter {
             ),
         };
 
-        Ok(Self { aperf_stats_file })
-    }
+        for aperf_stats in &self.time_series_aperf_stats {
+            bincode::serialize_into(&mut aperf_stats_file, aperf_stats)?;
+        }
+        if !self.cur_aperf_stats.data.is_empty() {
+            bincode::serialize_into(&mut aperf_stats_file, &self.cur_aperf_stats)?;
+        }
 
-    pub fn write(&mut self, aperf_stats: &AperfStat) -> Result<()> {
-        bincode::serialize_into(&mut self.aperf_stats_file, aperf_stats)?;
+        self.time_series_aperf_stats.clear();
+        self.cur_aperf_stats = AperfStat::new();
 
         Ok(())
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for AperfStatsCollector {
+    fn drop(&mut self) {
+        if let Err(e) = self.flush() {
+            error!("Failed to flush APerf stats on drop: {e}");
+        }
     }
 }
 

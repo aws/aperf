@@ -24,6 +24,14 @@ impl AperfStat {
         }
     }
 
+    pub fn for_time(time: TimeEnum) -> Self {
+        AperfStat {
+            time,
+            name: String::new(),
+            data: HashMap::new(),
+        }
+    }
+
     pub fn measure<F>(&mut self, name: String, mut func: F) -> Result<()>
     where
         F: FnMut() -> Result<()>,
@@ -69,20 +77,49 @@ impl ProcessData for AperfStat {
             };
         }
 
+        let mut collection_started = false;
         for value in values {
-            time_series_data_processor.proceed_to_time(value.time);
+            // Ignore the time diff for data before the collection started, as time_diff
+            // computation would have been corrupted and these data are not time-series anyway.
+            if !collection_started
+                && report_params
+                    .collection_start
+                    .map_or(true, |collection_start_time| {
+                        value.time >= collection_start_time
+                    })
+            {
+                collection_started = true;
+            }
+            if collection_started {
+                time_series_data_processor.proceed_to_time(value.time);
+            }
 
-            for (name, stat) in value.data {
-                let datatype: Vec<&str> = name.split('-').collect();
-                let metric_name = datatype[0];
-                let mut series_name = datatype.get(1).unwrap_or(&metric_name).to_string();
-                // Make the series name easier to understand - since it's essentially to write the
-                // collected data to disk
-                if series_name == "print" {
-                    series_name = "write".to_string();
+            for (stat_key, stat_value) in value.data {
+                let stat_key_components: Vec<&str> = stat_key.split('-').collect();
+                let data_name = stat_key_components[0];
+                let mut stat_name = stat_key_components.get(1).unwrap_or(&data_name).to_string();
+                // Backward compatibility - the previous stat name was "print"
+                if stat_name == "print" {
+                    stat_name = "write".to_string();
                 }
 
-                time_series_data_processor.add_data_point(metric_name, &series_name, stat as f64);
+                if stat_name == "collect" || stat_name == "write" {
+                    // The stats for APerf collecting time-series data, which should be
+                    // processed as regular time-series data as well.
+                    time_series_data_processor.add_data_point(
+                        data_name,
+                        &stat_name,
+                        stat_value as f64,
+                    );
+                } else {
+                    // For non-time-series stats, group them in a dummy metric by stat_name as different
+                    // series by data_name.
+                    time_series_data_processor.add_data_point(
+                        &stat_name,
+                        data_name,
+                        stat_value as f64,
+                    );
+                }
             }
         }
 
