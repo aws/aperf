@@ -14,7 +14,7 @@ use chrono::Utc;
 use clap::{builder::PossibleValuesParser, ArgGroup, Args};
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -182,6 +182,15 @@ pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
     init_params.interval = record.interval;
     init_params.tmp_dir = tmp_dir.to_path_buf();
     init_params.runlog = runlog.to_path_buf();
+    init_params.page_size = match procfs::page_size() {
+        Ok(page_size) => page_size as u64,
+        Err(e) => {
+            warn!(
+                "Failed to read system page size, ResidentSetSize will be reported in pages: {e}"
+            );
+            0
+        }
+    };
     if let Some(p) = &record.pmu_config {
         init_params.pmu_config = Some(PathBuf::from(p));
     }

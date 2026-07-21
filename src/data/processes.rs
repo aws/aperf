@@ -1,5 +1,3 @@
-extern crate lazy_static;
-
 use crate::computations::Statistics;
 use crate::data::common::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
 use crate::data::{Data, ProcessData, TimeEnum};
@@ -13,20 +11,7 @@ use std::collections::HashMap;
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
 #[cfg(target_os = "linux")]
-use {
-    crate::data::CollectData, crate::data_collection::InitParams, chrono::Utc, std::fs,
-    std::sync::Mutex,
-};
-
-#[cfg(target_os = "linux")]
-pub const PROC_PID_STAT_USERSPACE_TIME_POS: usize = 11;
-#[cfg(target_os = "linux")]
-pub const PROC_PID_STAT_KERNELSPACE_TIME_POS: usize = 12;
-
-#[cfg(target_os = "linux")]
-lazy_static! {
-    pub static ref TICKS_PER_SECOND: Mutex<u64> = Mutex::new(0);
-}
+use {crate::data::CollectData, crate::data_collection::InitParams, chrono::Utc, std::fs};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProcessesRaw {
@@ -56,12 +41,11 @@ impl Default for ProcessesRaw {
 #[cfg(target_os = "linux")]
 impl CollectData for ProcessesRaw {
     fn prepare_data_collector(&mut self, _init_params: &InitParams) -> Result<()> {
-        *TICKS_PER_SECOND.lock().unwrap() = procfs::ticks_per_second()? as u64;
+        self.ticks_per_second = procfs::ticks_per_second()? as u64;
         Ok(())
     }
 
     fn collect_data(&mut self, _init_params: &InitParams) -> Result<()> {
-        let ticks_per_second: u64 = *TICKS_PER_SECOND.lock().unwrap();
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
         for entry in fs::read_dir("/proc")? {
@@ -75,7 +59,6 @@ impl CollectData for ProcessesRaw {
                 }
             }
         }
-        self.ticks_per_second = ticks_per_second;
         Ok(())
     }
 }
@@ -97,9 +80,11 @@ pub enum ProcessKey {
     NumberThreads,
     VirtualMemorySize,
     ResidentSetSize,
+    ResidentSetSizeBytes,
+    NumberProcesses,
 }
 
-fn get_process_key_stat(process_key: ProcessKey, values: Vec<&str>) -> Option<u64> {
+fn get_process_key_stat(process_key: ProcessKey, values: &[&str], page_size: u64) -> Option<f64> {
     // The last element we access is the 22nd element in a values vector (ResidentSetSize), make sure the index 21 exists
     if values.len() < 21 + 1 {
         warn!("Incomplete proc/<PID>/stat entry found, skipping...");
@@ -111,8 +96,15 @@ fn get_process_key_stat(process_key: ProcessKey, values: Vec<&str>) -> Option<u6
         ProcessKey::NumberThreads => values[17].parse::<u64>().ok()?,
         ProcessKey::VirtualMemorySize => values[20].parse::<u64>().ok()?,
         ProcessKey::ResidentSetSize => values[21].parse::<u64>().ok()?,
+        ProcessKey::ResidentSetSizeBytes => {
+            if page_size == 0 {
+                return None;
+            }
+            values[21].parse::<u64>().ok()? * page_size
+        }
+        ProcessKey::NumberProcesses => return None,
     };
-    Some(result)
+    Some(result as f64)
 }
 
 impl ProcessData for Processes {
@@ -138,6 +130,8 @@ impl ProcessData for Processes {
             return Ok(AperfData::TimeSeries(time_series_data));
         };
 
+        let page_size = report_params.page_size;
+
         let mut ticks_per_second_option: Option<f64> = None;
         // Get data into Series format
         for buffer in raw_data {
@@ -152,6 +146,8 @@ impl ProcessData for Processes {
                 TimeEnum::TimeDiff(v) => v,
                 _ => continue,
             };
+
+            let mut proc_count: u64 = 0;
 
             for line in raw_value.data.lines() {
                 let open_parenthesis = line.find('(');
@@ -169,10 +165,10 @@ impl ProcessData for Processes {
                     .map_err(|_| anyhow::anyhow!("Failed to parse PID"))?;
                 let name = line[open_pos + 1..close_pos].to_string();
                 let values: Vec<&str> = line[close_pos + 2..].split_whitespace().collect();
+                proc_count += 1;
 
                 for process_key in ProcessKey::iter() {
-                    let Some(process_key_stat) = get_process_key_stat(process_key, values.clone())
-                    else {
+                    let Some(value) = get_process_key_stat(process_key, &values, page_size) else {
                         continue;
                     };
 
@@ -182,16 +178,26 @@ impl ProcessData for Processes {
                         .or_insert(HashMap::new());
                     let process_series = per_process_series
                         .entry(process_pid_name.clone())
-                        .or_insert(Series::new(process_pid_name.clone()));
+                        .or_insert(Series::new(process_pid_name));
                     process_series.time_diff.push(time);
-                    process_series.values.push(process_key_stat as f64);
+                    process_series.values.push(value);
                 }
             }
+
+            let process_count_name = ProcessKey::NumberProcesses.to_string();
+            let per_process_series = per_field_per_process_series
+                .entry(ProcessKey::NumberProcesses)
+                .or_insert(HashMap::new());
+            let process_series = per_process_series
+                .entry(process_count_name.clone())
+                .or_insert(Series::new(process_count_name));
+            process_series.time_diff.push(time);
+            process_series.values.push(proc_count as f64);
         }
 
         // If the raw data is empty default ticks per second to 1, in which case it should never
         // be used to compute any series values
-        let ticks_per_second = ticks_per_second_option.unwrap_or_else(|| 1.0);
+        let ticks_per_second = ticks_per_second_option.unwrap_or(1.0);
         // Track total cpu time for filtering top processes
         let mut process_cpu_time_map: HashMap<String, f64> = HashMap::new();
 
@@ -266,9 +272,13 @@ impl ProcessData for Processes {
         for (process_key, process_map) in per_field_per_process_series {
             let mut series_vec = Vec::new();
 
-            for process_name in &processes_to_include {
-                if let Some(series) = process_map.get(process_name) {
-                    series_vec.push(series.clone());
+            if process_key == ProcessKey::NumberProcesses {
+                series_vec.extend(process_map.into_values());
+            } else {
+                for process_name in &processes_to_include {
+                    if let Some(series) = process_map.get(process_name) {
+                        series_vec.push(series.clone());
+                    }
                 }
             }
 
@@ -294,15 +304,15 @@ impl ProcessData for Processes {
 
                 let value_range = (metric_min.floor() as u64, metric_max.ceil() as u64);
 
+                let metric_name = process_key.to_string();
                 let metric = TimeSeriesMetric {
-                    metric_name: process_key.to_string(),
+                    metric_name: metric_name.clone(),
                     series: series_vec,
                     stats_series_idx: 0,
                     value_range,
                     stats: final_stats,
                 };
-                let metric_name = process_key.to_string();
-                time_series_data.metrics.insert(metric_name.clone(), metric);
+                time_series_data.metrics.insert(metric_name, metric);
             }
         }
 

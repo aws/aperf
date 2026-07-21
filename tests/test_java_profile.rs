@@ -22,6 +22,7 @@ fn setup_test_env() -> (TempDir, PathBuf, PathBuf, ReportParams) {
         collection_start: None,
         pmu_counter_mode: String::new(),
         pid: None,
+        page_size: 0,
     };
 
     (temp_dir, data_dir, report_dir, params)
