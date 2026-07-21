@@ -136,6 +136,14 @@ impl AnalyzeData for PerfStat {
                 score: Score::Poor,
                 message: "The STREX instructions are being used extensively. It is an old-style atomic instruction less efficient than the newer LSE instructions.",
             ),
+            time_series_data_point_threshold!(
+                name: "PMU Counter Collection Multiplexing",
+                metric: "mux_counter_schedule_rate",
+                comparator: Comparator::Less,
+                threshold: 100.0,
+                score: Score::Concerning,
+                message: " The PMU events were collected under multiplexing. The accuracy of the values might be impacted and there is increased CPU utilization for the collection.",
+            ),
         ]
     }
 }

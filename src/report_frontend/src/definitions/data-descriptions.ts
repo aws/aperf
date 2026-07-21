@@ -379,6 +379,16 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
           "https://aws.github.io/graviton/c-c++.html#large-system-extensions-lse",
         ],
       },
+      mux_counter_schedule_rate: {
+        readableName: "Average Counter Collection Schedule Rate",
+        description:
+          "The percentage of collection time when a counter was actually scheduled on a core. The value shows the level of multiplexing during collection, which impacts the accuracy of the PMU data and consumes additional CPU time. 100% means there were no multiplexing and all PMU counters to be collected fitted in the available PMU registers.",
+        unit: "Average Counter Schedule Rate (%)",
+        desired: "higher",
+        helpfulLinks: [
+          "https://developer.arm.com/community/arm-community-blogs/b/architectures-and-processors-blog/posts/p2-perf-pmu-feature-armv8-cpus",
+        ],
+      },
     },
   },
   memalloc: {

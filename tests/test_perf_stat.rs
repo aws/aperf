@@ -374,7 +374,12 @@ fn test_grouped_single_metric_multi_cpu() {
 
     let ts = process(report_params(dir.path(), GROUPED_PMU_MODE), raw);
 
-    assert_eq!(ts.sorted_metric_names, vec!["ipc"]);
+    // Processing also emits the mux_counter_schedule_rate metric; with te == tr the rate is
+    // 100%, which sorts above ipc (~2) in the average-descending order.
+    assert_eq!(
+        ts.sorted_metric_names,
+        vec!["mux_counter_schedule_rate", "ipc"]
+    );
     let ipc = &ts.metrics["ipc"];
     // 2 CPU series + 1 aggregate.
     assert_eq!(ipc.series.len(), 3);
@@ -427,6 +432,14 @@ fn test_grouped_multiplexing_scale_cancels_for_ratio() {
     // Despite scale x2 then x4, the ratio is unchanged.
     approx(cpu0.values[0], 2.0, "scaled ratio s0");
     approx(cpu0.values[1], 2.0, "scaled ratio s1");
+
+    // The multiplexing counter schedule rate is reported as a percentage of the time the
+    // counters were scheduled to run (time_running / time_enabled * 100).
+    //   s0: te=2, tr=1 (first value used as its own delta) => 1/2 = 50%
+    //   s1: te delta 4 (2->6), tr delta 1 (1->2)           => 1/4 = 25%
+    let sched = series(&ts.metrics["mux_counter_schedule_rate"], "CPU0");
+    approx(sched.values[0], 50.0, "counter schedule rate percent s0");
+    approx(sched.values[1], 25.0, "counter schedule rate percent s1");
 }
 
 #[test]
@@ -463,9 +476,11 @@ fn test_grouped_metric_order_follows_config() {
     )];
 
     let ts = process(report_params(dir.path(), GROUPED_PMU_MODE), raw);
+    // mux_counter_schedule_rate (100% here) sorts first by average; the config-derived
+    // metrics keep their config insertion order after it.
     assert_eq!(
         ts.sorted_metric_names,
-        vec!["l3-mpki", "ipc", "branch-mpki"]
+        vec!["mux_counter_schedule_rate", "l3-mpki", "ipc", "branch-mpki"]
     );
 
     approx(
@@ -568,8 +583,12 @@ fn test_ungrouped_event_dedup_across_metrics() {
 
     let ts = process(report_params(dir.path(), UNGROUPED_PMU_MODE), raw);
 
-    assert_eq!(ts.metrics.len(), 2);
-    assert_eq!(ts.sorted_metric_names, vec!["ipc", "branch-mpki"]);
+    // ipc + branch-mpki, plus the mux_counter_schedule_rate metric emitted by processing.
+    assert_eq!(ts.metrics.len(), 3);
+    assert_eq!(
+        ts.sorted_metric_names,
+        vec!["mux_counter_schedule_rate", "ipc", "branch-mpki"]
+    );
 
     // ipc per CPU.
     approx(
