@@ -24,7 +24,12 @@ use std::fs;
 use std::path::PathBuf;
 use thiserror::Error;
 #[cfg(target_os = "linux")]
-use {crate::data::aperf_stats::AperfStat, chrono::Utc, log::error, std::cell::RefCell};
+use {
+    crate::data::{aperf_stats::AperfStat, common::utils::CpuInfo},
+    chrono::Utc,
+    log::error,
+    std::cell::RefCell,
+};
 
 pub const APERF_FILE_FORMAT: &str = "bin";
 
@@ -39,6 +44,11 @@ pub const APERF_TMP: &str = "/tmp";
 
 pub const GROUPED_PMU_MODE: &str = "grouped";
 pub const UNGROUPED_PMU_MODE: &str = "ungrouped";
+
+#[cfg(target_os = "linux")]
+lazy_static! {
+    pub static ref CPU_INFO: Result<CpuInfo> = CpuInfo::new();
+}
 
 #[derive(Error, Debug)]
 pub enum PDError {
