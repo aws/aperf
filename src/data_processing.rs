@@ -28,6 +28,8 @@ pub struct ReportParams {
     pub pmu_counter_mode: String,
     /// PID of the aperf process that performed the collection. "None" for legacy runs.
     pub pid: Option<u32>,
+    /// System page size in bytes at collection time
+    pub page_size: u64,
 }
 
 impl ReportParams {
@@ -40,6 +42,7 @@ impl ReportParams {
             collection_start: None,
             pmu_counter_mode: String::new(),
             pid: None,
+            page_size: 0,
         }
     }
 }

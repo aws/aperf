@@ -97,6 +97,7 @@ impl RunsInfo {
             Ok(meta_data) => {
                 report_params.pmu_counter_mode = meta_data.pmu_counter_mode;
                 report_params.pid = meta_data.pid;
+                report_params.page_size = meta_data.page_size;
                 if let Some(collection_start) = meta_data.collection_start {
                     report_params.collection_start = Some(collection_start);
                     self.per_run_start_time

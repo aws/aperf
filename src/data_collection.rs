@@ -353,6 +353,10 @@ pub struct InitParams {
     /// for archives produced by versions of aperf that did not record this.
     #[serde(default)]
     pub pid: Option<u32>,
+    /// System page size in bytes (sysconf(_SC_PAGESIZE)) at collection time,
+    /// used to convert process ResidentSetSize from pages to bytes.
+    #[serde(default)]
+    pub page_size: u64,
     /// The PIDs of all processes launched during data collection.
     pub sub_process_pids: HashSet<u32>,
     /// The signal that ends the collection. An empty string means the collection
@@ -385,6 +389,7 @@ impl InitParams {
             collection_start: None,
             collection_end: None,
             pid: Some(std::process::id()),
+            page_size: 0,
             sub_process_pids: HashSet::new(),
             end_signal: String::new(),
             expected_end_time: Instant::now(),

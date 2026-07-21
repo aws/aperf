@@ -37,6 +37,7 @@ mod aperf_stats_tests {
             collection_start: None,
             pmu_counter_mode: String::new(),
             pid: None,
+            page_size: 0,
         }
     }
 

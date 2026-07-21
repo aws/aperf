@@ -183,11 +183,23 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
         desired: "lower",
         unit: "Bytes",
       },
+      resident_set_size_bytes: {
+        readableName: "Resident Set Size Bytes (rss)",
+        description: "Physical memory in bytes used by a process. Converted from pages using sysconf(_SC_PAGESIZE).",
+        desired: "lower",
+        unit: "Bytes",
+      },
       resident_set_size: {
         readableName: "Resident Set Size (rss)",
         description: "Physical memory in number of pages used by a process. Multiply by page size to convert to bytes.",
         desired: "lower",
         unit: "Pages",
+      },
+      number_processes: {
+        readableName: "Number of Processes",
+        description: "System-wide count of processes with a readable /proc/<pid>/stat entry at each collection sample.",
+        desired: "depends",
+        unit: "Count",
       },
     },
   },
@@ -4737,6 +4749,13 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
       process_virtual_memory_size: {
         readableName: "APerf Process Virtual Memory Size (vsize)",
         description: "Total virtual memory used by the APerf process.",
+        desired: "lower",
+        unit: "Bytes",
+      },
+      process_resident_set_size_bytes: {
+        readableName: "APerf Process Resident Set Size Bytes (rss)",
+        description:
+          "Physical memory in bytes used by the APerf process. Converted from pages using sysconf(_SC_PAGESIZE).",
         desired: "lower",
         unit: "Bytes",
       },
