@@ -11,6 +11,6 @@
     "l3-mpki": "L1_Any_Fills_DRAM / Instructions * 1000",
     "stall-frontend-pkc": "Frontend_Stalls / Cycles * 1000",
     "inst-tlb-tw-pki": "Instruction_TLB_TW_Misses / Instructions * 1000",
-    "stall-backend-pkc": "Backend_Stalls / Cycles * 167"
+    "stall-backend-pkc": "Backend_Stalls / Cycles * 125"
   }
 }

@@ -69,6 +69,7 @@ fn warn_multiplexing(required_counters_per_cpu: usize, counter_limit: usize) {
 /// with multiple non-contiguous bit ranges (the format used on AMD). The implementations
 /// below fix the issue.
 #[cfg(target_os = "linux")]
+#[derive(Debug)]
 struct PmuConfigEvent {
     pmu_type: u32,
     /// A format file could have config/config1/config2 mapping to
@@ -88,9 +89,19 @@ impl perf_event::events::Event for PmuConfigEvent {
 
 #[cfg(target_os = "linux")]
 impl PmuConfigEvent {
+    fn from_event_string(event_string: &str) -> Result<Self> {
+        Self::from_event_string_at_base_path(
+            event_string,
+            PathBuf::from("/sys/bus/event_source/devices"),
+        )
+    }
+
     /// Parse "pmu/field=val,field=val,.../" and build the event by reading the
     /// PMU type and building the config bit map from each field's config.
-    fn from_event_string(event_string: &str) -> Result<Self> {
+    fn from_event_string_at_base_path(
+        event_string: &str,
+        pmu_devices_base_path: PathBuf,
+    ) -> Result<Self> {
         let (pmu_name, fields_str) = event_string
             .split_once('/')
             .ok_or_else(|| anyhow!("Missing '/' in the PMU event string {event_string}"))?;
@@ -116,18 +127,16 @@ impl PmuConfigEvent {
             fields.push((field_key.trim().to_string(), field_val));
         }
 
-        let pmu_device_path = PathBuf::from("/sys/bus/event_source/devices").join(pmu_name);
+        let pmu_device_path = pmu_devices_base_path.join(pmu_name);
         let pmu_type = fs::read_to_string(pmu_device_path.join("type"))?
             .trim()
             .parse::<u32>()?;
 
         // For each field=value, the layout of the 3 64-bit fields (config, config1, and config2)
         // comes from the kernel's sysfs format file /sys/bus/event_source/devices/<pmu>/format/<field>,
-        // e.g. confi1g:0-7, config2:1-8, or AMD's non-contiguous config:0-7,32-35.
+        // e.g. config1:0-7, config2:1-8, or AMD's non-contiguous config:0-7,32-35.
         let mut config = [0u64; 3];
         for (field, value) in fields {
-            let mut shift = 0;
-
             let format_str = fs::read_to_string(pmu_device_path.join("format").join(&field))?;
             let (config_idx, ranges_str) =
                 if let Some(ranges_str) = format_str.strip_prefix("config:") {
@@ -140,6 +149,9 @@ impl PmuConfigEvent {
                     bail!("Unexpected PMU format {format_str} for field {field}");
                 };
 
+            // The bit ranges are not guaranteed to be in ascending order, so collect
+            // all bit ranges first and sort them.
+            let mut bit_ranges = Vec::new();
             for range_str in ranges_str.trim().split(',') {
                 let (low, high) = match range_str.split_once('-') {
                     Some((low_str, high_str)) => {
@@ -147,8 +159,25 @@ impl PmuConfigEvent {
                     }
                     None => (range_str.parse::<u32>()?, range_str.parse::<u32>()?),
                 };
+                if low > high || high > 63 {
+                    bail!("Invalid bit range {range_str} in PMU format {format_str}");
+                }
+                bit_ranges.push((low, high));
+            }
+            bit_ranges.sort_unstable();
+
+            // Check for and flag overlapping bit ranges.
+            for pair in bit_ranges.windows(2) {
+                if pair[1].0 <= pair[0].1 {
+                    bail!("Overlapping bit ranges in PMU format {format_str} for field {field}");
+                }
+            }
+
+            // Pack the value into the field bits.
+            let mut shift = 0;
+            for (low, high) in bit_ranges {
                 let width = high - low + 1;
-                let mask = (1u64 << width) - 1;
+                let mask = u64::MAX >> (64 - width);
                 config[config_idx] |= ((value >> shift) & mask) << low;
                 shift += width;
             }
@@ -350,7 +379,7 @@ impl PmuConfig {
             ),
         };
 
-        let probe_event = if cpu_info.is_graviton() {
+        let probe_event = if cpu_info.is_arm() {
             "armv8_pmuv3_0/event=0x3/"
         } else if cpu_info.is_intel() {
             "cpu/event=0x51,umask=0x1/"
@@ -761,7 +790,7 @@ impl CollectData for PerfStatRaw {
                 ),
             };
 
-            if cpu_info.is_graviton() {
+            if cpu_info.is_arm() {
                 let mut pmu_config = PmuConfig::from_default("grv_pmu_config.json")?;
 
                 if cpu_info.is_graviton_5() {
@@ -772,10 +801,18 @@ impl CollectData for PerfStatRaw {
             } else if cpu_info.is_intel() {
                 let mut pmu_config = PmuConfig::from_default("intel_pmu_config.json")?;
 
-                if cpu_info.is_intel_icelake() {
+                if cpu_info.is_intel_skylake() {
+                    pmu_config.extend_from_default("intel_skylake_pmu_config.json")?;
+                } else if cpu_info.is_intel_cascade_lake() {
+                    pmu_config.extend_from_default("intel_cascade_lake_pmu_config.json")?;
+                } else if cpu_info.is_intel_icelake() {
                     pmu_config.extend_from_default("intel_icelake_pmu_config.json")?;
                 } else if cpu_info.is_intel_sapphire_rapids() {
                     pmu_config.extend_from_default("intel_sapphire_rapids_pmu_config.json")?;
+                } else if cpu_info.is_intel_emerald_rapids() {
+                    pmu_config.extend_from_default("intel_emerald_rapids_pmu_config.json")?;
+                } else if cpu_info.is_intel_granite_rapids() {
+                    pmu_config.extend_from_default("intel_granite_rapids_pmu_config.json")?;
                 }
 
                 pmu_config
@@ -784,8 +821,14 @@ impl CollectData for PerfStatRaw {
 
                 if cpu_info.is_amd_genoa() {
                     pmu_config.extend_from_default("amd_genoa_pmu_config.json")?;
+                } else if cpu_info.is_amd_turin() {
+                    pmu_config.extend_from_default("amd_turin_pmu_config.json")?;
                 } else if cpu_info.is_amd_milan() {
                     pmu_config.extend_from_default("amd_milan_pmu_config.json")?;
+                } else if cpu_info.is_amd_rome() {
+                    pmu_config.extend_from_default("amd_rome_pmu_config.json")?;
+                } else if cpu_info.is_amd_naples() {
+                    pmu_config.extend_from_default("amd_naples_pmu_config.json")?;
                 }
 
                 pmu_config
@@ -1351,12 +1394,76 @@ impl ProcessData for PerfStat {
 mod tests {
     #[cfg(target_os = "linux")]
     use {
-        super::{PerfStatRaw, PmuConfig},
+        super::{PerfStatRaw, PmuConfig, PmuConfigEvent},
         crate::data::common::utils::get_online_cpu_ids,
         crate::data::CollectData,
         crate::data_collection::InitParams,
         std::io::ErrorKind,
+        tempfile::TempDir,
     };
+
+    /// Create a synthetic PMU directory with the given type and format fields.
+    #[cfg(target_os = "linux")]
+    fn make_pmu(type_val: u32, fields: &[(&str, &str)]) -> TempDir {
+        let dir = TempDir::new().unwrap();
+        let pmu = dir.path().join("test_pmu");
+        std::fs::create_dir_all(pmu.join("format")).unwrap();
+        std::fs::write(pmu.join("type"), format!("{type_val}\n")).unwrap();
+        for (name, content) in fields {
+            std::fs::write(pmu.join("format").join(name), content).unwrap();
+        }
+        dir
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_from_event_string_packing() {
+        let dir = make_pmu(
+            10,
+            &[
+                ("event", "config:32-35,0-7\n"),
+                ("umask", "config:8-15\n"),
+                ("wide", "config2:0-63\n"),
+                ("long", "config1:0\n"),
+            ],
+        );
+        let ev = PmuConfigEvent::from_event_string_at_base_path(
+            "test_pmu/event=0x1a0,umask=0x1e,wide=0xdeadbeefcafebabe,long=1/",
+            dir.path().to_path_buf(),
+        )
+        .unwrap();
+        assert_eq!(ev.pmu_type, 10);
+        assert_eq!(ev.config[0], 0xa0 | (0x1u64 << 32) | (0x1e << 8));
+        assert_eq!(ev.config[1], 1);
+        assert_eq!(ev.config[2], 0xdeadbeef_cafebabe);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_from_event_string_invalid_inputs() {
+        let dir = make_pmu(
+            4,
+            &[("event", "config:0-7\n"), ("bad", "config:0-7,4-11\n")],
+        );
+        // Overlapping bit ranges in the format file are rejected.
+        let result = PmuConfigEvent::from_event_string_at_base_path(
+            "test_pmu/bad=0xff/",
+            dir.path().to_path_buf(),
+        );
+        assert!(result.unwrap_err().to_string().contains("Overlapping"));
+        // Event string without a '/' (no PMU name) is rejected.
+        assert!(PmuConfigEvent::from_event_string_at_base_path(
+            "test_pmu_event=0xff",
+            dir.path().to_path_buf(),
+        )
+        .is_err());
+        // Unknown PMU directory is an error.
+        assert!(PmuConfigEvent::from_event_string_at_base_path(
+            "no_such_pmu/event=0x1/",
+            dir.path().to_path_buf(),
+        )
+        .is_err());
+    }
 
     #[cfg(target_os = "linux")]
     #[test]

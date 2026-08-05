@@ -1,0 +1,10 @@
+{
+  "events": {
+    "L1_Data_Misses": "cpu/event=0x60,umask=0xc8/",
+    "Instruction_TLB_TW_Misses": "cpu/event=0x85,umask=0x7/"
+  },
+  "metrics": {
+    "data-l1-mpki": "L1_Data_Misses / Instructions * 1000",
+    "inst-tlb-tw-pki": "Instruction_TLB_TW_Misses / Instructions * 1000"
+  }
+}

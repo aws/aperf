@@ -17,7 +17,6 @@ use std::{fs, path::PathBuf};
 use tempfile::Builder as TempBuilder;
 #[cfg(target_os = "linux")]
 use {
-    aperf::pmu::{custom_pmu, CustomPMU},
     aperf::record::{record, Record, RECORD_DATA_RECOMMENDATION},
     std::os::unix::fs::PermissionsExt,
 };
@@ -49,10 +48,6 @@ enum Commands {
 
     /// Generate an HTML report based on the data collected.
     Report(Report),
-
-    #[cfg(target_os = "linux")]
-    /// Create a custom PMU configuration file for use with Aperf record.
-    CustomPMU(CustomPMU),
 
     /// Setup shell completions for APerf commands.
     SetupShellCompletions(SetupShellCompletions),
@@ -130,9 +125,6 @@ fn main() -> Result<()> {
         Commands::Record(r) => record(&r, &tmp_dir_path_buf, &runlog),
 
         Commands::Report(r) => report(&r, &tmp_dir_path_buf),
-
-        #[cfg(target_os = "linux")]
-        Commands::CustomPMU(r) => custom_pmu(&r),
 
         Commands::SetupShellCompletions(r) => setup_shell_completions(&r, &mut Cli::command()),
 

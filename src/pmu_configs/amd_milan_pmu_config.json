@@ -1,10 +1,17 @@
 {
   "events": {
+    "L1_Data_Fills": "cpu/event=0x44,umask=0xff/",
+    "L1_Any_Fills_DRAM": "cpu/event=0x44,umask=0x8/",
+    "Frontend_Stalls": "cpu/event=0xa9,umask=0x0/",
+    "Instruction_TLB_TW_Misses": "cpu/event=0x85,umask=0xf/",
     "Backend_Stalls_1": "cpu/event=0xae,umask=0xf7/",
-    "Backend_Stalls_2": "cpu/event=0xaf,umask=0x27/",
-    "Cycles": "cpu/event=0x76,umask=0x0/"
+    "Backend_Stalls_2": "cpu/event=0xaf,umask=0x27/"
   },
   "metrics": {
+    "data-l1-mpki": "L1_Data_Fills / Instructions * 1000",
+    "l3-mpki": "L1_Any_Fills_DRAM / Instructions * 1000",
+    "stall-frontend-pkc": "Frontend_Stalls / Cycles * 1000",
+    "inst-tlb-tw-pki": "Instruction_TLB_TW_Misses / Instructions * 1000",
     "stall-backend-pkc": "(Backend_Stalls_1 + Backend_Stalls_2) / Cycles * 1000"
   }
 }
