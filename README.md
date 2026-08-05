@@ -51,7 +51,7 @@ ulimit -n 65535
 | `vmstat`                 | Virtual Memory Utilization                                                                                                                                   |
 | `diskstats`              | Disk Utilization per Disk                                                                                                                                    |
 | `interrupts`             | Interrupt Data per Interrupt Line per CPU                                                                                                                    |
-| `perf_stat`              | CPU Performance Counters                                                                                                                                     |
+| `perf_stat`              | [PMU data](/docs/PMU.md)                                                                                                                                     |
 | `processes`              | CPU utilization of running processes                                                                                                                         |
 | `netstat`                | TCP/IP stats                                                                                                                                                 |
 | `ena_stat`               | ENA (ethtool) stats                                                                                                                                          |
@@ -247,6 +247,10 @@ Profile JVMs using async-profiler. See [async-profiler documentation](./docs/DEP
 
 Custom PMU config file to use.
 
+`--ungroup-pmu-events`
+
+Avoid creating a PMU counter group for each metric defined in the PMU config. For details, please read the [PMU data document](/docs/PMU.md).
+
 `--hotline-sample-frequency <FREQUENCY>` (For Hotline-enabled binary) [default: 1000]
 
 Hotline sampling period in Hz.
@@ -271,19 +275,6 @@ The directory and archive name of the report.
 
 The time range to apply to a run in the report, including its time-series metrics, statistics, and analytical findings.
 Specify the option multiple times to apply a time range for multiple runs, or omit the `RUN_NAME=` part to apply it to all runs. Either bound can be omitted or negative.
-
------
-
-#### Custom PMU
-Use this command to create a custom PMU configuration interactively through command-line prompts. This allows users to specify the set of counters for their specific machine and use case. The generated configuration can then be used for `perf_stat` data collections through `aperf record --pmu-config <PMU_CONFIG>`.
-
-`-p, --pmu-file <PMU_FILE>` 
-
-Name of the file for an existing custom PMU configuration.
-
-`--verify` 
-
-Verify the supplied PMU file.
 
 -----
 
@@ -332,12 +323,13 @@ The server exposes 8 tools: `load_report`, `get_metrics`, `get_metric_values`, `
 
 #### PMU Counters:
 * PMU counters are only available on [certain instance sizes](https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/debug_hw_perf.md#how-to-collect-pmu-counters) and families. Select the appropriate instance size if you need PMU stats.
-* For collecting PMU counter metrics w/o `root` or `sudo` permissions, set the `perf_event_paranoid` to `-1`.
+* For collecting PMU counter metrics without `root` or `sudo` permissions, set the `perf_event_paranoid` to `-1`.
 ```
 sudo sysctl -w kernel.perf_event_paranoid=-1
 ```
-* To collect PMU counter metrics, APerf needs to open up to 50 file descriptors per vCPU. So, increase `ulimit` settings accordingly.
-* APerf preparation for PMU counter metrics may take significant time on larger instances, delaying the start of the recording period. Use `--dont-collect perf_stat` if startup time is a concern and/or PMU metrics are not necessary.
+* APerf preparation for PMU counter metrics may take significant time on larger instances in 5.x kernels, delaying the start of the recording period. Use `--dont-collect perf_stat` if startup time is a concern and/or PMU metrics are not necessary.
+* For more details, refer to the [PMU data document](/docs/PMU.md).
+
 #### Other:
 * APerf needs access to `/proc/kallsyms`, so we need to relax `kptr_restrict` by setting it to `0` (on Ubuntu OS).
 ```

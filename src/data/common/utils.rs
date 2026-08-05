@@ -18,6 +18,9 @@ pub struct CpuInfo {
     pub part: Option<String>,
     pub vendor_id: Option<String>,
     pub model_name: Option<String>,
+    pub family: Option<u32>,
+    pub model: Option<u32>,
+    pub stepping: Option<u32>,
 }
 
 #[cfg(target_os = "linux")]
@@ -28,6 +31,9 @@ impl CpuInfo {
         let mut part = None;
         let mut vendor_id = None;
         let mut model_name = None;
+        let mut family = None;
+        let mut model = None;
+        let mut stepping = None;
         for line in cpu_info_reader.lines() {
             let info_line = line?;
             if info_line.is_empty() {
@@ -43,6 +49,9 @@ impl CpuInfo {
                 "CPU part" => part = Some(value),
                 "vendor_id" => vendor_id = Some(value),
                 "model name" => model_name = Some(value),
+                "cpu family" => family = value.parse::<u32>().ok(),
+                "model" => model = value.parse::<u32>().ok(),
+                "stepping" => stepping = value.parse::<u32>().ok(),
                 _ => continue,
             }
         }
@@ -51,10 +60,17 @@ impl CpuInfo {
             part,
             vendor_id,
             model_name,
+            family,
+            model,
+            stepping,
         })
     }
 
-    pub fn is_graviton(&self) -> bool {
+    /// Whether this is an ARM CPU. ARM64 kernels print the "CPU part" field
+    /// unconditionally for every core (from the MIDR_EL1 register; see the
+    /// kernel's arch/arm64/kernel/cpuinfo.c), while x86's /proc/cpuinfo has no
+    /// such field (arch/x86/kernel/cpu/proc.c).
+    pub fn is_arm(&self) -> bool {
         self.part.is_some()
     }
 
@@ -68,16 +84,49 @@ impl CpuInfo {
             .map_or(false, |vendor_id| vendor_id == "GenuineIntel")
     }
 
-    pub fn is_intel_icelake(&self) -> bool {
-        self.model_name.as_ref().map_or(false, |model_name| {
-            model_name == "Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz"
-        })
+    /// Skylake-SP (1st Gen Xeon Scalable, e.g. EC2 m5/c5's 8175M/8124M):
+    /// CPUID 06_55h with stepping 0-4 per the intel/perfmon mapfile.csv
+    /// (GenuineIntel-6-55-[01234] -> SKX). Cascade Lake shares the same
+    /// family/model and differs only by stepping.
+    pub fn is_intel_skylake(&self) -> bool {
+        self.family == Some(6)
+            && self.model == Some(0x55)
+            && self.stepping.map_or(false, |s| s <= 4)
     }
 
+    /// Cascade Lake (2nd Gen Xeon Scalable, e.g. EC2 m5n/m5zn's 8259CL/8252,
+    /// and the larger m5/c5 sizes): CPUID 06_55h with stepping 5+ per the
+    /// intel/perfmon mapfile.csv (GenuineIntel-6-55-[56789ABCDEF] -> CLX).
+    pub fn is_intel_cascade_lake(&self) -> bool {
+        self.family == Some(6)
+            && self.model == Some(0x55)
+            && self.stepping.map_or(false, |s| s >= 5)
+    }
+
+    /// Ice Lake-SP/-D (3rd Gen Xeon Scalable, e.g. EC2 m6i/i4i's 8375C):
+    /// CPUID 06_6Ah (SP) or 06_6Ch (D) per the intel/perfmon mapfile.csv
+    /// (GenuineIntel-6-6[AC] -> ICX).
+    pub fn is_intel_icelake(&self) -> bool {
+        self.family == Some(6) && (self.model == Some(0x6A) || self.model == Some(0x6C))
+    }
+
+    /// Sapphire Rapids (4th Gen Xeon Scalable, e.g. EC2 m7i/u7i's 8488C):
+    /// CPUID 06_8Fh per the intel/perfmon mapfile.csv (GenuineIntel-6-8F -> SPR).
     pub fn is_intel_sapphire_rapids(&self) -> bool {
-        self.model_name.as_ref().map_or(false, |model_name| {
-            model_name == "Intel(R) Xeon(R) Platinum 8488C"
-        })
+        self.family == Some(6) && self.model == Some(0x8F)
+    }
+
+    /// Emerald Rapids (5th Gen Xeon Scalable, e.g. EC2 i7i/i7ie): CPUID
+    /// 06_CFh per the intel/perfmon mapfile.csv (GenuineIntel-6-CF -> EMR).
+    pub fn is_intel_emerald_rapids(&self) -> bool {
+        self.family == Some(6) && self.model == Some(0xCF)
+    }
+
+    /// Granite Rapids (Intel Xeon 6 P-core, e.g. EC2 m8i/c8i/r8i): CPUID
+    /// 06_ADh (SP) or 06_AEh (AP) per the intel/perfmon mapfile.csv
+    /// (GenuineIntel-6-A[DE] -> GNR).
+    pub fn is_intel_granite_rapids(&self) -> bool {
+        self.family == Some(6) && (self.model == Some(0xAD) || self.model == Some(0xAE))
     }
 
     pub fn is_amd(&self) -> bool {
@@ -86,16 +135,50 @@ impl CpuInfo {
             .map_or(false, |vendor_id| vendor_id == "AuthenticAMD")
     }
 
+    /// Genoa (Zen4, 4th Gen EPYC, e.g. EC2 m7a's 9R14): CPUID family 19h with
+    /// the Zen4 model ranges (10h-1Fh, 60h-AFh) per the family/model -> ZEN4
+    /// mapping in the kernel's arch/x86/kernel/cpu/amd.c.
     pub fn is_amd_genoa(&self) -> bool {
-        self.model_name
-            .as_ref()
-            .map_or(false, |model_name| model_name.starts_with("AMD EPYC 9R14"))
+        self.family == Some(0x19)
+            && self.model.map_or(false, |m| {
+                (0x10..=0x1F).contains(&m) || (0x60..=0xAF).contains(&m)
+            })
     }
 
+    /// Milan (Zen3, 3rd Gen EPYC, e.g. EC2 m6a's 7R13): CPUID family 19h with
+    /// the Zen3 model ranges (00h-0Fh, 20h-5Fh) per the family/model -> ZEN3
+    /// mapping in the kernel's arch/x86/kernel/cpu/amd.c.
     pub fn is_amd_milan(&self) -> bool {
-        self.model_name
-            .as_ref()
-            .map_or(false, |model_name| model_name.starts_with("AMD EPYC 7R13"))
+        self.family == Some(0x19)
+            && self
+                .model
+                .map_or(false, |m| m <= 0x0F || (0x20..=0x5F).contains(&m))
+    }
+
+    /// Turin (Zen5, 5th Gen EPYC, e.g. EC2 m8a/c8a/r8a = 9R45, m8azn/x8aedz =
+    /// 9R05): CPUID family 1Ah per the family -> ZEN5 mapping in the kernel's
+    /// arch/x86/kernel/cpu/amd.c.
+    pub fn is_amd_turin(&self) -> bool {
+        self.family == Some(0x1A)
+    }
+
+    /// Naples (Zen1, 1st Gen EPYC, e.g. EC2 m5a/r5a/t3a = EPYC 7571): CPUID
+    /// family 17h with the Zen1 model ranges (00h-2Fh, 50h-5Fh) per the
+    /// family/model -> ZEN1 mapping in the kernel's arch/x86/kernel/cpu/amd.c.
+    pub fn is_amd_naples(&self) -> bool {
+        self.family == Some(0x17)
+            && self
+                .model
+                .map_or(false, |m| m <= 0x2F || (0x50..=0x5F).contains(&m))
+    }
+
+    /// Rome (Zen2, 2nd Gen EPYC, e.g. EC2 c5a/c5ad = EPYC 7R32, plus
+    /// g4ad/g5 hosts): CPUID family 17h in the Zen2 model ranges (30h-4Fh,
+    /// 60h-AFh) per the family/model -> ZEN2 mapping in the kernel's
+    /// arch/x86/kernel/cpu/amd.c — i.e. any family-17h model that is not in
+    /// the Zen1 ranges.
+    pub fn is_amd_rome(&self) -> bool {
+        self.family == Some(0x17) && !self.is_amd_naples() && self.model.is_some()
     }
 }
 
@@ -345,8 +428,8 @@ mod utils_test {
         let cpu_info = CpuInfo::new().expect("Should read and parse /proc/cpuinfo");
 
         assert!(
-            cpu_info.is_graviton() || cpu_info.is_intel() || cpu_info.is_amd(),
-            "The CPU should be recognized as one of Graviton, Intel, and AMD"
+            cpu_info.is_arm() || cpu_info.is_intel() || cpu_info.is_amd(),
+            "The CPU should be recognized as one of ARM, Intel, and AMD"
         );
     }
 

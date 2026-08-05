@@ -1,20 +1,19 @@
 {
   "events": {
     "L2": "cpu/event=0xf1,umask=0x1f/",
-    "Frontend_Stalls": "cpu/event=0x9c,umask=0x1,cmask=0x5/",
-    "Backend_Stalls": "cpu/event=0xa4,umask=0x2/",
-    "Slots": "cpu/event=0xa4,umask=0x1/",
+    "Frontend_Stalls": "cpu/event=0x9c,umask=0x1,cmask=0x4/",
+    "Backend_Stalls": "cpu/event=0xa2,umask=0x1/",
     "Instruction_TLB": "cpu/event=0x85,umask=0x20/",
-    "Instruction_TLB_TW": "cpu/event=0x85,umask=0xe/",
+    "Instruction_TLB_TW": "cpu/event=0x85,umask=0x1/",
     "Data_TLB": "cpu/event=0x8,umask=0x20/",
-    "Data_TLB_TW": "cpu/event=0x8,umask=0xe/",
+    "Data_TLB_TW": "cpu/event=0x8,umask=0x1/",
     "Data_ST_TLB": "cpu/event=0x49,umask=0x20/",
-    "Data_ST_TLB_TW": "cpu/event=0x49,umask=0xe/"
+    "Data_ST_TLB_TW": "cpu/event=0x49,umask=0x1/"
   },
   "metrics": {
     "l2-mpki": "L2 / Instructions * 1000",
     "stall-frontend-pkc": "Frontend_Stalls / Cycles * 1000",
-    "stall-backend-pkc": "Backend_Stalls / Slots * 1000",
+    "stall-backend-pkc": "Backend_Stalls / Cycles * 1000",
     "inst-tlb-mpki": "Instruction_TLB / Instructions * 1000",
     "inst-tlb-tw-pki": "Instruction_TLB_TW / Instructions * 1000",
     "data-tlb-mpki": "Data_TLB / Instructions * 1000",
