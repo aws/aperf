@@ -90,7 +90,8 @@ mod vmstat_tests {
         stats2.insert("nr_dirty".to_string(), 45);
         expected_per_sample_stats.push(ExpectedVmstatStats { stats: stats2 });
 
-        let raw_samples = generate_vmstat_raw_data(&expected_per_sample_stats, 2);
+        let interval_seconds: u64 = 2;
+        let raw_samples = generate_vmstat_raw_data(&expected_per_sample_stats, interval_seconds);
         let raw_data: Vec<Data> = raw_samples
             .into_iter()
             .map(|s| Data::VmstatRaw(s))
@@ -132,7 +133,7 @@ mod vmstat_tests {
                             metric_name, sample_idx, value, expected
                         );
                     } else {
-                        // Delta metrics - first sample should be 0, others should be deltas
+                        // Delta metrics - first sample should be 0, others should be per-second rates
                         if sample_idx == 0 {
                             assert_eq!(
                                 value, 0.0,
@@ -143,7 +144,8 @@ mod vmstat_tests {
                             let current = expected_per_sample_stats[sample_idx].stats[metric_name];
                             let previous =
                                 expected_per_sample_stats[sample_idx - 1].stats[metric_name];
-                            let expected_delta = (current - previous) as f64;
+                            let expected_delta =
+                                (current - previous) as f64 / interval_seconds as f64;
                             assert_eq!(
                                 value, expected_delta,
                                 "Delta metric {} sample {} mismatch: got {}, expected {}",
@@ -206,7 +208,8 @@ mod vmstat_tests {
             expected_per_sample_stats.push(ExpectedVmstatStats { stats });
         }
 
-        let raw_samples = generate_vmstat_raw_data(&expected_per_sample_stats, 1);
+        let interval_seconds: u64 = 1;
+        let raw_samples = generate_vmstat_raw_data(&expected_per_sample_stats, interval_seconds);
         let raw_data: Vec<Data> = raw_samples
             .into_iter()
             .map(|s| Data::VmstatRaw(s))
@@ -274,7 +277,7 @@ mod vmstat_tests {
                             metric_name, sample_idx, value, expected
                         );
                     } else {
-                        // Delta metrics - first sample should be 0, others should be deltas
+                        // Delta metrics - first sample should be 0, others should be per-second rates
                         if sample_idx == 0 {
                             assert_eq!(
                                 value, 0.0,
@@ -285,7 +288,8 @@ mod vmstat_tests {
                             let current = expected_per_sample_stats[sample_idx].stats[metric_name];
                             let previous =
                                 expected_per_sample_stats[sample_idx - 1].stats[metric_name];
-                            let expected_delta = (current - previous) as f64;
+                            let expected_delta =
+                                (current - previous) as f64 / interval_seconds as f64;
                             assert_eq!(
                                 value, expected_delta,
                                 "Delta metric {} sample {} mismatch: got {}, expected {}",
@@ -342,7 +346,8 @@ mod vmstat_tests {
             expected_per_sample_stats.push(ExpectedVmstatStats { stats });
         }
 
-        let raw_samples = generate_vmstat_raw_data(&expected_per_sample_stats, 1);
+        let interval_seconds: u64 = 1;
+        let raw_samples = generate_vmstat_raw_data(&expected_per_sample_stats, interval_seconds);
         let raw_data: Vec<Data> = raw_samples
             .into_iter()
             .map(|s| Data::VmstatRaw(s))
@@ -409,7 +414,7 @@ mod vmstat_tests {
                             metric_name, sample_idx, value, expected
                         );
                     } else {
-                        // Delta metrics - first sample should be 0, others should be deltas
+                        // Delta metrics - first sample should be 0, others should be per-second rates
                         if series_idx == 0 {
                             assert_eq!(
                                 value, 0.0,
@@ -420,7 +425,8 @@ mod vmstat_tests {
                             let current = expected_per_sample_stats[sample_idx].stats[metric_name];
                             let previous =
                                 expected_per_sample_stats[sample_idx - 1].stats[metric_name];
-                            let expected_delta = (current - previous) as f64;
+                            let expected_delta =
+                                (current - previous) as f64 / interval_seconds as f64;
                             assert_eq!(
                                 value, expected_delta,
                                 "Delta metric {} sample {} mismatch: got {}, expected {}",

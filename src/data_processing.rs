@@ -1,18 +1,21 @@
 use crate::analytics::{AnalyticalEngine, DataFindings};
 use crate::computations::Statistics;
-use crate::data::aperf_stats::AperfStat;
-use crate::data::common::data_formats::{AperfData, DataFormat, ProcessedData, TimeSeriesMetric};
+use crate::data::aperf_stats::AperfStats;
+use crate::data::common::data_formats::{
+    AperfData, DataFormat, ProcessedData, Series, TimeSeriesMetric,
+};
 use crate::data::common::processed_data_accessor::ProcessedDataAccessor;
 use crate::data::common::utils::{combine_value_ranges, topological_sort};
 use crate::data::processes::Processes;
 use crate::data::TimeEnum;
-use crate::get_data_name_from_type;
 use crate::{data::Data, data::ReportData};
+use crate::{get_data_name_from_type, ProcessMetric};
 use anyhow::{bail, Result};
 use log::{debug, error, info};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::{Seek, SeekFrom};
 use std::path::PathBuf;
+use std::str::FromStr;
 
 #[derive(Clone, Debug)]
 pub struct ReportParams {
@@ -26,8 +29,9 @@ pub struct ReportParams {
     /// Whether the collection of PMU counters is "grouped" or "ungrouped". An empty \
     /// string means a legacy run before PMU config revamp.
     pub pmu_counter_mode: String,
-    /// PID of the aperf process that performed the collection. "None" for legacy runs.
-    pub pid: Option<u32>,
+    /// The PIDs of the APerf collector process itself and all long-running processes
+    /// that it launched.
+    pub aperf_process_pids: Vec<u32>,
     /// System page size in bytes at collection time
     pub page_size: u64,
 }
@@ -41,7 +45,7 @@ impl ReportParams {
             report_dir: PathBuf::new(),
             collection_start: None,
             pmu_counter_mode: String::new(),
-            pid: None,
+            aperf_process_pids: Vec::new(),
             page_size: 0,
         }
     }
@@ -143,14 +147,16 @@ impl DataProcessingEngine {
     }
 }
 
-/// Extract the APerf process's metric from processes data and add them to the
-/// aperf_stats data, to monitor APerf performance in the report.
+/// Extract the metric of APerf process and all of its subprocesses from processes data
+/// and add them to the aperf_stats data, to monitor APerf performance in the report.
 fn copy_aperf_process_metrics_to_aperf_stats(
     data_processors: &mut HashMap<String, DataProcessor>,
     per_run_report_params: &HashMap<String, ReportParams>,
 ) {
-    // A map from a run name to the sorted list of APerf process metrics
-    let mut per_run_aperf_process_metrics: HashMap<String, Vec<TimeSeriesMetric>> = HashMap::new();
+    // Store all extracted APerf process series, in the format of
+    // Map<run_name, Map<process_metric_name, Vec<process_series>>>
+    let mut per_run_aperf_process_metrics: HashMap<String, HashMap<String, Vec<Series>>> =
+        HashMap::new();
 
     let processes_data_processor = match data_processors.get(get_data_name_from_type::<Processes>())
     {
@@ -158,15 +164,10 @@ fn copy_aperf_process_metrics_to_aperf_stats(
         None => return,
     };
 
+    // Extract APerf process series from the metrics within processes data.
     for (run_name, cur_run_data) in &processes_data_processor.processed_data.runs {
-        let cur_run_pid = match per_run_report_params.get(run_name) {
-            Some(report_params) => {
-                if let Some(pid) = report_params.pid {
-                    pid
-                } else {
-                    continue;
-                }
-            }
+        let aperf_process_pids = match per_run_report_params.get(run_name) {
+            Some(report_params) => &report_params.aperf_process_pids,
             None => continue,
         };
 
@@ -175,29 +176,35 @@ fn copy_aperf_process_metrics_to_aperf_stats(
             _ => continue,
         };
 
-        let aperf_series_name = format!("{cur_run_pid}_aperf");
-
         for metric_name in &cur_run_processes_data.sorted_metric_names {
-            // For every processes metric, locate the corresponding series for the APerf process and
-            // create a new dedicated metric for it.
+            let aperf_stats_metric_name = match ProcessMetric::from_str(metric_name) {
+                Ok(process_metric) => {
+                    // Skip metrics that are not too helpful.
+                    match process_metric {
+                        ProcessMetric::NumberProcesses
+                        | ProcessMetric::ResidentSetSize
+                        | ProcessMetric::VirtualMemorySize => continue,
+                        _ => process_metric.to_aperf_stat_metric_name(),
+                    }
+                }
+                Err(_) => continue,
+            };
+
+            // For every processes metric, locate and extract all series for APerf processes.
             if let Some(metric) = cur_run_processes_data.metrics.get(metric_name) {
-                if let Some(series) = metric
-                    .series
-                    .iter()
-                    .find(|s| s.series_name == aperf_series_name)
-                {
-                    let aperf_process_metric_name = format!("process_{metric_name}");
-                    let mut aperf_process_metric =
-                        TimeSeriesMetric::new(aperf_process_metric_name.clone());
-                    let stats = Statistics::from_values(&series.values);
-                    aperf_process_metric.value_range =
-                        (stats.min.floor() as u64, stats.max.ceil() as u64);
-                    aperf_process_metric.stats = stats;
-                    aperf_process_metric.series = vec![series.clone()];
-                    per_run_aperf_process_metrics
-                        .entry(run_name.clone())
-                        .or_default()
-                        .push(aperf_process_metric);
+                for aperf_process_pid in aperf_process_pids {
+                    if let Some(aperf_process_series) = metric
+                        .series
+                        .iter()
+                        .find(|s| s.series_name.starts_with(&format!("{aperf_process_pid}_")))
+                    {
+                        per_run_aperf_process_metrics
+                            .entry(run_name.clone())
+                            .or_default()
+                            .entry(aperf_stats_metric_name.clone())
+                            .or_default()
+                            .push(aperf_process_series.clone());
+                    }
                 }
             }
         }
@@ -208,28 +215,92 @@ fn copy_aperf_process_metrics_to_aperf_stats(
     }
 
     let aperf_stats_data_processor =
-        match data_processors.get_mut(get_data_name_from_type::<AperfStat>()) {
+        match data_processors.get_mut(get_data_name_from_type::<AperfStats>()) {
             Some(aperf_stats_data_processor) => aperf_stats_data_processor,
             None => return,
         };
 
+    // Add extracted APerf process series to APerf stats metrics.
     for (run_name, aperf_process_metrics) in per_run_aperf_process_metrics {
         if let Some(AperfData::TimeSeries(cur_run_aperf_stats_data)) = aperf_stats_data_processor
             .processed_data
             .runs
             .get_mut(&run_name)
         {
-            // The APerf process metrics should be showing upfront
-            let mut insert_pos = 0;
-            for aperf_process_metric in aperf_process_metrics {
-                cur_run_aperf_stats_data
+            for (aperf_stats_metric_name, all_aperf_process_series) in aperf_process_metrics {
+                if !cur_run_aperf_stats_data
                     .sorted_metric_names
-                    .insert(insert_pos, aperf_process_metric.metric_name.clone());
-                cur_run_aperf_stats_data.metrics.insert(
-                    aperf_process_metric.metric_name.clone(),
-                    aperf_process_metric,
+                    .contains(&aperf_stats_metric_name)
+                {
+                    cur_run_aperf_stats_data
+                        .sorted_metric_names
+                        .insert(0, aperf_stats_metric_name.clone());
+                }
+
+                let aperf_stats_metric = cur_run_aperf_stats_data
+                    .metrics
+                    .entry(aperf_stats_metric_name.clone())
+                    .or_insert_with(|| TimeSeriesMetric::new(aperf_stats_metric_name.clone()));
+
+                // To recreate the "total" series as the sum of all series within the metric,
+                // first build a sorted map from time_diff to value to account for inconsistent
+                // time_diffs across different series within the metric.
+                let mut total_series_map: BTreeMap<u64, f64> = match aperf_stats_metric
+                    .series
+                    .iter()
+                    .position(|series| series.is_aggregate)
+                {
+                    Some(total_series_idx) => {
+                        let cur_total_series = aperf_stats_metric.series.remove(total_series_idx);
+                        cur_total_series
+                            .time_diff
+                            .into_iter()
+                            .zip(cur_total_series.values.into_iter())
+                            .collect()
+                    }
+                    None => BTreeMap::new(),
+                };
+
+                for aperf_process_series in &all_aperf_process_series {
+                    aperf_process_series
+                        .time_diff
+                        .iter()
+                        .zip(aperf_process_series.values.iter())
+                        .for_each(|(&time_diff, &value)| {
+                            // Update value range for possible smaller values in the new series.
+                            aperf_stats_metric.value_range.0 =
+                                aperf_stats_metric.value_range.0.min(value.floor() as u64);
+                            // Update the total series by adding the values in the new series.
+                            *total_series_map.entry(time_diff).or_default() += value
+                        });
+                }
+
+                for mut aperf_process_series in all_aperf_process_series {
+                    // Drop pid and only keep the process name as the series name.
+                    let series_name = aperf_process_series.series_name;
+                    aperf_process_series.series_name = series_name
+                        .split_once("_")
+                        .map_or(series_name.clone(), |(_pid, process_name)| {
+                            process_name.to_string()
+                        });
+                    aperf_process_series.is_aggregate = false;
+                    aperf_stats_metric.series.insert(0, aperf_process_series);
+                }
+                // Create and save the new total series for the metric and recompute its stats.
+                let (total_series_time_diff, total_series_values): (Vec<u64>, Vec<f64>) =
+                    total_series_map.into_iter().unzip();
+                aperf_stats_metric.stats = Statistics::from_values(&total_series_values);
+                aperf_stats_metric.value_range.1 = aperf_stats_metric.stats.max.ceil() as u64;
+                aperf_stats_metric.series.insert(
+                    0,
+                    Series {
+                        series_name: "total".to_string(),
+                        time_diff: total_series_time_diff,
+                        values: total_series_values,
+                        is_aggregate: true,
+                    },
                 );
-                insert_pos += 1;
+                aperf_stats_metric.stats_series_idx = 0;
             }
         }
     }
@@ -548,6 +619,7 @@ mod tests {
     }
 
     const APERF_PID: u32 = 4242;
+    const SUB_PROCESS_PID: u32 = 4243;
 
     /// Build the `processes` + `aperf_stats` data processors for run "run1". The processes data
     /// has one "user_space_time" metric with a series for each name in `process_series_names`;
@@ -567,8 +639,8 @@ mod tests {
                 make_time_series_data(vec![make_metric("user_space_time", &processes_series)]),
             ),
             (
-                get_data_name_from_type::<AperfStat>(),
-                ReportData::AperfStat(AperfStat::new()),
+                get_data_name_from_type::<AperfStats>(),
+                ReportData::AperfStats(AperfStats::new()),
                 make_time_series_data(vec![make_metric("aperf", &[])]),
             ),
         ]
@@ -583,16 +655,16 @@ mod tests {
         .collect()
     }
 
-    fn params_with_pid(pid: Option<u32>) -> HashMap<String, ReportParams> {
+    fn params_with_pids(aperf_process_pids: Vec<u32>) -> HashMap<String, ReportParams> {
         let mut rp = ReportParams::new();
         rp.run_name = "run1".to_string();
-        rp.pid = pid;
+        rp.aperf_process_pids = aperf_process_pids;
         HashMap::from([("run1".to_string(), rp)])
     }
 
     /// The aperf_stats TimeSeriesData for "run1" after the copy.
     fn aperf_stats_result(data_processors: &HashMap<String, DataProcessor>) -> TimeSeriesData {
-        match &data_processors[get_data_name_from_type::<AperfStat>()]
+        match &data_processors[get_data_name_from_type::<AperfStats>()]
             .processed_data
             .runs["run1"]
         {
@@ -603,12 +675,15 @@ mod tests {
 
     #[test]
     fn test_copy_aperf_process_metrics_copies_series() {
+        // Two APerf processes (the collector + a subprocess) and one unrelated process.
         let aperf_series = format!("{APERF_PID}_aperf");
-        let mut data_processors = make_aperf_metric_processors(&[&aperf_series, "999_other"]);
+        let subprocess_series = format!("{SUB_PROCESS_PID}_perf");
+        let mut data_processors =
+            make_aperf_metric_processors(&[&aperf_series, &subprocess_series, "999_other"]);
 
         copy_aperf_process_metrics_to_aperf_stats(
             &mut data_processors,
-            &params_with_pid(Some(APERF_PID)),
+            &params_with_pids(vec![APERF_PID, SUB_PROCESS_PID]),
         );
 
         let ts = aperf_stats_result(&data_processors);
@@ -616,9 +691,28 @@ mod tests {
             .metrics
             .get("process_user_space_time")
             .expect("aperf process metric should be copied into aperf_stats");
-        assert_eq!(copied.series.len(), 1);
-        assert_eq!(copied.series[0].series_name, aperf_series);
-        assert_eq!(copied.series[0].values, vec![0.0, 1.0, 2.0]);
+        // The two copied APerf process series, plus the recreated "total" aggregate series
+        // (the unrelated process series is not copied).
+        assert_eq!(copied.series.len(), 3);
+        let total = &copied.series[0];
+        assert_eq!(total.series_name, "total");
+        assert!(total.is_aggregate);
+        // The total is the sum of the two copied series ([0,1,2] each) at every time_diff.
+        assert_eq!(total.time_diff, vec![0, 1, 2]);
+        assert_eq!(total.values, vec![0.0, 2.0, 4.0]);
+        for series in &copied.series[1..] {
+            assert!(!series.is_aggregate);
+            // The PID prefix is dropped from copied series names, keeping the process name.
+            assert!(["aperf", "perf"]
+                .iter()
+                .any(|name| *name == series.series_name));
+            assert_eq!(series.values, vec![0.0, 1.0, 2.0]);
+        }
+        // The metric stats are recomputed from the total series.
+        assert_eq!(copied.stats.max, 4.0);
+        assert_eq!(copied.stats.avg, 2.0);
+        // The value range covers the copied values and the total's max.
+        assert_eq!(copied.value_range, (0, 4));
         // Inserted at the front, ahead of the pre-existing "aperf" metric.
         assert_eq!(
             ts.sorted_metric_names,
@@ -632,7 +726,10 @@ mod tests {
         let aperf_series = format!("{APERF_PID}_aperf");
         let mut data_processors = make_aperf_metric_processors(&[&aperf_series, "999_other"]);
 
-        copy_aperf_process_metrics_to_aperf_stats(&mut data_processors, &params_with_pid(None));
+        copy_aperf_process_metrics_to_aperf_stats(
+            &mut data_processors,
+            &params_with_pids(Vec::new()),
+        );
 
         assert_eq!(
             aperf_stats_result(&data_processors).sorted_metric_names,
@@ -647,7 +744,7 @@ mod tests {
 
         copy_aperf_process_metrics_to_aperf_stats(
             &mut data_processors,
-            &params_with_pid(Some(APERF_PID)),
+            &params_with_pids(vec![APERF_PID]),
         );
 
         assert_eq!(

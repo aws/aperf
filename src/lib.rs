@@ -20,13 +20,21 @@ use anyhow::{bail, Result};
 use regex::Regex;
 use std::fs;
 use std::path::PathBuf;
+use strum_macros::{Display, EnumIter, EnumString};
 use thiserror::Error;
 #[cfg(target_os = "linux")]
 use {
-    crate::data::{aperf_stats::AperfStat, common::utils::CpuInfo},
-    chrono::Utc,
-    log::error,
+    crate::data::{aperf_stats::AperfStatsCollector, common::utils::CpuInfo},
+    log::warn,
     std::cell::RefCell,
+    std::collections::HashSet,
+    std::ffi::OsStr,
+    std::fs::File,
+    std::io::{Read, Seek, SeekFrom},
+    std::os::unix::process::ExitStatusExt,
+    std::path::Path,
+    std::process::{Child, Command, ExitStatus, Output, Stdio},
+    std::time,
 };
 
 pub const APERF_FILE_FORMAT: &str = "bin";
@@ -162,9 +170,32 @@ pub fn aperf_runlog_file_path(run_data_dir: &PathBuf) -> PathBuf {
     run_data_dir.join(get_data_name_from_type::<AperfRunlog>())
 }
 
+#[derive(EnumIter, EnumString, Display, Clone, Copy, Eq, Hash, PartialEq)]
+#[strum(serialize_all = "snake_case")]
+pub enum ProcessMetric {
+    UserSpaceTime,
+    KernelSpaceTime,
+    NumberThreads,
+    VirtualMemorySize,
+    ResidentSetSize,
+    ResidentSetSizeBytes,
+    NumberProcesses,
+}
+
+impl ProcessMetric {
+    fn to_aperf_stat_metric_name(&self) -> String {
+        format!("process_{}", self.to_string())
+    }
+}
+
 #[cfg(target_os = "linux")]
 thread_local! {
+    /// The singleton APerf stats to collect APerf performance metrics
+    /// throughout the collection.
     static APERF_STATS_COLLECTOR: RefCell<AperfStatsCollector> = RefCell::new(AperfStatsCollector::new());
+    /// PIDs of the long-running subprocesses launched via run_command, to be
+    /// saved to InitParams.sub_process_pids at the end of the collection.
+    static SUB_PROCESS_PIDS: RefCell<HashSet<u32>> = RefCell::new(HashSet::new());
 }
 
 #[cfg(target_os = "linux")]
@@ -184,24 +215,47 @@ pub fn aperf_stats_proceed_to_next_stats(next_stats_time: TimeEnum) {
 }
 
 #[cfg(target_os = "linux")]
-pub fn aperf_stats_measure<F>(stat_name: String, func: F) -> Result<()>
+pub fn aperf_stats_add(stat_name: String, data_name: String, stat_value: f64) {
+    APERF_STATS_COLLECTOR.with(|aperf_stats_collector| {
+        aperf_stats_collector
+            .borrow_mut()
+            .add_stat(stat_name, data_name, stat_value);
+    });
+}
+
+/// Measure the wall-clock time of executing a function and add as a stat.
+#[cfg(target_os = "linux")]
+pub fn aperf_stats_measure<F>(stat_name: String, data_name: String, mut callback: F) -> Result<()>
 where
     F: FnMut() -> Result<()>,
 {
-    APERF_STATS_COLLECTOR.with(|aperf_stats_collector| {
-        aperf_stats_collector.borrow_mut().measure(stat_name, func)
-    })?;
+    let start_time = time::Instant::now();
+    callback()?;
+    let execution_time = (time::Instant::now() - start_time).as_micros() as f64;
+
+    aperf_stats_add(stat_name, data_name, execution_time);
 
     Ok(())
 }
 
+/// Save the usage metrics of a child process as APerf stats.
 #[cfg(target_os = "linux")]
-pub fn aperf_stats_add(stat_key: String, stat_value: u64) {
-    APERF_STATS_COLLECTOR.with(|aperf_stats_collector| {
-        aperf_stats_collector
-            .borrow_mut()
-            .add_stat(stat_key, stat_value);
-    });
+pub fn aperf_stats_add_process_usage(process_name: &str, rusage: libc::rusage) {
+    aperf_stats_add(
+        ProcessMetric::UserSpaceTime.to_aperf_stat_metric_name(),
+        process_name.to_string(),
+        rusage.ru_utime.tv_sec as f64 + rusage.ru_utime.tv_usec as f64 / 1_000_000.0,
+    );
+    aperf_stats_add(
+        ProcessMetric::KernelSpaceTime.to_aperf_stat_metric_name(),
+        process_name.to_string(),
+        rusage.ru_stime.tv_sec as f64 + rusage.ru_stime.tv_usec as f64 / 1_000_000.0,
+    );
+    aperf_stats_add(
+        ProcessMetric::ResidentSetSizeBytes.to_aperf_stat_metric_name(),
+        process_name.to_string(),
+        rusage.ru_maxrss as f64 * 1024.0,
+    );
 }
 
 #[cfg(target_os = "linux")]
@@ -212,123 +266,155 @@ pub fn aperf_stats_flush() -> Result<()> {
     Ok(())
 }
 
-/// Encapsulate all logics of collecting and writing APerf stats.
-/// The collected stats will be saved in memory in time order and be written to
-/// disk when flush() is called.
 #[cfg(target_os = "linux")]
-pub struct AperfStatsCollector {
-    cur_aperf_stats: AperfStat,
-    time_series_aperf_stats: Vec<AperfStat>,
-    run_data_dir: Option<PathBuf>,
+pub fn sub_process_pids() -> HashSet<u32> {
+    SUB_PROCESS_PIDS.with(|pids| pids.borrow().clone())
 }
 
 #[cfg(target_os = "linux")]
-impl AperfStatsCollector {
-    pub fn new() -> Self {
-        Self {
-            cur_aperf_stats: AperfStat::new(),
-            time_series_aperf_stats: Vec::new(),
-            run_data_dir: None,
-        }
-    }
-
-    pub fn initialize(&mut self, run_data_dir: PathBuf) {
-        self.run_data_dir = Some(run_data_dir);
-    }
-
-    /// Check current time and if at next second, save the current stats and
-    /// proceed with a new empty stats.
-    /// If we get to a point where the stats is big and we want to limit APerf's
-    /// memory usage, we can also flush here.
-    fn update_time_series(&mut self) {
-        let cur_time = TimeEnum::DateTime(Utc::now());
-        let cur_time_diff = match cur_time - self.cur_aperf_stats.time {
-            TimeEnum::TimeDiff(time_diff) => time_diff,
-            _ => return,
-        };
-        if cur_time_diff >= 1 {
-            self.proceed_to_next_stats(cur_time);
-        }
-    }
-
-    /// Save current stats and proceed to the next new stats.
-    fn proceed_to_next_stats(&mut self, next_stats_time: TimeEnum) {
-        let cur_aperf_stats = std::mem::replace(
-            &mut self.cur_aperf_stats,
-            AperfStat::for_time(next_stats_time),
-        );
-        self.time_series_aperf_stats.push(cur_aperf_stats);
-    }
-
-    /// Measure the wall-clock time of executing a function and save as a stat.
-    pub fn measure<F>(&mut self, stat_name: String, func: F) -> Result<()>
-    where
-        F: FnMut() -> Result<()>,
-    {
-        self.update_time_series();
-
-        self.cur_aperf_stats.measure(stat_name, func)
-    }
-
-    /// Save a stat.
-    pub fn add_stat(&mut self, stat_key: String, stat_value: u64) {
-        self.update_time_series();
-
-        self.cur_aperf_stats.data.insert(stat_key, stat_value);
-    }
-
-    /// Write all saved stats to disk file.
-    pub fn flush(&mut self) -> Result<()> {
-        if self.run_data_dir.is_none() {
-            bail!("Failed to flush APerf stat since the run data directory path is uninitialized.");
-        }
-
-        let aperf_stats_file_path = data_file_path(
-            get_data_name_from_type::<AperfStat>(),
-            self.run_data_dir.as_ref().unwrap(),
-        );
-        let mut aperf_stats_file = match fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&aperf_stats_file_path)
-        {
-            Ok(aperf_stats_file) => aperf_stats_file,
-            Err(e) => bail!(
-                "Failed to create APerf Stats file at {}: {:?}",
-                aperf_stats_file_path.display(),
-                e
-            ),
-        };
-
-        for aperf_stats in &self.time_series_aperf_stats {
-            bincode::serialize_into(&mut aperf_stats_file, aperf_stats)?;
-        }
-        if !self.cur_aperf_stats.data.is_empty() {
-            bincode::serialize_into(&mut aperf_stats_file, &self.cur_aperf_stats)?;
-        }
-
-        self.time_series_aperf_stats.clear();
-        self.cur_aperf_stats = AperfStat::new();
-
-        Ok(())
-    }
+pub fn register_sub_process_pid(pid: u32) {
+    SUB_PROCESS_PIDS.with(|pids| pids.borrow_mut().insert(pid));
 }
 
+/// Run a command without waiting for its completion and save its pid, so that
+/// its process metrics can be later identified and extracted into APerf stats.
+/// The caller is expected to own the command's stdio config, signaling, and
+/// waiting.
 #[cfg(target_os = "linux")]
-impl Drop for AperfStatsCollector {
-    fn drop(&mut self) {
-        if let Err(e) = self.flush() {
-            error!("Failed to flush APerf stats on drop: {e}");
+pub fn run_command<S, I>(command: S, args: I, stdout: Stdio, stderr: Stdio) -> Result<Child>
+where
+    S: AsRef<OsStr>,
+    I: IntoIterator,
+    I::Item: AsRef<OsStr>,
+{
+    let child = Command::new(command)
+        .args(args)
+        .stdout(stdout)
+        .stderr(stderr)
+        .spawn()?;
+
+    register_sub_process_pid(child.id());
+
+    Ok(child)
+}
+
+/// Run a command, wait for its completion, and collect its resource usage.
+///
+/// For the command's output streams, stderr is always written to a temp file,
+/// and stdout is either piped or written to the file at stdout_path if provided.
+/// With only one possible pipe, so we don't need to worry about deadlock when
+/// draining with single thread.
+#[cfg(target_os = "linux")]
+pub fn run_command_and_wait<S, I>(
+    command: S,
+    args: I,
+    process_name: &str,
+    stdout_path: Option<&Path>,
+) -> Result<Output>
+where
+    S: AsRef<OsStr>,
+    I: IntoIterator,
+    I::Item: AsRef<OsStr>,
+{
+    let mut command = Command::new(command);
+    command.args(args);
+
+    let stderr_file = tempfile::tempfile();
+    if let Ok(stderr_file) = stderr_file.as_ref() {
+        if let Ok(stderr_file_clone) = stderr_file.try_clone() {
+            command.stderr(Stdio::from(stderr_file_clone));
         }
     }
+
+    let capture_stdout = stdout_path.is_none();
+    match stdout_path {
+        Some(path) => command.stdout(Stdio::from(File::create(path)?)),
+        None => command.stdout(Stdio::piped()),
+    };
+
+    let mut child = command.spawn()?;
+    let pid = child.id() as libc::pid_t;
+
+    let mut stdout = Vec::new();
+    if capture_stdout {
+        // Drain the pipe to EOF before reaping, so the subprocess can never
+        // be blcoked by a full pipe while we wait for its completion.
+        if let Some(pipe) = child.stdout.as_mut() {
+            pipe.read_to_end(&mut stdout)?;
+        }
+    }
+
+    // Reap with wait4 to also obtain the kernel's resource usage accounting
+    // of the subprocess.
+    let mut status: libc::c_int = 0;
+    let mut rusage: libc::rusage = unsafe { std::mem::zeroed() };
+    if unsafe { libc::wait4(pid, &mut status, 0, &mut rusage) } == -1 {
+        warn!(
+            "Failed to obtain the resource usage of command {process_name}: {}",
+            std::io::Error::last_os_error()
+        );
+    } else {
+        aperf_stats_add_process_usage(&process_name, rusage);
+    }
+
+    // Read the subprocess's stderr back from the temp file.
+    let mut stderr = Vec::new();
+    if let Ok(mut stderr_file) = stderr_file {
+        if stderr_file.seek(SeekFrom::Start(0)).is_ok() {
+            let _ = stderr_file.read_to_end(&mut stderr);
+        }
+    }
+
+    Ok(Output {
+        status: ExitStatus::from_raw(status),
+        stdout,
+        stderr,
+    })
 }
 
 #[cfg(test)]
 mod test {
     use super::find_file;
+    #[cfg(target_os = "linux")]
+    use super::run_command_and_wait;
     use std::fs;
     use std::path::PathBuf;
     use tempfile::TempDir;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_run_command_and_wait_captures_output() {
+        // stdout and stderr are captured separately; exit status is reported.
+        let output = run_command_and_wait(
+            "sh",
+            ["-c", "echo out_data; echo err_data >&2; exit 3"],
+            "sh",
+            None,
+        )
+        .unwrap();
+        assert_eq!(output.status.code(), Some(3));
+        assert_eq!(String::from_utf8_lossy(&output.stdout), "out_data\n");
+        assert_eq!(String::from_utf8_lossy(&output.stderr), "err_data\n");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_run_command_and_wait_stdout_to_file() {
+        // With stdout_path set, stdout goes to the file and Output.stdout is empty.
+        let dir = TempDir::new().unwrap();
+        let stdout_path = dir.path().join("stdout.txt");
+        let output = run_command_and_wait(
+            "sh",
+            ["-c", "echo to_file; echo err_data >&2"],
+            "sh",
+            Some(&stdout_path),
+        )
+        .unwrap();
+        assert!(output.status.success());
+        assert!(output.stdout.is_empty());
+        assert_eq!(String::from_utf8_lossy(&output.stderr), "err_data\n");
+        assert_eq!(fs::read_to_string(&stdout_path).unwrap(), "to_file\n");
+    }
 
     #[test]
     fn test_find_file_prefix_match() {

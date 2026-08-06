@@ -114,7 +114,8 @@ fn test_process_netstat_raw_data_complex() {
         expected_per_sample_stats.push(expected_stats);
     }
 
-    let raw_data = generate_netstat_raw_data(&expected_per_sample_stats, 2);
+    let interval_seconds: u64 = 2;
+    let raw_data = generate_netstat_raw_data(&expected_per_sample_stats, interval_seconds);
     let mut netstat = aperf::data::netstat::Netstat::new();
     let result = netstat
         .process_raw_data(&ReportParams::new(), raw_data)
@@ -185,7 +186,8 @@ fn test_process_netstat_raw_data_complex() {
 
                 let current_value = current_expected.stats.get(metric_name).unwrap_or(&0);
                 let previous_value = previous_expected.stats.get(metric_name).unwrap_or(&0);
-                let expected_delta = (*current_value as f64) - (*previous_value as f64);
+                let expected_delta =
+                    ((*current_value as f64) - (*previous_value as f64)) / interval_seconds as f64;
 
                 assert_eq!(
                     metric.series[0].values[sample_idx], expected_delta,
@@ -357,16 +359,16 @@ fn test_process_netstat_single_prefix() {
             assert!(metric_name.starts_with("TcpExt:"));
         }
 
-        // Check specific values
+        // Check specific values (deltas divided by interval_seconds=2)
         let pure_acks = &time_series_data.metrics["TcpExt:TCPPureAcks"];
         assert_eq!(pure_acks.series[0].values[0], 0.0);
-        assert_eq!(pure_acks.series[0].values[1], 50.0);
-        assert_eq!(pure_acks.series[0].values[2], 50.0);
+        assert_eq!(pure_acks.series[0].values[1], 25.0); // delta 50 / 2
+        assert_eq!(pure_acks.series[0].values[2], 25.0); // delta 50 / 2
 
         let timeouts = &time_series_data.metrics["TcpExt:TCPTimeouts"];
         assert_eq!(timeouts.series[0].values[0], 0.0);
-        assert_eq!(timeouts.series[0].values[1], 5.0);
-        assert_eq!(timeouts.series[0].values[2], 5.0);
+        assert_eq!(timeouts.series[0].values[1], 2.5); // delta 5 / 2
+        assert_eq!(timeouts.series[0].values[2], 2.5); // delta 5 / 2
     } else {
         panic!("Expected TimeSeries data");
     }
@@ -433,15 +435,23 @@ fn test_process_netstat_input_validation() {
         assert!(time_series_data.metrics.contains_key("TcpExt:TCPHPAcks"));
 
         // Check that we only have 2 data points (from 2 valid samples, invalid ones skipped)
+        // Valid samples are at t=0s and t=3s, so elapsed is 3 seconds
+        let elapsed_seconds = 3.0_f64;
+
         let tcp_pure_acks = &time_series_data.metrics["TcpExt:TCPPureAcks"];
         assert_eq!(tcp_pure_acks.series[0].values.len(), 2);
         assert_eq!(tcp_pure_acks.series[0].values[0], 0.0); // First valid sample
-        assert_eq!(tcp_pure_acks.series[0].values[1], 100.0); // Delta: 200 - 100 (invalid samples skipped)
+        assert!(
+            (tcp_pure_acks.series[0].values[1] - 100.0 / elapsed_seconds).abs() < 1e-6,
+            "TCPPureAcks delta rate mismatch: got {}, expected {}",
+            tcp_pure_acks.series[0].values[1],
+            100.0 / elapsed_seconds
+        ); // Delta: (200 - 100) / 3
 
         let tcp_hp_acks = &time_series_data.metrics["TcpExt:TCPHPAcks"];
         assert_eq!(tcp_hp_acks.series[0].values.len(), 2);
         assert_eq!(tcp_hp_acks.series[0].values[0], 0.0); // First valid sample
-        assert_eq!(tcp_hp_acks.series[0].values[1], 150.0); // Delta: 350 - 200
+        assert_eq!(tcp_hp_acks.series[0].values[1], 150.0 / elapsed_seconds); // Delta: (350 - 200) / 3 = 50.0
     }
 }
 

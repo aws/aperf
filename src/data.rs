@@ -34,7 +34,7 @@ use {
 
 use anyhow::{bail, Result};
 use aperf_runlog::AperfRunlog;
-use aperf_stats::AperfStat;
+use aperf_stats::AperfStats;
 use chrono::prelude::*;
 use common::data_formats::AperfData;
 use cpu_utilization::{CpuUtilization, CpuUtilizationRaw};
@@ -294,7 +294,7 @@ report_data!(
     Numastat,
     PerfProfile,
     Hotline,
-    AperfStat,
+    AperfStats,
     AperfRunlog,
     JavaProfile,
     MemallocData,

@@ -512,9 +512,11 @@ fn test_ena_many_samples_multi_interface() {
 
     assert_eq!(eth0.values.len(), 100);
     assert_eq!(eth1.values.len(), 100);
+    // Counters grow by 1000/2000 per 2-second sample; accumulative deltas are
+    // normalized by the elapsed time, so the per-second rates are 500/1000.
     for i in 1..100 {
-        assert_eq!(eth0.values[i], 1000.0, "eth0 rx_bytes sample {}", i);
-        assert_eq!(eth1.values[i], 2000.0, "eth1 rx_bytes sample {}", i);
+        assert_eq!(eth0.values[i], 500.0, "eth0 rx_bytes sample {}", i);
+        assert_eq!(eth1.values[i], 1000.0, "eth1 rx_bytes sample {}", i);
     }
 }
 

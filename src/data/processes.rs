@@ -1,7 +1,8 @@
-use crate::computations::Statistics;
-use crate::data::common::data_formats::{AperfData, Series, TimeSeriesData, TimeSeriesMetric};
+use crate::data::common::data_formats::AperfData;
+use crate::data::common::time_series_data_processor::time_series_data_processor_with_max_series_aggregate;
 use crate::data::{Data, ProcessData, TimeEnum};
 use crate::data_processing::ReportParams;
+use crate::ProcessMetric;
 use anyhow::Result;
 use core::f64;
 use log::warn;
@@ -9,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
-use strum_macros::{Display, EnumIter};
 #[cfg(target_os = "linux")]
 use {crate::data::CollectData, crate::data_collection::InitParams, chrono::Utc, std::fs};
 
@@ -72,37 +72,29 @@ impl Processes {
     }
 }
 
-#[derive(EnumIter, Display, Clone, Copy, Eq, Hash, PartialEq)]
-#[strum(serialize_all = "snake_case")]
-pub enum ProcessKey {
-    UserSpaceTime,
-    KernelSpaceTime,
-    NumberThreads,
-    VirtualMemorySize,
-    ResidentSetSize,
-    ResidentSetSizeBytes,
-    NumberProcesses,
-}
-
-fn get_process_key_stat(process_key: ProcessKey, values: &[&str], page_size: u64) -> Option<f64> {
+fn get_process_metric_value(
+    process_metric: ProcessMetric,
+    values: &[String],
+    page_size: u64,
+) -> Option<f64> {
     // The last element we access is the 22nd element in a values vector (ResidentSetSize), make sure the index 21 exists
     if values.len() < 21 + 1 {
         warn!("Incomplete proc/<PID>/stat entry found, skipping...");
         return None;
     }
-    let result = match process_key {
-        ProcessKey::UserSpaceTime => values[11].parse::<u64>().ok()?,
-        ProcessKey::KernelSpaceTime => values[12].parse::<u64>().ok()?,
-        ProcessKey::NumberThreads => values[17].parse::<u64>().ok()?,
-        ProcessKey::VirtualMemorySize => values[20].parse::<u64>().ok()?,
-        ProcessKey::ResidentSetSize => values[21].parse::<u64>().ok()?,
-        ProcessKey::ResidentSetSizeBytes => {
+    let result = match process_metric {
+        ProcessMetric::UserSpaceTime => values[11].parse::<u64>().ok()?,
+        ProcessMetric::KernelSpaceTime => values[12].parse::<u64>().ok()?,
+        ProcessMetric::NumberThreads => values[17].parse::<u64>().ok()?,
+        ProcessMetric::VirtualMemorySize => values[20].parse::<u64>().ok()?,
+        ProcessMetric::ResidentSetSize => values[21].parse::<u64>().ok()?,
+        ProcessMetric::ResidentSetSizeBytes => {
             if page_size == 0 {
                 return None;
             }
             values[21].parse::<u64>().ok()? * page_size
         }
-        ProcessKey::NumberProcesses => return None,
+        ProcessMetric::NumberProcesses => return None,
     };
     Some(result as f64)
 }
@@ -113,41 +105,36 @@ impl ProcessData for Processes {
         report_params: &ReportParams,
         raw_data: Vec<Data>,
     ) -> Result<AperfData> {
-        let mut time_series_data = TimeSeriesData::default();
+        let mut time_series_data_processor =
+            time_series_data_processor_with_max_series_aggregate!(report_params.collection_start);
 
-        // map process field -> process -> series
-        let mut per_field_per_process_series: HashMap<ProcessKey, HashMap<String, Series>> =
-            HashMap::new();
-
-        let time_zero = if let Some(t) = report_params.collection_start {
-            t
-        } else if let Some(first_buffer) = raw_data.first() {
-            match first_buffer {
-                Data::ProcessesRaw(ref value) => value.time,
-                _ => panic!("Invalid Data type in raw file"),
-            }
-        } else {
-            return Ok(AperfData::TimeSeries(time_series_data));
-        };
-
-        let page_size = report_params.page_size;
+        // For each timestamp, it stores all parsed processes data in the format of
+        // Map<pid_name, parsed_data>.
+        let mut parsed_data: Vec<(TimeEnum, HashMap<String, Vec<String>>)> = Vec::new();
+        // Track per process cpu time to filter out the top ones to retain, in the
+        // format of Map<pid_name, (utime, stime)>.
+        let mut per_process_cpu_time: HashMap<String, (f64, f64)> = HashMap::new();
 
         let mut ticks_per_second_option: Option<f64> = None;
-        // Get data into Series format
+
         for buffer in raw_data {
             let raw_value = match buffer {
                 Data::ProcessesRaw(ref value) => value,
                 _ => panic!("Invalid Data type in raw file"),
             };
 
+            // If multiple data were added at the same time diff, only keep the last one
+            // Since processes data is collected once again at the end of collection,
+            // this could happen if the finish stage completed fast.
+            if let Some((last_parsed_time, _)) = parsed_data.last() {
+                if raw_value.time - *last_parsed_time == TimeEnum::TimeDiff(0) {
+                    parsed_data.pop();
+                }
+            }
+
             ticks_per_second_option.get_or_insert(raw_value.ticks_per_second as f64);
 
-            let time: u64 = match raw_value.time - time_zero {
-                TimeEnum::TimeDiff(v) => v,
-                _ => continue,
-            };
-
-            let mut proc_count: u64 = 0;
+            let mut cur_parsed_data: HashMap<String, Vec<String>> = HashMap::new();
 
             for line in raw_value.data.lines() {
                 let open_parenthesis = line.find('(');
@@ -164,101 +151,60 @@ impl ProcessData for Processes {
                     .parse::<u64>()
                     .map_err(|_| anyhow::anyhow!("Failed to parse PID"))?;
                 let name = line[open_pos + 1..close_pos].to_string();
-                let values: Vec<&str> = line[close_pos + 2..].split_whitespace().collect();
-                proc_count += 1;
+                let values: Vec<String> = line[close_pos + 2..]
+                    .split_whitespace()
+                    .map(String::from)
+                    .collect();
 
-                for process_key in ProcessKey::iter() {
-                    let Some(value) = get_process_key_stat(process_key, &values, page_size) else {
-                        continue;
-                    };
+                let process_pid_name = format!("{}_{}", pid, name);
 
-                    let process_pid_name = format!("{}_{}", pid, name);
-                    let per_process_series = per_field_per_process_series
-                        .entry(process_key)
-                        .or_insert(HashMap::new());
-                    let process_series = per_process_series
-                        .entry(process_pid_name.clone())
-                        .or_insert(Series::new(process_pid_name));
-                    process_series.time_diff.push(time);
-                    process_series.values.push(value);
+                let (utime, stime) = match (
+                    get_process_metric_value(
+                        ProcessMetric::UserSpaceTime,
+                        &values,
+                        report_params.page_size,
+                    ),
+                    get_process_metric_value(
+                        ProcessMetric::KernelSpaceTime,
+                        &values,
+                        report_params.page_size,
+                    ),
+                ) {
+                    (Some(utime), Some(stime)) => (utime, stime),
+                    _ => continue,
+                };
+
+                if let Some((max_utime, max_stime)) =
+                    per_process_cpu_time.get_mut(&process_pid_name)
+                {
+                    *max_utime = max_utime.max(utime);
+                    *max_stime = max_stime.max(stime);
+                } else {
+                    per_process_cpu_time.insert(process_pid_name.clone(), (utime, stime));
                 }
+
+                cur_parsed_data.insert(process_pid_name, values);
             }
 
-            let process_count_name = ProcessKey::NumberProcesses.to_string();
-            let per_process_series = per_field_per_process_series
-                .entry(ProcessKey::NumberProcesses)
-                .or_insert(HashMap::new());
-            let process_series = per_process_series
-                .entry(process_count_name.clone())
-                .or_insert(Series::new(process_count_name));
-            process_series.time_diff.push(time);
-            process_series.values.push(proc_count as f64);
+            parsed_data.push((raw_value.time.clone(), cur_parsed_data));
         }
 
         // If the raw data is empty default ticks per second to 1, in which case it should never
         // be used to compute any series values
         let ticks_per_second = ticks_per_second_option.unwrap_or(1.0);
-        // Track total cpu time for filtering top processes
-        let mut process_cpu_time_map: HashMap<String, f64> = HashMap::new();
 
-        // Convert to useful data from stats and calculate total time
-        for (process_key, process_map) in per_field_per_process_series.iter_mut() {
-            for (process_pid_name, series) in process_map.iter_mut() {
-                let mut prev_value = series.values.get(0).copied().unwrap_or(0.0);
-                let mut prev_time = series.time_diff.get(0).copied().unwrap_or(0);
-
-                for i in 0..series.values.len() {
-                    let current_value = series.values[i];
-                    let current_time = series.time_diff[i];
-
-                    let stat = match process_key {
-                        ProcessKey::UserSpaceTime | ProcessKey::KernelSpaceTime => {
-                            // CPU time: represents the CPU time that a process consumes, e.g.
-                            // 3.5 means the process's execution was equivalently scheduled on
-                            // 3 CPUs the whole time and an additional CPU for half of the time.
-                            let value_diff = current_value - prev_value;
-                            let time_diff = current_time - prev_time;
-                            let s = if time_diff > 0 {
-                                value_diff / (ticks_per_second as f64 * time_diff as f64)
-                            } else {
-                                0.0
-                            };
-                            s
-                        }
-                        _ => {
-                            // Other metrics: snapshot value
-                            current_value
-                        }
-                    };
-
-                    if process_key == &ProcessKey::UserSpaceTime
-                        || process_key == &ProcessKey::KernelSpaceTime
-                    {
-                        *process_cpu_time_map
-                            .entry(process_pid_name.clone())
-                            .or_insert(0.0) += stat;
-                    }
-
-                    series.values[i] = stat;
-                    prev_value = current_value;
-                    prev_time = current_time;
-                }
-            }
-        }
-
-        let mut ranking: Vec<(String, f64)> = process_cpu_time_map
+        let mut ranking: Vec<(String, f64)> = per_process_cpu_time
             .iter()
-            .map(|(k, v)| (k.clone(), *v))
+            .map(|(k, v)| (k.clone(), v.0 + v.1))
             .collect();
         ranking.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
         // Only retain the top 16 processes of cpu utilization.
         let mut processes_to_include: Vec<String> =
             ranking.into_iter().take(16).map(|(name, _)| name).collect();
 
-        // Also retain the metrics of the APerf process, located by the saved pid.
-        if let Some(aperf_pid) = report_params.pid {
-            let pid_prefix = format!("{aperf_pid}_");
-            if let Some(aperf_process) = process_cpu_time_map
+        for pid in &report_params.aperf_process_pids {
+            let pid_prefix = format!("{pid}_");
+            if let Some(aperf_process) = per_process_cpu_time
                 .keys()
                 .find(|name| name.starts_with(&pid_prefix))
             {
@@ -268,57 +214,55 @@ impl ProcessData for Processes {
             }
         }
 
-        // Add the selected processes for each metric to time_series_data
-        for (process_key, process_map) in per_field_per_process_series {
-            let mut series_vec = Vec::new();
+        for (time, data) in parsed_data {
+            time_series_data_processor.proceed_to_time(time);
 
-            if process_key == ProcessKey::NumberProcesses {
-                series_vec.extend(process_map.into_values());
-            } else {
-                for process_name in &processes_to_include {
-                    if let Some(series) = process_map.get(process_name) {
-                        series_vec.push(series.clone());
-                    }
-                }
-            }
+            let number_processes_str = ProcessMetric::NumberProcesses.to_string();
+            time_series_data_processor.add_data_point(
+                &number_processes_str,
+                &number_processes_str,
+                data.len() as f64,
+            );
 
-            if !series_vec.is_empty() {
-                let mut max_avg = 0.0;
-                let mut final_stats = Statistics::default();
-                let mut metric_min: f64 = f64::MAX;
-                let mut metric_max: f64 = 0.0;
-
-                for series in &series_vec {
-                    let skip = matches!(
-                        process_key,
-                        ProcessKey::UserSpaceTime | ProcessKey::KernelSpaceTime
-                    ) as usize;
-                    let stats = Statistics::from_values(&series.values[skip..].to_vec());
-                    metric_min = metric_min.min(stats.min);
-                    metric_max = metric_max.max(stats.max);
-                    if stats.avg > max_avg {
-                        max_avg = stats.avg;
-                        final_stats = stats;
-                    }
-                }
-
-                let value_range = (metric_min.floor() as u64, metric_max.ceil() as u64);
-
-                let metric_name = process_key.to_string();
-                let metric = TimeSeriesMetric {
-                    metric_name: metric_name.clone(),
-                    series: series_vec,
-                    stats_series_idx: 0,
-                    value_range,
-                    stats: final_stats,
+            for process in &processes_to_include {
+                let values = match data.get(process) {
+                    Some(values) => values,
+                    None => continue,
                 };
-                time_series_data.metrics.insert(metric_name, metric);
+                for process_metric in ProcessMetric::iter() {
+                    let value = match get_process_metric_value(
+                        process_metric,
+                        values,
+                        report_params.page_size,
+                    ) {
+                        Some(value) => value,
+                        None => continue,
+                    };
+                    match process_metric {
+                        ProcessMetric::UserSpaceTime | ProcessMetric::KernelSpaceTime => {
+                            time_series_data_processor.add_accumulative_data_point(
+                                &process_metric.to_string(),
+                                process,
+                                value / ticks_per_second,
+                            )
+                        }
+                        _ => time_series_data_processor.add_data_point(
+                            &process_metric.to_string(),
+                            process,
+                            value,
+                        ),
+                    };
+                }
             }
         }
 
-        time_series_data.sorted_metric_names = ProcessKey::iter()
-            .map(|process_key| process_key.to_string())
+        let metric_order: Vec<String> = ProcessMetric::iter()
+            .map(|process_metric| process_metric.to_string())
             .collect();
+        let time_series_data = time_series_data_processor
+            .get_time_series_data_with_metric_name_order(
+                metric_order.iter().map(String::as_str).collect(),
+            );
 
         Ok(AperfData::TimeSeries(time_series_data))
     }

@@ -4771,6 +4771,31 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
         description: "The total time in us for APerf to collect all data during one interval.",
         desired: "lower",
       },
+      prepare: {
+        readableName: "Data preparation time",
+        description: "The total time in us spent in each data's pre-collection preparation stage.",
+        desired: "lower",
+      },
+      finish: {
+        readableName: "Data finish time",
+        description: "The total time in us spent in each data's post-collection finish stage.",
+        desired: "lower",
+      },
+      systeminfo: {
+        readableName: "System Info collection time",
+        description: "The total time in us for APerf to collect the System Info data.",
+        desired: "lower",
+      },
+      kernel_config: {
+        readableName: "Kernel Config collection time",
+        description: "The total time in us for APerf to collect the Kernel Config data.",
+        desired: "lower",
+      },
+      sysctl: {
+        readableName: "Sysctl Config collection time",
+        description: "The total time in us for APerf to collect the Sysctl Config data.",
+        desired: "lower",
+      },
       cpu_utilization: {
         readableName: "CPU utilization collection time",
         description: "The total time in us for APerf to collect the CPU utilization data during one interval.",

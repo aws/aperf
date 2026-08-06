@@ -1,10 +1,11 @@
 use aperf::data::common::data_formats::AperfData;
-use aperf::data::processes::{ProcessKey, Processes, ProcessesRaw};
+use aperf::data::processes::{Processes, ProcessesRaw};
 use aperf::data::ProcessData;
 use aperf::data::{Data, TimeEnum};
 use aperf::data_processing::ReportParams;
+use aperf::ProcessMetric;
 use chrono::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use strum::IntoEnumIterator;
 
 /// Page size passed to the processing path via ReportParams. ResidentSetSize is
@@ -138,21 +139,24 @@ fn test_process_processes_raw_data_complex() {
 
     if let AperfData::TimeSeries(time_series_data) = result {
         // Validate structure
-        assert_eq!(time_series_data.metrics.len(), ProcessKey::iter().count());
+        assert_eq!(
+            time_series_data.metrics.len(),
+            ProcessMetric::iter().count()
+        );
         assert_eq!(
             time_series_data.sorted_metric_names.len(),
-            ProcessKey::iter().count()
+            ProcessMetric::iter().count()
         );
 
         // Check each process key metric exists
-        for process_key in ProcessKey::iter() {
+        for process_key in ProcessMetric::iter() {
             let metric_name = process_key.to_string();
             assert!(time_series_data.metrics.contains_key(&metric_name));
 
             let metric = &time_series_data.metrics[&metric_name];
             assert_eq!(metric.metric_name, metric_name);
 
-            if process_key == ProcessKey::NumberProcesses {
+            if process_key == ProcessMetric::NumberProcesses {
                 // System-wide aggregate: a single series with one point per
                 // sample, each equal to the number of live processes (3).
                 assert_eq!(metric.series.len(), 1);
@@ -174,7 +178,7 @@ fn test_process_processes_raw_data_complex() {
         }
 
         // Validate sorted metric names
-        let expected_metrics: Vec<String> = ProcessKey::iter().map(|k| k.to_string()).collect();
+        let expected_metrics: Vec<String> = ProcessMetric::iter().map(|k| k.to_string()).collect();
         assert_eq!(
             time_series_data.sorted_metric_names.len(),
             expected_metrics.len()
@@ -186,8 +190,8 @@ fn test_process_processes_raw_data_complex() {
         }
 
         // Validate all per process data using expected values
-        for process_key in ProcessKey::iter() {
-            if process_key == ProcessKey::NumberProcesses {
+        for process_key in ProcessMetric::iter() {
+            if process_key == ProcessMetric::NumberProcesses {
                 continue;
             }
             let metric_name = process_key.to_string();
@@ -201,7 +205,7 @@ fn test_process_processes_raw_data_complex() {
                     if sample_idx == 0
                         && matches!(
                             process_key,
-                            ProcessKey::UserSpaceTime | ProcessKey::KernelSpaceTime
+                            ProcessMetric::UserSpaceTime | ProcessMetric::KernelSpaceTime
                         )
                     {
                         assert_eq!(
@@ -217,7 +221,7 @@ fn test_process_processes_raw_data_complex() {
                         expected_per_sample_per_process_stats[sample_idx].get(process_name)
                     {
                         let expected_value = match process_key {
-                            ProcessKey::UserSpaceTime => {
+                            ProcessMetric::UserSpaceTime => {
                                 if sample_idx == 0 {
                                     0.0
                                 } else {
@@ -228,7 +232,7 @@ fn test_process_processes_raw_data_complex() {
                                     (delta as f64) / (ticks_per_second as f64 * 2.0)
                                 }
                             }
-                            ProcessKey::KernelSpaceTime => {
+                            ProcessMetric::KernelSpaceTime => {
                                 if sample_idx == 0 {
                                     0.0
                                 } else {
@@ -239,15 +243,17 @@ fn test_process_processes_raw_data_complex() {
                                     (delta as f64) / (ticks_per_second as f64 * 2.0)
                                 }
                             }
-                            ProcessKey::NumberThreads => expected_stats.number_threads as f64,
-                            ProcessKey::VirtualMemorySize => {
+                            ProcessMetric::NumberThreads => expected_stats.number_threads as f64,
+                            ProcessMetric::VirtualMemorySize => {
                                 expected_stats.virtual_memory_size as f64
                             }
-                            ProcessKey::ResidentSetSize => expected_stats.resident_set_size as f64,
-                            ProcessKey::ResidentSetSizeBytes => {
+                            ProcessMetric::ResidentSetSize => {
+                                expected_stats.resident_set_size as f64
+                            }
+                            ProcessMetric::ResidentSetSizeBytes => {
                                 (expected_stats.resident_set_size * PAGE_SIZE) as f64
                             }
-                            ProcessKey::NumberProcesses => unreachable!("skipped above"),
+                            ProcessMetric::NumberProcesses => unreachable!("skipped above"),
                         };
 
                         assert!(
@@ -267,9 +273,9 @@ fn test_process_processes_raw_data_complex() {
         // Validate sorted metric names
         assert_eq!(
             time_series_data.sorted_metric_names.len(),
-            ProcessKey::iter().count()
+            ProcessMetric::iter().count()
         );
-        for process_key in ProcessKey::iter() {
+        for process_key in ProcessMetric::iter() {
             assert!(time_series_data
                 .sorted_metric_names
                 .contains(&process_key.to_string()));
@@ -309,10 +315,13 @@ fn test_process_processes_raw_data_simple() {
         .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {
-        assert_eq!(time_series_data.metrics.len(), ProcessKey::iter().count());
+        assert_eq!(
+            time_series_data.metrics.len(),
+            ProcessMetric::iter().count()
+        );
 
         // Validate all data using expected values
-        for process_key in ProcessKey::iter() {
+        for process_key in ProcessMetric::iter() {
             let metric_name = process_key.to_string();
             let metric = &time_series_data.metrics[&metric_name];
 
@@ -320,7 +329,7 @@ fn test_process_processes_raw_data_simple() {
             let series = &metric.series[0];
             assert_eq!(series.values.len(), 3);
 
-            if process_key == ProcessKey::NumberProcesses {
+            if process_key == ProcessMetric::NumberProcesses {
                 // One live process per sample, so the count is always 1.
                 assert!(series.values.iter().all(|&v| v == 1.0));
                 continue;
@@ -334,7 +343,7 @@ fn test_process_processes_raw_data_simple() {
                     &expected_per_sample_per_process_stats[sample_idx][process_name];
 
                 let expected_value = match process_key {
-                    ProcessKey::UserSpaceTime => {
+                    ProcessMetric::UserSpaceTime => {
                         if sample_idx == 0 {
                             0.0
                         } else {
@@ -344,7 +353,7 @@ fn test_process_processes_raw_data_simple() {
                             (delta as f64) / (ticks_per_second as f64 * 1.0)
                         }
                     }
-                    ProcessKey::KernelSpaceTime => {
+                    ProcessMetric::KernelSpaceTime => {
                         if sample_idx == 0 {
                             0.0
                         } else {
@@ -355,13 +364,13 @@ fn test_process_processes_raw_data_simple() {
                             (delta as f64) / (ticks_per_second as f64 * 1.0)
                         }
                     }
-                    ProcessKey::NumberThreads => expected_stats.number_threads as f64,
-                    ProcessKey::VirtualMemorySize => expected_stats.virtual_memory_size as f64,
-                    ProcessKey::ResidentSetSize => expected_stats.resident_set_size as f64,
-                    ProcessKey::ResidentSetSizeBytes => {
+                    ProcessMetric::NumberThreads => expected_stats.number_threads as f64,
+                    ProcessMetric::VirtualMemorySize => expected_stats.virtual_memory_size as f64,
+                    ProcessMetric::ResidentSetSize => expected_stats.resident_set_size as f64,
+                    ProcessMetric::ResidentSetSizeBytes => {
                         (expected_stats.resident_set_size * PAGE_SIZE) as f64
                     }
-                    ProcessKey::NumberProcesses => unreachable!("skipped above"),
+                    ProcessMetric::NumberProcesses => unreachable!("skipped above"),
                 };
 
                 assert!(
@@ -378,9 +387,9 @@ fn test_process_processes_raw_data_simple() {
         // Validate sorted metric names
         assert_eq!(
             time_series_data.sorted_metric_names.len(),
-            ProcessKey::iter().count()
+            ProcessMetric::iter().count()
         );
-        for process_key in ProcessKey::iter() {
+        for process_key in ProcessMetric::iter() {
             assert!(time_series_data
                 .sorted_metric_names
                 .contains(&process_key.to_string()));
@@ -435,7 +444,10 @@ fn test_process_processes_dynamic_processes() {
 
     if let AperfData::TimeSeries(time_series_data) = result {
         // Should have all process keys
-        assert_eq!(time_series_data.metrics.len(), ProcessKey::iter().count());
+        assert_eq!(
+            time_series_data.metrics.len(),
+            ProcessMetric::iter().count()
+        );
 
         // Check that we have 3 processes (top 16 includes all)
         let user_space_metric = &time_series_data.metrics["user_space_time"];
@@ -455,9 +467,9 @@ fn test_process_processes_dynamic_processes() {
         // Validate sorted metric names
         assert_eq!(
             time_series_data.sorted_metric_names.len(),
-            ProcessKey::iter().count()
+            ProcessMetric::iter().count()
         );
-        for process_key in ProcessKey::iter() {
+        for process_key in ProcessMetric::iter() {
             assert!(time_series_data
                 .sorted_metric_names
                 .contains(&process_key.to_string()));
@@ -498,7 +510,10 @@ fn test_process_processes_top_16_ranking_simple() {
 
     if let AperfData::TimeSeries(time_series_data) = result {
         // Should have all process keys
-        assert_eq!(time_series_data.metrics.len(), ProcessKey::iter().count());
+        assert_eq!(
+            time_series_data.metrics.len(),
+            ProcessMetric::iter().count()
+        );
 
         // Should only have top 16 processes
         let user_space_metric = &time_series_data.metrics["user_space_time"];
@@ -510,7 +525,7 @@ fn test_process_processes_top_16_ranking_simple() {
         }
 
         let number_processes_metric =
-            &time_series_data.metrics[&ProcessKey::NumberProcesses.to_string()];
+            &time_series_data.metrics[&ProcessMetric::NumberProcesses.to_string()];
         assert_eq!(number_processes_metric.series.len(), 1);
         let number_processes_series = &number_processes_metric.series[0];
         assert_eq!(number_processes_series.values.len(), 5);
@@ -519,9 +534,9 @@ fn test_process_processes_top_16_ranking_simple() {
         // Validate sorted metric names
         assert_eq!(
             time_series_data.sorted_metric_names.len(),
-            ProcessKey::iter().count()
+            ProcessMetric::iter().count()
         );
-        for process_key in ProcessKey::iter() {
+        for process_key in ProcessMetric::iter() {
             assert!(time_series_data
                 .sorted_metric_names
                 .contains(&process_key.to_string()));
@@ -590,7 +605,10 @@ fn test_process_processes_top_16_ranking_complex() {
 
     if let AperfData::TimeSeries(time_series_data) = result {
         // Should have all process keys
-        assert_eq!(time_series_data.metrics.len(), ProcessKey::iter().count());
+        assert_eq!(
+            time_series_data.metrics.len(),
+            ProcessMetric::iter().count()
+        );
 
         // Should only have top 16 processes
         let user_space_metric = &time_series_data.metrics["user_space_time"];
@@ -601,36 +619,39 @@ fn test_process_processes_top_16_ranking_complex() {
             assert_eq!(series.values.len(), 5);
         }
 
-        let user_space_metric = &time_series_data.metrics["user_space_time"];
-        let kernel_space_metric = &time_series_data.metrics["kernel_space_time"];
-
-        let mut process_total_cpu: Vec<(String, f64)> = Vec::new();
-        for (i, series) in user_space_metric.series.iter().enumerate() {
-            let kernel_series = &kernel_space_metric.series[i];
-            let process_name = series.series_name.clone();
-
-            let total_user: f64 = series.values.iter().sum();
-            let total_kernel: f64 = kernel_series.values.iter().sum();
-            let total_cpu = total_user + total_kernel;
-
-            process_total_cpu.push((process_name, total_cpu));
-        }
-
-        for i in 1..process_total_cpu.len() {
-            assert!(
-                process_total_cpu[i - 1].1 >= process_total_cpu[i].1,
-                "Processes should be ranked by total CPU usage: {} should be >= {}",
-                process_total_cpu[i - 1].1,
-                process_total_cpu[i].1
-            );
-        }
+        // The included processes are the top 16 by cumulative CPU ticks (the series within
+        // the metric themselves are sorted by name, not by rank). Compute the expected set
+        // from the last (largest, as the counters are monotonic) generated sample.
+        let mut expected_totals: Vec<(String, u64)> = expected_per_sample_per_process_stats
+            .last()
+            .unwrap()
+            .iter()
+            .map(|(name, stats)| {
+                (
+                    name.clone(),
+                    stats.user_space_time + stats.kernel_space_time,
+                )
+            })
+            .collect();
+        expected_totals.sort_by(|a, b| b.1.cmp(&a.1));
+        let expected_included: HashSet<String> = expected_totals
+            .iter()
+            .take(16)
+            .map(|(name, _)| name.clone())
+            .collect();
+        let included: HashSet<String> = user_space_metric
+            .series
+            .iter()
+            .map(|s| s.series_name.clone())
+            .collect();
+        assert_eq!(included, expected_included);
 
         // Validate sorted metric names
         assert_eq!(
             time_series_data.sorted_metric_names.len(),
-            ProcessKey::iter().count()
+            ProcessMetric::iter().count()
         );
-        for process_key in ProcessKey::iter() {
+        for process_key in ProcessMetric::iter() {
             assert!(time_series_data
                 .sorted_metric_names
                 .contains(&process_key.to_string()));
@@ -683,8 +704,8 @@ fn test_process_processes_legacy_page_size_zero() {
     if let AperfData::TimeSeries(time_series_data) = result {
         // The pages metric is present; the bytes variant carries no data on a
         // legacy run, so it is absent from the metrics map.
-        let pages_name = ProcessKey::ResidentSetSize.to_string();
-        let bytes_name = ProcessKey::ResidentSetSizeBytes.to_string();
+        let pages_name = ProcessMetric::ResidentSetSize.to_string();
+        let bytes_name = ProcessMetric::ResidentSetSizeBytes.to_string();
         assert_eq!(pages_name, "resident_set_size");
         assert_eq!(bytes_name, "resident_set_size_bytes");
         assert!(time_series_data.metrics.contains_key(&pages_name));
@@ -725,19 +746,107 @@ fn test_process_processes_rss_bytes_and_pages_coexist() {
         .unwrap();
 
     if let AperfData::TimeSeries(time_series_data) = result {
-        let pages_metric = &time_series_data.metrics[&ProcessKey::ResidentSetSize.to_string()];
+        let pages_metric = &time_series_data.metrics[&ProcessMetric::ResidentSetSize.to_string()];
         for series in &pages_metric.series {
             for &value in &series.values {
                 assert!((value - rss_pages as f64).abs() < 1e-5);
             }
         }
 
-        let bytes_metric = &time_series_data.metrics[&ProcessKey::ResidentSetSizeBytes.to_string()];
+        let bytes_metric =
+            &time_series_data.metrics[&ProcessMetric::ResidentSetSizeBytes.to_string()];
         for series in &bytes_metric.series {
             for &value in &series.values {
                 assert!((value - (rss_pages * PAGE_SIZE) as f64).abs() < 1e-5);
             }
         }
+    } else {
+        panic!("Expected TimeSeries data");
+    }
+}
+
+/// Builds one ProcessesRaw snapshot at `base + offset_ms` with a single process line.
+fn processes_raw_at_ms(offset_ms: i64, utime: u64, stime: u64) -> Data {
+    let base_time = Utc.with_ymd_and_hms(2023, 1, 1, 0, 0, 0).unwrap();
+    Data::ProcessesRaw(ProcessesRaw {
+        time: TimeEnum::DateTime(base_time + chrono::Duration::milliseconds(offset_ms)),
+        ticks_per_second: 100,
+        data: format!(
+            "1 (proc) S 0 0 0 0 0 0 0 0 0 0 {} {} 0 0 0 0 1 0 0 1000000 500000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0",
+            utime, stime
+        ),
+    })
+}
+
+#[test]
+fn test_process_processes_duplicate_time_diff_keeps_last() {
+    // The finish-stage extra collection can land within the same rounded second as the
+    // last interval sample; only the later snapshot must be kept.
+    let raw_data = vec![
+        processes_raw_at_ms(0, 100, 50),
+        processes_raw_at_ms(1000, 200, 100),
+        // 1300ms rounds to the same time_diff (1s) as the 1000ms sample: replaces it.
+        processes_raw_at_ms(1300, 300, 150),
+    ];
+
+    let mut processes = Processes::new();
+    let result = processes
+        .process_raw_data(&report_params_with_page_size(PAGE_SIZE), raw_data)
+        .unwrap();
+
+    if let AperfData::TimeSeries(time_series_data) = result {
+        let number_threads_metric =
+            &time_series_data.metrics[&ProcessMetric::NumberThreads.to_string()];
+        let series = &number_threads_metric.series[0];
+        // Two snapshots survive (0s and the deduped 1s), each contributing one point.
+        assert_eq!(series.time_diff, vec![0, 1]);
+
+        // The kept 1s snapshot is the LAST one (ticks 300+150): the user time rate is
+        // (300-100)/100 ticks-per-sec / 1s elapsed = 2.0 cores, not (200-100)/100 = 1.0.
+        let user_metric = &time_series_data.metrics[&ProcessMetric::UserSpaceTime.to_string()];
+        let user_series = &user_metric.series[0];
+        assert_eq!(user_series.values, vec![0.0, 2.0]);
+    } else {
+        panic!("Expected TimeSeries data");
+    }
+}
+
+#[test]
+fn test_process_processes_aperf_pids_retained_beyond_top_16() {
+    // 20 busy processes + one idle APerf process (pid 9999). The APerf process would
+    // never make the top-16 CPU ranking, but must be retained via aperf_process_pids.
+    let mut expected_per_sample_per_process_stats = Vec::new();
+    for sample in 0..3u64 {
+        let mut sample_stats = HashMap::new();
+        for proc_id in 1..=20u64 {
+            let mut stats = ExpectedProcessStats::default();
+            stats.user_space_time = 10000 + sample * proc_id * 100;
+            stats.kernel_space_time = 5000 + sample * proc_id * 50;
+            sample_stats.insert(format!("{}_busy", proc_id), stats);
+        }
+        let mut aperf_stats = ExpectedProcessStats::default();
+        aperf_stats.user_space_time = 1 + sample; // nearly idle
+        aperf_stats.kernel_space_time = 1;
+        sample_stats.insert("9999_aperf".to_string(), aperf_stats);
+        expected_per_sample_per_process_stats.push(sample_stats);
+    }
+
+    let raw_data = generate_processes_raw_data(&expected_per_sample_per_process_stats, 1, 100);
+
+    let mut params = report_params_with_page_size(PAGE_SIZE);
+    params.aperf_process_pids = vec![9999];
+
+    let mut processes = Processes::new();
+    let result = processes.process_raw_data(&params, raw_data).unwrap();
+
+    if let AperfData::TimeSeries(time_series_data) = result {
+        let user_metric = &time_series_data.metrics[&ProcessMetric::UserSpaceTime.to_string()];
+        // Top 16 busy processes + the retained APerf process.
+        assert_eq!(user_metric.series.len(), 17);
+        assert!(user_metric
+            .series
+            .iter()
+            .any(|s| s.series_name == "9999_aperf"));
     } else {
         panic!("Expected TimeSeries data");
     }
