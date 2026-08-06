@@ -531,9 +531,11 @@ fn test_efa_many_samples_multi_driver() {
 
     assert_eq!(efa0.values.len(), 100);
     assert_eq!(efa1.values.len(), 100);
+    // Counters grow by 1000/2000 per 2-second sample; accumulative deltas are
+    // normalized by the elapsed time, so the per-second rates are 500/1000.
     for i in 1..100 {
-        assert_eq!(efa0.values[i], 1000.0, "efa0 tx_bytes sample {}", i);
-        assert_eq!(efa1.values[i], 2000.0, "efa1 tx_bytes sample {}", i);
+        assert_eq!(efa0.values[i], 500.0, "efa0 tx_bytes sample {}", i);
+        assert_eq!(efa1.values[i], 1000.0, "efa1 tx_bytes sample {}", i);
     }
 }
 

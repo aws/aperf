@@ -396,7 +396,7 @@ fn test_decreasing_counter() {
             data: "           CPU0       CPU1\n  0:         50        100\n".to_string(),
         },
         InterruptDataRaw {
-            time: TimeEnum::DateTime(base_time + chrono::Duration::seconds(1)),
+            time: TimeEnum::DateTime(base_time + chrono::Duration::seconds(2)),
             data: "           CPU0       CPU1\n  40:         80        130\n".to_string(),
         },
     ];

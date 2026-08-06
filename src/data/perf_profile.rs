@@ -16,6 +16,7 @@ use {
     crate::data_collection::InitParams,
     crate::profiling::perf::parser::build_perf_profiler_data,
     crate::PDError,
+    crate::{run_command, run_command_and_wait},
     chrono::Utc,
     inferno::collapse::{perf::Folder, Collapse},
     inferno::flamegraph::{self, Direction, Options},
@@ -23,7 +24,7 @@ use {
     nix::{sys::signal, unistd, unistd::Pid},
     std::fs::File,
     std::io::Write,
-    std::process::{Command, Stdio},
+    std::process::Stdio,
     std::str::FromStr,
     std::{process::Child, sync::Mutex},
 };
@@ -121,9 +122,9 @@ impl CollectData for PerfProfileRaw {
 
         *PROFILE_START_TIME_MS.lock().unwrap() = Utc::now().timestamp_millis();
 
-        match Command::new("perf")
-            .stdout(Stdio::null())
-            .args([
+        match run_command(
+            "perf",
+            [
                 "record",
                 "-a",
                 "-q",
@@ -139,9 +140,10 @@ impl CollectData for PerfProfileRaw {
                 "--",
                 "sleep",
                 &get_sub_process_duration_seconds(init_params).to_string(),
-            ])
-            .spawn()
-        {
+            ],
+            Stdio::null(),
+            Stdio::inherit(),
+        ) {
             Err(e) => Err(PDError::DependencyError(format!(
                 "Skipping Perf profile collection due to: {}",
                 e
@@ -182,16 +184,19 @@ impl CollectData for PerfProfileRaw {
 
         debug!("Running Perf inject...");
         let perf_jit_loc = init_params.run_data_dir.join("perf.data.jit");
-        let out_jit = Command::new("perf")
-            .args([
+        let out_jit = run_command_and_wait(
+            "perf",
+            [
                 "inject",
                 "-j",
                 "-i",
                 &raw_perf_on_cpu_profile_path(&init_params.run_data_dir).to_string_lossy(),
                 "-o",
                 perf_jit_loc.to_str().unwrap(),
-            ])
-            .status();
+            ],
+            "perf-inject",
+            None,
+        );
 
         let fg_out = File::create(init_params.run_data_dir.join("flamegraph.svg"))?;
         let reverse_fg_out = File::create(init_params.run_data_dir.join("reverse-flamegraph.svg"))?;
@@ -204,12 +209,13 @@ impl CollectData for PerfProfileRaw {
             }
             Ok(_) => {
                 debug!("Creating flamegraph...");
-                // TODO: extract metadata from perf record and generate script -> ProfilingData
                 let script_loc = init_params.run_data_dir.join("script.out");
-                let out = Command::new("perf")
-                    .stdout(File::create(&script_loc)?)
-                    .args(["script", "-f", "-i", perf_jit_loc.to_str().unwrap()])
-                    .output();
+                let out = run_command_and_wait(
+                    "perf",
+                    ["script", "-f", "-i", perf_jit_loc.to_str().unwrap()],
+                    "perf-script",
+                    Some(&script_loc),
+                );
                 match out {
                     Err(e) => {
                         let out = format!("Perf script failed due to: {}", e);

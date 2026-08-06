@@ -17,6 +17,7 @@ use {crate::data::CollectData, crate::data_collection::InitParams};
 #[cfg(feature = "hotline")]
 use {
     crate::data::common::utils::get_sub_process_duration_seconds,
+    crate::register_sub_process_pid,
     libc::{_exit, fork, geteuid, killpg, setpgid, waitpid, SIGTERM},
     log::{info, warn},
     std::time::Instant,
@@ -196,6 +197,7 @@ impl CollectData for HotlineRaw {
                     // Parent process
                     self.pid = pid;
                     self.launched = true;
+                    register_sub_process_pid(pid as u32);
                     Ok(())
                 }
             }

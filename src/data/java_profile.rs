@@ -18,13 +18,14 @@ use {
     crate::data_collection::InitParams,
     crate::profiling::jfr,
     crate::{get_data_name_from_type, PDError},
+    crate::{run_command, run_command_and_wait},
     log::debug,
     nix::{sys::signal, unistd::Pid},
     serde_json::Value,
     std::fs::File,
     std::io::Write,
     std::path::PathBuf,
-    std::process::{Child, Command},
+    std::process::{Child, Stdio},
     std::str::FromStr,
     std::sync::Mutex,
 };
@@ -68,8 +69,9 @@ impl JavaProfileRaw {
         tmp_dir: &PathBuf,
     ) -> Result<()> {
         for jid in &jids {
-            match Command::new("asprof")
-                .args([
+            match run_command(
+                "asprof",
+                [
                     "-d",
                     &duration.to_string(),
                     "-o",
@@ -89,9 +91,10 @@ impl JavaProfileRaw {
                         .join(format!("{}-java-profile-{}.jfr", run_name, jid))
                         .to_string_lossy(),
                     jid.as_str(),
-                ])
-                .spawn()
-            {
+                ],
+                Stdio::inherit(),
+                Stdio::inherit(),
+            ) {
                 Err(e) => {
                     return Err(PDError::DependencyError(format!(
                         "'asprof' command failed. {}",
@@ -126,7 +129,7 @@ impl JavaProfileRaw {
 
     fn update_process_map(&mut self) -> Result<String, PDError> {
         debug!("Running jps (may incur utilization spike)...");
-        let jps_cmd = Command::new("jps").output();
+        let jps_cmd = run_command_and_wait("jps", std::iter::empty::<&str>(), "jps", None);
         /*
         Output of jps:
         lvmid [ classname | JARfilename | "Unknown"]
@@ -155,7 +158,7 @@ impl JavaProfileRaw {
     }
 
     fn launch_pgrep(&mut self) -> Result<Vec<String>, PDError> {
-        let pgrep_cmd = Command::new("pgrep").arg("java").output();
+        let pgrep_cmd = run_command_and_wait("pgrep", ["java"], "pgrep", None);
         match pgrep_cmd {
             Ok(pgrep_out) => {
                 let pgrep_str = String::from_utf8(pgrep_out.stdout).unwrap();
@@ -176,7 +179,7 @@ impl JavaProfileRaw {
 impl CollectData for JavaProfileRaw {
     fn prepare_data_collector(&mut self, init_params: &InitParams) -> Result<()> {
         // Check if asprof is installed
-        match Command::new("asprof").args(["--version"]).output() {
+        match run_command_and_wait("asprof", ["--version"], "asprof", None) {
             Ok(_) => {},
             Err(e) => return Err(PDError::DependencyError(format!(
                 "'asprof' command failed. Ensure it is installed and refer to DEPENDENCIES documentation for more info. Error msg: {}",
@@ -291,16 +294,18 @@ impl CollectData for JavaProfileRaw {
                     "jdk.JVMInformation",
                     "jdk.NativeLibrary",
                 ];
-                let metadata_json = match Command::new("jfr")
-                    .args([
+                let metadata_json = match run_command_and_wait(
+                    "jfr",
+                    [
                         "print",
                         "--json",
                         "--events",
                         &metadata_events.join(","),
                         &jfr_path.to_string_lossy(),
-                    ])
-                    .output()
-                {
+                    ],
+                    "jfr-print",
+                    None,
+                ) {
                     Err(e) => {
                         error!("'jfr' metadata extraction failed for {}: {}", key, e);
                         Value::Null
@@ -325,17 +330,19 @@ impl CollectData for JavaProfileRaw {
                         .run_data_dir
                         .join(format!("java-profile-{}-{}.html", key, metric));
 
-                    match Command::new("jfrconv")
-                        .args([
+                    match run_command_and_wait(
+                        "jfrconv",
+                        [
                             &format!("--{metric}"),
                             "-o",
                             "heatmap",
                             "--dot",
                             &jfr_path.to_string_lossy(),
                             html_path.to_str().unwrap(),
-                        ])
-                        .output()
-                    {
+                        ],
+                        "jfrconv",
+                        None,
+                    ) {
                         Err(e) => {
                             error!(
                                 "'jfrconv' command failed for {} with metric {}: {}",

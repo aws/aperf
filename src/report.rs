@@ -96,7 +96,12 @@ impl RunsInfo {
         match InitParams::from_json(&run_dir_path) {
             Ok(meta_data) => {
                 report_params.pmu_counter_mode = meta_data.pmu_counter_mode;
-                report_params.pid = meta_data.pid;
+                if let Some(aperf_pid) = meta_data.pid {
+                    report_params.aperf_process_pids.push(aperf_pid);
+                }
+                for sub_process_pid in meta_data.sub_process_pids {
+                    report_params.aperf_process_pids.push(sub_process_pid);
+                }
                 report_params.page_size = meta_data.page_size;
                 if let Some(collection_start) = meta_data.collection_start {
                     report_params.collection_start = Some(collection_start);
@@ -469,6 +474,7 @@ fn generate_report_files(runs_info: RunsInfo) {
     for run_name in &runs_info.run_names {
         data_processing_engine.process_raw_data(run_name).unwrap();
     }
+    data_processing_engine.post_process_data();
 
     /* Generate run.js, containing run name and metadata (currently only start and end wall time) */
     let run_js_path = processed_data_js_dir.join("runs.js");
@@ -521,8 +527,6 @@ fn generate_report_files(runs_info: RunsInfo) {
     JS_DIR
         .extract(&report_dir)
         .expect("Failed to copy frontend files");
-
-    data_processing_engine.post_process_data();
 
     info!("Writing processed data into report");
     for data_name in data_processing_engine.all_data_names() {

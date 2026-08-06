@@ -21,7 +21,7 @@ fn setup_test_env() -> (TempDir, PathBuf, PathBuf, ReportParams) {
         run_name: "test_run".to_string(),
         collection_start: None,
         pmu_counter_mode: String::new(),
-        pid: None,
+        aperf_process_pids: Vec::new(),
         page_size: 0,
     };
 

@@ -25,8 +25,8 @@ impl TimeSeriesDataAggregateMode {
 pub struct TimeSeriesDataProcessor {
     // For logging purposes
     data_name: &'static str,
-    // Store the data value at the previous snapshot - for accumulative data
-    prev_data_points: HashMap<String, HashMap<String, f64>>,
+    // Store the data value at the previous snapshot along with its time_diff - for accumulative data
+    prev_data_points: HashMap<String, HashMap<String, (f64, u64)>>,
     // Map<metric name, Map<series name, series>> for quick access of a series
     per_metric_series: HashMap<String, HashMap<String, Series>>,
     // Map<metric name, (max value, min value)> for the eventual computation of the value range
@@ -195,16 +195,16 @@ impl TimeSeriesDataProcessor {
         match self
             .prev_data_points
             .entry(metric_name.to_string())
-            .or_insert(HashMap::new())
-            .insert(series_name.to_string(), data_value)
+            .or_default()
+            .insert(series_name.to_string(), (data_value, self.cur_time_diff))
         {
-            Some(prev_value) => {
-                if prev_value > data_value {
-                    // In case there are a lot of decreases, we don't want to pollute the logs
-                    // so only use debug here and warn the total number of decreases at the end
+            Some((prev_value, prev_time_diff)) => {
+                if prev_value > data_value || self.cur_time_diff <= prev_time_diff {
+                    // In case there are a lot of invalid data, we don't want to pollute the logs
+                    // so only use debug here and warn the total number of decreases at the end.
                     debug!(
-                        "Unexpected decreasing of accumulative data {}.{}.{}: from {} to {}",
-                        self.data_name, metric_name, series_name, prev_value, data_value
+                        "Invalid computation of accumulative data delta for {}.{}.{}: from ({}, {}s) to ({}, {}s)",
+                        self.data_name, metric_name, series_name, prev_value, prev_time_diff, data_value, self.cur_time_diff
                     );
                     let error_counts = self
                         .decreasing_accumulative_data
@@ -213,7 +213,7 @@ impl TimeSeriesDataProcessor {
                     *error_counts += 1;
                     return None;
                 }
-                Some(data_value - prev_value)
+                Some((data_value - prev_value) / (self.cur_time_diff - prev_time_diff) as f64)
             }
             None => Some(if self.ignore_first_accumulative_value {
                 0.0
@@ -296,7 +296,7 @@ impl TimeSeriesDataProcessor {
         // Log any unexpected decreases of accumulative data
         for (data_key, count) in self.decreasing_accumulative_data {
             warn!(
-                "{}.{}: skipped {} data points due to unexpected decrease of accumulative data.",
+                "{}.{}: skipped {} data points due to unexpected decrease of accumulative data or invalid time diff.",
                 self.data_name, data_key, count
             );
         }
@@ -1260,30 +1260,57 @@ mod tests {
 
     #[test]
     fn test_get_delta_increasing_returns_delta() {
+        // The delta is normalized by the elapsed time between the two values.
+        let times = make_times(4, 1);
         let mut p = make_processor(TimeSeriesDataAggregateMode::Average);
+        p.proceed_to_time(times[0]);
         p.get_delta_and_set_previous_value("m", "s", 100.0);
+        p.proceed_to_time(times[1]);
         assert_eq!(
             p.get_delta_and_set_previous_value("m", "s", 350.0),
             Some(250.0)
         );
+        // Two seconds elapsed until the next value: the delta is halved.
+        p.proceed_to_time(times[3]);
+        assert_eq!(
+            p.get_delta_and_set_previous_value("m", "s", 550.0),
+            Some(100.0)
+        );
+    }
+
+    #[test]
+    fn test_get_delta_same_time_diff_returns_none() {
+        // A second value at the same time_diff cannot produce a rate (no time elapsed).
+        let times = make_times(1, 1);
+        let mut p = make_processor(TimeSeriesDataAggregateMode::Average);
+        p.proceed_to_time(times[0]);
+        p.get_delta_and_set_previous_value("m", "s", 100.0);
+        assert_eq!(p.get_delta_and_set_previous_value("m", "s", 350.0), None);
     }
 
     #[test]
     fn test_get_delta_decreasing_returns_none() {
+        let times = make_times(2, 1);
         let mut p = make_processor(TimeSeriesDataAggregateMode::Average);
+        p.proceed_to_time(times[0]);
         p.get_delta_and_set_previous_value("m", "s", 100.0);
+        p.proceed_to_time(times[1]);
         assert_eq!(p.get_delta_and_set_previous_value("m", "s", 50.0), None);
     }
 
     #[test]
     fn test_get_delta_after_decrease_uses_decreased_value() {
+        let times = make_times(3, 1);
         let mut p = make_processor(TimeSeriesDataAggregateMode::Average);
+        p.proceed_to_time(times[0]);
         p.get_delta_and_set_previous_value("m", "s", 100.0);
+        p.proceed_to_time(times[1]);
         p.get_delta_and_set_previous_value("m", "s", 30.0); // decrease, but 30 is stored
+        p.proceed_to_time(times[2]);
         assert_eq!(
             p.get_delta_and_set_previous_value("m", "s", 80.0),
             Some(50.0)
-        ); // 80-30
+        ); // (80-30) / 1s
     }
 
     // =======================================================================

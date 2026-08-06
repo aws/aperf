@@ -13,6 +13,7 @@ use std::time::Instant;
 use {
     crate::data::processes::ProcessesRaw,
     crate::data::Data,
+    crate::sub_process_pids,
     crate::{aperf_runlog_file_path, data_file_path, get_data_name_from_type},
     crate::{aperf_stats_add, aperf_stats_measure, aperf_stats_proceed_to_next_stats},
     nix::poll::{poll, PollFd, PollFlags, PollTimeout},
@@ -169,8 +170,9 @@ impl DataCollectionEngine {
 
                     let cur_collection_time = cur_collection_end - cur_collection_start;
                     aperf_stats_add(
-                        "aperf-collect".to_string(),
-                        cur_collection_time.as_micros() as u64,
+                        "aperf".to_string(),
+                        "collect".to_string(),
+                        cur_collection_time.as_micros() as f64,
                     );
                     debug!("Collection time: {:?}", cur_collection_time);
 
@@ -213,6 +215,12 @@ impl DataCollectionEngine {
             &self.init_params.runlog,
             aperf_runlog_file_path(&self.init_params.run_data_dir),
         )?;
+
+        // Save the PIDs of all long-running subprocesses launched during this run,
+        // so that report processing can retain their performance data from
+        // processes data. All subprocess launches (prepare and collect stages)
+        // happen before this point.
+        self.init_params.sub_process_pids = sub_process_pids();
 
         // Persist meta_data once, at the end of the recording. This captures the final
         // InitParams that can be read during report generation.
@@ -275,44 +283,64 @@ impl DataCollector {
     }
 
     pub fn prepare_data_collector(&mut self, init_params: &InitParams) -> Result<()> {
-        aperf_stats_measure(format!("{}-prepare", self.data_name), || -> Result<()> {
-            self.data.prepare_data_collector(init_params)?;
-            Ok(())
-        })?;
+        aperf_stats_measure(
+            "prepare".to_string(),
+            self.data_name.to_string(),
+            || -> Result<()> {
+                self.data.prepare_data_collector(init_params)?;
+                Ok(())
+            },
+        )?;
         Ok(())
     }
 
     pub fn collect_data(&mut self, init_params: &InitParams) -> Result<()> {
-        let aperf_stat_name = format!(
-            "{}-{}collect",
-            self.data_name,
-            if self.is_static() { "static_" } else { "" }
-        );
-        aperf_stats_measure(aperf_stat_name, || -> Result<()> {
-            self.data.collect_data(init_params)?;
-            Ok(())
-        })?;
+        let operation_name = if self.is_static() {
+            "static_collect"
+        } else {
+            "collect"
+        }
+        .to_string();
+
+        aperf_stats_measure(
+            self.data_name.to_string(),
+            operation_name,
+            || -> Result<()> {
+                self.data.collect_data(init_params)?;
+                Ok(())
+            },
+        )?;
         Ok(())
     }
 
     pub fn write_to_file(&mut self) -> Result<()> {
-        let aperf_stat_name = format!(
-            "{}-{}write",
-            self.data_name,
-            if self.is_static() { "static_" } else { "" }
-        );
-        aperf_stats_measure(aperf_stat_name, || -> Result<()> {
-            bincode::serialize_into(&mut self.data_file, &self.data)?;
-            Ok(())
-        })?;
+        let operation_name = if self.is_static() {
+            "static_write"
+        } else {
+            "write"
+        }
+        .to_string();
+
+        aperf_stats_measure(
+            self.data_name.to_string(),
+            operation_name,
+            || -> Result<()> {
+                bincode::serialize_into(&mut self.data_file, &self.data)?;
+                Ok(())
+            },
+        )?;
         Ok(())
     }
 
     pub fn finish_data_collection(&mut self, init_params: &InitParams) -> Result<()> {
-        aperf_stats_measure(format!("{}-finish", self.data_name), || -> Result<()> {
-            self.data.finish_data_collection(init_params)?;
-            Ok(())
-        })?;
+        aperf_stats_measure(
+            "finish".to_string(),
+            self.data_name.to_string(),
+            || -> Result<()> {
+                self.data.finish_data_collection(init_params)?;
+                Ok(())
+            },
+        )?;
         Ok(())
     }
 }
@@ -353,12 +381,13 @@ pub struct InitParams {
     /// for archives produced by versions of aperf that did not record this.
     #[serde(default)]
     pub pid: Option<u32>,
+    /// The PIDs of all long-running processes whose lifetime persists through
+    /// the collection period.
+    pub sub_process_pids: HashSet<u32>,
     /// System page size in bytes (sysconf(_SC_PAGESIZE)) at collection time,
     /// used to convert process ResidentSetSize from pages to bytes.
     #[serde(default)]
     pub page_size: u64,
-    /// The PIDs of all processes launched during data collection.
-    pub sub_process_pids: HashSet<u32>,
     /// The signal that ends the collection. An empty string means the collection
     /// followed the specified period and ended naturally.
     pub end_signal: String,

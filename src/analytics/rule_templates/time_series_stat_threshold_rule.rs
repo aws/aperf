@@ -10,6 +10,7 @@ use std::fmt::Formatter;
 pub struct TimeSeriesStatThresholdRule {
     pub rule_name: &'static str,
     pub metric_name: &'static str,
+    pub series_name: Option<&'static str>,
     pub stat: Stat,
     pub comparator: Comparator,
     pub threshold: f64,
@@ -31,6 +32,7 @@ macro_rules! time_series_stat_threshold {
             TimeSeriesStatThresholdRule{
                 rule_name: $rule_name,
                 metric_name: $metric_name,
+                series_name: None,
                 stat: $stat,
                 comparator: $comparator,
                 threshold: $threshold,
@@ -41,6 +43,33 @@ macro_rules! time_series_stat_threshold {
     };
 }
 pub(crate) use time_series_stat_threshold;
+
+macro_rules! time_series_stat_threshold_for_series {
+    {
+        name: $rule_name:literal,
+        metric: $metric_name:literal,
+        series: $series_name:literal,
+        stat: $stat:path,
+        comparator: $comparator:path,
+        threshold: $threshold:literal,
+        score: $score:expr,
+        message: $message:literal,
+    } => {
+        AnalyticalRule::TimeSeriesStatThresholdRule(
+            TimeSeriesStatThresholdRule{
+                rule_name: $rule_name,
+                metric_name: $metric_name,
+                series_name: Some($series_name),
+                stat: $stat,
+                comparator: $comparator,
+                threshold: $threshold,
+                score: $score.as_f64(),
+                message: $message,
+            }
+        )
+    };
+}
+pub(crate) use time_series_stat_threshold_for_series;
 
 impl fmt::Display for TimeSeriesStatThresholdRule {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -60,22 +89,32 @@ impl Analyze for TimeSeriesStatThresholdRule {
         processed_data_accessor: &mut ProcessedDataAccessor,
     ) {
         for run_name in processed_data.runs.keys() {
-            let metric_stat = match processed_data_accessor.time_series_metric_stats(
-                processed_data,
-                run_name,
-                &self.metric_name,
-            ) {
-                Some(metric_stats) => self.stat.get_stat(&metric_stats),
+            let series_stats = match self.series_name {
+                Some(series_name) => processed_data_accessor.time_series_series_stats(
+                    processed_data,
+                    run_name,
+                    &self.metric_name,
+                    series_name,
+                ),
+                None => processed_data_accessor.time_series_metric_stats(
+                    processed_data,
+                    run_name,
+                    &self.metric_name,
+                ),
+            };
+
+            let stats = match series_stats {
+                Some(series_stats) => self.stat.get_stat(&series_stats),
                 None => continue,
             };
 
-            if self.comparator.compare(metric_stat, self.threshold) {
-                let finding_score = compute_finding_score(metric_stat, self.threshold, self.score);
+            if self.comparator.compare(stats, self.threshold) {
+                let finding_score = compute_finding_score(stats, self.threshold, self.score);
                 let finding_description = format!(
                     "The {} in {} is {}.",
                     self.stat,
                     run_name,
-                    formatted_number_string(metric_stat),
+                    formatted_number_string(stats),
                 );
 
                 data_findings.insert_finding(

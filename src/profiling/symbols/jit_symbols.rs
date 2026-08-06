@@ -1,11 +1,11 @@
 use crate::profiling::symbols::{resolve_symbol, ResolvedSymbol, SymbolTableEntry};
+use crate::run_command_and_wait;
 use anyhow::Result;
 use log::debug;
 use std::{
     fs::File,
     io::{BufRead, BufReader},
     path::PathBuf,
-    process::{Command, Stdio},
 };
 
 /// Store all JIT symbols created by application runtimes to resolve an address.
@@ -87,14 +87,13 @@ impl JitSymbols {
 /// any reason, we silently continue — the caller will fall back to leaving frames
 /// unresolved.
 fn create_hotspot_jvm_perf_map(pid: i32) {
-    let result = Command::new("jcmd")
-        .args([&pid.to_string(), "Compiler.perfmap"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
+    let result = run_command_and_wait("jcmd", [&pid.to_string(), "Compiler.perfmap"], "jcmd", None);
     match result {
-        Ok(s) if s.success() => debug!("jcmd Compiler.perfmap succeeded for pid {pid}"),
-        Ok(s) => debug!("jcmd Compiler.perfmap exited with {s} for pid {pid}"),
+        Ok(out) if out.status.success() => debug!("jcmd Compiler.perfmap succeeded for pid {pid}"),
+        Ok(out) => debug!(
+            "jcmd Compiler.perfmap exited with {} for pid {pid}",
+            out.status
+        ),
         Err(e) => debug!("jcmd Compiler.perfmap failed for pid {pid}: {e}"),
     }
 }

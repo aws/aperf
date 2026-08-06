@@ -29,9 +29,9 @@ pub struct ProcessedDataAccessor {
     per_run_start_time: HashMap<String, TimeEnum>,
     /// Wall-clock end of every run's `collect_data_serial`.
     per_run_end_time: HashMap<String, TimeEnum>,
-    /// The cache for a metric's stat within the time range
-    /// (since stat computation is costly).
-    time_series_metric_stat_cache: HashMap<(String, String), Statistics>,
+    /// The cache for a metric's series stat within the time range, in the format of
+    /// (run_name, metric_name, series_name), to mitigate the computation cost of stats.
+    time_series_metric_stat_cache: HashMap<(String, String, String), Statistics>,
     /// Cache of whether time range has been applied per run per profiler.
     profiler_time_range_cache: HashMap<String, HashMap<String, bool>>,
 }
@@ -125,6 +125,24 @@ impl ProcessedDataAccessor {
         let time_series_data = get_time_series_data(processed_data, run_name)?;
         Some(self.get_or_compute_time_series_metric_stats(
             time_series_data.metrics.get(metric_name)?,
+            None,
+            run_name,
+        ))
+    }
+
+    /// Returns the stat of a particular series in the time-series metric within the time range.
+    /// The computed stat will be cached.
+    pub fn time_series_series_stats(
+        &mut self,
+        processed_data: &ProcessedData,
+        run_name: &str,
+        metric_name: &str,
+        series_name: &str,
+    ) -> Option<Statistics> {
+        let time_series_data = get_time_series_data(processed_data, run_name)?;
+        Some(self.get_or_compute_time_series_metric_stats(
+            time_series_data.metrics.get(metric_name)?,
+            Some(series_name),
             run_name,
         ))
     }
@@ -216,8 +234,11 @@ impl ProcessedDataAccessor {
                     }
                     first_metric = false;
                     write!(buf, "{}:", serde_json::to_string(metric_name).unwrap()).unwrap();
-                    let stats =
-                        self.get_or_compute_time_series_metric_stats(time_series_metric, run_name);
+                    let stats = self.get_or_compute_time_series_metric_stats(
+                        time_series_metric,
+                        None,
+                        run_name,
+                    );
                     write_time_series_metric_json_string(
                         &mut buf,
                         time_series_metric,
@@ -250,7 +271,8 @@ impl ProcessedDataAccessor {
         run_name: &str,
     ) -> String {
         let mut buf = String::new();
-        let stats = self.get_or_compute_time_series_metric_stats(time_series_metric, run_name);
+        let stats =
+            self.get_or_compute_time_series_metric_stats(time_series_metric, None, run_name);
         write_time_series_metric_json_string(
             &mut buf,
             time_series_metric,
@@ -415,22 +437,38 @@ impl ProcessedDataAccessor {
 
     /// Retrieves the stat of a time-series metric within the time range from the cache, or,
     /// if it does not exist in the cache, computes the stat and stores it in the cache.
+    /// If the series name is specified, the stat of the particular series is computed.
     fn get_or_compute_time_series_metric_stats(
         &mut self,
         time_series_metric: &TimeSeriesMetric,
+        series_name: Option<&str>,
         run_name: &str,
     ) -> Statistics {
-        let cache_key = (run_name.to_string(), time_series_metric.metric_name.clone());
+        let cache_key = (
+            run_name.to_string(),
+            time_series_metric.metric_name.clone(),
+            series_name.map_or(String::new(), |s| s.to_string()),
+        );
         if let Some(stats) = self.time_series_metric_stat_cache.get(&cache_key) {
             return stats.clone();
         }
+
         let from_time = self.per_run_from_time.get(run_name).copied();
         let to_time = self.per_run_to_time.get(run_name).copied();
         let run_duration_seconds = self.run_duration_seconds(run_name);
-        let stats = if let Some(stats_series) = time_series_metric
-            .series
-            .get(time_series_metric.stats_series_idx)
-        {
+
+        let series = if let Some(series_name) = series_name {
+            time_series_metric
+                .series
+                .iter()
+                .find(|&series| series.series_name == series_name)
+        } else {
+            time_series_metric
+                .series
+                .get(time_series_metric.stats_series_idx)
+        };
+
+        let stats = if let Some(stats_series) = series {
             let (start_idx, end_idx) = compute_time_diff_index(
                 &stats_series.time_diff,
                 from_time,
@@ -1137,9 +1175,11 @@ mod tests {
         )]);
         let mut accessor = ProcessedDataAccessor::new();
         let _ = accessor.time_series_metric_stats(&pd, "run1", "cpu");
-        assert!(accessor
-            .time_series_metric_stat_cache
-            .contains_key(&("run1".to_string(), "cpu".to_string())));
+        assert!(accessor.time_series_metric_stat_cache.contains_key(&(
+            "run1".to_string(),
+            "cpu".to_string(),
+            String::new()
+        )));
     }
 
     #[test]
@@ -1256,9 +1296,11 @@ mod tests {
         )];
         let mut accessor = ProcessedDataAccessor::new();
         let _ = accessor.time_series_metric_json_string(&metric, "run1");
-        assert!(accessor
-            .time_series_metric_stat_cache
-            .contains_key(&("run1".to_string(), "cpu".to_string())));
+        assert!(accessor.time_series_metric_stat_cache.contains_key(&(
+            "run1".to_string(),
+            "cpu".to_string(),
+            String::new()
+        )));
     }
 
     // ---- time_series_data_json_string tests ----
@@ -1354,5 +1396,88 @@ mod tests {
         );
         assert_eq!(accessor.per_run_from_time.get("run1"), Some(&10));
         assert_eq!(accessor.per_run_to_time.get("run1"), Some(&30));
+    }
+
+    // ---- metric/series stats (get_or_compute_time_series_metric_stats) tests ----
+
+    #[test]
+    fn test_metric_and_series_stats() {
+        // A metric with two series where stats_series_idx points at the second one.
+        let pd = make_series_with_stats_idx(vec![(
+            "m",
+            vec![
+                make_series("low", vec![0, 1, 2], vec![1.0, 2.0, 3.0]),
+                make_series("agg", vec![0, 1, 2], vec![10.0, 20.0, 30.0]),
+            ],
+            1,
+        )]);
+        let mut accessor = ProcessedDataAccessor::new();
+
+        // Metric-level stats come from the series at stats_series_idx, not series 0.
+        let metric_stats = accessor
+            .time_series_metric_stats(&pd, "run1", "m")
+            .expect("metric stats should exist");
+        assert_eq!(metric_stats.avg, 20.0);
+        assert_eq!(metric_stats.max, 30.0);
+
+        // Series-level stats come from the named series regardless of stats_series_idx.
+        let series_stats = accessor
+            .time_series_series_stats(&pd, "run1", "m", "low")
+            .expect("series stats should exist");
+        assert_eq!(series_stats.avg, 2.0);
+        assert_eq!(series_stats.max, 3.0);
+
+        // A nonexistent series yields default (all-zero) stats rather than a panic.
+        let missing_stats = accessor
+            .time_series_series_stats(&pd, "run1", "m", "nonexistent")
+            .expect("metric exists, so stats are returned");
+        assert_eq!(missing_stats.avg, 0.0);
+        assert_eq!(missing_stats.max, 0.0);
+
+        // Repeated queries hit the cache; the metric-level and series-level cache
+        // entries for the same metric must not collide.
+        assert_eq!(
+            accessor
+                .time_series_metric_stats(&pd, "run1", "m")
+                .unwrap()
+                .avg,
+            metric_stats.avg
+        );
+        assert_eq!(
+            accessor
+                .time_series_series_stats(&pd, "run1", "m", "low")
+                .unwrap()
+                .avg,
+            series_stats.avg
+        );
+    }
+
+    #[test]
+    fn test_metric_and_series_stats_respect_time_range() {
+        // Stats honor the run's from/to time range for both query levels.
+        let pd = make_processed_data(vec![(
+            "m",
+            vec![make_series(
+                "s",
+                vec![0, 10, 20, 30],
+                vec![1.0, 2.0, 3.0, 4.0],
+            )],
+        )]);
+        let mut accessor = ProcessedDataAccessor::from_time_ranges(
+            HashMap::from([("run1".to_string(), 10)]),
+            HashMap::from([("run1".to_string(), 20)]),
+            HashMap::new(),
+            HashMap::new(),
+        );
+
+        // Only the points at time_diff 10 and 20 are in range.
+        let metric_stats = accessor.time_series_metric_stats(&pd, "run1", "m").unwrap();
+        assert_eq!(metric_stats.min, 2.0);
+        assert_eq!(metric_stats.max, 3.0);
+        let series_stats = accessor
+            .time_series_series_stats(&pd, "run1", "m", "s")
+            .unwrap();
+        assert_eq!(series_stats.min, 2.0);
+        assert_eq!(series_stats.max, 3.0);
     }
 }

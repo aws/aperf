@@ -20,6 +20,7 @@ fn test_stat_below_threshold() {
     let rule = TimeSeriesStatThresholdRule {
         rule_name: "test_rule",
         metric_name: "metric1",
+        series_name: None,
         stat: Stat::Average,
         comparator: Comparator::Greater,
         threshold: 50.0,
@@ -46,6 +47,7 @@ fn test_stat_above_threshold() {
     let rule = TimeSeriesStatThresholdRule {
         rule_name: "test_rule",
         metric_name: "metric1",
+        series_name: None,
         stat: Stat::Average,
         comparator: Comparator::Greater,
         threshold: 50.0,
@@ -73,6 +75,7 @@ fn test_stat_equal_threshold() {
     let rule = TimeSeriesStatThresholdRule {
         rule_name: "test_rule",
         metric_name: "metric1",
+        series_name: None,
         stat: Stat::Average,
         comparator: Comparator::GreaterEqual,
         threshold: 50.0,
@@ -99,6 +102,7 @@ fn test_less_than_comparator() {
     let rule = TimeSeriesStatThresholdRule {
         rule_name: "test_rule",
         metric_name: "metric1",
+        series_name: None,
         stat: Stat::Average,
         comparator: Comparator::Less,
         threshold: 50.0,
@@ -125,6 +129,7 @@ fn test_max_stat() {
     let rule = TimeSeriesStatThresholdRule {
         rule_name: "test_rule",
         metric_name: "metric1",
+        series_name: None,
         stat: Stat::Max,
         comparator: Comparator::Greater,
         threshold: 50.0,
@@ -151,6 +156,7 @@ fn test_min_stat() {
     let rule = TimeSeriesStatThresholdRule {
         rule_name: "test_rule",
         metric_name: "metric1",
+        series_name: None,
         stat: Stat::Min,
         comparator: Comparator::Less,
         threshold: 10.0,
@@ -177,6 +183,7 @@ fn test_metric_not_found() {
     let rule = TimeSeriesStatThresholdRule {
         rule_name: "test_rule",
         metric_name: "metric2",
+        series_name: None,
         stat: Stat::Average,
         comparator: Comparator::Greater,
         threshold: 50.0,
@@ -209,6 +216,7 @@ fn test_multiple_runs() {
     let rule = TimeSeriesStatThresholdRule {
         rule_name: "test_rule",
         metric_name: "metric1",
+        series_name: None,
         stat: Stat::Average,
         comparator: Comparator::Greater,
         threshold: 50.0,
@@ -244,6 +252,7 @@ fn test_multiple_series_uses_aggregate() {
     let rule = TimeSeriesStatThresholdRule {
         rule_name: "test_rule",
         metric_name: "metric1",
+        series_name: None,
         stat: Stat::Average,
         comparator: Comparator::Greater,
         threshold: 50.0,
@@ -272,6 +281,7 @@ fn test_time_range_changes_stat() {
     let rule = TimeSeriesStatThresholdRule {
         rule_name: "test_rule",
         metric_name: "metric1",
+        series_name: None,
         stat: Stat::Average,
         comparator: Comparator::Greater,
         threshold: 50.0,
@@ -334,6 +344,7 @@ fn test_time_range_multi_run() {
     let rule = TimeSeriesStatThresholdRule {
         rule_name: "test_rule",
         metric_name: "metric1",
+        series_name: None,
         stat: Stat::Average,
         comparator: Comparator::Greater,
         threshold: 50.0,
@@ -392,4 +403,83 @@ fn test_time_range_multi_run() {
     rule.analyze(&mut findings3, &mut processed_data, &mut accessor2);
     assert_eq!(findings3.num_runs_with_findings(), 1);
     assert!(findings3.has_findings_for_run("run1"));
+}
+
+#[test]
+fn test_series_rule_uses_named_series_stats() {
+    // Metric has a low-value "aperf" series and a high-value aggregate series; the
+    // series-scoped rule must evaluate the named series, not the metric-level stats
+    // (which come from the aggregate).
+    let ts_data = create_time_series_data_multi_series(vec![(
+        "metric1",
+        vec![
+            (Some("aperf"), vec![1.0, 2.0, 3.0]),
+            (Some("total"), vec![100.0, 200.0, 300.0]),
+        ],
+    )]);
+    let mut processed_data =
+        create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
+
+    let rule = TimeSeriesStatThresholdRule {
+        rule_name: "test_rule",
+        metric_name: "metric1",
+        series_name: Some("aperf"),
+        stat: Stat::Average,
+        comparator: Comparator::Greater,
+        threshold: 50.0,
+        score: Score::Bad.as_f64(),
+        message: "Test message",
+    };
+
+    // The aperf series average (2.0) is below the threshold: no finding, even though
+    // the metric-level (aggregate) average (200.0) is above it.
+    let mut findings = DataFindings::default();
+    rule.analyze(
+        &mut findings,
+        &mut processed_data,
+        &mut ProcessedDataAccessor::new(),
+    );
+    assert_eq!(findings.num_runs_with_findings(), 0);
+
+    // Lower the threshold below the aperf series average: the finding fires.
+    let rule = TimeSeriesStatThresholdRule {
+        threshold: 1.5,
+        ..rule
+    };
+    let mut findings = DataFindings::default();
+    rule.analyze(
+        &mut findings,
+        &mut processed_data,
+        &mut ProcessedDataAccessor::new(),
+    );
+    assert_eq!(findings.num_runs_with_findings(), 1);
+    assert!(findings.has_findings_for_run("run1"));
+}
+
+#[test]
+fn test_series_rule_missing_series_no_finding() {
+    // A series-scoped rule whose series does not exist in the metric produces no
+    // finding (default stats) and must not panic.
+    let ts_data = create_time_series_data(vec![("metric1", vec![100.0, 200.0, 300.0])]);
+    let mut processed_data =
+        create_processed_data("test_data", vec![("run1", AperfData::TimeSeries(ts_data))]);
+
+    let rule = TimeSeriesStatThresholdRule {
+        rule_name: "test_rule",
+        metric_name: "metric1",
+        series_name: Some("nonexistent"),
+        stat: Stat::Average,
+        comparator: Comparator::Greater,
+        threshold: 1.0,
+        score: Score::Bad.as_f64(),
+        message: "Test message",
+    };
+
+    let mut findings = DataFindings::default();
+    rule.analyze(
+        &mut findings,
+        &mut processed_data,
+        &mut ProcessedDataAccessor::new(),
+    );
+    assert_eq!(findings.num_runs_with_findings(), 0);
 }
