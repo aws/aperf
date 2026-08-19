@@ -6,7 +6,10 @@ use anyhow::Result;
 use log::error;
 use serde::{Deserialize, Serialize};
 #[cfg(target_os = "linux")]
-use {crate::data::CollectData, crate::data_collection::InitParams, chrono::prelude::*};
+use {
+    crate::data::common::utils::read_virtual_file, crate::data::CollectData,
+    crate::data_collection::InitParams, chrono::prelude::*,
+};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct VmstatRaw {
@@ -28,8 +31,7 @@ impl VmstatRaw {
 impl CollectData for VmstatRaw {
     fn collect_data(&mut self, _init_params: &InitParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
-        self.data = String::new();
-        self.data = std::fs::read_to_string("/proc/vmstat")?;
+        self.data = read_virtual_file("/proc/vmstat")?;
         Ok(())
     }
 }

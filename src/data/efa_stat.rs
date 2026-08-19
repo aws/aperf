@@ -12,13 +12,13 @@ use std::fs::File;
 #[cfg(target_os = "linux")]
 use {
     crate::data::common::common_raw_data::TimeSeriesDataBuilder,
+    crate::data::common::utils::read_open_virtual_file,
     crate::data::CollectData,
     crate::data_collection::InitParams,
     crate::PDError,
     chrono::Utc,
     log::{debug, warn},
     std::fs,
-    std::io::{Read, Seek, SeekFrom},
     std::path::PathBuf,
 };
 
@@ -185,10 +185,8 @@ impl CollectData for EfaStatRaw {
         for (efa_component, counter_file_paths) in self.efa_metric_file_paths.iter_mut() {
             common_raw_data_builder.add_component_line(efa_component);
             for (counter_name, counter_file) in counter_file_paths {
-                let mut counter_value = String::new();
-                counter_file.read_to_string(&mut counter_value)?;
+                let counter_value = read_open_virtual_file(counter_file)?;
                 common_raw_data_builder.add_metric_line(counter_name, &counter_value);
-                counter_file.seek(SeekFrom::Start(0))?;
             }
         }
         self.data = common_raw_data_builder.get_data();
