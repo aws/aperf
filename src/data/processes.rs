@@ -11,7 +11,10 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
 #[cfg(target_os = "linux")]
-use {crate::data::CollectData, crate::data_collection::InitParams, chrono::Utc, std::fs};
+use {
+    crate::data::common::utils::read_virtual_file, crate::data::CollectData,
+    crate::data_collection::InitParams, chrono::Utc, std::fs,
+};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProcessesRaw {
@@ -54,7 +57,7 @@ impl CollectData for ProcessesRaw {
             if file_name.chars().all(char::is_numeric) {
                 let mut path = entry.path();
                 path.push("stat");
-                if let Ok(v) = fs::read_to_string(path) {
+                if let Ok(v) = read_virtual_file(path) {
                     self.data.push_str(&v)
                 }
             }

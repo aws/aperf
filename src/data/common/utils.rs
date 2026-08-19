@@ -3,8 +3,8 @@ use log::error;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 #[cfg(target_os = "linux")]
 use {anyhow::Context, log::debug};
@@ -212,6 +212,38 @@ pub fn get_online_cpu_ids() -> Result<Vec<usize>> {
     ids.sort_unstable();
     ids.dedup();
     Ok(ids)
+}
+
+const VIRTUAL_FILE_READ_CAPACITY: usize = 8192;
+
+/// Read `file`'s entire contents from its current position, refilling a
+/// fixed-size buffer until a true zero-byte read confirms EOF.
+#[cfg(target_os = "linux")]
+fn read_virtual_file_from_current_position(file: &mut File) -> Result<String> {
+    let mut buf = [0u8; VIRTUAL_FILE_READ_CAPACITY];
+    let mut out = String::new();
+    loop {
+        let len = file.read(&mut buf)?;
+        if len == 0 {
+            break;
+        }
+        out.push_str(std::str::from_utf8(&buf[..len])?);
+    }
+    Ok(out)
+}
+
+/// Read a pseudo-file (e.g. under /proc or /sys)
+#[cfg(target_os = "linux")]
+pub fn read_virtual_file<P: AsRef<Path>>(path: P) -> Result<String> {
+    read_virtual_file_from_current_position(&mut File::open(&path)?)
+}
+
+/// Read a pseudo-file through a handle the caller keeps open across multiple
+/// collection intervals.
+#[cfg(target_os = "linux")]
+pub fn read_open_virtual_file(file: &mut File) -> Result<String> {
+    file.seek(SeekFrom::Start(0))?;
+    read_virtual_file_from_current_position(file)
 }
 
 /// Check the current fd limit and raise it if the number of required fd is larger.

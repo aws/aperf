@@ -8,7 +8,10 @@ use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
 #[cfg(target_os = "linux")]
-use {crate::data::CollectData, crate::data_collection::InitParams, chrono::prelude::*};
+use {
+    crate::data::common::utils::read_virtual_file, crate::data::CollectData,
+    crate::data_collection::InitParams, chrono::prelude::*,
+};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DiskstatsRaw {
@@ -30,8 +33,7 @@ impl DiskstatsRaw {
 impl CollectData for DiskstatsRaw {
     fn collect_data(&mut self, _init_params: &InitParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
-        self.data = String::new();
-        self.data = std::fs::read_to_string("/proc/diskstats")?;
+        self.data = read_virtual_file("/proc/diskstats")?;
         Ok(())
     }
 }

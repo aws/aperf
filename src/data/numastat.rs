@@ -7,6 +7,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 #[cfg(target_os = "linux")]
 use {
+    crate::data::common::utils::read_virtual_file,
     crate::data::CollectData,
     crate::data_collection::InitParams,
     chrono::prelude::*,
@@ -81,7 +82,7 @@ impl CollectData for NumastatRaw {
 
         // Collect NUMA stats from /sys/devices/system/node/node*/numastat
         for (node_name, numastat_path) in NAME_PATH_MAP.iter() {
-            let content = fs::read_to_string(numastat_path)?;
+            let content = read_virtual_file(numastat_path)?;
             self.data
                 .push_str(&format!("{}:\n{}\n", node_name.to_string(), content));
         }

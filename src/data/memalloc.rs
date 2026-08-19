@@ -6,8 +6,8 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 #[cfg(target_os = "linux")]
 use {
-    crate::data::CollectData, crate::data_collection::InitParams, crate::PDError,
-    chrono::prelude::*,
+    crate::data::common::utils::read_virtual_file, crate::data::CollectData,
+    crate::data_collection::InitParams, crate::PDError, chrono::prelude::*,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -40,9 +40,9 @@ impl MemallocDataRaw {
 #[cfg(target_os = "linux")]
 impl CollectData for MemallocDataRaw {
     fn prepare_data_collector(&mut self, _init_params: &InitParams) -> Result<()> {
-        if std::fs::read_to_string("/proc/buddyinfo").is_err()
-            && std::fs::read_to_string("/proc/pagetypeinfo").is_err()
-            && std::fs::read_to_string("/proc/slabinfo").is_err()
+        if read_virtual_file("/proc/buddyinfo").is_err()
+            && read_virtual_file("/proc/pagetypeinfo").is_err()
+            && read_virtual_file("/proc/slabinfo").is_err()
         {
             return Err(PDError::IgnoredDataPreparationError(
                 "None of memalloc system files are readable".to_string(),
@@ -54,9 +54,9 @@ impl CollectData for MemallocDataRaw {
 
     fn collect_data(&mut self, _init_params: &InitParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
-        self.buddyinfo_data = std::fs::read_to_string("/proc/buddyinfo").unwrap_or_default();
-        self.pagetypeinfo_data = std::fs::read_to_string("/proc/pagetypeinfo").unwrap_or_default();
-        self.slabinfo_data = std::fs::read_to_string("/proc/slabinfo").unwrap_or_default();
+        self.buddyinfo_data = read_virtual_file("/proc/buddyinfo").unwrap_or_default();
+        self.pagetypeinfo_data = read_virtual_file("/proc/pagetypeinfo").unwrap_or_default();
+        self.slabinfo_data = read_virtual_file("/proc/slabinfo").unwrap_or_default();
         Ok(())
     }
 }
