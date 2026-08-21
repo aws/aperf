@@ -25,6 +25,7 @@ use thiserror::Error;
 #[cfg(target_os = "linux")]
 use {
     crate::data::{aperf_stats::AperfStatsCollector, common::utils::CpuInfo},
+    chrono::Utc,
     log::warn,
     std::cell::RefCell,
     std::collections::HashSet,
@@ -238,24 +239,24 @@ where
     Ok(())
 }
 
-/// Save the usage metrics of a child process as APerf stats.
+/// Save the resource usage of a reaped child process as an APerf stat, along with the window it
+/// ran for, so that report processing can spread its CPU time over the seconds it was actually
+/// running instead of charging it all to the moment it exited.
 #[cfg(target_os = "linux")]
-pub fn aperf_stats_add_process_usage(process_name: &str, rusage: libc::rusage) {
-    aperf_stats_add(
-        ProcessMetric::UserSpaceTime.to_aperf_stat_metric_name(),
-        process_name.to_string(),
-        rusage.ru_utime.tv_sec as f64 + rusage.ru_utime.tv_usec as f64 / 1_000_000.0,
-    );
-    aperf_stats_add(
-        ProcessMetric::KernelSpaceTime.to_aperf_stat_metric_name(),
-        process_name.to_string(),
-        rusage.ru_stime.tv_sec as f64 + rusage.ru_stime.tv_usec as f64 / 1_000_000.0,
-    );
-    aperf_stats_add(
-        ProcessMetric::ResidentSetSizeBytes.to_aperf_stat_metric_name(),
-        process_name.to_string(),
-        rusage.ru_maxrss as f64 * 1024.0,
-    );
+pub fn aperf_stats_add_sub_process_usage(
+    process_name: &str,
+    start_time: TimeEnum,
+    end_time: TimeEnum,
+    rusage: libc::rusage,
+) {
+    APERF_STATS_COLLECTOR.with(|aperf_stats_collector| {
+        aperf_stats_collector.borrow_mut().add_sub_process_usage(
+            process_name,
+            start_time,
+            end_time,
+            rusage,
+        );
+    });
 }
 
 #[cfg(target_os = "linux")]
@@ -332,6 +333,7 @@ where
         None => command.stdout(Stdio::piped()),
     };
 
+    let start_time = TimeEnum::DateTime(Utc::now());
     let mut child = command.spawn()?;
     let pid = child.id() as libc::pid_t;
 
@@ -354,7 +356,12 @@ where
             std::io::Error::last_os_error()
         );
     } else {
-        aperf_stats_add_process_usage(&process_name, rusage);
+        aperf_stats_add_sub_process_usage(
+            process_name,
+            start_time,
+            TimeEnum::DateTime(Utc::now()),
+            rusage,
+        );
     }
 
     // Read the subprocess's stderr back from the temp file.

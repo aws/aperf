@@ -27,6 +27,21 @@ pub struct AperfStat {
     pub data: HashMap<String, u64>,
 }
 
+/// The resource usage of one subprocess that APerf launched and waited for, recorded
+/// when it is reaped.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct SubProcessUsage {
+    name: String,
+    start_time: TimeEnum,
+    end_time: TimeEnum,
+    /// Seconds of CPU time spent in user space over the whole run.
+    user_time: f64,
+    /// Seconds of CPU time spent in kernel space over the whole run.
+    kernel_time: f64,
+    /// Peak resident set size in bytes over the whole run.
+    max_rss_bytes: f64,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AperfStats {
     pub time: TimeEnum,
@@ -34,21 +49,27 @@ pub struct AperfStats {
     /// Each stat will be processed into a metric, and each data will be
     /// processed into a series within the metric.
     pub stats: HashMap<String, HashMap<String, f64>>,
+    /// The usage of subprocesses that APerf started and reaped, the data
+    /// within will be turned into visualizable time-series stats during
+    /// raw data processing.
+    sub_process_usages: Vec<SubProcessUsage>,
 }
 
 impl AperfStats {
     pub fn new() -> Self {
-        Self {
-            time: TimeEnum::DateTime(Utc::now()),
-            stats: HashMap::new(),
-        }
+        Self::for_time(TimeEnum::DateTime(Utc::now()))
     }
 
     pub fn for_time(time: TimeEnum) -> Self {
         Self {
             time,
             stats: HashMap::new(),
+            sub_process_usages: Vec::new(),
         }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.stats.is_empty() && self.sub_process_usages.is_empty()
     }
 }
 
@@ -100,6 +121,32 @@ impl AperfStatsCollector {
         self.time_series_aperf_stats.push(cur_aperf_stats);
     }
 
+    /// Record the resource usage of a subprocess that APerf started and reaped, along with
+    /// the window it ran for.
+    pub fn add_sub_process_usage(
+        &mut self,
+        process_name: &str,
+        start_time: TimeEnum,
+        end_time: TimeEnum,
+        rusage: libc::rusage,
+    ) {
+        self.update_time_series();
+
+        self.cur_aperf_stats
+            .sub_process_usages
+            .push(SubProcessUsage {
+                name: process_name.to_string(),
+                start_time,
+                end_time,
+                user_time: rusage.ru_utime.tv_sec as f64
+                    + rusage.ru_utime.tv_usec as f64 / 1_000_000.0,
+                kernel_time: rusage.ru_stime.tv_sec as f64
+                    + rusage.ru_stime.tv_usec as f64 / 1_000_000.0,
+                // ru_maxrss is in kilobytes on Linux.
+                max_rss_bytes: rusage.ru_maxrss as f64 * 1024.0,
+            });
+    }
+
     /// Add a stat. If a stat is added multiple times, the values are summed up.
     pub fn add_stat(&mut self, stat_name: String, data_name: String, stat_value: f64) {
         self.update_time_series();
@@ -139,7 +186,7 @@ impl AperfStatsCollector {
         for aperf_stats in &self.time_series_aperf_stats {
             bincode::serialize_into(&mut aperf_stats_file, aperf_stats)?;
         }
-        if !self.cur_aperf_stats.stats.is_empty() {
+        if !self.cur_aperf_stats.is_empty() {
             bincode::serialize_into(&mut aperf_stats_file, &self.cur_aperf_stats)?;
         }
 
@@ -192,6 +239,101 @@ fn process_legacy_aperf_stats_raw_data(
     }
 }
 
+/// Compute the share percentage that should be attributed to each second within
+/// the time range (start_time_seconds, end_time_seconds), in the format of
+/// [(second, shares of total for that second)] - all shares add up to 1.
+fn per_second_shares(start_time_seconds: f64, end_time_seconds: f64) -> Vec<(u64, f64)> {
+    let duration = end_time_seconds - start_time_seconds;
+
+    if !duration.is_finite() || duration <= 0.0 {
+        return vec![(end_time_seconds.ceil().max(0.0) as u64, 1.0)];
+    }
+
+    // A data point at second `n` covers the interval ending at it, which is what an accumulative
+    // metric sampled once a second reports, so second `n` here means (n-1, n].
+    let first_second = start_time_seconds.floor() as i64 + 1;
+    let last_second = end_time_seconds.ceil() as i64;
+    (first_second..=last_second)
+        .map(|second| {
+            let overlap =
+                end_time_seconds.min(second as f64) - start_time_seconds.max((second - 1) as f64);
+            (second.max(0) as u64, overlap / duration)
+        })
+        .collect()
+}
+
+/// Turn every recorded subprocess usage into a time-series data point for each second
+/// it ran in.
+fn spread_sub_process_usages_into_stats(
+    all_aperf_stats: &mut Vec<AperfStats>,
+    collection_start: DateTime<Utc>,
+) {
+    let sub_process_usages: Vec<SubProcessUsage> = all_aperf_stats
+        .iter()
+        .flat_map(|aperf_stats| aperf_stats.sub_process_usages.clone())
+        .collect();
+    if sub_process_usages.is_empty() {
+        return;
+    }
+
+    // Find the index within all_aperf_stats for the stats at each second.
+    let mut index_of_second: HashMap<u64, usize> = HashMap::new();
+    for (index, aperf_stats) in all_aperf_stats.iter().enumerate() {
+        if let TimeEnum::DateTime(_) = aperf_stats.time {
+            if let TimeEnum::TimeDiff(second) =
+                aperf_stats.time - TimeEnum::DateTime(collection_start)
+            {
+                index_of_second.insert(second, index);
+            }
+        }
+    }
+
+    for sub_process_usage in sub_process_usages {
+        let (TimeEnum::DateTime(start_time), TimeEnum::DateTime(end_time)) =
+            (sub_process_usage.start_time, sub_process_usage.end_time)
+        else {
+            continue;
+        };
+        let per_second_shares = per_second_shares(
+            (start_time - collection_start).as_seconds_f64(),
+            (end_time - collection_start).as_seconds_f64(),
+        );
+
+        for (second, share) in per_second_shares {
+            let index = *index_of_second.entry(second).or_insert_with(|| {
+                all_aperf_stats.push(AperfStats::for_time(TimeEnum::DateTime(
+                    collection_start + chrono::Duration::seconds(second as i64),
+                )));
+                all_aperf_stats.len() - 1
+            });
+            let stats = &mut all_aperf_stats[index].stats;
+
+            for (process_metric, cpu_seconds) in [
+                (ProcessMetric::UserSpaceTime, sub_process_usage.user_time),
+                (
+                    ProcessMetric::KernelSpaceTime,
+                    sub_process_usage.kernel_time,
+                ),
+            ] {
+                *stats
+                    .entry(process_metric.to_aperf_stat_metric_name())
+                    .or_default()
+                    .entry(sub_process_usage.name.clone())
+                    .or_default() += cpu_seconds * share;
+            }
+
+            let peak_rss = stats
+                .entry(ProcessMetric::ResidentSetSizeBytes.to_aperf_stat_metric_name())
+                .or_default()
+                .entry(sub_process_usage.name.clone())
+                .or_default();
+            *peak_rss = peak_rss.max(sub_process_usage.max_rss_bytes);
+        }
+    }
+
+    all_aperf_stats.sort_by_key(|aperf_stats| aperf_stats.time);
+}
+
 impl ProcessData for AperfStats {
     fn compatible_filenames(&self) -> Vec<&str> {
         vec!["aperf_run_stats"]
@@ -237,22 +379,25 @@ impl ProcessData for AperfStats {
             };
         }
 
-        let mut collection_started = false;
+        if let Some(collection_start) = report_params
+            .collection_start
+            .or_else(|| values.first().map(|aperf_stats| aperf_stats.time))
+        {
+            // Stats recorded before the collection started, such as the time spent preparing the
+            // collectors, have no second of their own. Anchor them at the collection start so they
+            // land at second 0.
+            for aperf_stats in &mut values {
+                if aperf_stats.time < collection_start {
+                    aperf_stats.time = collection_start;
+                }
+            }
+            if let TimeEnum::DateTime(collection_start) = collection_start {
+                spread_sub_process_usages_into_stats(&mut values, collection_start);
+            }
+        }
+
         for value in values {
-            // Ignore the time diff for data before the collection started, as time_diff
-            // computation would have been corrupted and these data are not time-series anyway.
-            if !collection_started
-                && report_params
-                    .collection_start
-                    .map_or(true, |collection_start_time| {
-                        value.time >= collection_start_time
-                    })
-            {
-                collection_started = true;
-            }
-            if collection_started {
-                time_series_data_processor.proceed_to_time(value.time);
-            }
+            time_series_data_processor.proceed_to_time(value.time);
 
             for (stat_name, stat_data) in value.stats {
                 for (data_name, stat_value) in stat_data {
