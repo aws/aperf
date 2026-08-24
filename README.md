@@ -318,7 +318,7 @@ The server exposes 8 tools: `load_report`, `get_metrics`, `get_metric_values`, `
 
 > [!WARNING]
 > **KNOWN LIMITATIONS** :
-> - The default configuration of 10ms for `perf_event_mux_interval_ms` is known to cause serious performance overhead for systems with large core counts. We recommend setting this value to 100ms by doing the following: `echo 100 | sudo tee /sys/devices/*/perf_event_mux_interval_ms`
+> - The default configuration of 10ms for `perf_event_mux_interval_ms` is known to cause serious performance overhead for systems with large core counts. We recommend setting this value to 100ms by doing the following: `echo 100 | sudo tee /sys/bus/event_source/devices/*/perf_event_mux_interval_ms`
 > - APerf report is currently not able to efficiently process and display long record data. Multiple hour long records on machines with many CPUs (>128 core count) may be too large to run report on or open in a web browser.
 
 #### PMU Counters:
