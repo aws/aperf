@@ -154,6 +154,7 @@ pub struct ExecutionSample {
     pub stack_trace_id: i32,
     pub thread_state: i32,
     pub samples: i32,
+    pub time_span: i64,
     pub sample_type: ExecSampleType,
 }
 

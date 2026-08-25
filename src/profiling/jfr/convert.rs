@@ -219,6 +219,9 @@ fn write_jfr_out_event(
             if e.sample_type == ExecSampleType::WallClock {
                 writeln!(out_file, "  samples = {}", e.samples)?;
             }
+            if e.sample_type == ExecSampleType::WallClock {
+                writeln!(out_file, "  timeSpan = {}", format_timespan(e.time_span))?;
+            }
         }
         JfrEvent::AllocationSample(e) => {
             let cls = humanized_class_name_cache
@@ -389,6 +392,97 @@ fn jvm_type_to_human(name: &str) -> String {
 
 fn round_half_up_1(v: f64) -> f64 {
     (v * 10.0 + 0.5).floor() / 10.0
+}
+
+fn digit_count(mut v: i64) -> u32 {
+    if v == 0 {
+        return 1;
+    }
+    let mut n = 0;
+    while v > 0 {
+        v /= 10;
+        n += 1;
+    }
+    n
+}
+
+fn round_to_sig_figs(value: i64, digits: u32, sig_figs: u32) -> i64 {
+    if digits <= sig_figs {
+        return value;
+    }
+    let round_value = 10_i64.pow(digits - sig_figs);
+    ((value as f64 / round_value as f64).round() as i64) * round_value
+}
+
+const MICROSECOND_NANOS: i64 = 1_000;
+const MILLISECOND_NANOS: i64 = 1_000_000;
+const SECOND_NANOS: i64 = 1_000_000_000;
+const MINUTE_NANOS: i64 = 60 * SECOND_NANOS;
+const HOUR_NANOS: i64 = 60 * MINUTE_NANOS;
+const DAY_NANOS: i64 = 24 * HOUR_NANOS;
+const HALF_SECOND_NANOS: i64 = SECOND_NANOS / 2;
+const HALF_MINUTE_NANOS: i64 = MINUTE_NANOS / 2;
+const HALF_HOUR_NANOS: i64 = HOUR_NANOS / 2;
+
+/// Rounds a nanosecond duration to the precision `jfr print` displays it at, mirroring
+/// jdk.jfr.internal.util.ValueFormatter#roundPositiveDuration.
+fn round_duration_nanos(nanos: i64) -> i64 {
+    match nanos {
+        0 => 0,
+        n if n < MICROSECOND_NANOS => n, // sub-microsecond: displayed unrounded
+        n if n < SECOND_NANOS => round_to_sig_figs(n, digit_count(n), 3),
+        n if n < MINUTE_NANOS => {
+            let secs = n / SECOND_NANOS;
+            let millis = (n % SECOND_NANOS) / MILLISECOND_NANOS;
+            let round_value = 10_i64.pow(digit_count(secs));
+            let rounded_millis =
+                ((millis as f64 / round_value as f64).round() as i64) * round_value;
+            secs * SECOND_NANOS + rounded_millis * MILLISECOND_NANOS
+        }
+        n if n < HOUR_NANOS => (n + HALF_SECOND_NANOS) / SECOND_NANOS * SECOND_NANOS,
+        n if n < DAY_NANOS => (n + HALF_MINUTE_NANOS) / MINUTE_NANOS * MINUTE_NANOS,
+        n => (n + HALF_HOUR_NANOS) / HOUR_NANOS * HOUR_NANOS,
+    }
+}
+
+/// Formats an already-rounded nanosecond duration, mirroring
+/// jdk.jfr.internal.util.ValueFormatter#formatPositiveDuration.
+fn format_duration_nanos(nanos: i64) -> String {
+    if nanos == 0 {
+        return "0 s".to_string();
+    }
+    if nanos < MICROSECOND_NANOS {
+        return format!("{:.6} ms", nanos as f64 / MILLISECOND_NANOS as f64);
+    }
+    if nanos < SECOND_NANOS {
+        let precision = 9_u32.saturating_sub(digit_count(nanos)) as usize;
+        return format!(
+            "{:.*} ms",
+            precision,
+            nanos as f64 / MILLISECOND_NANOS as f64
+        );
+    }
+    if nanos < MINUTE_NANOS {
+        let secs = nanos / SECOND_NANOS;
+        let millis = (nanos % SECOND_NANOS) / MILLISECOND_NANOS;
+        let precision = 3_u32.saturating_sub(digit_count(secs)) as usize;
+        return format!("{:.*} s", precision, secs as f64 + millis as f64 / 1000.0);
+    }
+    if nanos < HOUR_NANOS {
+        let secs = nanos / SECOND_NANOS;
+        return format!("{} m {} s", secs / 60, secs % 60);
+    }
+    if nanos < DAY_NANOS {
+        let mins = nanos / MINUTE_NANOS;
+        return format!("{} h {} m", mins / 60, mins % 60);
+    }
+    let hours = nanos / HOUR_NANOS;
+    format!("{} d {} h", hours / 24, hours % 24)
+}
+
+/// Mirrors OpenJDK's `jfr print` duration formatting (jdk.jfr.internal.util.ValueFormatter)
+fn format_timespan(nanos: i64) -> String {
+    format_duration_nanos(round_duration_nanos(nanos))
 }
 
 fn format_bytes(bytes: i64) -> String {
