@@ -221,15 +221,18 @@ impl JfrReader {
         let stack_trace_id = self.get_varint();
         let thread_state = self.get_varint();
         let samples = if wall { self.get_varint() } else { 1 };
-        if wall && self.has_wall_time_span {
-            self.get_varlong(); // timeSpan ignored
-        }
+        let time_span = if wall && self.has_wall_time_span {
+            self.get_varlong()
+        } else {
+            0
+        };
         ExecutionSample {
             time,
             tid,
             stack_trace_id,
             thread_state,
             samples,
+            time_span,
             sample_type,
         }
     }
@@ -279,6 +282,7 @@ impl JfrReader {
             stack_trace_id,
             thread_state: 254,
             samples: 1,
+            time_span: 0,
             sample_type: ExecSampleType::CpuTime,
         }
     }
