@@ -358,6 +358,9 @@ pub struct InitParams {
     /// PMU config revamp.
     #[serde(default)]
     pub pmu_counter_mode: String,
+    /// The CPUs to collect PMU counters on. Empty means all online CPUs.
+    #[serde(default)]
+    pub pmu_cpu_ids: Vec<usize>,
     pub interval: u64,
     /// The version of APerf that performed the collection.
     pub collector_version: String,
@@ -406,6 +409,7 @@ impl InitParams {
             profile: HashMap::new(),
             pmu_config: Option::None,
             pmu_counter_mode: GROUPED_PMU_MODE.to_string(),
+            pmu_cpu_ids: Vec::new(),
             interval: 0,
             collector_version: env!("CARGO_PKG_VERSION").to_string(),
             collector_commit_sha: env!("VERGEN_GIT_SHA").to_string(),

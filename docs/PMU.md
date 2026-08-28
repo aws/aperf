@@ -2,7 +2,7 @@
 
 Modern CPUs are equipped with a Performance Monitoring Unit (PMU), which is a small piece of hardware that counts micro-architectural events, such as instructions retired, cycles, cache and TLB misses, branch mispredictions, pipeline stalls, and more. Metrics derived from these counter values provide significant insights into why a workload is slow, making PMU data one of the most valuable metrics that APerf collects.
 
-The PMU data is collected through Linux's `perf_event_open` system call. For events to be collected, APerf opens counters on every CPU, which are programmed by the kernel into one of the PMU's hardware counter registers, and APerf reads the accumulated counts at every collection interval to compute the metrics shown in the report. Because each CPU core only has a small number of counter registers (typically 2-8), when there are more events than available registers to collect, kernel is required to time-share the registers among the counters ([multiplexing](#multiplexing)).
+The PMU data is collected through Linux's `perf_event_open` system call. For events to be collected, APerf opens counters on each CPU (all online CPUs by default unless otherwise specified by the `--pmu-cpus` flag), which are programmed by the kernel into one of the PMU's hardware counter registers, and APerf reads the accumulated counts at every collection interval to compute the metrics shown in the report. Because each CPU core only has a small number of counter registers (typically 2-8), when there are more events than available registers to collect, kernel is required to time-share the registers among the counters ([multiplexing](#multiplexing)).
 
 
 ## PMU Config

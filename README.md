@@ -251,6 +251,10 @@ Custom PMU config file to use.
 
 Avoid creating a PMU counter group for each metric defined in the PMU config. For details, please read the [PMU data document](/docs/PMU.md).
 
+`--pmu-cpus <CPU>,<CPU RANGE>,...,<CPU>` [default: all online CPUs]
+
+Collect PMU counters only on the given CPUs, given as a comma separated list of single CPUs and inclusive ranges, e.g. `12,5,41-55,16-19,1`.
+
 `--hotline-sample-frequency <FREQUENCY>` (For Hotline-enabled binary) [default: 1000]
 
 Hotline sampling period in Hz.

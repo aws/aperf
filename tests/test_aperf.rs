@@ -915,6 +915,7 @@ fn record_with_name(
         profile_java: None,
         pmu_config: None,
         ungroup_pmu_events: false,
+        pmu_cpus: None,
         hotline_frequency: 1000,
         num_to_report: 5000,
     };
@@ -932,6 +933,7 @@ fn record_with_name(
         profile_java: None,
         pmu_config: None,
         ungroup_pmu_events: false,
+        pmu_cpus: None,
     };
 
     let runlog = work_dir.join("aperf_runlog");

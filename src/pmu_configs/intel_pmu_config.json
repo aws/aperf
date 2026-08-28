@@ -2,6 +2,7 @@
   "events": {
     "Instructions": "cpu/event=0xc0,umask=0x0/",
     "Cycles": "cpu/event=0x3c,umask=0x0/",
+    "Ref_Cycles": "cpu/event=0x0,umask=0x3/",
     "Branches": "cpu/event=0xc5,umask=0x0/",
     "L1_Instructions": "cpu/event=0x24,umask=0xe4/",
     "L1_Data": "cpu/event=0x51,umask=0x1/",
@@ -9,6 +10,7 @@
   },
   "metrics": {
     "ipc": "Instructions / Cycles",
+    "turbo-ratio": "Cycles / Ref_Cycles",
     "branch-mpki": "Branches / Instructions * 1000",
     "inst-l1-mpki": "L1_Instructions / Instructions * 1000",
     "data-l1-mpki": "L1_Data / Instructions * 1000",

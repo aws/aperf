@@ -30,22 +30,28 @@ use {
 
 static DEFAULT_PMU_CONFIG_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/pmu_configs");
 
-/// Help build a PMU counter or group with unified error handling logic.
+/// Whether creating a PMU counter failed because kernel.perf_event_paranoid is too high.
 #[cfg(target_os = "linux")]
-macro_rules! build_pmu_counter {
-    ($build:expr, $on_unsupported:expr) => {
-        match $build {
-            Ok(counter) => counter,
-            Err(e) => match e.raw_os_error() {
-                Some(libc::EACCES) | Some(libc::EPERM) => {
-                    error!("kernel.perf_event_paranoid is not <=0. Run `sudo sysctl -w kernel.perf_event_paranoid=-1`");
-                    return Err(e.into());
-                }
-                Some(libc::ENOENT) | Some(libc::ENODEV) | Some(libc::EOPNOTSUPP) => $on_unsupported,
-                _ => bail!("Failed to create PMU counter: {:?}", e),
-            },
-        }
-    };
+fn is_permission_denied(error: &std::io::Error) -> bool {
+    matches!(error.raw_os_error(), Some(libc::EACCES) | Some(libc::EPERM))
+}
+
+/// Whether creating a PMU counter failed because the event is not supported on this platform.
+#[cfg(target_os = "linux")]
+fn is_event_unsupported(error: &std::io::Error) -> bool {
+    matches!(
+        error.raw_os_error(),
+        Some(libc::ENOENT) | Some(libc::ENODEV) | Some(libc::EOPNOTSUPP)
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn log_pmu_counter_error(error: &std::io::Error) {
+    if is_permission_denied(error) {
+        error!("kernel.perf_event_paranoid is larger than 0. Run `sudo sysctl -w kernel.perf_event_paranoid=-1`");
+    } else {
+        error!("Failed to create PMU counter: {error:?}");
+    }
 }
 
 /// Get the path to PMU config saved in the run dir.
@@ -64,6 +70,11 @@ fn warn_multiplexing(required_counters_per_cpu: usize, counter_limit: usize) {
     }
 }
 
+/// Used to check for MSR events, whose counter creation has to contain include_hv(),
+/// since it does not support any exclusion bits.
+#[cfg(target_os = "linux")]
+const MSR_PMU_NAME: &str = "msr";
+
 /// Custom event type used to build the counter. It essentially duplicates perf-event2's
 /// DynamicBuilder and Event::Dynamic, which, unfortunately, fails to parse a config
 /// with multiple non-contiguous bit ranges (the format used on AMD). The implementations
@@ -71,6 +82,7 @@ fn warn_multiplexing(required_counters_per_cpu: usize, counter_limit: usize) {
 #[cfg(target_os = "linux")]
 #[derive(Debug)]
 struct PmuConfigEvent {
+    pmu_name: String,
     pmu_type: u32,
     /// A format file could have config/config1/config2 mapping to
     /// 3 different 64-bit fields.
@@ -183,7 +195,11 @@ impl PmuConfigEvent {
             }
         }
 
-        Ok(Self { pmu_type, config })
+        Ok(Self {
+            pmu_name: pmu_name.to_string(),
+            pmu_type,
+            config,
+        })
     }
 }
 
@@ -239,8 +255,7 @@ impl PmuConfig {
     /// across different groups creates one counter per group. Therfore, this mode puts more
     /// loads on the collection multiplexing, and each event is collected for less time.
     #[cfg(target_os = "linux")]
-    pub fn create_metric_counter_groups(&self) -> Result<Vec<PmuCollector>> {
-        let online_cpu_ids = get_online_cpu_ids()?;
+    pub fn create_metric_counter_groups(&self, cpu_ids: &[usize]) -> Result<Vec<PmuCollector>> {
         let metric_expressions = self.get_metric_expressions()?;
 
         let num_counters_per_cpu = metric_expressions
@@ -248,7 +263,7 @@ impl PmuConfig {
             .map(|metric_expression| metric_expression.var_names().len())
             .sum::<usize>();
 
-        match Self::probe_pmu_counter_limit(online_cpu_ids.last().copied().unwrap()) {
+        match Self::probe_pmu_counter_limit(cpu_ids.last().copied().unwrap()) {
             Ok(pmu_counter_limit) => {
                 warn_multiplexing(num_counters_per_cpu, pmu_counter_limit);
             }
@@ -260,17 +275,17 @@ impl PmuConfig {
         // Each group (one for every metric) also takes one fd.
         // Add some buffers to the expected fd requirement.
         let num_required_fds =
-            50 + online_cpu_ids.len() * (num_counters_per_cpu + metric_expressions.len());
+            50 + cpu_ids.len() * (num_counters_per_cpu + metric_expressions.len());
         debug!(
             "Require {num_required_fds} fds for the collection of {} PMU metrics over {} CPUs.",
             metric_expressions.len(),
-            online_cpu_ids.len()
+            cpu_ids.len()
         );
         raise_fd_limit(num_required_fds as u64)?;
 
         let mut metric_counter_groups = Vec::new();
 
-        // For each defined metric on each online CPU, create a group that contains all the PMU event counters
+        // For each defined metric on each collected CPU, create a group that contains all the PMU event counters
         // used by the metric.
         'outer: for (metric_name, metric_expression) in metric_expressions {
             // The event names are in alphabetical order, and their values need to be passed to the
@@ -290,11 +305,15 @@ impl PmuConfig {
                 };
             }
 
-            for &cpu_id in &online_cpu_ids {
+            for &cpu_id in cpu_ids {
                 let pmu_metric_counter_group =
-                    match Self::create_counter_group(&metric_name, &event_strings, cpu_id)? {
-                        Some(pmu_metric_counter_group) => pmu_metric_counter_group,
-                        None => continue 'outer,
+                    match Self::create_counter_group(&metric_name, &event_strings, cpu_id) {
+                        Ok(pmu_metric_counter_group) => pmu_metric_counter_group,
+                        Err(e) if is_event_unsupported(&e) => continue 'outer,
+                        Err(e) => {
+                            log_pmu_counter_error(&e);
+                            return Err(e.into());
+                        }
                     };
                 metric_counter_groups.push(PmuCollector::Grouped(pmu_metric_counter_group));
             }
@@ -309,11 +328,10 @@ impl PmuConfig {
     /// metric value are not guaranteed to be collected at the same time, unless all counters
     /// can fit in available PMU registers (typically 4-8 depeding on the CPU type).
     #[cfg(target_os = "linux")]
-    pub fn create_event_counters(&self) -> Result<Vec<PmuCollector>> {
-        let online_cpu_ids = get_online_cpu_ids()?;
-
+    pub fn create_event_counters(&self, cpu_ids: &[usize]) -> Result<Vec<PmuCollector>> {
         let num_counters_per_cpu = self.events.len();
-        match Self::probe_pmu_counter_limit(online_cpu_ids.last().copied().unwrap()) {
+
+        match Self::probe_pmu_counter_limit(cpu_ids.last().copied().unwrap()) {
             Ok(pmu_counter_limit) => {
                 warn_multiplexing(num_counters_per_cpu, pmu_counter_limit);
             }
@@ -323,36 +341,54 @@ impl PmuConfig {
         };
 
         // Add some buffers to the expected fd requirement.
-        let num_required_fds = 50 + online_cpu_ids.len() * num_counters_per_cpu;
+        let num_required_fds = 50 + cpu_ids.len() * num_counters_per_cpu;
         debug!(
             "Require {num_required_fds} fds for the collection of {} PMU eventd over {} CPUs.",
             self.events.len(),
-            online_cpu_ids.len()
+            cpu_ids.len()
         );
         raise_fd_limit(num_required_fds as u64)?;
 
         let mut event_counters = Vec::new();
 
         'outer: for (event_name, event_string) in &self.events {
-            for &cpu_id in &online_cpu_ids {
-                let event = PmuConfigEvent::from_event_string(event_string).with_context(|| {
-                    format!("Failed to create event {event_name} from definition {event_string}")
-                })?;
-                let counter = build_pmu_counter!(
-                    perf_event::Builder::new(event)
-                        .read_format(
-                            perf_event::ReadFormat::TOTAL_TIME_ENABLED
-                                | perf_event::ReadFormat::TOTAL_TIME_RUNNING,
-                        )
-                        .one_cpu(cpu_id)
-                        .any_pid()
-                        .include_kernel()
-                        .build(),
-                    {
+            for &cpu_id in cpu_ids {
+                let event = match PmuConfigEvent::from_event_string(event_string) {
+                    Ok(event) => event,
+                    Err(e) => {
+                        warn!(
+                            "Failed to create event from definition {event_string}: {:?}",
+                            e
+                        );
+                        continue 'outer;
+                    }
+                };
+
+                let is_msr_pmu = event.pmu_name == MSR_PMU_NAME;
+                let mut builder = perf_event::Builder::new(event);
+                builder
+                    .read_format(
+                        perf_event::ReadFormat::TOTAL_TIME_ENABLED
+                            | perf_event::ReadFormat::TOTAL_TIME_RUNNING,
+                    )
+                    .one_cpu(cpu_id)
+                    .any_pid()
+                    .include_kernel();
+                if is_msr_pmu {
+                    builder.include_hv();
+                }
+
+                let counter = match builder.build() {
+                    Ok(counter) => counter,
+                    Err(e) if is_event_unsupported(&e) => {
                         warn!("Skipping PMU event {event_name} as it is not supported.");
                         continue 'outer;
                     }
-                );
+                    Err(e) => {
+                        log_pmu_counter_error(&e);
+                        return Err(e.into());
+                    }
+                };
 
                 event_counters.push(PmuCollector::Ungrouped(PmuEventCounter {
                     cpu_id,
@@ -402,17 +438,7 @@ impl PmuConfig {
             let event_strings: Vec<&str> = iter::repeat_n(probe_event, mid).collect();
 
             let mut probe_group =
-                match Self::create_counter_group("pmu_counter_limit_probe", &event_strings, cpu_id)
-                {
-                    Ok(Some(probe_group)) => probe_group,
-                    Ok(None) => bail!("unsupported probe event"),
-                    // On X86 a group that is larger than the number of available registers
-                    // will fail to be created with EINVAL.
-                    Err(_) => {
-                        high = mid - 1;
-                        continue;
-                    }
-                };
+                Self::create_counter_group("pmu_counter_limit_probe", &event_strings, cpu_id)?;
 
             probe_group.enable()?;
             thread::sleep(Duration::from_millis(10));
@@ -446,27 +472,23 @@ impl PmuConfig {
         Ok(metric_expressions)
     }
 
-    /// Helper function to create a group containing counters built from
-    /// each event string.
+    /// Helper function to create a group containing counters built from each event string.
     #[cfg(target_os = "linux")]
     fn create_counter_group(
         metric_name: &str,
         event_strings: &Vec<&str>,
         cpu_id: usize,
-    ) -> Result<Option<PmuMetricCounterGroup>> {
-        let mut group = build_pmu_counter!(
-            perf_event::Builder::new(perf_event::events::Software::DUMMY)
-                .read_format(
-                    perf_event::ReadFormat::GROUP
-                        | perf_event::ReadFormat::TOTAL_TIME_ENABLED
-                        | perf_event::ReadFormat::TOTAL_TIME_RUNNING
-                        | perf_event::ReadFormat::ID,
-                )
-                .one_cpu(cpu_id)
-                .any_pid()
-                .build_group(),
-            unreachable!("Group leader is a software event and cannot be unsupported")
-        );
+    ) -> std::io::Result<PmuMetricCounterGroup> {
+        let mut group = perf_event::Builder::new(perf_event::events::Software::DUMMY)
+            .read_format(
+                perf_event::ReadFormat::GROUP
+                    | perf_event::ReadFormat::TOTAL_TIME_ENABLED
+                    | perf_event::ReadFormat::TOTAL_TIME_RUNNING
+                    | perf_event::ReadFormat::ID,
+            )
+            .one_cpu(cpu_id)
+            .any_pid()
+            .build_group()?;
         let mut counters = Vec::new();
 
         for event_string in event_strings {
@@ -477,30 +499,33 @@ impl PmuConfig {
                         "Failed to create event {event_string} in metric {metric_name}: {:?}",
                         e
                     );
-                    return Ok(None);
+                    // An invalid event string should be handled the same as "unsupported events".
+                    return Err(std::io::Error::from_raw_os_error(libc::ENOENT));
                 }
             };
 
-            let counter = build_pmu_counter!(
-                perf_event::Builder::new(event)
-                    .one_cpu(cpu_id)
-                    .any_pid()
-                    .include_kernel()
-                    .build_with_group(&mut group),
-                {
+            let is_msr_pmu = event.pmu_name == MSR_PMU_NAME;
+            let mut builder = perf_event::Builder::new(event);
+            builder.one_cpu(cpu_id).any_pid().include_kernel();
+            if is_msr_pmu {
+                builder.include_hv();
+            }
+
+            let counter = builder.build_with_group(&mut group).inspect_err(|e| {
+                if is_event_unsupported(e) {
                     warn!("PMU event {event_string} in metric {metric_name} is not supported.");
-                    return Ok(None);
                 }
-            );
+            })?;
+
             counters.push(counter);
         }
 
-        Ok(Some(PmuMetricCounterGroup {
+        Ok(PmuMetricCounterGroup {
             cpu_id: cpu_id,
             metric_name: metric_name.to_string(),
             counters,
             group,
-        }))
+        })
     }
 }
 
@@ -761,6 +786,28 @@ impl PerfStatRaw {
 #[cfg(target_os = "linux")]
 impl CollectData for PerfStatRaw {
     fn prepare_data_collector(&mut self, init_params: &InitParams) -> Result<()> {
+        let online_cpu_ids = get_online_cpu_ids()?;
+        let cpu_ids = if init_params.pmu_cpu_ids.is_empty() {
+            online_cpu_ids
+        } else {
+            // If user specified the list of CPUs to collect, ensure that they are all online.
+            let online_cpu_id_set: HashSet<usize> = online_cpu_ids.into_iter().collect();
+            let offline_cpu_ids: Vec<usize> = init_params
+                .pmu_cpu_ids
+                .iter()
+                .copied()
+                .filter(|cpu_id| !online_cpu_id_set.contains(cpu_id))
+                .collect();
+
+            if !offline_cpu_ids.is_empty() {
+                panic!("Cannot collect PMU counters on the requested CPUs {offline_cpu_ids:?} since they are not online.");
+            }
+
+            init_params.pmu_cpu_ids.clone()
+        };
+
+        debug!("Collecting PMU counters on CPUs {cpu_ids:?}");
+
         // Read and parse the PMU config. If user did not provide a PMU config file, use the default one
         // based on the CPU type.
         let pmu_config = if let Some(custom_pmu_config_path) = &init_params.pmu_config {
@@ -773,12 +820,11 @@ impl CollectData for PerfStatRaw {
                     custom_pmu_config
                 }
                 Err(e) => {
-                    error!(
+                    panic!(
                         "Custom PMU configuration {} is invalid: {:?}",
                         custom_pmu_config_path.display(),
                         e
                     );
-                    std::process::exit(1);
                 }
             }
         } else {
@@ -847,11 +893,11 @@ impl CollectData for PerfStatRaw {
         // counter groups for collection.
         let mut pmu_collectors = if init_params.pmu_counter_mode == UNGROUPED_PMU_MODE {
             pmu_config
-                .create_event_counters()
+                .create_event_counters(&cpu_ids)
                 .context("Failed to create PMU event counters")?
         } else {
             pmu_config
-                .create_metric_counter_groups()
+                .create_metric_counter_groups(&cpu_ids)
                 .context("Failed to create PMU metric counter groups")?
         };
 
@@ -1376,7 +1422,11 @@ impl ProcessData for PerfStat {
                 );
             }
             for metric in zero_time_running_metrics {
-                warn!("PMU metric {metric} might contain too many events to be scheduled for collection. Please reduce the number of events in it or use --ungroup-pmu-events.");
+                // Warns if a metric was never scheduled, meaning its time_running
+                // is always 0 and no time-series data was created.
+                if !time_series_data_processor.has_metric(&metric) {
+                    warn!("PMU metric {metric} contains too many events to be scheduled for collection on this host. Please reduce the number of events in the metric or use --ungroup-pmu-events.");
+                }
             }
         }
 
@@ -1394,7 +1444,7 @@ impl ProcessData for PerfStat {
 mod tests {
     #[cfg(target_os = "linux")]
     use {
-        super::{PerfStatRaw, PmuConfig, PmuConfigEvent},
+        super::{PerfStatRaw, PmuCollectedData, PmuConfig, PmuConfigEvent},
         crate::data::common::utils::get_online_cpu_ids,
         crate::data::CollectData,
         crate::data_collection::InitParams,
@@ -1404,9 +1454,9 @@ mod tests {
 
     /// Create a synthetic PMU directory with the given type and format fields.
     #[cfg(target_os = "linux")]
-    fn make_pmu(type_val: u32, fields: &[(&str, &str)]) -> TempDir {
+    fn make_pmu(pmu_name: &str, type_val: u32, fields: &[(&str, &str)]) -> TempDir {
         let dir = TempDir::new().unwrap();
-        let pmu = dir.path().join("test_pmu");
+        let pmu = dir.path().join(pmu_name);
         std::fs::create_dir_all(pmu.join("format")).unwrap();
         std::fs::write(pmu.join("type"), format!("{type_val}\n")).unwrap();
         for (name, content) in fields {
@@ -1419,6 +1469,7 @@ mod tests {
     #[test]
     fn test_from_event_string_packing() {
         let dir = make_pmu(
+            "test_pmu",
             10,
             &[
                 ("event", "config:32-35,0-7\n"),
@@ -1436,12 +1487,14 @@ mod tests {
         assert_eq!(ev.config[0], 0xa0 | (0x1u64 << 32) | (0x1e << 8));
         assert_eq!(ev.config[1], 1);
         assert_eq!(ev.config[2], 0xdeadbeef_cafebabe);
+        assert_eq!(ev.pmu_name, "test_pmu");
     }
 
     #[cfg(target_os = "linux")]
     #[test]
     fn test_from_event_string_invalid_inputs() {
         let dir = make_pmu(
+            "test_pmu",
             4,
             &[("event", "config:0-7\n"), ("bad", "config:0-7,4-11\n")],
         );
@@ -1503,6 +1556,59 @@ mod tests {
                 perf_stat.collect_data(&params).unwrap();
                 assert!(!perf_stat.data.is_empty());
             }
+        }
+    }
+
+    /// The counters must be opened on the CPUs requested through --pmu-cpus
+    /// only, so that the collected data covers no other CPU.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_collect_data_with_requested_cpus() {
+        let requested_cpu_id = *get_online_cpu_ids()
+            .expect("failed to read online CPUs")
+            .last()
+            .expect("expected at least one online CPU");
+        let run_dir = TempDir::new().unwrap();
+        let params = InitParams {
+            run_data_dir: run_dir.path().to_path_buf(),
+            pmu_cpu_ids: vec![requested_cpu_id],
+            ..Default::default()
+        };
+
+        let mut perf_stat = PerfStatRaw::new();
+        // PMU counters are not available on every instance type and kernel
+        // configuration; test_collect_data reports why the collection failed.
+        if perf_stat.prepare_data_collector(&params).is_err() {
+            return;
+        }
+
+        perf_stat.collect_data(&params).unwrap();
+        assert!(!perf_stat.data.is_empty());
+        for pmu_data_string in perf_stat.data.lines() {
+            let pmu_data = PmuCollectedData::from_string(pmu_data_string)
+                .unwrap_or_else(|| panic!("failed to parse collected data {pmu_data_string}"));
+            assert_eq!(
+                pmu_data.cpu_id, requested_cpu_id,
+                "collected {} on CPU {} while only CPU {requested_cpu_id} was requested",
+                pmu_data.identifier, pmu_data.cpu_id
+            );
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[should_panic(expected = "[12345, 99999]")]
+    fn test_collect_data_with_invalid_requested_cpus() {
+        let run_dir = TempDir::new().unwrap();
+        let params = InitParams {
+            run_data_dir: run_dir.path().to_path_buf(),
+            pmu_cpu_ids: vec![12345, 99999],
+            ..Default::default()
+        };
+
+        let mut perf_stat = PerfStatRaw::new();
+        if perf_stat.prepare_data_collector(&params).is_ok() {
+            panic!("prepare_data_collector should panic due to invalid PMU CPU ids.")
         }
     }
 }

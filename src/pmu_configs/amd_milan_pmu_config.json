@@ -5,9 +5,11 @@
     "Frontend_Stalls": "cpu/event=0xa9,umask=0x0/",
     "Instruction_TLB_TW_Misses": "cpu/event=0x85,umask=0xf/",
     "Backend_Stalls_1": "cpu/event=0xae,umask=0xf7/",
-    "Backend_Stalls_2": "cpu/event=0xaf,umask=0x27/"
+    "Backend_Stalls_2": "cpu/event=0xaf,umask=0x27/",
+    "Tsc": "msr/event=0x0/"
   },
   "metrics": {
+    "turbo-ratio": "Cycles / Tsc",
     "data-l1-mpki": "L1_Data_Fills / Instructions * 1000",
     "l3-mpki": "L1_Any_Fills_DRAM / Instructions * 1000",
     "stall-frontend-pkc": "Frontend_Stalls / Cycles * 1000",
