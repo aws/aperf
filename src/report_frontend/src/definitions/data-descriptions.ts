@@ -334,6 +334,14 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
           "https://aws.github.io/graviton/perfrunbook/debug_hw_perf.html#top-down-method-to-debug-hardware-performance",
         ],
       },
+      "turbo-ratio": {
+        readableName: "Turbo Ratio",
+        description:
+          "Ratio of the core clock cycles actually elapsed to the cycles that would have elapsed at the processor's nominal (base) frequency, for the time the core was not halted. A value of 1.0 means the core ran at its nominal frequency, and x86 cores commonly boost up to about 1.5. Multiply by the nominal frequency of the instance type to obtain the absolute frequency in GHz. This matters when comparing metrics such as IPC across instance types, since a core that boosts higher completes more work per unit of time even at the same IPC.",
+        desired: "depends",
+        unit: "Ratio",
+        helpfulLinks: ["https://aws.amazon.com/ec2/instance-types/"],
+      },
       "data-rd-tlb-mpki": {
         readableName: "Data Read TLB Misses per Thousand Instructions",
         description:

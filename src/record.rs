@@ -3,6 +3,7 @@
 use crate::aperf_stats_flush;
 use crate::aperf_stats_initialize;
 use crate::data;
+use crate::data::common::utils::parse_cpu_list;
 use crate::data::java_profile::JavaProfile;
 use crate::data_collection::DataCollectionEngine;
 use crate::data_collection::InitParams;
@@ -109,6 +110,18 @@ pub struct Record {
     #[clap(help_heading = "PMU Options", long, value_parser, verbatim_doc_comment)]
     pub ungroup_pmu_events: bool,
 
+    /// Collect PMU counters only on the given CPUs, instead of all online CPUs.
+    /// The value is a comma separated list of single CPUs and inclusive ranges,
+    /// e.g. "12,5,41-55,16-19,1".
+    #[clap(
+        help_heading = "PMU Options",
+        long,
+        value_parser,
+        value_name = "CPU>,<CPU RANGE>,...,<CPU",
+        verbatim_doc_comment
+    )]
+    pub pmu_cpus: Option<String>,
+
     #[cfg(feature = "hotline")]
     /// SPE sampling frequency, defaulted to 1kHz on Grv4.
     #[clap(
@@ -145,6 +158,23 @@ pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
                 Please increase the overall recording period or decrease the interval.", interval = record.interval, period =record.period);
         bail!("Cannot start recording with the given parameters.");
     }
+
+    let pmu_cpu_ids = match &record.pmu_cpus {
+        Some(pmu_cpus) => match parse_cpu_list(pmu_cpus) {
+            Ok(pmu_cpu_ids) => {
+                if pmu_cpu_ids.is_empty() {
+                    error!("--pmu-cpus value '{pmu_cpus}' does not contain any CPU.");
+                    bail!("Cannot start recording with the given parameters.");
+                }
+                pmu_cpu_ids
+            }
+            Err(e) => {
+                error!("Invalid --pmu-cpus value: {e:?}");
+                bail!("Cannot start recording with the given parameters.");
+            }
+        },
+        None => Vec::new(),
+    };
 
     // Parse and validate the provided run name or path. If it is not provided or invalid,
     // use the default name and path.
@@ -197,6 +227,7 @@ pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
     if record.ungroup_pmu_events {
         init_params.pmu_counter_mode = UNGROUPED_PMU_MODE.to_string();
     }
+    init_params.pmu_cpu_ids = pmu_cpu_ids;
 
     #[cfg(feature = "hotline")]
     {

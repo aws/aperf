@@ -182,16 +182,24 @@ impl CpuInfo {
     }
 }
 
-#[cfg(target_os = "linux")]
-/// Return the IDs of all online CPUs by parsing /sys/devices/system/cpu/online,
-/// a comma-separated list of single CPUs and inclusive ranges, e.g. "0-1,3-5,7".
-pub fn get_online_cpu_ids() -> Result<Vec<usize>> {
+/// Parse a CPU list, a comma-separated list of single CPUs and inclusive
+/// ranges, e.g. "0-1,3-5,7", into sorted and de-duplicated CPU IDs. This is
+/// the format the kernel uses in the CPU masks under /sys/devices/system/cpu,
+/// and the format accepted by the --pmu-cpus option.
+pub fn parse_cpu_list(cpu_list: &str) -> Result<Vec<usize>> {
     let mut ids = Vec::new();
-    let cpu_list = fs::read_to_string("/sys/devices/system/cpu/online")?;
     let cpu_list = cpu_list.trim();
     if cpu_list.is_empty() {
         return Ok(ids);
     }
+
+    fn parse_cpu_id(cpu_id: &str, cpu_list: &str) -> Result<usize> {
+        match cpu_id.trim().parse() {
+            Ok(cpu) => Ok(cpu),
+            Err(e) => bail!("invalid CPU '{cpu_id}' in cpu list '{cpu_list}': {e}"),
+        }
+    }
+
     for part in cpu_list.split(',') {
         let part = part.trim();
         if part.is_empty() {
@@ -199,19 +207,26 @@ pub fn get_online_cpu_ids() -> Result<Vec<usize>> {
         }
         match part.split_once('-') {
             Some((low, high)) => {
-                let low: usize = low.trim().parse()?;
-                let high: usize = high.trim().parse()?;
-                if high < low {
+                let low = parse_cpu_id(low, cpu_list)?;
+                let high = parse_cpu_id(high, cpu_list)?;
+                // Prevent bad user input from attempting to allocate too many memories.
+                if high < low || high - low > 10000 {
                     bail!("invalid CPU range '{part}' in cpu list '{cpu_list}'");
                 }
                 ids.extend(low..=high);
             }
-            None => ids.push(part.parse()?),
+            None => ids.push(parse_cpu_id(part, cpu_list)?),
         }
     }
     ids.sort_unstable();
     ids.dedup();
     Ok(ids)
+}
+
+#[cfg(target_os = "linux")]
+/// Return the IDs of all online CPUs by parsing /sys/devices/system/cpu/online.
+pub fn get_online_cpu_ids() -> Result<Vec<usize>> {
+    parse_cpu_list(&fs::read_to_string("/sys/devices/system/cpu/online")?)
 }
 
 const VIRTUAL_FILE_READ_CAPACITY: usize = 8192;
@@ -450,6 +465,33 @@ mod utils_test {
         // Count should match sysconf(_SC_NPROCESSORS_ONLN) on a normal system.
         let nproc = unsafe { libc::sysconf(libc::_SC_NPROCESSORS_ONLN as libc::c_int) } as usize;
         assert_eq!(ids.len(), nproc, "online CPU count should match sysconf");
+    }
+
+    #[test]
+    fn test_parse_cpu_list() {
+        use super::parse_cpu_list;
+
+        // Out-of-order single CPUs and ranges are expanded and sorted.
+        let mut expected = vec![1, 5, 12, 16, 17, 18, 19];
+        expected.extend(41..=55);
+        assert_eq!(parse_cpu_list("12,5,41-55,16-19,1").unwrap(), expected);
+        // Surrounding whitespace is ignored, and duplicates from repeated values
+        // and overlapping ranges are collapsed.
+        assert_eq!(parse_cpu_list(" 3 , 1-3 ,\t3, 2 ").unwrap(), vec![1, 2, 3]);
+        assert_eq!(parse_cpu_list("7").unwrap(), vec![7]);
+        // Both ends of a range are included.
+        assert_eq!(parse_cpu_list("4-4").unwrap(), vec![4]);
+        // No CPU is requested.
+        assert!(parse_cpu_list("").unwrap().is_empty());
+        assert!(parse_cpu_list("  ").unwrap().is_empty());
+        // A reversed range is a typo, and must not be read as no CPU at all.
+        assert!(parse_cpu_list("5-3").is_err());
+        // Values that are not CPU IDs are rejected.
+        assert!(parse_cpu_list("1,a").is_err());
+        assert!(parse_cpu_list("-1").is_err());
+        assert!(parse_cpu_list("1-").is_err());
+        // User input that might lead to memory exhaustion is rejected.
+        assert!(parse_cpu_list("1-1234567890").is_err());
     }
 
     #[cfg(target_os = "linux")]

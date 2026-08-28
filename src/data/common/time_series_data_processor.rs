@@ -156,9 +156,9 @@ impl TimeSeriesDataProcessor {
         let series = self
             .per_metric_series
             .entry(metric_name.to_string())
-            .or_insert(HashMap::new())
+            .or_default()
             .entry(series_name.to_string())
-            .or_insert(Series::new(series_name.to_string()));
+            .or_insert_with(|| Series::new(series_name.to_string()));
         series.is_aggregate = is_aggregate;
         series.time_diff.push(self.cur_time_diff);
         series.values.push(metric_value);
@@ -181,6 +181,11 @@ impl TimeSeriesDataProcessor {
         }
 
         Some(metric_value)
+    }
+
+    /// Checks if a metric exists in the time-series data.
+    pub fn has_metric(&self, metric_name: &str) -> bool {
+        self.per_metric_series.contains_key(metric_name)
     }
 
     /// Keeps track of previous snapshot value and compute the delta as the series value for
@@ -242,9 +247,9 @@ impl TimeSeriesDataProcessor {
             let aggregate_series = self
                 .per_metric_series
                 .entry(metric_name.clone())
-                .or_insert(HashMap::new())
+                .or_default()
                 .entry(aggregate_series_name.to_string())
-                .or_insert(Series::new(aggregate_series_name.to_string()));
+                .or_insert_with(|| Series::new(aggregate_series_name.to_string()));
             aggregate_series.is_aggregate = true;
             let aggregate_value = match self.aggregate_mode {
                 TimeSeriesDataAggregateMode::Average => {
