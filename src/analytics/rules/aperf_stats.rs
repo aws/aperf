@@ -13,8 +13,8 @@ impl AnalyzeData for AperfStats {
                 stat: Stat::Average,
                 comparator: Comparator::Greater,
                 threshold: 0.01,
-                score: Score::Critical,
-                message: "APerf consumed higher-than-expected userspace CPU time during its collection, and it might impacted the performance of the application undertest. Feel free to report the issue at https://github.com/aws/aperf/issues and ask APerf maintainers to investigate.",
+                score: Score::Concerning,
+                message: "APerf consumed higher-than-expected userspace CPU time during its collection, and it might impacted the performance of the application undertest.",
             },
             time_series_stat_threshold_for_series! {
                 name: "High APerf Kernelspace CPU Time",
@@ -23,8 +23,8 @@ impl AnalyzeData for AperfStats {
                 stat: Stat::Average,
                 comparator: Comparator::Greater,
                 threshold: 0.04,
-                score: Score::Critical,
-                message: "APerf consumed higher-than-expected kernelspace CPU time during its collection, and it might impacted the performance of the application undertest. Feel free to report the issue at https://github.com/aws/aperf/issues and ask APerf maintainers to investigate.",
+                score: Score::Concerning,
+                message: "APerf consumed higher-than-expected kernelspace CPU time during its collection, and it might impacted the performance of the application undertest.",
             },
         ]
     }

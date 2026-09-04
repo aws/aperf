@@ -141,7 +141,7 @@ impl AnalyzeData for PerfStat {
                 metric: "mux_counter_schedule_rate",
                 comparator: Comparator::Less,
                 threshold: 100.0,
-                score: Score::Concerning,
+                score: Score::Neutral,
                 message: " The PMU events were collected under multiplexing. The accuracy of the values might be impacted and there is increased CPU utilization for the collection.",
             ),
         ]
