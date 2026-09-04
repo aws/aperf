@@ -5,6 +5,7 @@ use crate::data::{Data, ProcessData, TimeEnum};
 use crate::data_processing::ReportParams;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 #[cfg(target_os = "linux")]
 use {
     crate::data::common::utils::read_virtual_file, crate::data::CollectData,
@@ -49,7 +50,7 @@ impl InterruptData {
 struct Interrupt {
     pub interrupt_name: String,
     pub interrupt_info: String,
-    pub per_cpu_values: Vec<u64>,
+    pub per_cpu_values: HashMap<usize, u64>,
     // Some interrupts only have one value (instead of per-cpu)
     pub value: Option<u64>,
 }
@@ -59,7 +60,7 @@ impl Interrupt {
         Interrupt {
             interrupt_name,
             interrupt_info: String::new(),
-            per_cpu_values: Vec::new(),
+            per_cpu_values: HashMap::new(),
             value: None,
         }
     }
@@ -73,13 +74,20 @@ fn parse_raw_interrupt_data(raw_interrupt_data: &String) -> Vec<Interrupt> {
     let mut raw_interrupt_lines = raw_interrupt_data.lines();
     // Get the number of CPUs:
     let cpu_lines = raw_interrupt_lines.next().unwrap_or_default();
-    let num_cpus: usize = cpu_lines.split_whitespace().count();
+    let cpu_ids: Vec<Option<usize>> = cpu_lines
+        .split_whitespace()
+        .map(|cpu_label| {
+            cpu_label
+                .strip_prefix("CPU")
+                .and_then(|cpu_id_str| cpu_id_str.parse::<usize>().ok())
+        })
+        .collect();
 
     // process every line except for the first line, which is a line of CPUs as column header
     for raw_interrupt_line in raw_interrupt_data.lines().skip(1) {
-        let mut raw_columns = raw_interrupt_line.split_whitespace();
+        let mut raw_values = raw_interrupt_line.split_whitespace();
 
-        let interrupt_name = match raw_columns.next() {
+        let interrupt_name = match raw_values.next() {
             Some(first_item) => first_item.trim_end_matches(":").to_string(),
             None => continue,
         };
@@ -88,25 +96,23 @@ fn parse_raw_interrupt_data(raw_interrupt_data: &String) -> Vec<Interrupt> {
         let mut interrupt_info_items: Vec<String> = Vec::new();
 
         // process every CPU's value
-        for _i in 0..num_cpus {
-            match raw_columns.next() {
-                Some(raw_column) => {
-                    if let Ok(cpu_value) = raw_column.parse::<u64>() {
-                        interrupt.per_cpu_values.push(cpu_value);
-                    }
-                }
-                None => break,
+        for &cpu_id in &cpu_ids {
+            let Some(raw_value) = raw_values.next() else {
+                break;
+            };
+            if let (Some(cpu_id), Ok(cpu_value)) = (cpu_id, raw_value.parse::<u64>()) {
+                interrupt.per_cpu_values.insert(cpu_id, cpu_value);
             }
         }
         // store the remaining items as the interrupt info
-        for raw_column in raw_columns {
-            interrupt_info_items.push(raw_column.to_string());
+        for raw_item in raw_values {
+            interrupt_info_items.push(raw_item.to_string());
         }
 
         interrupt.interrupt_info = interrupt_info_items.join(" ");
         // The MIS and ERR interrupts do not have per CPU counts
         if is_interrupt_name_mis_err(&interrupt_name) {
-            interrupt.value = interrupt.per_cpu_values.first().map(|value| *value);
+            interrupt.value = interrupt.per_cpu_values.values().next().map(|value| *value);
             interrupt.per_cpu_values.clear();
         }
 
@@ -158,11 +164,11 @@ impl ProcessData for InterruptData {
             for interrupt in per_interrupt_data {
                 let interrupt_metric_name = get_interrupt_metric_name(&interrupt);
 
-                for (cpu, num_interrupts) in interrupt.per_cpu_values.iter().enumerate() {
+                for (cpu, num_interrupts) in interrupt.per_cpu_values {
                     time_series_data_processor.add_accumulative_data_point(
                         &interrupt_metric_name,
                         &get_cpu_series_name(cpu),
-                        *num_interrupts as f64,
+                        num_interrupts as f64,
                     );
                 }
                 if let Some(value) = interrupt.value {

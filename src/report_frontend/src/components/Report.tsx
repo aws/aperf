@@ -4,9 +4,9 @@ import { applyMode, Mode } from "@cloudscape-design/global-styles";
 import DataNavigation from "./misc/DataNavigation";
 import { useReportState } from "./ReportStateProvider";
 import { PROCESSED_DATA, RUNS } from "../definitions/data-config";
-import { extractDataTypeFromFragment, getRunNumCpus } from "../utils/utils";
+import { extractDataTypeFromFragment, getRunCpuIds } from "../utils/utils";
 import { ReportHelpPanel } from "./misc/ReportHelpPanel";
-import { NumCpusPerRun, SelectedCpusPerRun } from "../definitions/types";
+import { CpuIdsPerRun, SelectedCpusPerRun } from "../definitions/types";
 import TimeSeriesDataPage from "./pages/TimeSeriesDataPage";
 import KeyValueDataPage from "./pages/KeyValueDataPage";
 import ProfilingDataPage from "./pages/ProfilingDataPage";
@@ -30,7 +30,7 @@ export default function () {
     setShowSplitPanel,
     setShowHelpPanel,
     setDataComponent,
-    setNumCpusPerRun,
+    setCpuIdsPerRun,
     setSelectedCpusPerRun,
     darkMode,
   } = useReportState();
@@ -51,20 +51,20 @@ export default function () {
     // all statistical findings
     computeAllTimeSeriesStatsDelta();
 
-    // Read the number of CPUs from processed data to be used by the configuration
-    const numCpusPerRun: NumCpusPerRun = {};
+    // Read the CPU IDs from processed data to be used by the configuration
+    const cpuIdsPerRun: CpuIdsPerRun = {};
     const selectedCpusPerRun: SelectedCpusPerRun = {};
     RUNS.forEach((runName) => {
-      const numCpusCurRun = getRunNumCpus(runName);
-      numCpusPerRun[runName] = numCpusCurRun;
+      const curRunCpuIds = getRunCpuIds(runName);
+      cpuIdsPerRun[runName] = curRunCpuIds;
       // When the number of CPUs is too large, the metric graph only show aggregate by default;
       // otherwise show all CPUs
       selectedCpusPerRun[runName] = {
         aggregate: true,
-        cpus: Array(numCpusCurRun).fill(numCpusCurRun <= MAX_NUM_CPU_SHOW_DEFAULT),
+        cpus: new Set(curRunCpuIds.length <= MAX_NUM_CPU_SHOW_DEFAULT ? curRunCpuIds : []),
       };
     });
-    setNumCpusPerRun(numCpusPerRun);
+    setCpuIdsPerRun(cpuIdsPerRun);
     setSelectedCpusPerRun(selectedCpusPerRun);
     setPreprocessing(false);
   }, []);

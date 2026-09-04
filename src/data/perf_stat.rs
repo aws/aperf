@@ -36,22 +36,9 @@ fn is_permission_denied(error: &std::io::Error) -> bool {
     matches!(error.raw_os_error(), Some(libc::EACCES) | Some(libc::EPERM))
 }
 
-/// Whether creating a PMU counter failed because the event is not supported on this platform.
 #[cfg(target_os = "linux")]
-fn is_event_unsupported(error: &std::io::Error) -> bool {
-    matches!(
-        error.raw_os_error(),
-        Some(libc::ENOENT) | Some(libc::ENODEV) | Some(libc::EOPNOTSUPP)
-    )
-}
-
-#[cfg(target_os = "linux")]
-fn log_pmu_counter_error(error: &std::io::Error) {
-    if is_permission_denied(error) {
-        error!("kernel.perf_event_paranoid is larger than 0. Run `sudo sysctl -w kernel.perf_event_paranoid=-1`");
-    } else {
-        error!("Failed to create PMU counter: {error:?}");
-    }
+fn log_permission_denied_error() {
+    error!("kernel.perf_event_paranoid is larger than 0. Run `sudo sysctl -w kernel.perf_event_paranoid=-1`");
 }
 
 /// Get the path to PMU config saved in the run dir.
@@ -306,15 +293,21 @@ impl PmuConfig {
             }
 
             for &cpu_id in cpu_ids {
-                let pmu_metric_counter_group =
-                    match Self::create_counter_group(&metric_name, &event_strings, cpu_id) {
-                        Ok(pmu_metric_counter_group) => pmu_metric_counter_group,
-                        Err(e) if is_event_unsupported(&e) => continue 'outer,
-                        Err(e) => {
-                            log_pmu_counter_error(&e);
-                            return Err(e.into());
-                        }
-                    };
+                let pmu_metric_counter_group = match Self::create_counter_group(
+                    &metric_name,
+                    &event_strings,
+                    cpu_id,
+                ) {
+                    Ok(pmu_metric_counter_group) => pmu_metric_counter_group,
+                    Err(e) if is_permission_denied(&e) => {
+                        log_permission_denied_error();
+                        return Err(e.into());
+                    }
+                    Err(e) => {
+                        warn!("Skipping metric {metric_name} as its counter group cannot be created: {e:?}");
+                        continue 'outer;
+                    }
+                };
                 metric_counter_groups.push(PmuCollector::Grouped(pmu_metric_counter_group));
             }
         }
@@ -356,10 +349,7 @@ impl PmuConfig {
                 let event = match PmuConfigEvent::from_event_string(event_string) {
                     Ok(event) => event,
                     Err(e) => {
-                        warn!(
-                            "Failed to create event from definition {event_string}: {:?}",
-                            e
-                        );
+                        warn!("Failed to create config event {event_string}: {e:?}");
                         continue 'outer;
                     }
                 };
@@ -380,13 +370,13 @@ impl PmuConfig {
 
                 let counter = match builder.build() {
                     Ok(counter) => counter,
-                    Err(e) if is_event_unsupported(&e) => {
-                        warn!("Skipping PMU event {event_name} as it is not supported.");
-                        continue 'outer;
+                    Err(e) if is_permission_denied(&e) => {
+                        log_permission_denied_error();
+                        return Err(e.into());
                     }
                     Err(e) => {
-                        log_pmu_counter_error(&e);
-                        return Err(e.into());
+                        warn!("Skipping PMU event {event_name} as its counter cannot be created: {e:?}");
+                        continue 'outer;
                     }
                 };
 
@@ -495,12 +485,11 @@ impl PmuConfig {
             let event = match PmuConfigEvent::from_event_string(event_string) {
                 Ok(event) => event,
                 Err(e) => {
-                    warn!(
-                        "Failed to create event {event_string} in metric {metric_name}: {:?}",
-                        e
-                    );
-                    // An invalid event string should be handled the same as "unsupported events".
-                    return Err(std::io::Error::from_raw_os_error(libc::ENOENT));
+                    // An invalid event string should be handled the same as failed group creation.
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!("Failed to create config event {event_string}: {e:?}"),
+                    ));
                 }
             };
 
@@ -511,11 +500,7 @@ impl PmuConfig {
                 builder.include_hv();
             }
 
-            let counter = builder.build_with_group(&mut group).inspect_err(|e| {
-                if is_event_unsupported(e) {
-                    warn!("PMU event {event_string} in metric {metric_name} is not supported.");
-                }
-            })?;
+            let counter = builder.build_with_group(&mut group)?;
 
             counters.push(counter);
         }

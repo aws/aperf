@@ -378,6 +378,117 @@ fn test_process_interrupts_mis_err_only() {
     }
 }
 
+/// /proc/interrupts only lists the online CPUs, so the CPU IDs in its column header are
+/// not necessarily contiguous: an offline CPU leaves a gap, and a column's position can
+/// no longer be used as its CPU ID.
+#[test]
+fn test_process_interrupts_noncontiguous_cpu_ids() {
+    use aperf::data::common::data_formats::AperfData;
+
+    // CPU2 is offline, so it has no column at all
+    let header = "           CPU0       CPU1       CPU3";
+    let base_time = Utc::now();
+    let raw_samples = [
+        // irq 10, IPI0, and ERR (which has no per-CPU counts)
+        "  10:        100        200        300   IR-PCI-MSI 0-edge      eth0\n\
+         IPI0:        10         20         30   Rescheduling interrupts\n\
+          ERR:          5\n",
+        "  10:        150        260        380   IR-PCI-MSI 0-edge      eth0\n\
+         IPI0:        15         30         45   Rescheduling interrupts\n\
+          ERR:          7\n",
+        "  10:        170        300        430   IR-PCI-MSI 0-edge      eth0\n\
+         IPI0:        25         50         75   Rescheduling interrupts\n\
+          ERR:          7\n",
+    ];
+
+    let raw_data: Vec<Data> = raw_samples
+        .iter()
+        .enumerate()
+        .map(|(sample_idx, sample)| {
+            Data::InterruptDataRaw(InterruptDataRaw {
+                time: TimeEnum::DateTime(base_time + Duration::seconds(sample_idx as i64)),
+                data: format!("{}\n{}", header, sample),
+            })
+        })
+        .collect();
+
+    let result = InterruptData::new()
+        .process_raw_data(&ReportParams::new(), raw_data)
+        .unwrap();
+
+    let AperfData::TimeSeries(time_series_data) = result else {
+        panic!("Expected TimeSeries data");
+    };
+    assert_eq!(time_series_data.metrics.len(), 3);
+
+    // Every per-CPU metric must have a series for the online CPUs only - CPU3 must keep its
+    // own ID instead of being shifted into the gap left by the offline CPU2
+    let expected_per_cpu_series_names = vec!["CPU0", "CPU1", "CPU3", "average"];
+    // Map<metric name, Map<series name, expected deltas>>. The first data point of an
+    // accumulative series is always 0 as there is no previous value to compute the delta.
+    let expected_per_metric_series_values = HashMap::from([
+        (
+            "(IR-PCI-MSI 0-edge eth0)",
+            HashMap::from([
+                ("CPU0", vec![0.0, 50.0, 20.0]),
+                ("CPU1", vec![0.0, 60.0, 40.0]),
+                ("CPU3", vec![0.0, 80.0, 50.0]),
+                // The average is over the 3 online CPUs, not 4
+                ("average", vec![0.0, 190.0 / 3.0, 110.0 / 3.0]),
+            ]),
+        ),
+        (
+            "IPI0 (Rescheduling interrupts)",
+            HashMap::from([
+                ("CPU0", vec![0.0, 5.0, 10.0]),
+                ("CPU1", vec![0.0, 10.0, 20.0]),
+                ("CPU3", vec![0.0, 15.0, 30.0]),
+                ("average", vec![0.0, 10.0, 20.0]),
+            ]),
+        ),
+        // ERR has a single value shared by all CPUs, so it has no per-CPU series
+        ("ERR", HashMap::from([("ERR", vec![0.0, 2.0, 0.0])])),
+    ]);
+
+    for (metric_name, expected_series_values) in expected_per_metric_series_values {
+        let metric = &time_series_data.metrics[metric_name];
+        let series_names: Vec<&str> = metric
+            .series
+            .iter()
+            .map(|series| series.series_name.as_str())
+            .collect();
+        if metric_name == "ERR" {
+            assert_eq!(series_names, vec!["ERR"]);
+        } else {
+            assert_eq!(series_names, expected_per_cpu_series_names);
+        }
+
+        for series in &metric.series {
+            let expected_values = &expected_series_values[series.series_name.as_str()];
+            assert_eq!(
+                series.values.len(),
+                expected_values.len(),
+                "Metric {} series {}: unexpected number of data points",
+                metric_name,
+                series.series_name
+            );
+            for (sample_idx, (&series_value, &expected_value)) in
+                series.values.iter().zip(expected_values.iter()).enumerate()
+            {
+                assert!(
+                    (series_value - expected_value).abs() < 1e-6,
+                    "Metric {} series {} sample {}: expected {} but got {}",
+                    metric_name,
+                    series.series_name,
+                    sample_idx,
+                    expected_value,
+                    series_value
+                );
+            }
+        }
+    }
+}
+
 #[test]
 fn test_decreasing_counter() {
     use aperf::data::common::data_formats::AperfData;

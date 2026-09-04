@@ -223,10 +223,31 @@ pub fn parse_cpu_list(cpu_list: &str) -> Result<Vec<usize>> {
     Ok(ids)
 }
 
+/// Helper function to retrieve the CPU ID of a per-CPU line in /proc/stat.
+pub fn proc_stat_line_cpu_id(line: &str) -> Option<usize> {
+    line.split_whitespace()
+        .next()?
+        .strip_prefix("cpu")?
+        .parse()
+        .ok()
+}
+
+/// Return the IDs of all online CPUs, from /sys/devices/system/cpu/online, or fall back to
+/// per-CPU lines of /proc/stat when sysfs cannot be read.
 #[cfg(target_os = "linux")]
-/// Return the IDs of all online CPUs by parsing /sys/devices/system/cpu/online.
 pub fn get_online_cpu_ids() -> Result<Vec<usize>> {
-    parse_cpu_list(&fs::read_to_string("/sys/devices/system/cpu/online")?)
+    match fs::read_to_string("/sys/devices/system/cpu/online") {
+        Ok(cpu_list) => parse_cpu_list(&cpu_list),
+        Err(e) => {
+            debug!("Failed to read the online CPUs from sysfs ({e}), falling back to /proc/stat.");
+            let mut cpu_ids: Vec<usize> = read_virtual_file("/proc/stat")?
+                .lines()
+                .filter_map(proc_stat_line_cpu_id)
+                .collect();
+            cpu_ids.sort_unstable();
+            Ok(cpu_ids)
+        }
+    }
 }
 
 const VIRTUAL_FILE_READ_CAPACITY: usize = 8192;
@@ -462,9 +483,25 @@ mod utils_test {
         sorted.sort_unstable();
         sorted.dedup();
         assert_eq!(ids, sorted, "ids should be sorted and unique");
-        // Count should match sysconf(_SC_NPROCESSORS_ONLN) on a normal system.
-        let nproc = unsafe { libc::sysconf(libc::_SC_NPROCESSORS_ONLN as libc::c_int) } as usize;
-        assert_eq!(ids.len(), nproc, "online CPU count should match sysconf");
+        // Compare against /proc/stat since it is an independent source of the same online CPU set.
+        let mut proc_stat_ids: Vec<usize> = super::read_virtual_file("/proc/stat")
+            .expect("should read /proc/stat")
+            .lines()
+            .filter_map(super::proc_stat_line_cpu_id)
+            .collect();
+        proc_stat_ids.sort_unstable();
+        assert_eq!(ids, proc_stat_ids, "sysfs and /proc/stat should agree");
+    }
+
+    #[test]
+    fn test_proc_stat_line_cpu_id() {
+        use super::proc_stat_line_cpu_id;
+        assert_eq!(proc_stat_line_cpu_id("cpu0 1 2 3"), Some(0));
+        assert_eq!(proc_stat_line_cpu_id("cpu12 1 2 3"), Some(12));
+        assert_eq!(proc_stat_line_cpu_id("cpu  1 2 3"), None);
+        assert_eq!(proc_stat_line_cpu_id("intr 1 2 3"), None);
+        assert_eq!(proc_stat_line_cpu_id("cpuX 1 2"), None);
+        assert_eq!(proc_stat_line_cpu_id(""), None);
     }
 
     #[test]

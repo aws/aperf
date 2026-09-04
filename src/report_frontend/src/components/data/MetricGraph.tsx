@@ -17,7 +17,7 @@ function getSeriesData(
   runName: string,
   metricName: string,
   selectedAggregate: boolean,
-  selectedCpus: boolean[],
+  selectedCpus: Set<number>,
 ): {
   seriesData: Partial<Plotly.PlotData>[];
   valueRange: number[];

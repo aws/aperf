@@ -318,4 +318,90 @@ mod cpu_utilization_tests {
             panic!("Expected TimeSeries data");
         }
     }
+
+    /// The kernel only writes a /proc/stat line for every *online* CPU, so an offline CPU
+    /// leaves a gap in the CPU IDs. Every series must be named after the CPU ID the kernel
+    /// reported, not after the position of its line, or all the CPUs after the gap get
+    /// attributed to the wrong CPU.
+    #[test]
+    fn test_process_cpu_utilization_noncontiguous_cpu_ids() {
+        use aperf::data::cpu_utilization::CpuUtilizationRaw;
+        use aperf::data::TimeEnum;
+        use chrono::Utc;
+
+        // cpu2 is offline, so /proc/stat lists cpu0, cpu1, cpu3 and cpu4 only.
+        let online_cpu_ids = [0, 1, 3, 4];
+        let base_time = Utc::now();
+        let mut raw_data: Vec<Data> = Vec::new();
+        for sample_idx in 0..3u64 {
+            // Every CPU spends 25% of the jiffies in user and the remaining 75% idle, so
+            // that a mis-attributed series would still be well-formed and only the name
+            // reveals the bug.
+            let mut proc_stat = format!(
+                "cpu  {} 0 0 {} 0 0 0 0 0 0\n",
+                sample_idx * 100 * online_cpu_ids.len() as u64,
+                sample_idx * 300 * online_cpu_ids.len() as u64
+            );
+            for cpu_id in online_cpu_ids {
+                proc_stat.push_str(&format!(
+                    "cpu{} {} 0 0 {} 0 0 0 0 0 0\n",
+                    cpu_id,
+                    sample_idx * 100,
+                    sample_idx * 300
+                ));
+            }
+            proc_stat.push_str("intr 1 2 3\nctxt 4567\n");
+            raw_data.push(Data::CpuUtilizationRaw(CpuUtilizationRaw {
+                time: TimeEnum::DateTime(base_time + chrono::Duration::seconds(sample_idx as i64)),
+                data: proc_stat,
+            }));
+        }
+
+        let mut cpu_util = CpuUtilization::new();
+        let result = cpu_util
+            .process_raw_data(&ReportParams::new(), raw_data)
+            .unwrap();
+
+        if let AperfData::TimeSeries(time_series_data) = result {
+            let user_metric = time_series_data
+                .metrics
+                .get("user")
+                .expect("missing user metric");
+            // One series per online CPU, plus the aggregate of all CPUs.
+            assert_eq!(user_metric.series.len(), online_cpu_ids.len() + 1);
+
+            let cpu_series_names: Vec<&str> = user_metric
+                .series
+                .iter()
+                .filter(|series| !series.is_aggregate)
+                .map(|series| series.series_name.as_str())
+                .collect();
+            // The names follow the CPU IDs and skip the offline cpu2, rather than being
+            // renumbered into a contiguous CPU0..CPU3.
+            assert_eq!(cpu_series_names, vec!["CPU0", "CPU1", "CPU3", "CPU4"]);
+
+            // Exactly one aggregate series, and it is not mistaken for a CPU.
+            let aggregate_series: Vec<&str> = user_metric
+                .series
+                .iter()
+                .filter(|series| series.is_aggregate)
+                .map(|series| series.series_name.as_str())
+                .collect();
+            assert_eq!(aggregate_series, vec!["Aggregate"]);
+
+            // Every CPU had the same utilization, so a mis-attribution cannot hide here:
+            // all of them report 25% user for every interval after the first.
+            for series in &user_metric.series {
+                assert_eq!(series.values.len(), 3, "series {}", series.series_name);
+                assert_eq!(
+                    series.values[1..],
+                    [25.0, 25.0],
+                    "unexpected user utilization for series {}",
+                    series.series_name
+                );
+            }
+        } else {
+            panic!("Expected TimeSeries data");
+        }
+    }
 }
