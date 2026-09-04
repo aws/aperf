@@ -140,8 +140,12 @@ export interface TimeSeriesMetricProps {
   readonly metricName: string;
 }
 
-export type NumCpusPerRun = { [key in string]: number };
-export type SelectedCpusPerRun = { [key in string]: { aggregate: boolean; cpus: boolean[] } };
+/// The CPU IDs a run collected data for. The IDs are sorted but not necessarily
+/// contiguous: an offline CPU leaves a gap, so they cannot be treated as 0..N-1.
+export type CpuIdsPerRun = { [key in string]: number[] };
+/// The CPUs currently selected for display, held as a set of CPU IDs rather than
+/// a positional array so that a gap in the IDs cannot shift the selection.
+export type SelectedCpusPerRun = { [key in string]: { aggregate: boolean; cpus: Set<number> } };
 
 export const ALL_FINDING_TYPES = ["negative", "zero", "positive"] as const;
 export type FindingType = (typeof ALL_FINDING_TYPES)[number];

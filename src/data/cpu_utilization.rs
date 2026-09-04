@@ -1,6 +1,8 @@
 use crate::data::common::data_formats::AperfData;
 use crate::data::common::time_series_data_processor::time_series_data_processor_with_custom_aggregate;
-use crate::data::common::utils::{get_aggregate_series_name, get_cpu_series_name};
+use crate::data::common::utils::{
+    get_aggregate_series_name, get_cpu_series_name, proc_stat_line_cpu_id,
+};
 use crate::data::{Data, ProcessData, TimeEnum};
 use crate::data_processing::ReportParams;
 use anyhow::Result;
@@ -56,44 +58,33 @@ impl CpuUtilization {
     }
 }
 
-/// A helper struct that parses and holds one snapshot of /proc/stat data
-pub struct ProcKernelStat {
-    total: Vec<u64>,
-    per_cpu: Vec<Vec<u64>>,
-}
+fn parse_raw_proc_stat(raw_data: &String) -> HashMap<usize, Vec<u64>> {
+    let mut proc_stats: HashMap<usize, Vec<u64>> = HashMap::new();
 
-impl ProcKernelStat {
-    pub fn from_raw_data(raw_data: &String) -> Self {
-        let mut kernel_stats = ProcKernelStat {
-            total: Vec::new(),
-            per_cpu: Vec::new(),
-        };
+    for line in raw_data.lines() {
+        let split: Vec<&str> = line.split_whitespace().collect();
 
-        for line in raw_data.lines() {
-            let split: Vec<&str> = line.split_whitespace().collect();
-
-            if split.len() < 9 {
-                continue;
-            }
-
-            // For aggregate the label will just be "cpu"; for individual core the label
-            // will be "cpu<number>"
-            let cpu_label = split[0];
-
-            let cpu_stat: Vec<u64> = split[1..]
-                .iter()
-                .map(|&s| s.parse::<u64>().unwrap_or_default())
-                .collect();
-
-            if cpu_label == "cpu" {
-                kernel_stats.total = cpu_stat;
-            } else if cpu_label.starts_with("cpu") {
-                kernel_stats.per_cpu.push(cpu_stat);
-            }
+        if split.len() < 9 {
+            continue;
         }
 
-        kernel_stats
+        // For aggregate the label will just be "cpu"; for individual core the label
+        // will be "cpu<number>"
+        let cpu_label = split[0];
+
+        let cpu_stat: Vec<u64> = split[1..]
+            .iter()
+            .map(|&s| s.parse::<u64>().unwrap_or_default())
+            .collect();
+
+        if cpu_label == "cpu" {
+            proc_stats.insert(usize::MAX, cpu_stat);
+        } else if let Some(cpu_id) = proc_stat_line_cpu_id(line) {
+            proc_stats.insert(cpu_id, cpu_stat);
+        }
     }
+
+    proc_stats
 }
 
 #[derive(EnumIter, Display, Clone, Copy, Eq, Hash, PartialEq)]
@@ -146,22 +137,15 @@ impl ProcessData for CpuUtilization {
             };
             time_series_data_processor.proceed_to_time(raw_value.time);
 
-            let kernel_stats = ProcKernelStat::from_raw_data(&raw_value.data);
-            let aggregate_cpu_time = vec![kernel_stats.total];
-            let all_cpu_time = kernel_stats.per_cpu;
-            let num_cpus = all_cpu_time.len();
+            let proc_stats = parse_raw_proc_stat(&raw_value.data);
 
-            for (cpu, cpu_time) in all_cpu_time
-                .iter()
-                .chain(aggregate_cpu_time.iter())
-                .enumerate()
-            {
+            for (cpu, cpu_time) in proc_stats {
                 // Compute the cpu time delta for every CPU state as the numerator, and the sum of
                 // all deltas as the denominator
                 let mut per_cpu_state_time_delta: HashMap<CpuState, f64> = HashMap::new();
                 let mut cpu_time_delta_sum = 0.0;
                 for cpu_state in CpuState::iter() {
-                    let cur_cpu_time = get_cpu_time(&cpu_state, cpu_time);
+                    let cur_cpu_time = get_cpu_time(&cpu_state, &cpu_time);
                     if let Some(cpu_time_delta) = time_series_data_processor
                         .get_delta_and_set_previous_value(
                             &cpu_state.to_string(),
@@ -188,7 +172,7 @@ impl ProcessData for CpuUtilization {
                         0.0
                     };
 
-                    if cpu < num_cpus {
+                    if cpu != usize::MAX {
                         // Processing one of the CPUs - add the data point to the CPU series in the
                         // state metric
                         time_series_data_processor.add_data_point(
@@ -214,7 +198,7 @@ impl ProcessData for CpuUtilization {
 
                 // If processing the aggregate of all CPUs, also compute the total CPU utilization
                 // which is sum of per-state time minus idle time
-                if cpu >= num_cpus {
+                if cpu == usize::MAX {
                     let total_cpu_util = if cpu_time_delta_sum > 0.0 {
                         (cpu_time_delta_sum
                             - per_cpu_state_time_delta

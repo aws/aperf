@@ -3,7 +3,7 @@ import { CollectionPreferences, Multiselect, SpaceBetween } from "@cloudscape-de
 import { useReportState } from "../ReportStateProvider";
 import { MAX_NUM_CPU_SHOW_DEFAULT, NUM_METRICS_PER_PAGE } from "../../definitions/constants";
 import { RUNS } from "../../definitions/data-config";
-import { NumCpusPerRun, SelectedCpusPerRun } from "../../definitions/types";
+import { CpuIdsPerRun, SelectedCpusPerRun } from "../../definitions/types";
 import { SelectProps } from "@cloudscape-design/components/select/interfaces";
 
 type SelectedCpuOptionsPerRun = { [key in string]: SelectProps.Options };
@@ -23,12 +23,12 @@ function getCpuOption(cpuNumber: number): SelectProps.Option {
     : { label: `CPU${cpuNumber}`, value: cpuNumber.toString() };
 }
 
-function getAllCpuOptionsPerRun(numCpusPerRun: NumCpusPerRun): Map<string, SelectProps.Option[]> {
+function getAllCpuOptionsPerRun(cpuIdsPerRun: CpuIdsPerRun): Map<string, SelectProps.Option[]> {
   const allCpuOptions = new Map<string, SelectProps.Option[]>();
-  for (const runName in numCpusPerRun) {
+  for (const runName in cpuIdsPerRun) {
     const curRunCpuOptions: SelectProps.Option[] = [getCpuOption(-1)];
-    for (let i = 0; i < numCpusPerRun[runName]; i++) {
-      curRunCpuOptions.push(getCpuOption(i));
+    for (const cpuId of cpuIdsPerRun[runName]) {
+      curRunCpuOptions.push(getCpuOption(cpuId));
     }
     allCpuOptions.set(runName, curRunCpuOptions);
   }
@@ -46,11 +46,9 @@ function selectedCpusToOptions(
   for (const runName in selectedCpusPerRun) {
     const curRunCpuOptions: SelectProps.Option[] = [];
     if (selectedCpusPerRun[runName].aggregate) curRunCpuOptions.push(getCpuOption(-1));
-    selectedCpusPerRun[runName].cpus.forEach((selected: boolean, cpu: number) => {
-      if (selected) {
-        curRunCpuOptions.push(getCpuOption(cpu));
-      }
-    });
+    for (const cpuId of [...selectedCpusPerRun[runName].cpus].sort((cpuId, otherCpuId) => cpuId - otherCpuId)) {
+      curRunCpuOptions.push(getCpuOption(cpuId));
+    }
     updateSelectedCpuOptions({
       runName,
       selectedCpuOptions: curRunCpuOptions,
@@ -64,18 +62,17 @@ function selectedCpusToOptions(
  */
 function optionsToSelectedCpus(
   selectedCpuOptionsPerRun: SelectedCpuOptionsPerRun,
-  numCpusPerRun: NumCpusPerRun,
   setSelectedCpusPerRun: (newSelectedCpusPerRun: SelectedCpusPerRun) => void,
 ) {
   const selectedCpusPerRun: SelectedCpusPerRun = {};
   for (const runName in selectedCpuOptionsPerRun) {
     let selectedAggregate = false;
-    const selectedCpus: boolean[] = Array(numCpusPerRun[runName]).fill(false);
+    const selectedCpus = new Set<number>();
     for (const selectedOption of selectedCpuOptionsPerRun[runName]) {
       if (selectedOption.label == "Aggregate") {
         selectedAggregate = true;
       } else {
-        selectedCpus[Number(selectedOption.value)] = true;
+        selectedCpus.add(Number(selectedOption.value));
       }
     }
     selectedCpusPerRun[runName] = {
@@ -91,15 +88,10 @@ function optionsToSelectedCpus(
  * the number of graphs to render on each page as well as the visible CPUs
  */
 export default function () {
-  const {
-    numMetricGraphsPerPage,
-    setNumMetricGraphsPerPage,
-    numCpusPerRun,
-    selectedCpusPerRun,
-    setSelectedCpusPerRun,
-  } = useReportState();
+  const { numMetricGraphsPerPage, setNumMetricGraphsPerPage, cpuIdsPerRun, selectedCpusPerRun, setSelectedCpusPerRun } =
+    useReportState();
 
-  const allCpuOptionsPerRun = React.useMemo(() => getAllCpuOptionsPerRun(numCpusPerRun), [numCpusPerRun]);
+  const allCpuOptionsPerRun = React.useMemo(() => getAllCpuOptionsPerRun(cpuIdsPerRun), [cpuIdsPerRun]);
 
   const [selectedCpuOptionsPerRun, updateSelectedCpuOptions] = React.useReducer(selectedCpuOptionsReducer, {});
   React.useEffect(() => {
@@ -159,7 +151,7 @@ export default function () {
       onCancel={() => selectedCpusToOptions(selectedCpusPerRun, updateSelectedCpuOptions)}
       onConfirm={({ detail }) => {
         setNumMetricGraphsPerPage(detail.pageSize);
-        optionsToSelectedCpus(selectedCpuOptionsPerRun, numCpusPerRun, setSelectedCpusPerRun);
+        optionsToSelectedCpus(selectedCpuOptionsPerRun, setSelectedCpusPerRun);
       }}
     />
   );

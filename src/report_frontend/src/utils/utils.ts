@@ -37,25 +37,32 @@ export function getDataTypeNonZeroMetricNames(dataType: DataType, sortedMetricNa
   });
 }
 
+const CPU_SERIES_NAME_PATTERN = /^CPU(\d+)$/;
+
+export function getCpuIdFromSeriesName(seriesName: string): number | undefined {
+  const cpuId = CPU_SERIES_NAME_PATTERN.exec(seriesName);
+  return cpuId === null ? undefined : Number(cpuId[1]);
+}
+
 /**
- * Compute the number of CPUs from time series metrics whose series are all CPUs
+ * Collect the online CPU ids of a run from data types that contain the CPU info.
  */
-export function getRunNumCpus(runName: string): number {
+export function getRunCpuIds(runName: string): number[] {
+  const cpuIds = new Set<number>();
   for (const cpuDataType of CPU_DATA_TYPES) {
     const reportData = PROCESSED_DATA[cpuDataType].runs[runName] as TimeSeriesData;
     if (reportData == undefined) continue;
     for (const metricName in reportData.metrics) {
-      let numCpus = 0;
-      for (const series of reportData.metrics[metricName].series) {
-        if (series.series_name.toLowerCase().startsWith("cpu")) {
-          numCpus++;
-        }
+      const curMetricCpuIds = reportData.metrics[metricName].series
+        .map((series) => getCpuIdFromSeriesName(series.series_name))
+        .filter((cpuId): cpuId is number => cpuId !== undefined);
+      if (curMetricCpuIds.length > 0) {
+        curMetricCpuIds.forEach((cpuId) => cpuIds.add(cpuId));
+        break;
       }
-      if (numCpus > 0) return numCpus;
     }
   }
-  // no CPU data type was collected, so return 0
-  return 0;
+  return [...cpuIds].sort((cpuId, otherCpuId) => cpuId - otherCpuId);
 }
 
 /**
@@ -70,14 +77,12 @@ export function formatNumber(n: number) {
   return n.toFixed(2);
 }
 
-export function shouldShowCpuSeries(seriesName: string, selectedAggregate: boolean, selectedCpus: boolean[]) {
+export function shouldShowCpuSeries(seriesName: string, selectedAggregate: boolean, selectedCpus: Set<number>) {
   if (seriesName === "Aggregate") {
     return selectedAggregate;
-  } else if (seriesName.startsWith("CPU")) {
-    return !!selectedCpus[Number(seriesName.substring(3))];
-  } else {
-    return true;
   }
+  const cpuId = getCpuIdFromSeriesName(seriesName);
+  return cpuId === undefined ? true : selectedCpus.has(cpuId);
 }
 
 /**

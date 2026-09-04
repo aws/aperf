@@ -4,7 +4,7 @@ import {
   ALL_FINDING_TYPES,
   DataType,
   FindingType,
-  NumCpusPerRun,
+  CpuIdsPerRun,
   SelectedCpusPerRun,
   Stat,
 } from "../definitions/types";
@@ -30,8 +30,8 @@ interface ReportState {
   setUpdateFilteringText: (newUpdateFilteringText: (text: string) => void) => void;
   combineGraphs: boolean;
   setCombineGraphs: (newCombineGraphs: boolean) => void;
-  numCpusPerRun: NumCpusPerRun;
-  setNumCpusPerRun: (newNumCpusPerRun: NumCpusPerRun) => void;
+  cpuIdsPerRun: CpuIdsPerRun;
+  setCpuIdsPerRun: (newCpuIdsPerRun: CpuIdsPerRun) => void;
   selectedCpusPerRun: SelectedCpusPerRun;
   setSelectedCpusPerRun: (newSelectedCpusPerRun: SelectedCpusPerRun) => void;
   darkMode: boolean;
@@ -70,7 +70,7 @@ export default function (props: { children: ReactNode }) {
   // to be distinguished from the function argument supported by the React useState and setState function
   const [updateFilteringText, setUpdateFilteringText] = React.useState<(text: string) => void>(() => () => {});
   const [combineGraphs, setCombineGraphs] = React.useState(false);
-  const [numCpusPerRun, setNumCpusPerRun] = React.useState<NumCpusPerRun>({});
+  const [cpuIdsPerRun, setCpuIdsPerRun] = React.useState<CpuIdsPerRun>({});
   const [selectedCpusPerRun, setSelectedCpusPerRun] = React.useState<SelectedCpusPerRun>({});
   const [darkMode, setDarkMode] = React.useState(() => {
     const saved = localStorage.getItem("aperf-dark-mode");
@@ -129,8 +129,8 @@ export default function (props: { children: ReactNode }) {
     setUpdateFilteringText,
     combineGraphs,
     setCombineGraphs,
-    numCpusPerRun,
-    setNumCpusPerRun,
+    cpuIdsPerRun,
+    setCpuIdsPerRun,
     selectedCpusPerRun,
     setSelectedCpusPerRun,
     darkMode,
