@@ -1,20 +1,35 @@
 use crate::data::common::data_formats::AperfData;
-use crate::data::common::time_series_data_processor::time_series_data_processor_with_custom_aggregate;
+use crate::data::common::time_series_data_processor::{
+    time_series_data_processor_with_custom_aggregate, TimeSeriesDataProcessor,
+};
 use crate::data::{Data, ProcessData, TimeEnum};
 use crate::data_processing::ReportParams;
 use anyhow::Result;
 use indexmap::IndexMap;
 use log::error;
 use serde::{Deserialize, Serialize};
+use std::fs::File;
 #[cfg(target_os = "linux")]
 use {
-    crate::data::common::utils::read_virtual_file, crate::data::CollectData,
-    crate::data_collection::InitParams, chrono::prelude::*,
+    crate::data::common::utils::{
+        open_files_in_dir, per_hugepage_size_dir_suffix, per_hugepage_size_dirs,
+        read_open_virtual_file, read_virtual_file,
+    },
+    crate::data::common::HUGETLB_DIR,
+    crate::data::CollectData,
+    crate::data_collection::InitParams,
+    chrono::prelude::*,
+    log::debug,
+    std::collections::HashMap,
+    std::path::Path,
 };
 
 /// Gather Meminfo raw data.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct MeminfoDataRaw {
+    // Held all open file handlers for the per-size HugeTLB pool counter files.
+    #[serde(skip)]
+    pub hugetlb_files: Vec<(String, File)>,
     pub time: TimeEnum,
     pub data: String,
 }
@@ -30,6 +45,7 @@ impl Default for MeminfoDataRaw {
 impl MeminfoDataRaw {
     pub fn new() -> Self {
         MeminfoDataRaw {
+            hugetlb_files: Vec::new(),
             time: TimeEnum::DateTime(Utc::now()),
             data: String::new(),
         }
@@ -38,9 +54,47 @@ impl MeminfoDataRaw {
 
 #[cfg(target_os = "linux")]
 impl CollectData for MeminfoDataRaw {
+    fn prepare_data_collector(&mut self, _init_params: &InitParams) -> Result<()> {
+        // The per-size HugeTLB pool counters and the corresponding metric name prefix in meminfo.
+        // For example, nr_hugepages of hugepages-2048kB eventually becomes HugePages_Total_2048kB.
+        let hugetlb_pool_counters = HashMap::from([
+            ("nr_hugepages", "HugePages_Total"),
+            ("free_hugepages", "HugePages_Free"),
+            ("resv_hugepages", "HugePages_Rsvd"),
+            ("surplus_hugepages", "HugePages_Surp"),
+        ]);
+
+        // Collect and open all per-size hugetlb counter files.
+        let counter_names: Vec<&str> = hugetlb_pool_counters.keys().copied().collect();
+        for size_dir in per_hugepage_size_dirs(Path::new(HUGETLB_DIR)) {
+            let Some(size) = per_hugepage_size_dir_suffix(&size_dir) else {
+                continue;
+            };
+            for (counter_name, file) in open_files_in_dir(&size_dir, &counter_names) {
+                if let Some(metric_name) = hugetlb_pool_counters.get(counter_name.as_str()) {
+                    self.hugetlb_files
+                        .push((format!("{metric_name}_{size}"), file));
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn collect_data(&mut self, _init_params: &InitParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = read_virtual_file("/proc/meminfo")?;
+
+        // Append all per-size hugetlb counter values.
+        for (metric_name, file) in self.hugetlb_files.iter_mut() {
+            match read_open_virtual_file(file) {
+                Ok(value) => {
+                    self.data
+                        .push_str(&format!("{metric_name}: {}\n", value.trim()));
+                }
+                Err(e) => debug!("Could not read the value of {metric_name}: {e}"),
+            }
+        }
+
         Ok(())
     }
 }
@@ -56,7 +110,7 @@ impl MeminfoData {
 
 /// Help function to parse a raw /proc/meminfo data into an IndexMap, where the
 /// insertion order is maintained and can be used to create metric name ordering
-fn parse_meminfo(raw_data: &String) -> IndexMap<String, u64> {
+fn parse_meminfo(raw_data: &str) -> IndexMap<String, u64> {
     let mut meminfo_map: IndexMap<String, u64> = IndexMap::new();
 
     for line in raw_data.lines() {
@@ -66,7 +120,7 @@ fn parse_meminfo(raw_data: &String) -> IndexMap<String, u64> {
         let split: Vec<&str> = line.split_whitespace().collect();
 
         if split.len() < 2 {
-            error!("Unexpected raw data format: {}", line);
+            error!("Unexpected raw meminfo data: {}", line);
             continue;
         }
 
@@ -95,6 +149,34 @@ fn parse_meminfo(raw_data: &String) -> IndexMap<String, u64> {
     meminfo_map
 }
 
+/// Register the derived metric for idle HugeTLB pool memory, as a percentage of total memory,
+/// summed over all per-size free pages.
+fn register_hugetlb_unused_memory_percent(
+    processor: &mut TimeSeriesDataProcessor,
+    metric_names: &[String],
+) {
+    let mut size_terms: Vec<String> = metric_names
+        .iter()
+        .filter_map(|name| name.strip_prefix("HugePages_Total_"))
+        .filter_map(|size| size.strip_suffix("kB")?.parse::<u64>().ok())
+        .map(|size_kb| {
+            format!(
+                "(HugePages_Free_{size_kb}kB - HugePages_Rsvd_{size_kb}kB) * {}",
+                size_kb * 1024
+            )
+        })
+        .collect();
+    if size_terms.is_empty() {
+        size_terms.push("(HugePages_Free - HugePages_Rsvd) * Hugepagesize".to_string());
+    }
+    let unused_bytes = size_terms.join(" + ");
+
+    processor.register_derived_metric(
+        "Hugetlb_Unused_Memory_Percent",
+        &format!("({unused_bytes}) / MemTotal * 100"),
+    );
+}
+
 impl ProcessData for MeminfoData {
     fn process_raw_data(
         &mut self,
@@ -103,6 +185,9 @@ impl ProcessData for MeminfoData {
     ) -> Result<AperfData> {
         let mut time_series_data_processor =
             time_series_data_processor_with_custom_aggregate!(report_params.collection_start);
+
+        time_series_data_processor
+            .register_derived_metric("PageTables_Memory_Percent", "PageTables / MemTotal * 100");
 
         let mut metric_name_order: Vec<String> = Vec::new();
 
@@ -120,6 +205,10 @@ impl ProcessData for MeminfoData {
             // placed at last
             if metric_name_order.is_empty() {
                 metric_name_order = meminfo.keys().cloned().collect();
+                register_hugetlb_unused_memory_percent(
+                    &mut time_series_data_processor,
+                    &metric_name_order,
+                );
             }
 
             for (metric_name, value) in meminfo {
@@ -138,7 +227,12 @@ impl ProcessData for MeminfoData {
 #[cfg(test)]
 mod tests {
     #[cfg(target_os = "linux")]
-    use {super::MeminfoDataRaw, crate::data::CollectData, crate::data_collection::InitParams};
+    use {
+        super::MeminfoDataRaw,
+        crate::data::common::{utils::per_hugepage_size_dirs, HUGETLB_DIR},
+        crate::data::CollectData,
+        crate::data_collection::InitParams,
+    };
 
     #[cfg(target_os = "linux")]
     #[test]
@@ -146,7 +240,28 @@ mod tests {
         let mut meminfodata_raw = MeminfoDataRaw::new();
         let params = InitParams::default();
 
+        meminfodata_raw.prepare_data_collector(&params).unwrap();
         meminfodata_raw.collect_data(&params).unwrap();
         assert!(!meminfodata_raw.data.is_empty());
+
+        // Every synthetic per-size HugeTLB line must parse like a /proc/meminfo line.
+        for (metric_name, _) in &meminfodata_raw.hugetlb_files {
+            let line = meminfodata_raw
+                .data
+                .lines()
+                .find(|line| line.starts_with(&format!("{metric_name}:")))
+                .unwrap_or_else(|| panic!("missing synthetic line for {metric_name}"));
+            let value = line.split_whitespace().nth(1).unwrap_or("");
+            assert!(
+                value.parse::<u64>().is_ok(),
+                "unparsable synthetic line: {line}"
+            );
+        }
+        if !per_hugepage_size_dirs(std::path::Path::new(HUGETLB_DIR)).is_empty() {
+            assert!(meminfodata_raw
+                .data
+                .lines()
+                .any(|line| line.starts_with("HugePages_Total_")));
+        }
     }
 }

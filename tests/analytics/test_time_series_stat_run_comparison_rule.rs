@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use aperf::analytics::time_series_stat_run_comparison_rule::TimeSeriesStatRunComparisonRule;
+use aperf::analytics::time_series_stat_run_comparison_rule::{
+    DeltaThreshold, TimeSeriesStatRunComparisonRule,
+};
 use aperf::analytics::{Analyze, DataFindings, Score, BASE_RUN_NAME};
 use aperf::computations::{Comparator, Stat};
 use aperf::data::common::data_formats::AperfData;
@@ -32,7 +34,7 @@ fn test_no_significant_delta() {
         stat: Stat::Average,
         comparator: Comparator::Greater,
         abs: false,
-        delta_ratio: 0.1,
+        delta: DeltaThreshold::Ratio(0.1),
         score: Score::Bad.as_f64(),
         message: "Test message",
     };
@@ -67,7 +69,7 @@ fn test_significant_positive_delta() {
         stat: Stat::Average,
         comparator: Comparator::Greater,
         abs: false,
-        delta_ratio: 0.1,
+        delta: DeltaThreshold::Ratio(0.1),
         score: Score::Bad.as_f64(),
         message: "Test message",
     };
@@ -103,7 +105,7 @@ fn test_significant_negative_delta() {
         stat: Stat::Average,
         comparator: Comparator::Less,
         abs: false,
-        delta_ratio: -0.1,
+        delta: DeltaThreshold::Ratio(-0.1),
         score: Score::Bad.as_f64(),
         message: "Test message",
     };
@@ -138,7 +140,7 @@ fn test_abs_delta() {
         stat: Stat::Average,
         comparator: Comparator::Greater,
         abs: true,
-        delta_ratio: 0.1,
+        delta: DeltaThreshold::Ratio(0.1),
         score: Score::Bad.as_f64(),
         message: "Test message",
     };
@@ -173,7 +175,7 @@ fn test_base_stat_zero() {
         stat: Stat::Average,
         comparator: Comparator::Greater,
         abs: false,
-        delta_ratio: 0.5,
+        delta: DeltaThreshold::Ratio(0.5),
         score: Score::Bad.as_f64(),
         message: "Test message",
     };
@@ -208,7 +210,7 @@ fn test_equal_zero_stats() {
         stat: Stat::Average,
         comparator: Comparator::Greater,
         abs: false,
-        delta_ratio: 0.0,
+        delta: DeltaThreshold::Ratio(0.0),
         score: Score::Bad.as_f64(),
         message: "Test message",
     };
@@ -243,7 +245,7 @@ fn test_max_stat() {
         stat: Stat::Max,
         comparator: Comparator::Greater,
         abs: false,
-        delta_ratio: 0.5,
+        delta: DeltaThreshold::Ratio(0.5),
         score: Score::Bad.as_f64(),
         message: "Test message",
     };
@@ -278,7 +280,7 @@ fn test_metric_not_in_base_run() {
         stat: Stat::Average,
         comparator: Comparator::Greater,
         abs: false,
-        delta_ratio: 0.1,
+        delta: DeltaThreshold::Ratio(0.1),
         score: Score::Bad.as_f64(),
         message: "Test message",
     };
@@ -315,7 +317,7 @@ fn test_multiple_non_base_runs() {
         stat: Stat::Average,
         comparator: Comparator::Greater,
         abs: false,
-        delta_ratio: 0.1,
+        delta: DeltaThreshold::Ratio(0.1),
         score: Score::Bad.as_f64(),
         message: "Test message",
     };
@@ -361,7 +363,7 @@ fn test_time_range_affects_comparison() {
         stat: Stat::Average,
         comparator: Comparator::Greater,
         abs: false,
-        delta_ratio: 0.1,
+        delta: DeltaThreshold::Ratio(0.1),
         score: Score::Bad.as_f64(),
         message: "Test message",
     };
@@ -432,7 +434,7 @@ fn test_time_range_multi_run() {
         stat: Stat::Average,
         comparator: Comparator::Greater,
         abs: false,
-        delta_ratio: 0.1,
+        delta: DeltaThreshold::Ratio(0.1),
         score: Score::Bad.as_f64(),
         message: "Test message",
     };
@@ -487,4 +489,114 @@ fn test_time_range_multi_run() {
     rule.analyze(&mut findings3, &mut processed_data, &mut accessor2);
     assert_eq!(findings3.num_runs_with_findings(), 1);
     assert!(findings3.has_findings_for_run("run2"));
+}
+
+#[test]
+fn test_absolute_delta_fires_on_difference_in_the_metric_unit() {
+    set_base_run("run1");
+
+    // 40% against 50% is only a 25% relative difference, but 10 percentage points apart.
+    let ts_data1 = create_time_series_data(vec![("metric1", vec![40.0, 40.0, 40.0])]);
+    let ts_data2 = create_time_series_data(vec![("metric1", vec![50.0, 50.0, 50.0])]);
+    let mut processed_data = create_processed_data(
+        "test_data",
+        vec![
+            ("run1", AperfData::TimeSeries(ts_data1)),
+            ("run2", AperfData::TimeSeries(ts_data2)),
+        ],
+    );
+
+    let rule = TimeSeriesStatRunComparisonRule {
+        rule_name: "test_rule",
+        metric_name: "metric1",
+        stat: Stat::Average,
+        comparator: Comparator::GreaterEqual,
+        abs: true,
+        delta: DeltaThreshold::Absolute(10.0),
+        score: Score::Bad.as_f64(),
+        message: "Test message",
+    };
+
+    let mut findings = DataFindings::default();
+    rule.analyze(
+        &mut findings,
+        &mut processed_data,
+        &mut ProcessedDataAccessor::new(),
+    );
+
+    assert_eq!(findings.num_runs_with_findings(), 1);
+    assert!(findings.has_findings_for_run("run2"));
+}
+
+#[test]
+fn test_absolute_delta_ignores_large_relative_difference_between_small_values() {
+    set_base_run("run1");
+
+    // Doubling from 0.1 to 0.2 is a 100% relative difference that an absolute threshold of 10
+    // correctly ignores, which is the reason an absolute threshold needs no lower bound.
+    let ts_data1 = create_time_series_data(vec![("metric1", vec![0.1, 0.1, 0.1])]);
+    let ts_data2 = create_time_series_data(vec![("metric1", vec![0.2, 0.2, 0.2])]);
+    let mut processed_data = create_processed_data(
+        "test_data",
+        vec![
+            ("run1", AperfData::TimeSeries(ts_data1)),
+            ("run2", AperfData::TimeSeries(ts_data2)),
+        ],
+    );
+
+    let rule = TimeSeriesStatRunComparisonRule {
+        rule_name: "test_rule",
+        metric_name: "metric1",
+        stat: Stat::Average,
+        comparator: Comparator::GreaterEqual,
+        abs: true,
+        delta: DeltaThreshold::Absolute(10.0),
+        score: Score::Bad.as_f64(),
+        message: "Test message",
+    };
+
+    let mut findings = DataFindings::default();
+    rule.analyze(
+        &mut findings,
+        &mut processed_data,
+        &mut ProcessedDataAccessor::new(),
+    );
+
+    assert_eq!(findings.num_runs_with_findings(), 0);
+}
+
+#[test]
+fn test_absolute_delta_respects_the_sign_when_abs_is_false() {
+    set_base_run("run1");
+
+    // run2 is 10 lower than the base run, so a rule looking for an increase should not fire.
+    let ts_data1 = create_time_series_data(vec![("metric1", vec![50.0, 50.0, 50.0])]);
+    let ts_data2 = create_time_series_data(vec![("metric1", vec![40.0, 40.0, 40.0])]);
+    let mut processed_data = create_processed_data(
+        "test_data",
+        vec![
+            ("run1", AperfData::TimeSeries(ts_data1)),
+            ("run2", AperfData::TimeSeries(ts_data2)),
+        ],
+    );
+
+    let rule = TimeSeriesStatRunComparisonRule {
+        rule_name: "test_rule",
+        metric_name: "metric1",
+        stat: Stat::Average,
+        comparator: Comparator::GreaterEqual,
+        abs: false,
+        delta: DeltaThreshold::Absolute(10.0),
+        score: Score::Bad.as_f64(),
+        message: "Test message",
+    };
+
+    let mut findings = DataFindings::default();
+    rule.analyze(
+        &mut findings,
+        &mut processed_data,
+        &mut ProcessedDataAccessor::new(),
+    );
+
+    assert_eq!(findings.num_runs_with_findings(), 0);
 }

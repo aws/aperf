@@ -156,7 +156,7 @@ impl ProcessData for SystemInfo {
 
     fn process_raw_data(
         &mut self,
-        _report_params: &ReportParams,
+        report_params: &ReportParams,
         raw_data: Vec<Data>,
     ) -> Result<AperfData> {
         let mut key_value_data = KeyValueData::default();
@@ -196,6 +196,13 @@ impl ProcessData for SystemInfo {
             key_values.insert(
                 "Local Hostname".to_string(),
                 raw_value.instance_metadata.local_hostname.clone(),
+            );
+        }
+
+        if report_params.page_size > 0 {
+            key_values.insert(
+                "Page Size".to_string(),
+                format!("{} bytes", report_params.page_size),
             );
         }
 

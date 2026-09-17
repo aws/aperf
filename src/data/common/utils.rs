@@ -359,7 +359,7 @@ pub fn copy_graph_and_update_graph_data(
 
 /// Collects the paths of all files in a dir and returns a map from file names to file paths,
 /// if the file system read was successful
-pub fn collect_file_paths_in_dir(dir: &PathBuf) -> Result<HashMap<String, PathBuf>> {
+pub fn collect_file_paths_in_dir(dir: &Path) -> Result<HashMap<String, PathBuf>> {
     match fs::read_dir(dir) {
         Ok(hardware_counters_entries) => {
             let mut hardware_counter_file_paths: HashMap<String, PathBuf> = HashMap::new();
@@ -382,6 +382,83 @@ pub fn collect_file_paths_in_dir(dir: &PathBuf) -> Result<HashMap<String, PathBu
             Ok(hardware_counter_file_paths)
         }
         Err(e) => Err(Error::from(e)),
+    }
+}
+
+/// Open the files specified by file_names in the dir, if they exist. Return a map
+/// from file name to the opened file descriptor.
+#[cfg(target_os = "linux")]
+pub fn open_files_in_dir(dir: &Path, file_names: &[&str]) -> HashMap<String, File> {
+    let mut files = HashMap::new();
+
+    let file_paths = match collect_file_paths_in_dir(dir) {
+        Ok(file_paths) => file_paths,
+        Err(e) => {
+            debug!("Could not access directory {}: {e}", dir.display());
+            return files;
+        }
+    };
+
+    for filename in file_names {
+        let Some(path) = file_paths.get(*filename) else {
+            continue;
+        };
+        match File::open(path) {
+            Ok(file) => {
+                files.insert(filename.to_string(), file);
+            }
+            Err(e) => {
+                debug!("Could not open {}: {e}", path.display());
+            }
+        }
+    }
+
+    files
+}
+
+/// Discover all subdirectories within dir that correspond to a specific hugepage size,
+/// whose names are in the format of hugepages-*kB.
+#[cfg(target_os = "linux")]
+pub fn per_hugepage_size_dirs(dir: &Path) -> Vec<PathBuf> {
+    let mut per_page_size_dirs = Vec::new();
+
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) => {
+            debug!("Could not access directory {}: {e}", dir.display());
+            return per_page_size_dirs;
+        }
+    };
+
+    for entry in entries.flatten() {
+        let dir_name = entry.file_name();
+        let Some(dir_name) = dir_name.to_str() else {
+            continue;
+        };
+        if dir_name.starts_with("hugepages-") && dir_name.ends_with("kB") {
+            per_page_size_dirs.push(entry.path());
+        }
+    }
+
+    per_page_size_dirs
+}
+
+/// Extract the size suffix of from a hugepage size directory,
+/// e.g. "2048kB" for /sys/kernel/mm/hugepages/hugepages-2048kB.
+#[cfg(target_os = "linux")]
+pub fn per_hugepage_size_dir_suffix(size_dir: &Path) -> Option<&str> {
+    size_dir.file_name()?.to_str()?.strip_prefix("hugepages-")
+}
+
+/// The active mode of a sysfs setting that lists every mode it accepts and marks the active
+/// one with brackets, e.g. "madvise" for "always [madvise] never".
+pub fn sysfs_active_mode(value: &str) -> Option<&str> {
+    let (_, after_open_bracket) = value.split_once('[')?;
+    let (active_mode, _) = after_open_bracket.split_once(']')?;
+    if active_mode.is_empty() {
+        None
+    } else {
+        Some(active_mode)
     }
 }
 
@@ -491,6 +568,62 @@ mod utils_test {
             .collect();
         proc_stat_ids.sort_unstable();
         assert_eq!(ids, proc_stat_ids, "sysfs and /proc/stat should agree");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_open_files_in_dir() {
+        use super::{open_files_in_dir, read_open_virtual_file};
+        use std::fs;
+
+        let dir = std::env::temp_dir().join(format!(
+            "aperf_test_open_files_in_dir_{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("first"), "1\n").unwrap();
+        fs::write(dir.join("second"), "2\n").unwrap();
+
+        // Existing files are opened under their file names, absent ones are left out.
+        let mut files = open_files_in_dir(&dir, &["second", "missing", "first"]);
+        let mut names: Vec<&str> = files.keys().map(String::as_str).collect();
+        names.sort_unstable();
+        assert_eq!(names, vec!["first", "second"]);
+        // The handles stay readable across repeated reads.
+        for _ in 0..2 {
+            assert_eq!(
+                read_open_virtual_file(files.get_mut("second").unwrap()).unwrap(),
+                "2\n"
+            );
+        }
+        // A directory that cannot be listed yields nothing.
+        fs::remove_dir_all(&dir).unwrap();
+        assert!(open_files_in_dir(&dir, &["first"]).is_empty());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_per_page_size_dir_suffix() {
+        use super::per_hugepage_size_dir_suffix;
+        use std::path::Path;
+        assert_eq!(
+            per_hugepage_size_dir_suffix(Path::new("/sys/kernel/mm/hugepages/hugepages-2048kB")),
+            Some("2048kB")
+        );
+        assert_eq!(
+            per_hugepage_size_dir_suffix(Path::new("/sys/kernel/mm/hugepages/other")),
+            None
+        );
+    }
+
+    #[test]
+    fn test_sysfs_active_mode() {
+        use super::sysfs_active_mode;
+        assert_eq!(sysfs_active_mode("always [madvise] never"), Some("madvise"));
+        assert_eq!(sysfs_active_mode("[always] madvise never"), Some("always"));
+        assert_eq!(sysfs_active_mode("madvise"), None);
+        assert_eq!(sysfs_active_mode("[]"), None);
+        assert_eq!(sysfs_active_mode(""), None);
     }
 
     #[test]

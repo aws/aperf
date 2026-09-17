@@ -32,6 +32,7 @@ fn generate_vmstat_raw_data(
         }
 
         samples.push(VmstatRaw {
+            thp_stats_files: Vec::new(),
             time: TimeEnum::DateTime(time),
             data: proc_vmstat,
         });
@@ -435,6 +436,158 @@ mod vmstat_tests {
                         }
                     }
                 }
+            }
+        } else {
+            panic!("Expected TimeSeries data");
+        }
+    }
+
+    /// Some /proc/vmstat fields are named with the "nr_" prefix but count events since boot
+    /// instead of reporting a level, so they have to be turned into per-interval deltas while
+    /// the genuine "nr_" levels are kept as they are.
+    #[test]
+    fn test_process_vmstat_cumulative_nr_metrics() {
+        let cumulative_metrics = vec![
+            "nr_dirtied",
+            "nr_written",
+            "nr_throttled_written",
+            "nr_vmscan_write",
+            "nr_vmscan_immediate_reclaim",
+            "nr_foll_pin_acquired",
+            "nr_foll_pin_released",
+            "nr_tlb_remote_flush",
+            "nr_tlb_remote_flush_received",
+            "nr_tlb_local_flush_all",
+            "nr_tlb_local_flush_one",
+        ];
+        let level_metrics = vec!["nr_dirty", "nr_free_pages", "nr_writeback"];
+
+        // Every cumulative metric climbs by 100 per sample, every level metric stays at 500.
+        let mut expected_per_sample_stats = Vec::new();
+        for sample_idx in 0..3 {
+            let mut stats = HashMap::new();
+            for name in &cumulative_metrics {
+                stats.insert(name.to_string(), 1000 + (sample_idx as i64) * 100);
+            }
+            for name in &level_metrics {
+                stats.insert(name.to_string(), 500);
+            }
+            expected_per_sample_stats.push(ExpectedVmstatStats { stats });
+        }
+
+        let interval_seconds: u64 = 2;
+        let raw_samples = generate_vmstat_raw_data(&expected_per_sample_stats, interval_seconds);
+        let raw_data: Vec<Data> = raw_samples
+            .into_iter()
+            .map(|s| Data::VmstatRaw(s))
+            .collect();
+
+        let mut vmstat = Vmstat::new();
+        let result = vmstat
+            .process_raw_data(&ReportParams::new(), raw_data)
+            .unwrap();
+
+        if let AperfData::TimeSeries(time_series_data) = result {
+            for name in &cumulative_metrics {
+                let metric = time_series_data
+                    .metrics
+                    .get(*name)
+                    .unwrap_or_else(|| panic!("Missing metric: {}", name));
+                let values = &metric.series[0].values;
+                // The first sample has no previous value to subtract, so it reports 0, and the
+                // rest report the 100 page increase spread over the 2 second interval.
+                assert_eq!(
+                    *values,
+                    vec![0.0, 50.0, 50.0],
+                    "Cumulative metric {} should be reported as per-interval deltas, got {:?}",
+                    name,
+                    values
+                );
+            }
+
+            for name in &level_metrics {
+                let metric = time_series_data
+                    .metrics
+                    .get(*name)
+                    .unwrap_or_else(|| panic!("Missing metric: {}", name));
+                let values = &metric.series[0].values;
+                assert_eq!(
+                    *values,
+                    vec![500.0, 500.0, 500.0],
+                    "Level metric {} should be reported as is, got {:?}",
+                    name,
+                    values
+                );
+            }
+        } else {
+            panic!("Expected TimeSeries data");
+        }
+    }
+
+    /// The synthetic per-size THP lines appended to /proc/vmstat reuse the names of their
+    /// PMD-size twins, so the existing dispatch classifies them without special casing:
+    /// thp_*_<size> are cumulative counters and nr_*_<size> are levels.
+    #[test]
+    fn test_process_vmstat_per_size_thp_metrics() {
+        let cumulative_metrics = vec!["thp_fault_alloc_64kB", "thp_fault_fallback_64kB"];
+        let level_metrics = vec![
+            "nr_anon_transparent_hugepages_64kB",
+            "nr_anon_partially_mapped_2048kB",
+        ];
+
+        // Every cumulative metric climbs from 100 to 300, every level metric stays at 500.
+        let mut expected_per_sample_stats = Vec::new();
+        for sample_idx in 0..2 {
+            let mut stats = HashMap::new();
+            for name in &cumulative_metrics {
+                stats.insert(name.to_string(), 100 + (sample_idx as i64) * 200);
+            }
+            for name in &level_metrics {
+                stats.insert(name.to_string(), 500);
+            }
+            expected_per_sample_stats.push(ExpectedVmstatStats { stats });
+        }
+
+        let interval_seconds: u64 = 2;
+        let raw_samples = generate_vmstat_raw_data(&expected_per_sample_stats, interval_seconds);
+        let raw_data: Vec<Data> = raw_samples.into_iter().map(Data::VmstatRaw).collect();
+
+        let mut vmstat = Vmstat::new();
+        let result = vmstat
+            .process_raw_data(&ReportParams::new(), raw_data)
+            .unwrap();
+
+        if let AperfData::TimeSeries(time_series_data) = result {
+            for name in &cumulative_metrics {
+                let metric = time_series_data
+                    .metrics
+                    .get(*name)
+                    .unwrap_or_else(|| panic!("Missing metric: {}", name));
+                let values = &metric.series[0].values;
+                // The first sample has no previous value to subtract, so it reports 0, and the
+                // second reports the 200 page increase spread over the 2 second interval.
+                assert_eq!(
+                    *values,
+                    vec![0.0, 100.0],
+                    "Cumulative metric {} should be reported as per-interval deltas, got {:?}",
+                    name,
+                    values
+                );
+            }
+
+            for name in &level_metrics {
+                let metric = time_series_data
+                    .metrics
+                    .get(*name)
+                    .unwrap_or_else(|| panic!("Missing metric: {}", name));
+                let values = &metric.series[0].values;
+                assert_eq!(
+                    *values,
+                    vec![500.0, 500.0],
+                    "Level metric {} should be reported as is, got {:?}",
+                    name,
+                    values
+                );
             }
         } else {
             panic!("Expected TimeSeries data");

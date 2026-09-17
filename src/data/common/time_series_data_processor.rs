@@ -1,6 +1,7 @@
 use crate::computations::{get_average, Statistics};
 use crate::data::common::data_formats::{Series, TimeSeriesData, TimeSeriesMetric};
 use crate::data::TimeEnum;
+use exmex::{Express, FlatEx};
 use log::{debug, warn};
 use numeric_sort::cmp;
 use std::collections::HashMap;
@@ -52,6 +53,9 @@ pub struct TimeSeriesDataProcessor {
     // Use to set every metric's value range and ignore the results collected in
     // per_metric_value_range
     fixed_value_range: Option<(u64, u64)>,
+    // Map<derived metric name, parsed metric expression> - used to store parsed expression
+    // and compute values of all derived metrics.
+    derived_metric_expressions: HashMap<String, FlatEx<f64>>,
 }
 
 impl TimeSeriesDataProcessor {
@@ -73,6 +77,7 @@ impl TimeSeriesDataProcessor {
             ignore_first_accumulative_value: true,
             decreasing_accumulative_data: HashMap::new(),
             fixed_value_range: None,
+            derived_metric_expressions: HashMap::new(),
         }
     }
 
@@ -95,11 +100,32 @@ impl TimeSeriesDataProcessor {
     /// Invoked before processing the data at the next snapshot, when all the data in the
     /// previous snapshot have been processed
     pub fn proceed_to_time(&mut self, time: TimeEnum) {
-        self.generate_aggregate_series_values();
+        self.finalize_cur_time_diff();
         self.cur_time_diff = match time - *self.time_zero.get_or_insert(time) {
             TimeEnum::TimeDiff(_time_diff) => _time_diff,
             TimeEnum::DateTime(_) => panic!("Unexpected TimeEnum diff"),
         };
+    }
+
+    /// Register a derived metric that will be automatically computed from the values of
+    /// other metrics. Variable metric names that have nonalphanumeric characters or
+    /// contain exmex keywords need to be wrapped with "{}".
+    pub fn register_derived_metric(
+        &mut self,
+        derived_metric_name: &str,
+        derived_metric_expression: &str,
+    ) {
+        match exmex::parse::<f64>(derived_metric_expression) {
+            Ok(parsed_expression) => {
+                self.derived_metric_expressions
+                    .insert(derived_metric_name.to_string(), parsed_expression);
+            }
+            Err(e) => {
+                debug!(
+                    "Failed to parse derived metric expression {derived_metric_expression}: {e}"
+                );
+            }
+        }
     }
 
     /// Add a noncumulative data point to the aggregate series of the corresponding metric.
@@ -274,6 +300,69 @@ impl TimeSeriesDataProcessor {
         self.per_metric_sum_count.clear();
     }
 
+    // Helper function to compute the value of all registered derived metrics at current time diff.
+    fn compute_derived_metric_values(&mut self) {
+        // Hold all derived (metric_name, series_name, value) to avoid ownership problem.
+        let mut derived_metric_series_values: Vec<(String, String, f64)> = Vec::new();
+
+        for (derived_metric_name, derived_metric_expressions) in &self.derived_metric_expressions {
+            let variable_metric_names = derived_metric_expressions.var_names();
+            let mut per_series_expression_values: HashMap<String, Vec<f64>> = HashMap::new();
+
+            // Collect the latest series values for every metric used to compute the derived metric.
+            for variable_metric_name in variable_metric_names {
+                let Some(cur_metric_series) = self.per_metric_series.get(variable_metric_name)
+                else {
+                    continue;
+                };
+
+                for (series_name, series) in cur_metric_series {
+                    let (Some(time_diff), Some(value)) =
+                        (series.time_diff.last(), series.values.last())
+                    else {
+                        continue;
+                    };
+                    if *time_diff != self.cur_time_diff {
+                        continue;
+                    }
+                    per_series_expression_values
+                        .entry(series_name.clone())
+                        .or_default()
+                        .push(*value);
+                }
+            }
+
+            // Compute the derived metric value for every series.
+            for (series_name, expression_values) in per_series_expression_values {
+                if expression_values.len() != variable_metric_names.len() {
+                    continue;
+                }
+                if let Ok(derived_metric_value) =
+                    derived_metric_expressions.eval(&expression_values)
+                {
+                    if derived_metric_value.is_finite() {
+                        derived_metric_series_values.push((
+                            derived_metric_name.clone(),
+                            series_name,
+                            derived_metric_value,
+                        ));
+                    }
+                }
+            }
+        }
+
+        for (derived_metric_name, series_name, derived_metric_value) in derived_metric_series_values
+        {
+            self.add_data_point(&derived_metric_name, &series_name, derived_metric_value);
+        }
+    }
+
+    /// Invoked before proceeding to the next time diff or before getting the processed data.
+    fn finalize_cur_time_diff(&mut self) {
+        self.compute_derived_metric_values();
+        self.generate_aggregate_series_values();
+    }
+
     /// Generate the time-series data, with alphabetically sorted metric names.
     pub fn get_time_series_data(self) -> TimeSeriesData {
         self.get_time_series_data_impl(None, false)
@@ -296,7 +385,7 @@ impl TimeSeriesDataProcessor {
         metric_name_order: Option<Vec<&str>>,
         sorted_by_average: bool,
     ) -> TimeSeriesData {
-        self.generate_aggregate_series_values();
+        self.finalize_cur_time_diff();
 
         // Log any unexpected decreases of accumulative data
         for (data_key, count) in self.decreasing_accumulative_data {
@@ -1355,5 +1444,91 @@ mod tests {
         let ts = p.get_time_series_data();
         let agg = agg_series(&ts, "m").unwrap();
         assert_eq!(agg.series_name.as_str(), "total");
+    }
+
+    // =======================================================================
+    // Derived metrics
+    // =======================================================================
+
+    #[test]
+    fn test_derived_metric_computed_for_every_series() {
+        let times = make_times(2, 1);
+        let mut p = make_processor(TimeSeriesDataAggregateMode::Average);
+        p.register_derived_metric("used_percent", "used / total * 100");
+
+        p.proceed_to_time(times[0]);
+        p.add_data_point("used", "node0", 25.0);
+        p.add_data_point("total", "node0", 100.0);
+        p.add_data_point("used", "node1", 30.0);
+        p.add_data_point("total", "node1", 200.0);
+
+        // The data of the last snapshot is only finalized when the data is generated
+        p.proceed_to_time(times[1]);
+        p.add_data_point("used", "node0", 50.0);
+        p.add_data_point("total", "node0", 100.0);
+        p.add_data_point("used", "node1", 100.0);
+        p.add_data_point("total", "node1", 200.0);
+
+        let ts = p.get_time_series_data();
+        let s = data_series(&ts, "used_percent");
+        assert_eq!(s.len(), 2);
+        assert_eq!(s[0].series_name.as_str(), "node0");
+        assert_eq!(s[0].values, vec![25.0, 50.0]);
+        assert_eq!(s[0].time_diff, vec![0, 1]);
+        assert_eq!(s[1].series_name.as_str(), "node1");
+        assert_eq!(s[1].values, vec![15.0, 50.0]);
+
+        // The aggregate series of a derived metric aggregates the derived values, so it is
+        // the average of the per-series ratios, not the ratio of the aggregate values
+        let agg = agg_series(&ts, "used_percent")
+            .expect("Derived metric should have an aggregate series");
+        assert_eq!(agg.values, vec![20.0, 50.0]);
+    }
+
+    #[test]
+    fn test_derived_metric_skips_values_it_cannot_compute() {
+        let times = make_times(2, 1);
+        let mut p = make_processor(TimeSeriesDataAggregateMode::Custom);
+        p.register_derived_metric("ratio", "a / b");
+
+        p.proceed_to_time(times[0]);
+        p.add_data_point("a", "s1", 10.0);
+        p.add_data_point("b", "s1", 2.0);
+        // Division by zero: the non-finite value must not reach the series
+        p.add_data_point("a", "s2", 10.0);
+        p.add_data_point("b", "s2", 0.0);
+
+        p.proceed_to_time(times[1]);
+        // "b" has no value for "s1" at this time_diff, and the previous one must not be reused
+        p.add_data_point("a", "s1", 20.0);
+        p.add_data_point("a", "s2", 10.0);
+        p.add_data_point("b", "s2", 5.0);
+
+        let ts = p.get_time_series_data();
+        let s = data_series(&ts, "ratio");
+        assert_eq!(s.len(), 2);
+        assert_eq!(s[0].values, vec![5.0]);
+        assert_eq!(s[0].time_diff, vec![0]);
+        assert_eq!(s[1].values, vec![2.0]);
+        assert_eq!(s[1].time_diff, vec![1]);
+    }
+
+    #[test]
+    fn test_derived_metric_with_braced_metric_names() {
+        // "min" is an exmex operator and "(" is not a valid variable name character, so
+        // both names have to be braced. The unbraced expression fails to parse and its
+        // derived metric is never computed.
+        let times = make_times(1, 1);
+        let mut p = make_processor(TimeSeriesDataAggregateMode::Custom);
+        p.register_derived_metric("unbraced", "min_free_kbytes / Active(anon)");
+        p.register_derived_metric("braced", "{min_free_kbytes} / {Active(anon)}");
+
+        p.proceed_to_time(times[0]);
+        p.add_data_point("min_free_kbytes", "value", 64.0);
+        p.add_data_point("Active(anon)", "value", 256.0);
+
+        let ts = p.get_time_series_data();
+        assert!(!ts.metrics.contains_key("unbraced"));
+        assert_eq!(data_series(&ts, "braced")[0].values, vec![0.25]);
     }
 }

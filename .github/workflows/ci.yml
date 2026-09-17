@@ -40,8 +40,12 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 16.16.0
+      # GitHub CLI key rotation: https://github.com/cli/cli/issues/13118    
       - name: Yum Update
-        run: sudo yum update -y
+        run: |
+          sudo yum install yum-utils -y
+          sudo yum-config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
+          sudo yum update -y
       - name: Install gcc
         run: sudo yum install -y "@Development Tools"
       - name: Install musl

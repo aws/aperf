@@ -9,6 +9,7 @@ pub mod hotline;
 pub mod interrupts;
 pub mod java_profile;
 pub mod kernel_config;
+pub mod mem_settings;
 pub mod memalloc;
 pub mod meminfo;
 pub mod netstat;
@@ -46,6 +47,7 @@ use include_dir::{include_dir, Dir};
 use interrupts::{InterruptData, InterruptDataRaw};
 use java_profile::{JavaProfile, JavaProfileRaw};
 use kernel_config::KernelConfig;
+use mem_settings::{MemSettings, MemSettingsRaw};
 use memalloc::{MemallocData, MemallocDataRaw};
 use meminfo::{MeminfoData, MeminfoDataRaw};
 use netstat::{Netstat, NetstatRaw};
@@ -276,7 +278,8 @@ data!(
     HotlineRaw,
     MemallocDataRaw,
     EnaStatRaw,
-    EfaStatRaw
+    EfaStatRaw,
+    MemSettingsRaw
 );
 
 report_data!(
@@ -299,7 +302,8 @@ report_data!(
     JavaProfile,
     MemallocData,
     EnaStat,
-    EfaStat
+    EfaStat,
+    MemSettings
 );
 
 #[cfg(target_os = "linux")]
