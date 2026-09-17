@@ -14,7 +14,8 @@ fn test_key_matches_expected_value() {
     let rule = KeyValueKeyExpectedRule {
         rule_name: "test_rule",
         key: "test_key",
-        expected_value: "expected_value",
+        report_on_match: false,
+        target_value: "expected_value",
         score: Score::Good.as_f64(),
         message: "Test message",
     };
@@ -38,7 +39,8 @@ fn test_key_does_not_match_expected_value() {
     let rule = KeyValueKeyExpectedRule {
         rule_name: "test_rule",
         key: "test_key",
-        expected_value: "expected_value",
+        report_on_match: false,
+        target_value: "expected_value",
         score: Score::Bad.as_f64(),
         message: "Test message",
     };
@@ -63,7 +65,8 @@ fn test_key_missing() {
     let rule = KeyValueKeyExpectedRule {
         rule_name: "test_rule",
         key: "test_key",
-        expected_value: "expected_value",
+        report_on_match: false,
+        target_value: "expected_value",
         score: Score::Bad.as_f64(),
         message: "Test message",
     };
@@ -94,7 +97,8 @@ fn test_multiple_runs() {
     let rule = KeyValueKeyExpectedRule {
         rule_name: "test_rule",
         key: "test_key",
-        expected_value: "expected_value",
+        report_on_match: false,
+        target_value: "expected_value",
         score: Score::Bad.as_f64(),
         message: "Test message",
     };
@@ -120,7 +124,8 @@ fn test_empty_key_value_data() {
     let rule = KeyValueKeyExpectedRule {
         rule_name: "test_rule",
         key: "test_key",
-        expected_value: "expected_value",
+        report_on_match: false,
+        target_value: "expected_value",
         score: Score::Bad.as_f64(),
         message: "Test message",
     };
@@ -133,4 +138,63 @@ fn test_empty_key_value_data() {
     );
 
     assert_eq!(findings.num_runs_with_findings(), 1);
+}
+
+/// With report_on_match the rule calls out one particular value instead of requiring one.
+#[test]
+fn test_report_on_match_fires_only_on_the_named_value() {
+    for (value, expect_finding) in [("never", true), ("madvise", false), ("always", false)] {
+        let kv_data = create_key_value_data(vec![("setting", value)]);
+        let mut processed_data =
+            create_processed_data("test_data", vec![("run1", AperfData::KeyValue(kv_data))]);
+
+        let rule = KeyValueKeyExpectedRule {
+            rule_name: "test_rule",
+            key: "setting",
+            target_value: "never",
+            report_on_match: true,
+            score: Score::Concerning.as_f64(),
+            message: "Test message",
+        };
+
+        let mut findings = DataFindings::default();
+        rule.analyze(
+            &mut findings,
+            &mut processed_data,
+            &mut ProcessedDataAccessor::new(),
+        );
+
+        assert_eq!(
+            findings.num_runs_with_findings(),
+            usize::from(expect_finding),
+            "unexpected result for value {value}"
+        );
+    }
+}
+
+/// A key that is absent cannot hold the value being called out, so nothing is reported. This is
+/// the opposite of the expected-value mode, where a missing key is itself the finding.
+#[test]
+fn test_report_on_match_ignores_a_missing_key() {
+    let kv_data = create_key_value_data(vec![("other_setting", "never")]);
+    let mut processed_data =
+        create_processed_data("test_data", vec![("run1", AperfData::KeyValue(kv_data))]);
+
+    let rule = KeyValueKeyExpectedRule {
+        rule_name: "test_rule",
+        key: "setting",
+        target_value: "never",
+        report_on_match: true,
+        score: Score::Concerning.as_f64(),
+        message: "Test message",
+    };
+
+    let mut findings = DataFindings::default();
+    rule.analyze(
+        &mut findings,
+        &mut processed_data,
+        &mut ProcessedDataAccessor::new(),
+    );
+
+    assert_eq!(findings.num_runs_with_findings(), 0);
 }

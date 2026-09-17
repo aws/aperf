@@ -5,3 +5,8 @@ pub mod data_formats;
 pub mod processed_data_accessor;
 pub mod time_series_data_processor;
 pub mod utils;
+
+#[cfg(target_os = "linux")]
+pub const THP_DIR: &str = "/sys/kernel/mm/transparent_hugepage";
+#[cfg(target_os = "linux")]
+pub const HUGETLB_DIR: &str = "/sys/kernel/mm/hugepages";

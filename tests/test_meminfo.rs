@@ -55,6 +55,7 @@ fn generate_meminfo_raw_data(
         );
 
         let meminfo_raw = MeminfoDataRaw {
+            hugetlb_files: Vec::new(),
             time,
             data: meminfo_data,
         };
@@ -264,6 +265,65 @@ fn test_process_meminfo_hugepages_no_conversion() {
     }
 }
 
+/// The per-size HugeTLB pool counters are appended to the raw /proc/meminfo data as synthetic
+/// "Name: value" lines; like the default pool's HugePages_* lines, their bare counts must pass
+/// through without a unit conversion, even though the metric names end in "kB".
+#[test]
+fn test_process_meminfo_per_size_hugetlb_counters() {
+    let mut raw_data = Vec::new();
+    for sample_idx in 0..3u64 {
+        let data = format!(
+            "MemTotal:       16384 kB\n\
+             HugePages_Total:   100\n\
+             HugePages_Total_2048kB: {}\n\
+             HugePages_Free_2048kB: {}\n\
+             HugePages_Rsvd_2048kB: 3\n\
+             HugePages_Surp_2048kB: 1\n\
+             HugePages_Total_1048576kB: 2\n",
+            100 + sample_idx,
+            5 + sample_idx,
+        );
+        let time = TimeEnum::DateTime(Utc::now() + chrono::Duration::seconds(sample_idx as i64));
+        raw_data.push(Data::MeminfoDataRaw(MeminfoDataRaw {
+            hugetlb_files: Vec::new(),
+            time,
+            data,
+        }));
+    }
+
+    let mut meminfo = aperf::data::meminfo::MeminfoData::new();
+    let result = meminfo
+        .process_raw_data(&ReportParams::new(), raw_data)
+        .unwrap();
+
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
+        // The sized line is converted to bytes while the counts pass through unchanged.
+        let expected_values = vec![
+            ("MemTotal", vec![16777216.0, 16777216.0, 16777216.0]),
+            ("HugePages_Total", vec![100.0, 100.0, 100.0]),
+            ("HugePages_Total_2048kB", vec![100.0, 101.0, 102.0]),
+            ("HugePages_Free_2048kB", vec![5.0, 6.0, 7.0]),
+            ("HugePages_Rsvd_2048kB", vec![3.0, 3.0, 3.0]),
+            ("HugePages_Surp_2048kB", vec![1.0, 1.0, 1.0]),
+            ("HugePages_Total_1048576kB", vec![2.0, 2.0, 2.0]),
+        ];
+        assert_eq!(time_series_data.metrics.len(), expected_values.len());
+        for (metric_name, values) in expected_values {
+            let metric = time_series_data
+                .metrics
+                .get(metric_name)
+                .unwrap_or_else(|| panic!("Missing metric: {}", metric_name));
+            assert_eq!(
+                metric.series[0].values, values,
+                "Unexpected values for {}",
+                metric_name
+            );
+        }
+    } else {
+        panic!("Expected TimeSeries data");
+    }
+}
+
 #[test]
 fn test_process_meminfo_empty_data() {
     let raw_data = Vec::new();
@@ -322,6 +382,124 @@ fn test_process_meminfo_missing_optional_fields() {
 
         // Check that unset fields are not present (since we only generate what we set)
         assert!(!time_series_data.metrics.contains_key("MemAvailable"));
+    } else {
+        panic!("Expected TimeSeries data");
+    }
+}
+
+/// A pool that is mostly idle: 100 x 2MiB reserved, 60 free of which 10 are committed, so 50
+/// pages x 2MiB = 100MiB is idle out of a 200MiB pool on a 1GiB host.
+#[test]
+fn test_process_meminfo_hugetlb_unused_derived_metrics() {
+    let mut raw_data = Vec::new();
+    for sample_idx in 0..3u64 {
+        let data = "MemTotal:       1048576 kB\n\
+             Hugetlb:         204800 kB\n\
+             Hugepagesize:      2048 kB\n\
+             HugePages_Total:   100\n\
+             HugePages_Free:     60\n\
+             HugePages_Rsvd:     10\n\
+             HugePages_Total_2048kB: 100\n\
+             HugePages_Free_2048kB: 60\n\
+             HugePages_Rsvd_2048kB: 10\n"
+            .to_string();
+        let time = TimeEnum::DateTime(Utc::now() + chrono::Duration::seconds(sample_idx as i64));
+        raw_data.push(Data::MeminfoDataRaw(MeminfoDataRaw {
+            hugetlb_files: Vec::new(),
+            time,
+            data,
+        }));
+    }
+
+    let mut meminfo = aperf::data::meminfo::MeminfoData::new();
+    let result = meminfo
+        .process_raw_data(&ReportParams::new(), raw_data)
+        .unwrap();
+
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
+        // 50 idle pages x 2MiB = 100MiB out of 1GiB of memory.
+        for (metric_name, expected) in [("Hugetlb_Unused_Memory_Percent", 100.0 / 1024.0 * 100.0)] {
+            let metric = time_series_data
+                .metrics
+                .get(metric_name)
+                .unwrap_or_else(|| panic!("Missing metric: {}", metric_name));
+            for value in &metric.series[0].values {
+                assert!(
+                    (value - expected).abs() < 0.001,
+                    "Unexpected {metric_name}: {value} instead of {expected}"
+                );
+            }
+        }
+    } else {
+        panic!("Expected TimeSeries data");
+    }
+}
+
+/// Without a pool there is nothing idle, so the share of memory is zero and stays well under the
+/// rule's threshold.
+#[test]
+fn test_process_meminfo_no_hugetlb_pool_reports_zero_unused() {
+    let data = "MemTotal:       1048576 kB\n\
+         Hugetlb:              0 kB\n\
+         Hugepagesize:      2048 kB\n\
+         HugePages_Total:     0\n\
+         HugePages_Free:      0\n\
+         HugePages_Rsvd:      0\n"
+        .to_string();
+    let raw_data = vec![Data::MeminfoDataRaw(MeminfoDataRaw {
+        hugetlb_files: Vec::new(),
+        time: TimeEnum::DateTime(Utc::now()),
+        data,
+    })];
+
+    let mut meminfo = aperf::data::meminfo::MeminfoData::new();
+    let result = meminfo
+        .process_raw_data(&ReportParams::new(), raw_data)
+        .unwrap();
+
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
+        let memory_percent = time_series_data
+            .metrics
+            .get("Hugetlb_Unused_Memory_Percent")
+            .expect("Missing Hugetlb_Unused_Memory_Percent");
+        assert_eq!(memory_percent.series[0].values, vec![0.0]);
+    } else {
+        panic!("Expected TimeSeries data");
+    }
+}
+
+/// Data recorded before the per-size counters existed still yields the derived metric, from the
+/// unsuffixed counters and Hugepagesize.
+#[test]
+fn test_process_meminfo_hugetlb_unused_falls_back_to_default_size() {
+    let data = "MemTotal:       1048576 kB\n\
+         Hugetlb:         204800 kB\n\
+         Hugepagesize:      2048 kB\n\
+         HugePages_Total:   100\n\
+         HugePages_Free:     60\n\
+         HugePages_Rsvd:     10\n"
+        .to_string();
+    let raw_data = vec![Data::MeminfoDataRaw(MeminfoDataRaw {
+        hugetlb_files: Vec::new(),
+        time: TimeEnum::DateTime(Utc::now()),
+        data,
+    })];
+
+    let mut meminfo = aperf::data::meminfo::MeminfoData::new();
+    let result = meminfo
+        .process_raw_data(&ReportParams::new(), raw_data)
+        .unwrap();
+
+    if let aperf::data::common::data_formats::AperfData::TimeSeries(time_series_data) = result {
+        // 50 idle pages x 2MiB = 100MiB out of 1GiB of memory.
+        let memory_percent = time_series_data
+            .metrics
+            .get("Hugetlb_Unused_Memory_Percent")
+            .expect("Missing Hugetlb_Unused_Memory_Percent");
+        assert_eq!(
+            memory_percent.series[0].values,
+            vec![100.0 / 1024.0 * 100.0]
+        );
     } else {
         panic!("Expected TimeSeries data");
     }

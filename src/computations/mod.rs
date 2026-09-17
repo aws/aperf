@@ -172,6 +172,23 @@ pub fn delta_ratio_to_percentage_string(delta_ratio: f64) -> String {
     format!("{}% {}", abs_delta_ratio, relation_string)
 }
 
+/// Format a difference in a metric's own unit into a delta string (e.g. 10.0 is "10 greater than")
+pub fn delta_to_difference_string(delta: f64) -> String {
+    if delta == 0.0 {
+        return String::from("equal to");
+    }
+    let relation_string = if delta > 0.0 {
+        "greater than"
+    } else {
+        "less than"
+    };
+    format!(
+        "{} {}",
+        formatted_number_string(delta.abs()),
+        relation_string
+    )
+}
+
 /// Format a number into a short string
 pub fn formatted_number_string(value: f64) -> String {
     if value.is_nan() {

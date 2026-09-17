@@ -8,6 +8,7 @@ mod hotline;
 mod interrupts;
 mod java_profile;
 mod kernel_config;
+mod mem_settings;
 mod memalloc;
 mod meminfo;
 pub mod multi_data_rules;

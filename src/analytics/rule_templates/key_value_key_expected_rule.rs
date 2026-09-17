@@ -4,11 +4,14 @@ use crate::data::common::processed_data_accessor::ProcessedDataAccessor;
 use std::fmt;
 use std::fmt::Formatter;
 
-/// This rule checks a key in all groups to match against an expected value. A finding is generated if the value does not match.
+/// This rule checks a key in all groups against a value. Whether report_on_match is
+/// true decides if the finding is generated when the value matches the target_value
+/// or not.
 pub struct KeyValueKeyExpectedRule {
     pub rule_name: &'static str,
     pub key: &'static str,
-    pub expected_value: &'static str,
+    pub target_value: &'static str,
+    pub report_on_match: bool,
     pub score: f64,
     pub message: &'static str,
 }
@@ -25,7 +28,8 @@ macro_rules! key_value_key_expected {
             KeyValueKeyExpectedRule{
                 rule_name: $rule_name,
                 key: $key,
-                expected_value: $expected_value,
+                target_value: $expected_value,
+                report_on_match: false,
                 score: $score.as_f64(),
                 message: $message,
             }
@@ -34,12 +38,35 @@ macro_rules! key_value_key_expected {
 }
 pub(crate) use key_value_key_expected;
 
+macro_rules! key_value_key_unexpected {
+    {
+        name: $rule_name:literal,
+        key: $key:literal,
+        unexpected_value: $unexpected_value:literal,
+        score: $score:expr,
+        message: $message:literal,
+    } => {
+        AnalyticalRule::KeyValueKeyExpectedRule(
+            KeyValueKeyExpectedRule{
+                rule_name: $rule_name,
+                key: $key,
+                target_value: $unexpected_value,
+                report_on_match: true,
+                score: $score.as_f64(),
+                message: $message,
+            }
+        )
+    };
+}
+pub(crate) use key_value_key_unexpected;
+
 impl fmt::Display for KeyValueKeyExpectedRule {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let relation = if self.report_on_match { "is" } else { "is not" };
         write!(
             f,
-            "KeyValueKeyExpectedRule {} <checking if the value of key {} is the expected value: {}>",
-            self.rule_name, self.key, self.expected_value
+            "KeyValueKeyExpectedRule {} <checking if the value of key {} {} {}>",
+            self.rule_name, self.key, relation, self.target_value
         )
     }
 }
@@ -55,11 +82,18 @@ impl Analyze for KeyValueKeyExpectedRule {
             if let Some(value) =
                 processed_data_accessor.key_value_value_by_key(processed_data, run_name, self.key)
             {
-                if value != self.expected_value {
-                    let finding_description = format!(
-                        "The value of {} in {} is \"{}\", instead of \"{}\".",
-                        self.key, run_name, value, self.expected_value
-                    );
+                if (value == self.target_value) == self.report_on_match {
+                    let finding_description = if self.report_on_match {
+                        format!(
+                            "The value of {} in {} is \"{}\".",
+                            self.key, run_name, value
+                        )
+                    } else {
+                        format!(
+                            "The value of {} in {} is \"{}\", instead of \"{}\".",
+                            self.key, run_name, value, self.target_value
+                        )
+                    };
                     report_findings.insert_finding(
                         run_name,
                         self.key,
@@ -71,10 +105,11 @@ impl Analyze for KeyValueKeyExpectedRule {
                         ),
                     );
                 }
-            } else {
+            } else if !self.report_on_match {
+                // A key that is absent cannot hold the value being called out.
                 let finding_description = format!(
                     "The key {} in {} is missing, instead of being set to {}",
-                    self.key, run_name, self.expected_value
+                    self.key, run_name, self.target_value
                 );
                 report_findings.insert_finding(
                     run_name,
