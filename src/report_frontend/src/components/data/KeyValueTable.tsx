@@ -1,16 +1,19 @@
 import React from "react";
-import { KeyValueData } from "../../definitions/types";
+import { DataType, KeyValueData } from "../../definitions/types";
 import { RUNS } from "../../definitions/data-config";
 import { TableProps } from "@cloudscape-design/components";
 import { RunHeader } from "./RunSystemInfo";
+import { ReportHelpPanelTextLink } from "../misc/ReportHelpPanel";
 
 export type TableItem = { [key in string]: string };
 
 /**
  * Build table items and column definitions from a map of run name to KeyValueData.
  * Shared by KeyValueDataPage (top-level key-value data) and GraphMetadata (profiler metadata).
+ * The key of every row links to the help panel, which shows the key's description if one is
+ * defined for the data type in the data-description folder.
  */
-export function buildKeyValueTable(dataByRun: Map<string, KeyValueData | undefined>) {
+export function buildKeyValueTable(dataType: DataType, dataByRun: Map<string, KeyValueData | undefined>) {
   let isDummySection = true;
   const keyValueTableItems = new Map<string, TableItem>();
 
@@ -45,7 +48,11 @@ export function buildKeyValueTable(dataByRun: Map<string, KeyValueData | undefin
   tableColumnDefinitions.push({
     id: "key",
     header: "Key",
-    cell: (item) => <b>{item.key}</b>,
+    cell: (item) => (
+      <ReportHelpPanelTextLink dataType={dataType} fieldKey={item.key}>
+        <b>{item.key}</b>
+      </ReportHelpPanelTextLink>
+    ),
     isRowHeader: isDummySection,
     sortingField: "key",
   });

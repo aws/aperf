@@ -19,7 +19,7 @@ function getTableItemsAndDefinitions(dataType: DataPageProps["dataType"]) {
   const dataByRun = new Map(
     RUNS.map((runName) => [runName, PROCESSED_DATA[dataType].runs[runName] as KeyValueData | undefined]),
   );
-  return buildKeyValueTable(dataByRun);
+  return buildKeyValueTable(dataType, dataByRun);
 }
 
 /**

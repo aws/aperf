@@ -14,6 +14,7 @@ export const ALL_DATA_TYPES = [
   "numastat",
   "kernel_config",
   "sysctl",
+  "mem_settings",
   "perf_profile",
   "java_profile",
   "hotline",

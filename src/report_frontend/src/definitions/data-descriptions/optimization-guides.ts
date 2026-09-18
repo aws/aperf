@@ -2,7 +2,7 @@ export const CPU_UTILIZATION_OPTIMIZATION = `
 ### CPU utilization investigations
 #### Higher-than-expected CPU utilization
 To find out which part in code is consuming more CPU time, you can perform [on-cpu profiling](https://aws.github.io/graviton/perfrunbook/debug_code_perf.html#on-cpu-profiling), which produces flamegraphs that indicate the CPU utilization of every stack trace. The profiling data is available in APerf if you used the \`--profile\` option during recording. To make sure the flamegraphs are correctly collected:
-* Before profiling, make sure \`/proc/sys/kernel/kptr_restrict\` is 0 for kernel address visibility. If not, run \`sudo sysctl -w kernel.kptr_restrict=0\`.
+* Kernel addresses are only visible when \`kernel.kptr_restrict\` is 0 (in Sysctl Config). If it is not, set it with \`sudo sysctl -w kernel.kptr_restrict=0\` and record again.
 * For native code, verify that it is built with \`-g -fno-omit-frame-pointer\`.
 * For Java code, we recommend installing [async-profiler](https://github.com/async-profiler/async-profiler) and profile through APerf's \`--profile-java\` option, which provides richer data; Otherwise, ensure that the JVM is run with \`-XX:+PreserveFramePointer -agentpath:/usr/lib64/libperf-jvmti.so\`.
 * For NodeJS code, verify that it is started with \`--perf-basic-prof\`. 
@@ -18,7 +18,7 @@ High iowait time indicates a bottleneck in disk operations. If the host uses EBS
 export const NETWORK_USAGE_INVESTIGATION = `
 ### Investigate network usage
 If the network throughput is not as expected, below are some steps to investigate:
-* Run \`watch netstat -t\` to look for heavily used connections. A dominating connection can saturate one core and bottleneck the rest of the system.
+* The aggregate TCP/IP counters are in the TCP/IP Stats data. APerf does not record per-connection state, so to find a single dominating connection, which can saturate one core and bottleneck the rest of the system, run \`watch netstat -t\` on the host.
 * For EC2 instances, check the ENA Stats and see if ENA throttle is being hit:
     * \`bw_in_allowance_exceeded\`
     * \`bw_out_allowance_exceeded\`
@@ -57,7 +57,7 @@ You can also use APerf's hotline feature (only works for native code and on meta
 
 export const TLB_MISS_OPTIMIZATION = `
 ### Optimizations for high TLB misses
-Since TLB is a cache that holds virtual-to-physical address translation, reducing its miss rate can improve performance:
+Since TLB is a cache that holds virtual-to-physical address translation, reducing its miss rate can improve performance. The Memory Settings data reports how huge pages are configured on the recorded host, so start there before changing anything:
 * Enable Transparent Huge Pages (THP) by running
     \`\`\`shell
     echo always > /sys/kernel/mm/transparent_hugepage/enabled
@@ -154,4 +154,60 @@ Common link-local services and their fixed IPs are:
 * [Instance Metadata Service (IMDS)](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html): \`169.254.169.254\`/\`fd00:ec2::254\`
 * [Amazon Route 53 Resolver](https://docs.aws.amazon.com/vpc/latest/userguide/AmazonDNS-concepts.html): \`169.254.169.253\`/\`fd00:ec2::253\`/\`primary private IPV4 CIDR range provisioned to your VPC plus two\`
 * [Amazon Time Sync Service](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/set-time.html): \`169.254.169.123\`/\`fd00:ec2::123\`
+`;
+
+export const MEMORY_COMPACTION_INVESTIGATION = `
+### Investigate failing memory compaction
+Compaction migrates in-use pages out of the way to build a physically contiguous block. Either the background \`kcompactd\` thread does it, which costs the workload nothing, or the thread that needs the memory does it itself and stays paused for the whole attempt. \`compact_stall\` in the Virtual Memory Stats data counts only the second kind. Transparent Huge Pages are the most common requester, but device and network drivers need contiguous memory too.
+
+**Find out why it is failing**
+Migrating pages needs somewhere to move them to, so compaction fails when there is no usable free memory:
+* If \`MemAvailable\` in the Memory Usage data is low, there is nowhere to migrate pages to. Relieve the memory pressure; no compaction setting will help.
+* Otherwise the free memory is pinned by kernel allocations, which cannot be migrated. Check the PageType and PageBlocks metrics in the Memory Allocation data for a large Unmovable share, which only freeing that kernel memory or a reboot resets.
+
+**Find out which thread is paying for it**
+For Transparent Huge Pages (compare \`thp_fault_alloc\` and \`thp_fault_fallback\` in the Virtual Memory Stats data), the \`transparent_hugepage/defrag\` setting in the Memory Settings data decides which of the two does the work:
+* \`always\` compacts in the faulting thread, which is what produces these stalls.
+* \`defer\` wakes \`kcompactd\` instead and falls back to regular pages for now, so the block is still built but off the application's critical path.
+* \`never\` skips compaction altogether.
+
+This setting only covers huge pages. A driver asking for a contiguous buffer compacts in its own thread regardless, so if the stalls are not coming from huge pages, changing it will not help.
+
+**Related settings**
+* \`vm.compaction_proactiveness\` in the Sysctl Config data - how aggressively \`kcompactd\` compacts in the background, before an application ever asks.
+* \`vm.extfrag_threshold\` in the Sysctl Config data - how fragmented a zone must be before the kernel prefers compaction over reclaim.
+* On kernels 6.9 and newer, the per-size \`transparent_hugepage/hugepages-*kB/enabled\` settings in the Memory Settings data ask for less contiguous memory each, so they succeed far more often than the largest size.
+* A reserved HugeTLB pool, shown as \`hugepages/hugepages-*kB/nr_hugepages\` in the Memory Settings data, sets memory aside while it is still unfragmented so no search is needed later.
+`;
+
+export const PAGE_TABLE_OVERHEAD_INVESTIGATION = `
+### Reduce page table memory
+Every process needs its own page table entries for the memory it maps, so the cost is the number of processes multiplied by the size each one maps. With 4kB pages, a 64GB mapping costs about 128MB of entries per process, which is why hundreds of processes sharing one large region can spend as much memory on the entries as the region itself. Huge pages make each entry cover 2MB instead of 4kB.
+
+**Back the mapped memory with huge pages**
+\`ShmemHugePages\` and \`HugePages_Total\` in the Memory Usage data show whether either mechanism is in use. Both being zero means every entry is the system's default page size (e.g. 4kB).
+* If the application can request huge pages itself, that is the most direct route. PostgreSQL takes \`huge_pages=on\` with a pool reserved through \`vm.nr_hugepages\`, reported as \`hugepages/hugepages-*kB/nr_hugepages\` in the Memory Settings data, large enough for \`shared_buffers\`.
+* Otherwise allow transparent huge pages for shared memory. A shared anonymous mapping is shmem internally, so it follows \`transparent_hugepage/shmem_enabled\` in the Memory Settings data and not \`transparent_hugepage/enabled\`. If that setting reads \`never\`, \`within_size\` is the usual choice, since it only uses a huge page where one fits entirely inside the mapping: \`echo within_size > /sys/kernel/mm/transparent_hugepage/shmem_enabled\`.
+
+**Or reduce the number of processes**
+The entries are paid per process, so fewer processes mapping the region saves proportionally. For a database this usually means a connection pooler.
+`;
+
+export const DIRTY_WRITEBACK_INVESTIGATION = `
+### Investigate dirty page writeback
+The kernel holds data written by an application in the page cache as dirty pages until it flushes them to disk. How much the kernel buffers, and how eagerly it flushes, decides how much time the application spends waiting on the disk. 
+If a performance regression is suspected to be related to dirty page writeback, check if any of the below configs are inconsistent across runs. 
+
+**Related Settings**
+The current value of each setting below is in the Sysctl Config data. To change one, run for example
+\`\`\`shell
+sysctl -w vm.dirty_bytes=1073741824
+\`\`\`
+and persist it under \`/etc/sysctl.d/\`.
+* \`vm.dirty_bytes\` or \`vm.dirty_ratio\` - the limit at which a writing process is made to stop and flush data itself. Only one of them can be set to non-zero.
+* \`vm.dirty_background_ratio\` or \`vm.dirty_background_bytes\` - the point where the kernel starts flushing in the background, without blocking the application.
+* \`vm.dirty_writeback_centisecs\` - how often the kernel flusher threads wake up.
+* \`vm.dirty_expire_centisecs\` - how old dirty data has to be before it is written out.
+
+\`CONFIG_BLK_WBT\` and \`CONFIG_BLK_WBT_MQ\` are the two related kernel configs. They let the block layer hold back background writeback so that it does not delay the application's own I/O.
 `;

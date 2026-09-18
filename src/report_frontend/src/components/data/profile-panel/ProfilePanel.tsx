@@ -128,7 +128,7 @@ function MetadataTable({ dataType, profilerName }: { readonly dataType: DataType
         return [runName, metadata] as const;
       }),
     );
-    return buildKeyValueTable(dataByRun);
+    return buildKeyValueTable(dataType, dataByRun);
   }, [dataType, profilerName]);
 
   if (tableItems.length === 0) {
