@@ -139,6 +139,29 @@ export function ReportHelpPanelLink(props: ReportHelpPanelProps) {
   );
 }
 
+interface ReportHelpPanelTextLinkProps extends ReportHelpPanelProps {
+  readonly children: React.ReactNode;
+}
+
+/**
+ * This component renders arbitrary content as a link that configures and shows the help panel. Use
+ * it to make a piece of text itself open the help panel, such as the key of a key-value data.
+ */
+export function ReportHelpPanelTextLink(props: ReportHelpPanelTextLinkProps) {
+  const { setHelpPanelDataType, setHelpPanelFieldKey, setShowHelpPanel } = useReportState();
+  return (
+    <Link
+      onFollow={() => {
+        setHelpPanelDataType(props.dataType);
+        setHelpPanelFieldKey(props.fieldKey);
+        setShowHelpPanel(true);
+      }}
+    >
+      {props.children}
+    </Link>
+  );
+}
+
 /**
  * This component renders an icon that configures and shows the help panel.
  */

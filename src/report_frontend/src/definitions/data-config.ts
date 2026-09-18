@@ -7,6 +7,7 @@ declare let processed_cpu_utilization_data;
 declare let processed_vmstat_data;
 declare let processed_kernel_config_data;
 declare let processed_sysctl_data;
+declare let processed_mem_settings_data;
 declare let processed_interrupts_data;
 declare let processed_diskstats_data;
 declare let processed_perf_stat_data;
@@ -27,6 +28,7 @@ declare let cpu_utilization_findings;
 declare let vmstat_findings;
 declare let kernel_config_findings;
 declare let sysctl_findings;
+declare let mem_settings_findings;
 declare let interrupts_findings;
 declare let diskstats_findings;
 declare let perf_stat_findings;
@@ -59,6 +61,7 @@ export const PROCESSED_DATA: { [key in DataType]: ReportData } = {
   numastat: processed_numastat_data,
   kernel_config: processed_kernel_config_data,
   sysctl: processed_sysctl_data,
+  mem_settings: processed_mem_settings_data,
   perf_profile: processed_perf_profile_data,
   java_profile: processed_java_profile_data,
   hotline: processed_hotline_data,
@@ -82,6 +85,7 @@ export const PER_DATA_ANALYTICAL_FINDINGS: { [key in DataType]: DataFindings } =
   numastat: numastat_findings,
   kernel_config: kernel_config_findings,
   sysctl: sysctl_findings,
+  mem_settings: mem_settings_findings,
   perf_profile: perf_profile_findings,
   java_profile: java_profile_findings,
   hotline: hotline_findings,
@@ -134,15 +138,11 @@ export const NAVIGATION_SECTIONS: NavigationSection[] = [
   },
   {
     sectionName: "System Configurations",
-    items: ["kernel_config", "sysctl"],
+    items: ["kernel_config", "sysctl", "mem_settings"],
   },
   {
     sectionName: "Profiling",
-    items: [
-      "perf_profile",
-      "java_profile",
-      "hotline",
-    ],
+    items: ["perf_profile", "java_profile", "hotline"],
   },
   {
     sectionName: "APerf Execution",
