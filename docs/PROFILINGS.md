@@ -7,8 +7,27 @@
 ### Profiling using Perf
 
 **Prerequisites:**
-- Ensure perf binary is installed.
-- [Kernel permissions](../README.md#advanced-usage) are set if not running with root permissions.
+Ensure perf binary is installed:
+
+```bash
+# For Amazon Linux or other Red Hat-based
+sudo dnf install perf
+```
+```bash
+# For Ubuntu / Debian
+sudo apt install linux-tools-common linux-tools-generic linux-tools-$(uname -r)
+```
+Ensure Perf is available on PATH:
+```bash
+perf -v
+```
+
+For non-root APerf runs, configure the permissions to allow profiling collection and kernel symbol resolution:
+
+```bash
+sudo sysctl -w kernel.perf_event_paranoid=-1
+sudo sysctl -w kernel.kptr_restrict=0
+```
 
 **What it collects:**  
 System-wide CPU profiling data using `perf record` with call graphs. These are displayed as flamegraphs in the report.
@@ -37,7 +56,7 @@ perf record -a -q -g -k 1 -F <perf_frequency> -e cpu-clock:pppH -o <data_file_pa
 
 #### Behavior
 
-APerf spawns a `perf record` process at the start of the recording period that runs for the collection duration. After the recording completes, APerf processes the collected data using `perf report --stdio --percent-limit 1` to generate a text report of the top functions (those consuming ≥1% of samples). This report is saved to the `top_functions` file in the data directory and displayed in the APerf HTML report. The flamegraphs are then generated from the `perf record` output by running `perf inject` to add the compiled code symbols and converting to SVG. All intermediate files are saved in the record archive for reference.
+APerf spawns a `perf record` process at the start of the recording period that runs for the collection duration. After the recording completes, the flamegraphs are generated from the `perf record` output by running `perf inject` to add the compiled code symbols and converting to SVG.
 
 ## Async-profiler
 
@@ -46,8 +65,37 @@ APerf spawns a `perf record` process at the start of the recording period that r
 ### Profiling Java using Async-Profiler
 
 **Prerequisites:**
-- Install [async-profiler](https://github.com/async-profiler/async-profiler) and add it to PATH.
-- Ensure JDK is installed (APerf uses the `jps` command).
+Install [async-profiler](https://github.com/async-profiler/async-profiler):
+```bash
+VERSION=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+  https://github.com/async-profiler/async-profiler/releases/latest | sed 's#.*/tag/v##')
+ARCH=$(uname -m | sed -e 's/x86_64/x64/' -e 's/aarch64/arm64/')
+curl -fsSL "https://github.com/async-profiler/async-profiler/releases/download/v$VERSION/async-profiler-$VERSION-linux-$ARCH.tar.gz" \
+  | sudo tar -xzf - -C /opt
+sudo ln -sf /opt/async-profiler-$VERSION-linux-$ARCH/bin/{asprof,jfrconv} /usr/local/bin/
+```
+The `jps`, `jcmd`, and `jfr` commands provided by JDK are also required. To install JDK (24 is recommended but other 16+ versions should also work):
+```bash
+# For Amazon Linux or other Red Hat-based
+sudo dnf install java-24-amazon-corretto-devel
+```
+```bash
+# For Ubuntu / Debian, add the Corretto apt repository first
+curl -fsSL https://apt.corretto.aws/corretto.key \
+  | sudo gpg --dearmor -o /usr/share/keyrings/corretto-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/corretto-keyring.gpg] https://apt.corretto.aws stable main" \
+  | sudo tee /etc/apt/sources.list.d/corretto.list
+sudo apt update && sudo apt install java-24-amazon-corretto-jdk
+sudo ln -sf /usr/lib/jvm/java-24-amazon-corretto/bin/jfr /usr/local/bin/jfr
+```
+Ensure that the below commands all work:
+```bash
+asprof --version
+jfrconv --version
+jps -h
+jcmd -h
+jfr --version
+```
 
 **What it collects:**  
 CPU, allocation, and wall-clock samples from JVMs which are displayed as heatmaps in the report. If no JVMs are specified, APerf automatically detects and profiles all running JVMs.

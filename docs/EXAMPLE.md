@@ -50,14 +50,26 @@ The report homepage contains the system information for each record run:
 
 ![System info](../images/system_info.png)
 
+Check the analytical findings section for all the potential performance issues:
+
+![Analytical findings](../images/analytical_findings.png)
+
+Check the statistical findings section for all metric comparisons to the base run. If the delta is green, it means the stat is more desired than the base run; if the delta is red, it means the stat is less desired:
+
+![Statistical findings](../images/statistical_findings.png)
+
 Use the navigation panel on the left side to view different data:
 
 ![Navigation panel](../images/navigation.png)
 
-For time series data, same metric across different runs are placed together for easy comparison. The stats of each metric are shown above the graph, and for runs other than the base run, the stats are compared against those of the base run. If the delta is green, it means the stat is more desired than the base run; if the delta is red, it means the stat is less desired:
+For time series data, same metric across different runs are placed together for easy comparison:
 
 ![Time series](../images/time_series.png)
 
-Click the info button of each metric to learn more about the metric, its desired value, and how it could impact performance:
+Click the info button of each metric to learn more about the metric, how it could impact performance, and possible optimization steps:
 
 ![Help panel](../images/help_panel.png)
+
+For system configurations, by default the report only shows those with differnt values across runs:
+
+![System Config](../images/sys_config.png)

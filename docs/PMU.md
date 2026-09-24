@@ -67,21 +67,29 @@ A CPU core typically has 2 to 8 general-purpose PMU counter registers (the exact
 
 Note that some events are counted on **dedicated counters** instead of the general-purpose registers, so effectively not consuming the budget — but only on **full-PMU (metal / dedicated-socket) instance sizes**:
 
-- **Intel** provides fixed counters for instructions retired
-  (`event=0xc0,umask=0x0`), core cycles (`event=0x3c,umask=0x0`), reference
-  cycles, and topdown slots.
-- **ARM** has a dedicated cycle counter for the `Cycles` event (`event=0x11`)
-  on metal sizes.
-- **AMD** has no fixed counters on any size.
-
 The general-purpose register count itself also shrinks on smaller instance sizes, and differently per vendor (e.g. when measured on large instances: Intel exposes the full 8, AMD ~5 of 6, Graviton4 only 2 of 6). A config that avoids multiplexing on metal can therefore multiplex heavily on a small size of the same family.
 
 Also note that on Intel, some events can only be counted on a **subset** of the general-purpose registers (e.g. `MEM_LOAD_RETIRED.*` events are restricted to
 the first four registers; see the `Counter` field in the [intel/perfmon](https://github.com/intel/perfmon) event lists). A config can therefore multiplex even when the event count fits the total register budget, if too many events compete for the same restricted registers. AMD core events have no such restrictions.
 
-To compensate for multiplexing, the kernel reports alongside each counter the time it was enabled and the time it actually ran. APerf uses them to scale every value as if the counter were collected for the whole interval, i.e. `value * time_enabled / time_running`. This estimate is accurate when the workload behaves steadily, but degrades on bursty workloads.
+Check the `mux_counter_schedule_rate` metric in APerf report's PMU Events data for the percentage of time a counter was actually collecting, which represents the level of multiplexing.
 
-Multiplexing also consumes extra CPU during collection, since the kernel spends time rotating the context.
+## Performance Overhead
+
+The collection of PMU events consumes different types of resources.
+
+###File descriptors 
+Each PMU counter on each CPU creates a file descriptor to read its value. APerf's default PMU config creates more than 20 counters, so on a machine with more than 64 cores, more than 1024, which is Linux's default limit for file descriptors per process, need to be created. APerf automatically increases the fd limit to meet the need.
+
+###Counter creation time
+Due to underoptimized v5.x kernel implementation, counter creation could lead to excessive lock contentions, which significantly increase the creation time. The issue is fixed on v6.x and v7.x kernels.
+
+###CPU usage
+When multiplexing is present, the kernel performs context rotation periodically to time share the counters running on the PMU registers. On kernels older than v6.2, the overhead can be as high as 0.6% per CPU on metal and 1.7% per CPU on virtualized hosts. After optimizations applied to v6.2, the per-CPU cost on metal drops to 0.1%. For virtualized hosts, the per-CPU cost stays at aroudn 1%, since it is dominated by traps to hypervisor.
+
+Therefore, **we recommend always setting `perf_event_mux_interval_ms`, which controls how often context rotation happens, to 100**. By increasing from the default value of 10ms to 100ms, the per-CPU cost is reduced by 10x, which is especially important for virtualized runs. To compensate for the reduced PMU counter accuracy caused by fewer collection windows, **we also recommend setting the collection period (`-p`) to at least 600 seconds**. Experiments showed that such settings could limit the counter error rate to from around 1% to 10%.
+
+Note that PMU counter accuracy can be increased by less context rotations, but meanwhile reduced by fewer collection windows. The impact on an event's accuracy depends on the nature of the event (e.g. sparse vs dense events), as well as the pattern of the workload (e.g. stable workloads vs spiky workloads).
 
 ## PMU Support on EC2
 

@@ -18,57 +18,224 @@ The goal of APerf is to accelerate the performance debugging process by enabling
 > [!TIP]
 > Check out the APerf guide and demo video at https://www.youtube.com/watch?v=mSrDZuxWFtw
 
+## Download
+
+#### Latest release: https://github.com/aws/aperf/releases/latest
+#### Nightly builds: https://github.com/aws/aperf/releases/tag/nightly
+#### Docker Images: https://gallery.ecr.aws/aperf/aperf
+
+The release artifacts include
+* ARM and X86 binaries
+* Windows and Mac binaries, for report generation only
+* ARM and x86 RPM packages
+* ARM and x86 DEB packages
+* Docker images
+* The kubectl tool
+
+Alternatively, you can [build APerf from source](#building-from-source).
+
 ## Quick Start
-Get started with APerf in under 2 minutes:
+
 ```bash
-# 1. Download and extract latest release
-arch=$(uname -m); curl -sL $(curl -s https://api.github.com/repos/aws/aperf/releases/latest | grep "browser_download_url.*$arch.*\.tar\.gz" | cut -d'"' -f4) | tar -xz && echo "✓ aperf available at ./aperf-<version>-$arch/aperf"
+echo "Download the latest APerf binary"
+VERSION=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+  https://github.com/aws/aperf/releases/latest | sed 's#.*/tag/##')
+ARCH=$(uname -m)
+curl -fsSL "https://github.com/aws/aperf/releases/download/$VERSION/aperf-$VERSION-$ARCH.tar.gz" | tar -xzf -
+cd aperf-$VERSION-$ARCH
+./aperf --version
 
-# 2. Set kernel permissions (non-root users)
-sudo sysctl -w kernel.perf_event_paranoid=-1
-sudo sysctl -w kernel.kptr_restrict=0
-ulimit -n 65535
+echo "Override perf_event_mux_interval_ms to reduce CPU overhead for PMU data collection"
+echo 100 | sudo tee /sys/bus/event_source/devices/*/perf_event_mux_interval_ms
 
-# 3. Record performance data every 1 second for 60 seconds
-./aperf record -r my_run -i 1 -p 60
+echo "Run APerf data collection for 10 seconds"
+sudo ./aperf record -r my_run
 
-# 4. Generate report, can be run another machine
-./aperf report -r my_run -n my_report
-
-# 5. Open my_report/index.html in your browser
+echo "Generate APerf report"
+sudo ./aperf report -r my_run -n my_report
 ```
+
+Then open my_report/index.html in browser to access the report.
 
 ## What data does APerf collect?
 
-| Data Type                | Description                                                                                                                                                  |
-|--------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Metadata**             |                                                                                                                                                              |
-| `systeminfo`             | System information and EC2 metadata if running on EC2 instances                                                                                              |
-| `kernel_config`          | Kernel Configuration (/boot/config)                                                                                                                          |
-| `sysctl`                 | Sysctl variable configuration settings                                                                                                                       |
-| **Performance Data**     |                                                                                                                                                              |
-| `cpu_utilization`        | CPU Utilization, both per CPU and aggregate CPU utilization                                                                                                  |
-| `vmstat`                 | Virtual Memory Utilization                                                                                                                                   |
-| `diskstats`              | Disk Utilization per Disk                                                                                                                                    |
-| `interrupts`             | Interrupt Data per Interrupt Line per CPU                                                                                                                    |
-| `perf_stat`              | [PMU data](/docs/PMU.md)                                                                                                                                     |
-| `processes`              | CPU utilization of running processes                                                                                                                         |
-| `netstat`                | TCP/IP stats                                                                                                                                                 |
-| `ena_stat`               | ENA (ethtool) stats                                                                                                                                          |
-| `efa_stat`               | [EFA](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/efa.html) stats                                                                                    |
-| `meminfo`                | Memory usage information                                                                                                                                     |
-| `perf_profile`           | Performance profile data (enabled through the `--profile` option and the `perf` binary)                                                                      |
-| `java_profile`           | JVM profile data (enabled through the `--profile-java` option and the [async-profiler](https://github.com/async-profiler/async-profiler/tree/master) binary) |
-| `hotline`                | Memory and branch predictor hot spot detection (needs to be built with the Hotline feature and run on metal instance only)                                   |
-| `memalloc`               | Memory allocation data including buddyinfo, pagetypeinfo, and slabinfo (some data requires root privileges)                                                  |
-| **APerf Execution Data** |                                                                                                                                                              |
-| `aperf_runlog`           | The log messages                                                                                                                                             |
-| `aperf_stats`            | Execution time of each collection interval (including the total time and every data's collection time)                                                       | 
+The table below follows the report's navigation panel, which shows each data type under its "Report Page" name.
 
-## Installation
-Download the binary from the [Releases](https://github.com/aws/APerf/releases) page. APerf record and report are fully supported on Linux. Only report generation (`aperf report`) is supported on macOS and Windows.
+| Data Type                 | Report Page          | Description                                                                                                                                                  |
+|---------------------------|----------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `systeminfo`              | Report Home          | System information and EC2 metadata if running on EC2 instances                                                                                              |
+| **Performance Data**      |                      |                                                                                                                                                              |
+| `cpu_utilization`         | CPU Utilization      | CPU Utilization percentage                                                                                                                                   |
+| `perf_stat`               | PMU Events           | [PMU data](/docs/PMU.md)                                                                                                                                     |
+| `interrupts`              | Interrupts           | Per-CPU Interrupt count                                                                                                                                      |
+| `diskstats`               | Disk Stats           | Disk Utilization per device                                                                                                                                  |
+| `processes`               | Processes            | Running processes resource usages                                                                                                                            |
+| `meminfo`                 | Memory Usage         | Physical memory usage                                                                                                                                        |
+| `memalloc`                | Memory Allocation    | Memory allocation data including buddyinfo, pagetypeinfo, and slabinfo (some data requires root privileges)                                                  |
+| `vmstat`                  | Virtual Memory Stats | Virtual Memory stats                                                                                                                                         |
+| `numastat`                | NUMA Stats           | Per-NUMA-node memory stats (/sys/devices/system/node/node\*/numastat)                                                                                        |
+| `netstat`                 | TCP/IP Stats         | TCP/IP stats                                                                                                                                                 |
+| `ena_stat`                | ENA Stats            | ENA (ethtool) stats                                                                                                                                          |
+| `efa_stat`                | EFA Stats            | [EFA](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/efa.html) stats                                                                                    |
+| **System Configurations** |                      |                                                                                                                                                              |
+| `kernel_config`           | Kernel Config        | Kernel Configuration (/boot/config)                                                                                                                          |
+| `sysctl`                  | Sysctl Config        | Sysctl variable configuration settings                                                                                                                       |
+| `mem_settings`            | Memory Settings      | Static memory-related configurations                                                                                                                         |
+| **Profiling**             |                      |                                                                                                                                                              |
+| `perf_profile`            | Perf Profiling       | Performance profile data (enabled through the `--profile` option and the `perf` binary)                                                                      |
+| `java_profile`            | Java Profiling       | JVM profile data (enabled through the `--profile-java` option and the [async-profiler](https://github.com/async-profiler/async-profiler/tree/master) binary) |
+| `hotline`                 | Hotline              | Memory and branch predictor hot spot detection (needs to be [built with the Hotline feature](#building-with-hotline) and run on metal instance only)                                   |
+| **APerf Execution**       |                      |                                                                                                                                                              |
+| `aperf_stats`             | APerf Stats          | Wallclock time of each data's collection and child processes' resource usages                                                                                |
+| `aperf_runlog`            | APerf Logs           | The log messages of APerf's execution                                                                                                                        |
 
-### Building from source
+## Detailed Usages
+
+For every subcommand below, you can supply these options:
+
+`-h, --help`
+
+Print help menu.
+
+`-V, --version`
+
+Print version.
+
+`-v, --verbose`
+
+Show debug messages. Use `-vv` for more verbose messages.
+
+`-t, --tmp-dir <TMP_DIR>` [default: /tmp]
+
+Temporary directory for intermediate files.
+
+-----
+
+### Record
+
+`aperf record` collects system configurations and performance data periodically and writes them to disk. It produces a directory and tar ball containing all collected data.
+
+`-r, --run-name <RUN_NAME>` [default: aperf_\<timestamp\>]
+
+Name of the run, which defines the directory and archive name of the recorded data.
+
+`-i, --interval <INTERVAL>` [default: 1]
+
+Interval (in seconds) at which performance data is to be collected.
+
+`-p, --period <PERIOD>` [default: 10]
+
+Time (in seconds) for which the performance data is to be collected.
+
+> [!TIP]
+> If applicable, collect for at least 10 minutes to more accurately record the application's behavior.
+
+`--dont-collect <Data Name>,<Data Name>...`
+
+The list of performance data to skip collection. Cannot be used with `--collect_only`.
+
+`--collect-only <Data Name>,<Data Name>...`
+
+The list of performance data to be collected - the others will not be collected. Cannot be used with `--dont_collect`. Please note that we recommend to always collect as much data as possible for performance debugging, unless you are sure some data can be excluded.
+
+`--profile` 
+
+Gather profiling data using the 'perf' binary. See [perf documentation](./docs/PROFILINGS.md#perf) for more details and usage.
+
+`-F, --perf-frequency <FREQUENCY>` [default: 99] 
+
+Frequency for perf profiling in Hz.
+
+`--profile-java [<PID/Name>,<PID/Name>,...,<PID/Name>]` [default: profiles all JVMs]
+
+Profile JVMs using async-profiler. See [async-profiler documentation](./docs/PROFILINGS.md#async-profiler) for more details and usage.
+
+`--pmu-config <PMU_CONFIG>` 
+
+Custom PMU config file to use.
+
+`--ungroup-pmu-events`
+
+Avoid creating a PMU counter group for each metric defined in the PMU config. For details, please read the [PMU data document](/docs/PMU.md).
+
+`--pmu-cpus <CPU>,<CPU RANGE>,...,<CPU>` [default: all online CPUs]
+
+Collect PMU counters only on the given CPUs, given as a comma separated list of single CPUs and inclusive ranges, e.g. `12,5,41-55,16-19,1`.
+
+`--hotline-sample-frequency <FREQUENCY>` (For Hotline-enabled binary) [default: 1000]
+
+Hotline sampling period in Hz.
+
+`--num-to-report <NUM_TO_REPORT>` [default: 5000]
+
+Maximum number of report entries to process for Hotline tables.
+
+-----
+
+### Report
+
+`aperf report` processes one or more directories or tar balls produced by `aperf record`, runs analytics, and generates a static HTML report. The report contains all visualized data and findings about potential performance bottlenecks. Check [EXAMPLE.md](/docs/EXAMPLE.md) for more report usages. 
+
+`-r, --run <RUN> <RUN> ...` 
+
+The paths to the directories or archives of the recorded data to be included in the report.
+
+> [!TIP]
+> If multiple runs are included in the report, the first run will be used as the base run. The data in every other run will be compared against the base run to generate statistical and analytical findings.
+
+`-n, --name <NAME>` [default: aperf_report_<run>] 
+
+The directory and archive name of the report.
+
+`--time-range RUN_NAME=FROM_TIME:TO_TIME`
+
+The time range to apply to a run in the report, including its time-series metrics, statistics, and analytical findings.
+Specify the option multiple times to apply a time range for multiple runs, or omit the `RUN_NAME=` part to apply it to all runs. Either bound can be omitted or negative.
+
+-----
+
+### Setup Shell Completions
+`aperf setup-shell-completions` generates a completion script for the specified shell and prints it to stdout. Aperf can also install the script to a specific location or attempt to detect the location for the shell using through `--install` option.
+
+> [!TIP]
+> Installing the RPM or DEB package installs the completion script automatically.
+
+`--shell <SHELL>`
+
+Shell to generate completions for [possible values: bash, elvish, fish, powershell, zsh].
+
+`--install <Path including filename>`
+
+Install the auto complete script using sudo, or specify a download path.
+
+-----
+
+### MCP Server (AI Assistant Integration)
+
+APerf includes a built-in [MCP](https://modelcontextprotocol.io/) server that lets AI assistants (Kiro, Claude Desktop, etc.) record data, generate reports, and analyze performance metrics interactively.
+
+```bash
+# Start the MCP server (used by AI clients, not run manually)
+aperf server --mcp
+```
+
+**Kiro setup** — add to `~/.kiro/settings/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "aperf-mcp": {
+      "command": "/path/to/aperf",
+      "args": ["server", "--mcp"],
+      "disabled": false
+    }
+  }
+}
+```
+
+The server exposes 8 tools: `load_report`, `get_metrics`, `get_metric_values`, `get_analytical_findings`, `get_statistical_findings`, `get_flamegraph`, `record`, and `generate_report`. See [MCP Server docs](./docs/MCP-SERVER.md) for full details.
+
+## Building from source
 1. Download the source code from the [Releases](https://github.com/aws/APerf/releases) page.
 
 2. Install requirements: [Rust toolchain (v1.61.0+)](https://www.rust-lang.org/tools/install), [Node.js (v16.16.0+)](https://nodejs.org/en/download/), and build tools
@@ -94,7 +261,7 @@ Download the binary from the [Releases](https://github.com/aws/APerf/releases) p
    ```
    The binary will be located at `target/release/aperf`.
 
-### Optional - Building with Hotline
+### Building with Hotline
 
 Hotline is APerf's in-memory latency and branch hotspot analyzer. It uses [ARM Statistical Profiling Extension (SPE)](https://developer.arm.com/community/arm-community-blogs/b/architectures-and-processors-blog/posts/statistical-profile-extension) to sample micro-architectural events directly from the CPU pipeline, giving you precise, low-overhead visibility into where your workloads spend time and why.
 
@@ -143,213 +310,30 @@ Hotline produces two categories of analysis:
    cargo test --features hotline
    ```
 
-## Usage
-`aperf record` records performance data and stores them in a series of files. A report is then generated with `aperf report` and can be viewed in any system with a web browser.
-
-### Basic Usage
-
-#### Record
-
-Run the following command to start an Aperf record run. Aperf will run for `<PERIOD>` seconds. During the recording period, once every `<INTERVAL>` seconds, it collects performance data from the system and writes them to binary files. At the end of the record, all collected data will be available in the `<RUN_NAME>` directory and also archived in `<RUN_NAME>.tar.gz`.
-
-```
-sudo aperf record -r <RUN_NAME> -i <INTERVAL> -p <PERIOD>
-```
-To run without sudo, refer to [kernel permissions](#kernel-permissions).
-
-#### Report
-
-Run the following command to generate an Aperf report for previously collected data. The data will be read from path `<RUN>`, which can be either the directory or archive produced by the previous `aperf record` command. The report will be generated in the `<REPORT_NAME>` directory and also archived in `<REPORT_NAME>.tar.gz`. To access the report, open the `index.html` file in browser.
-
-```
-aperf report -r <RUN> -n <REPORT_NAME>
-```
-
-You can compare the results of multiple performance record runs:
-```
-aperf report -r <RUN1> <RUN2> ... -n <REPORT_NAME>
-```
-
-> [!TIP]
-> If multiple runs are included in the report, the first run will be used as the base run. The data in every other run will be compared against the base run to generate all statistical findings and some analytical findings.
-
-### Advanced Usage
-
-<a name="kernel-permissions"></a>**Kernel Permissions for non-root users**
-
-Aperf PMU collection, profiling options `--profile`, and hotline require relaxed kernel permissions:
-
-```bash
-sudo sysctl -w kernel.perf_event_paranoid=-1   # Provides profiling access for perf record, PMU counters, hotline
-sudo sysctl -w kernel.kptr_restrict=0          # Provides perf access to /proc/kallsyms
-ulimit -n 65535                                # Increases file descriptor limit for PMU collection
-```
-
-These settings can be skipped when running APerf with root privileges.
-
-## Available Options
-
-For every subcommand below, you can supply these options:
-
-`-h, --help`
-
-Print help menu.
-
-`-V, --version`
-
-Print version.
-
-`-v, --verbose`
-
-Show debug messages. Use `-vv` for more verbose messages.
-
-`-t, --tmp-dir <TMP_DIR>` [default: /tmp]
-
-Temporary directory for intermediate files.
-
------
-
-#### Record
-
-`-r, --run-name <RUN_NAME>` [default: aperf_\<timestamp\>]
-
-Name of the run, which defines the directory and archive name of the recorded data.
-
-`-i, --interval <INTERVAL>` [default: 1]
-
-Interval (in seconds) at which performance data is to be collected.
-
-`-p, --period <PERIOD>` [default: 10]
-
-Time (in seconds) for which the performance data is to be collected.
-
-`--dont-collect <Data Name>,<Data Name>...`
-
-The list of performance data to skip collection. Cannot be used with `--collect_only`.
-
-`--collect-only <Data Name>,<Data Name>...`
-
-The list of performance data to be collected - the others will not be collected. Cannot be used with `--dont_collect`. Please note that we recommend to always collect as much data as possible for performance debugging, unless you are sure some data can be excluded.
-
-`--profile` 
-
-Gather profiling data using the 'perf' binary. See [perf documentation](./docs/DEPENDENCIES.md#perf) for more details and usage.
-
-`-F, --perf-frequency <FREQUENCY>` [default: 99] 
-
-Frequency for perf profiling in Hz.
-
-`--profile-java [<PID/Name>,<PID/Name>,...,<PID/Name>]` [default: profiles all JVMs]
-
-Profile JVMs using async-profiler. See [async-profiler documentation](./docs/DEPENDENCIES.md#async-profiler) for more details and usage.
-
-`--pmu-config <PMU_CONFIG>` 
-
-Custom PMU config file to use.
-
-`--ungroup-pmu-events`
-
-Avoid creating a PMU counter group for each metric defined in the PMU config. For details, please read the [PMU data document](/docs/PMU.md).
-
-`--pmu-cpus <CPU>,<CPU RANGE>,...,<CPU>` [default: all online CPUs]
-
-Collect PMU counters only on the given CPUs, given as a comma separated list of single CPUs and inclusive ranges, e.g. `12,5,41-55,16-19,1`.
-
-`--hotline-sample-frequency <FREQUENCY>` (For Hotline-enabled binary) [default: 1000]
-
-Hotline sampling period in Hz.
-
-`--num-to-report <NUM_TO_REPORT>` [default: 5000]
-
-Maximum number of report entries to process for Hotline tables.
-
------
-
-#### Report
-
-`-r, --run <RUN> <RUN> ...` 
-
-The paths to the directories or archives of the recorded data to be included in the report.
-
-`-n, --name <NAME>` [default: aperf_report_<run>] 
-
-The directory and archive name of the report.
-
-`--time-range RUN_NAME=FROM_TIME:TO_TIME`
-
-The time range to apply to a run in the report, including its time-series metrics, statistics, and analytical findings.
-Specify the option multiple times to apply a time range for multiple runs, or omit the `RUN_NAME=` part to apply it to all runs. Either bound can be omitted or negative.
-
------
-
-#### Setup Shell Completions
-This command generates a completion script for the specified shell, which will be printed to stdout. Aperf can also install the script to a specific location or automatically attempt to detect the proper location for the shell using the `--install` option.
-
-`--shell <SHELL>`
-
-Shell to generate completions for [possible values: bash, elvish, fish, powershell, zsh]
-
-`--install <Path including filename>`
-
-Install the auto complete script using sudo, or specify a download path
-
-## MCP Server (AI Assistant Integration)
-
-APerf includes a built-in [MCP](https://modelcontextprotocol.io/) server that lets AI assistants (Kiro, Claude Desktop, etc.) record data, generate reports, and analyze performance metrics interactively.
-
-```bash
-# Start the MCP server (used by AI clients, not run manually)
-aperf server --mcp
-```
-
-**Kiro setup** — add to `~/.kiro/settings/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "aperf-mcp": {
-      "command": "/path/to/aperf",
-      "args": ["server", "--mcp"],
-      "disabled": false
-    }
-  }
-}
-```
-
-The server exposes 8 tools: `load_report`, `get_metrics`, `get_metric_values`, `get_analytical_findings`, `get_statistical_findings`, `get_flamegraph`, `record`, and `generate_report`. See [MCP Server docs](./docs/MCP-SERVER.md) for full details.
-
-## APerf Issues?
-
-> [!WARNING]
-> **KNOWN LIMITATIONS** :
-> - The default configuration of 10ms for `perf_event_mux_interval_ms` is known to cause serious performance overhead for systems with large core counts. We recommend setting this value to 100ms by doing the following: `echo 100 | sudo tee /sys/bus/event_source/devices/*/perf_event_mux_interval_ms`
-> - APerf report is currently not able to efficiently process and display long record data. Multiple hour long records on machines with many CPUs (>128 core count) may be too large to run report on or open in a web browser.
-
-#### PMU Counters:
-* PMU counters are only available on [certain instance sizes](https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/debug_hw_perf.md#how-to-collect-pmu-counters) and families. Select the appropriate instance size if you need PMU stats.
-* For collecting PMU counter metrics without `root` or `sudo` permissions, set the `perf_event_paranoid` to `-1`.
-```
-sudo sysctl -w kernel.perf_event_paranoid=-1
-```
-* APerf preparation for PMU counter metrics may take significant time on larger instances in 5.x kernels, delaying the start of the recording period. Use `--dont-collect perf_stat` if startup time is a concern and/or PMU metrics are not necessary.
-* For more details, refer to the [PMU data document](/docs/PMU.md).
-
-#### Other:
-* APerf needs access to `/proc/kallsyms`, so we need to relax `kptr_restrict` by setting it to `0` (on Ubuntu OS).
-```
-sudo sysctl -w kernel.kptr_restrict=0
-```
-* To enable function-level profiling, install the `perf` binary on your instances.
-* Download the right [APerf binary](https://github.com/aws/aperf/releases) based on the instance type (x86/Intel/AMD or aarch64/Graviton).
-* For JVM profiling ensure the [async-profiler](https://github.com/async-profiler/async-profiler/tree/master) binary is installed and the `jps` command is available (part of Java Development Kit).
-* Root permission required for pagetypeinfo and slabinfo in Memory Allocation data. Run APerf with `sudo` if you are not root.
+## Known APerf Issues
+
+* Since APerf report is a static HTML, a huge report with hour-long records on machines with numerous cores could produce processed data files larger than 1GB. These files could prevent Chrome from loading the report. Firefox works better with huge reports, but the loading latency will be high. Consider using the `--time-range` option to trim the report.
+* Root permissions are required for APerf to collect pagetypeinfo and slabinfo in Memory Allocation data.
+
+### PMU data collection
+* To collect PMU data without `sudo` permissions, run `sudo sysctl -w kernel.perf_event_paranoid=-1` first.
+* When using APerf's default PMU configuration, the default system value of 10ms for `perf_event_mux_interval_ms` could cause large CPU overheads. We recommend setting it to 100ms to reduce the overheads ([details](/docs/PMU.md)).
+* The preparation time for PMU data can be significant on machines running kernel v5.x with a large number of cores. Use `--dont-collect perf_stat` if startup time is a concern and/or PMU metrics are not necessary.
+* To learn more about the usage, limiations, and concerns of PMU data collection, refer to the [PMU data document](./docs/PMU.md).
+
+### Profiling options
+* Perf profiling (`--profile`) requires the Linux Perf tool to be installed first.
+* To collect Perf profile without `sudo` permissions, run `sudo sysctl -w kernel.perf_event_paranoid=-1` and `sudo sysctl -w kernel.kptr_restrict=0` first.
+* Java profiling (`--profile-java`) requires the [async-profiler](https://github.com/async-profiler/async-profiler/releases/latest) to be installed first.
+* To learn more about the usage, limiations, and concerns of the profiling options, refer to the [profiling document](./docs/PROFILINGS.md).
 
 ## Documentation
 
 - [Contributing](./CONTRIBUTING.md)
-- [Dependencies Reference](./docs/DEPENDENCIES.md#aperf-dependencies)
 - [Development Guide](./docs/DEVELOPMENT.md)
 - [Example Usage](./docs/EXAMPLE.md#aperf-example)
+- [PMU Data Collection](./docs/PMU.md)
+- [Profiling Options](./docs/PROFILINGS.md)
 - [MCP Server (AI Assistant Integration)](./docs/MCP-SERVER.md)
 - [Running on EKS](./docs/README-EKS.md#running-aperf-on-ekskubernetes)
 
