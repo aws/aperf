@@ -24,7 +24,7 @@ jobs:
           github_token: ${{ secrets.WORKFLOW_TOKEN }}
           sync_tags: "true"
       - name: Ship pull request
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.WORKFLOW_TOKEN }}
           result-encoding: string
