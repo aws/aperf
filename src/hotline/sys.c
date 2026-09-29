@@ -26,7 +26,7 @@ FILE *open_cpu_info() {
 /// @return CPU part
 uint64_t get_cpu_part() {
   FILE *fp = open_cpu_info();
-  uint64_t part = CPU_PART_ID_GRV4;  // default to GRV4 if no part is found
+  uint64_t part = 0;
 
   char line[256];
   while (fgets(line, sizeof(line), fp) != NULL) {
@@ -56,6 +56,8 @@ uint64_t get_frequency() {
       return CPU_FREQ_GRV3;
     case CPU_PART_ID_GRV4:
       return CPU_FREQ_GRV4;
+    case CPU_PART_ID_GRV5:
+      return CPU_FREQ_GRV5;
     default:
       ASSERT(false, "Unkown part ID");
   }
@@ -94,6 +96,11 @@ void get_latency_bins(completion_latency_limits_t *limits) {
       limits->l2_latency_cap_ps = 5000;   // 5.0 ns
       limits->l3_latency_cap_ps = 31000;  // 31 ns
       break;
+    case CPU_PART_ID_GRV5:
+      limits->l1_latency_cap_ps = 1300;   // 1.3 ns
+      limits->l2_latency_cap_ps = 4000;   // 4 ns
+      limits->l3_latency_cap_ps = 31000;  // 31 ns
+      break;
     default:
       ASSERT(0, "Unknown CPU part.");
       break;
@@ -103,7 +110,7 @@ void get_latency_bins(completion_latency_limits_t *limits) {
 /// @brief Configures the perf_event_open type, which is dependent on CPU generation
 /// @return Perf type
 uint64_t get_perf_event_type() {
-  FILE *f = fopen("/sys/devices/arm_spe_0/type", "r");
+  FILE *f = fopen("/sys/bus/event_source/devices/arm_spe_0/type", "r");
   ASSERT(f != NULL, "Failed to open ARM SPE type file");
 
   char buffer[32];

@@ -13,6 +13,9 @@
 #define CPU_FREQ_GRV4 2800000000  // 2.8 GHz
 #define CPU_PART_ID_GRV4 0xd4f
 
+#define CPU_FREQ_GRV5 3300000000  // 3.3 GHz
+#define CPU_PART_ID_GRV5 0xd84
+
 #define SECOND_TO_PS 1000000000000
 
 /// @brief Bins for grouping latencies by completion node
