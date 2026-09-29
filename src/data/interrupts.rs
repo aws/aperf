@@ -85,12 +85,11 @@ fn parse_raw_interrupt_data(raw_interrupt_data: &String) -> Vec<Interrupt> {
 
     // process every line except for the first line, which is a line of CPUs as column header
     for raw_interrupt_line in raw_interrupt_data.lines().skip(1) {
-        let mut raw_values = raw_interrupt_line.split_whitespace();
-
-        let interrupt_name = match raw_values.next() {
-            Some(first_item) => first_item.trim_end_matches(":").to_string(),
-            None => continue,
+        let Some((raw_name, raw_values_and_info)) = raw_interrupt_line.split_once(':') else {
+            continue;
         };
+        let interrupt_name = raw_name.trim().to_string();
+        let mut raw_values = raw_values_and_info.split_whitespace();
 
         let mut interrupt = Interrupt::new(interrupt_name.clone());
         let mut interrupt_info_items: Vec<String> = Vec::new();

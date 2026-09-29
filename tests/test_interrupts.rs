@@ -489,6 +489,61 @@ fn test_process_interrupts_noncontiguous_cpu_ids() {
     }
 }
 
+/// arm64 prints the IPI lines with no space after the ':', and a count of 10 digits fills
+/// the whole "%10u" field, so the name ends up flush against the first CPU's count.
+#[test]
+fn test_process_interrupts_glued_name_and_first_value() {
+    use aperf::data::common::data_formats::AperfData;
+
+    let header = "           CPU0       CPU1       CPU2       CPU3";
+    let base_time = Utc::now();
+    let raw_data: Vec<Data> = (0..3)
+        .map(|sample_idx| {
+            Data::InterruptDataRaw(InterruptDataRaw {
+                time: TimeEnum::DateTime(base_time + Duration::seconds(sample_idx)),
+                data: format!(
+                    "{}\nIPI0:{} {} {} {}       Rescheduling interrupts\n",
+                    header,
+                    3347696063 + sample_idx * 10,
+                    3373900307 + sample_idx * 20,
+                    3314510608 + sample_idx * 30,
+                    3296802594 + sample_idx * 40,
+                ),
+            })
+        })
+        .collect();
+
+    let result = InterruptData::new()
+        .process_raw_data(&ReportParams::new(), raw_data)
+        .unwrap();
+
+    let AperfData::TimeSeries(time_series_data) = result else {
+        panic!("Expected TimeSeries data");
+    };
+    // The count must not end up in the metric name, or every sample would add a new metric
+    assert_eq!(
+        time_series_data.sorted_metric_names,
+        vec!["IPI0 (Rescheduling interrupts)"]
+    );
+    // Every CPU must keep its own count: CPU0's must not be lost into the name, and CPU3
+    // must not lose its series to the first word of the interrupt info
+    let metric = &time_series_data.metrics["IPI0 (Rescheduling interrupts)"];
+    let expected_series_values = vec![
+        ("CPU0", vec![0.0, 10.0, 10.0]),
+        ("CPU1", vec![0.0, 20.0, 20.0]),
+        ("CPU2", vec![0.0, 30.0, 30.0]),
+        ("CPU3", vec![0.0, 40.0, 40.0]),
+        ("average", vec![0.0, 25.0, 25.0]),
+    ];
+    assert_eq!(metric.series.len(), expected_series_values.len());
+    for (series, (expected_name, expected_values)) in
+        metric.series.iter().zip(expected_series_values.iter())
+    {
+        assert_eq!(&series.series_name, expected_name);
+        assert_eq!(&series.values, expected_values, "series {expected_name}");
+    }
+}
+
 #[test]
 fn test_decreasing_counter() {
     use aperf::data::common::data_formats::AperfData;
