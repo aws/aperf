@@ -182,6 +182,25 @@ impl CollectData for PerfProfileRaw {
             Ok(_) => debug!("'perf record' executed successfully."),
         }
 
+        // TODO: Guard the new profile processing logic by the save_profile_events flag,
+        //       so that the new flow is only executed in tests. Remove the guardrail
+        //       after the feature is ready to launch.
+        if init_params.save_profile_events {
+            let event_out_path_buf = init_params.run_data_dir.join("parsed_perf_data.out");
+
+            // Parse raw Perf profile and build ProfilingData
+            let perf_profiler_data = build_perf_profiler_data(
+                &raw_perf_on_cpu_profile_path(&init_params.run_data_dir),
+                *PROFILE_START_TIME_MS.lock().unwrap(),
+                Some(event_out_path_buf.as_path()),
+            );
+            if let Ok(json) = serde_json::to_string(&perf_profiler_data) {
+                fs::write(perf_profiler_data_path(&init_params.run_data_dir), json)?;
+            }
+
+            return Ok(());
+        }
+
         debug!("Running Perf inject...");
         let perf_jit_loc = init_params.run_data_dir.join("perf.data.jit");
         let out_jit = run_command_and_wait(
@@ -253,28 +272,6 @@ impl CollectData for PerfProfileRaw {
                         }
                     }
                 }
-            }
-        }
-
-        let event_out_path_buf = init_params.run_data_dir.join("parsed_perf_data.out");
-        let events_out_path = if init_params.save_profile_events {
-            Some(event_out_path_buf.as_path())
-        } else {
-            None
-        };
-
-        // TODO: Guard the new profile processing logic by the save_profile_events flag,
-        //       so that the new flow is only executed in tests. Remove the guardrail
-        //       after the feature is ready to launch.
-        if init_params.save_profile_events {
-            // Parse raw Perf profile and build ProfilingData
-            let perf_profiler_data = build_perf_profiler_data(
-                &raw_perf_on_cpu_profile_path(&init_params.run_data_dir),
-                *PROFILE_START_TIME_MS.lock().unwrap(),
-                events_out_path,
-            );
-            if let Ok(json) = serde_json::to_string(&perf_profiler_data) {
-                fs::write(perf_profiler_data_path(&init_params.run_data_dir), json)?;
             }
         }
 

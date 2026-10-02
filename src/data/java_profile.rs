@@ -285,6 +285,11 @@ impl CollectData for JavaProfileRaw {
                 .join(format!("{}-java-profile-{}.jfr", init_params.run_name, key));
 
             if fs::exists(&jfr_path).expect("Can't check existence of jfr file") {
+                let jfr_dest = init_params
+                    .run_data_dir
+                    .join(format!("java-profile-{}.jfr", key));
+                fs::copy(&jfr_path, jfr_dest).ok();
+
                 // Extract metadata JSON string from JFR
                 let metadata_events = [
                     "jdk.ActiveRecording",
@@ -323,6 +328,34 @@ impl CollectData for JavaProfileRaw {
                         }
                     }
                 };
+
+                // TODO: Guard the new profile processing logic by the save_profile_events flag,
+                //       so that the new flow is only executed in tests. Remove the guardrail
+                //       after the feature is ready to launch.
+                if init_params.save_profile_events {
+                    let events_path = init_params
+                        .run_data_dir
+                        .join(format!("parsed_jfr_events_{key}.out"));
+                    // Generate Profiler from JFR
+                    match jfr::build_java_profiler_data(&jfr_path, Some(events_path.as_path())) {
+                        Ok(mut profiler) => {
+                            profiler.metadata = jfr::parse_jfr_metadata(&metadata_json);
+                            if let Ok(json) = serde_json::to_string(&profiler) {
+                                fs::write(
+                                    init_params
+                                        .run_data_dir
+                                        .join(java_profiler_data_filename(key)),
+                                    json,
+                                )
+                                .ok();
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to build Profiler Data for {}: {}", key, e);
+                        }
+                    }
+                    continue;
+                }
 
                 // Generate heatmaps for each profiling type
                 for metric in PROFILE_METRICS {
@@ -366,44 +399,6 @@ impl CollectData for JavaProfileRaw {
                         }
                     }
                 }
-
-                let event_out_path_buf = init_params
-                    .run_data_dir
-                    .join(format!("parsed_jfr_events_{key}.out"));
-                let events_out_path = if init_params.save_profile_events {
-                    Some(event_out_path_buf.as_path())
-                } else {
-                    None
-                };
-
-                // TODO: Guard the new profile processing logic by the save_profile_events flag,
-                //       so that the new flow is only executed in tests. Remove the guardrail
-                //       after the feature is ready to launch.
-                if init_params.save_profile_events {
-                    // Generate Profiler from JFR
-                    match jfr::build_java_profiler_data(&jfr_path, events_out_path) {
-                        Ok(mut profiler) => {
-                            profiler.metadata = jfr::parse_jfr_metadata(&metadata_json);
-                            if let Ok(json) = serde_json::to_string(&profiler) {
-                                fs::write(
-                                    init_params
-                                        .run_data_dir
-                                        .join(java_profiler_data_filename(key)),
-                                    json,
-                                )
-                                .ok();
-                            }
-                        }
-                        Err(e) => {
-                            error!("Failed to build Profiler Data for {}: {}", key, e);
-                        }
-                    }
-                }
-
-                let jfr_dest = init_params
-                    .run_data_dir
-                    .join(format!("java-profile-{}.jfr", key));
-                fs::copy(&jfr_path, jfr_dest).ok();
             }
         }
 

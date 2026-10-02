@@ -466,11 +466,11 @@ fn parse_plt(
             }
             None => format!("offset_{:#x}@plt", plt_entries_offset),
         };
-        entries.push(SymbolTableEntry {
-            addr: plt_entries_offset,
-            size: plt_entry_size,
-            name: symbol_name,
-        });
+        entries.push(SymbolTableEntry::new(
+            plt_entries_offset,
+            plt_entry_size,
+            symbol_name,
+        ));
         plt_entries_offset += plt_entry_size;
     }
 
