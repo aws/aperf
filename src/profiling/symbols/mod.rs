@@ -1,6 +1,7 @@
 #![cfg(target_os = "linux")]
 
 use crate::profiling::FrameType;
+use std::cell::OnceCell;
 
 mod elf_build_ids;
 mod elf_symbols;
@@ -18,6 +19,19 @@ pub struct SymbolTableEntry {
     addr: u64,
     size: u64,
     name: String,
+    /// The name is only demangled upon first resolve, since most
+    /// entries in the symbol table are not touched.
+    demangled_name: OnceCell<String>,
+}
+impl SymbolTableEntry {
+    fn new(addr: u64, size: u64, name: String) -> Self {
+        SymbolTableEntry {
+            addr,
+            size,
+            name,
+            demangled_name: OnceCell::new(),
+        }
+    }
 }
 
 /// Information of a resolved symbol.
@@ -67,7 +81,10 @@ pub fn resolve_symbol(
     }
 
     Some(ResolvedSymbol {
-        name: symbol_table_entry.name.clone(),
+        name: symbol_table_entry
+            .demangled_name
+            .get_or_init(|| demangle_symbol(&symbol_table_entry.name))
+            .clone(),
         offset: symbol_offset,
         source: source.to_string(),
         // To be overriden by the caller.
@@ -100,11 +117,7 @@ pub struct RawSymbol {
 }
 impl RawSymbol {
     fn to_symbol_table_entry(self) -> SymbolTableEntry {
-        SymbolTableEntry {
-            addr: self.addr,
-            size: self.size,
-            name: demangle_symbol(&self.name),
-        }
+        SymbolTableEntry::new(self.addr, self.size, self.name)
     }
 }
 

@@ -3,12 +3,15 @@ use crate::run_command_and_wait;
 use anyhow::Result;
 use log::debug;
 use std::{
-    fs::File,
+    fs::{self, File},
     io::{BufRead, BufReader},
     path::PathBuf,
 };
 
 /// Store all JIT symbols created by application runtimes to resolve an address.
+///
+/// Note that jitdump is not currently processed, since it requires nontrivial logics and
+/// has limited use cases. Usually a JVM can be configured to write perf maps instead.
 #[derive(Default)]
 pub struct JitSymbols {
     /// All JIT symbols sorted by addr for fast lookup.
@@ -26,10 +29,10 @@ impl JitSymbols {
     ///
     /// Refer to the dso__load_perf_map function in
     /// https://github.com/torvalds/linux/blob/master/tools/perf/util/symbol.c
-    pub fn from_perf_map(pid: i32, is_hotspot_jvm: bool) -> Result<Self> {
+    pub fn from_perf_map(pid: i32) -> Result<Self> {
         let perf_map_file_path = PathBuf::from(format!("/tmp/perf-{}.map", pid));
         if !perf_map_file_path.exists() {
-            if is_hotspot_jvm {
+            if is_live_hotspot_jvm(pid) {
                 create_hotspot_jvm_perf_map(pid);
             } else {
                 return Ok(Self::default());
@@ -65,7 +68,7 @@ impl JitSymbols {
             }
             let size = u64::from_str_radix(size_str, 16).unwrap_or(0);
             let name = parts[2].to_string();
-            symbol_table.push(SymbolTableEntry { addr, size, name });
+            symbol_table.push(SymbolTableEntry::new(addr, size, name));
         }
 
         symbol_table.sort_by_key(|symbol_table_entry| symbol_table_entry.addr);
@@ -82,10 +85,14 @@ impl JitSymbols {
     }
 }
 
+/// Whether the process is a live HotSpot JVM, which is a requirement for running jcmd against it.
+/// jcmd from JDK 17 or older sends SIGQUIT to and kills a process that is not a JVM.
+fn is_live_hotspot_jvm(pid: i32) -> bool {
+    fs::read_to_string(format!("/proc/{pid}/maps")).is_ok_and(|maps| maps.contains("libjvm"))
+}
+
 /// Run `jcmd <pid> Compiler.perfmap` to ask a HotSpot JVM to dump /tmp/perf-<pid>.map.
-/// Best-effort: if jcmd is not on PATH, the JVM has shut down, or the dump fails for
-/// any reason, we silently continue — the caller will fall back to leaving frames
-/// unresolved.
+/// It is best-effort and any failures leave symbols unresolved.
 fn create_hotspot_jvm_perf_map(pid: i32) {
     let result = run_command_and_wait("jcmd", [&pid.to_string(), "Compiler.perfmap"], "jcmd", None);
     match result {

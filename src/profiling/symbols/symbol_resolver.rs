@@ -88,11 +88,19 @@ impl SymbolResolver {
     /// should be inherited, until the process is exec'd and receives its own MMAP events.
     pub fn handle_forked_process_mmap(&mut self, ppid: i32, pid: i32) {
         self.mmap_resolver.fork_process(ppid, pid);
+        self.jit_symbol_tables.remove(&pid);
+    }
+
+    /// Handle the case where a process execs - its previous address space and JIT
+    /// symbols no longer apply to the new image.
+    pub fn handle_exec(&mut self, pid: i32) {
+        self.mmap_resolver.handle_exec_process(pid);
+        self.jit_symbol_tables.remove(&pid);
     }
 
     /// Store a pair of ELF file path and its Build-ID, to help search for the original build
     /// of the ELF file.
-    pub fn add_build_id(&mut self, elf_file_path: &str, build_id: String) {
+    pub fn add_build_id(&mut self, elf_file_path: &str, build_id: &[u8]) {
         self.elf_build_ids.add_build_id(elf_file_path, build_id)
     }
 
@@ -148,10 +156,7 @@ impl SymbolResolver {
         let mut resolved_symbol = self
             .jit_symbol_tables
             .entry(pid)
-            .or_insert_with(|| {
-                JitSymbols::from_perf_map(pid, self.mmap_resolver.is_pid_hotspot_jvm(pid))
-                    .unwrap_or_default()
-            })
+            .or_insert_with(|| JitSymbols::from_perf_map(pid).unwrap_or_default())
             .resolve(addr)?;
         resolved_symbol.frame_type = FrameType::Jit;
         Some(resolved_symbol)
@@ -178,8 +183,7 @@ impl SymbolResolver {
         Some(resolved_symbol)
     }
 
-    /// Attempt to load the data of an ELF file and use it to build the ELF symbol table. If leaf
-    /// frame recovery is enabled, also build the Frame Unwinder from the same ELF file data.
+    /// Attempt to load the data of an ELF file and use it to build the ELF symbol table.
     fn lazy_load_elf_file(&mut self, pid: i32, elf_file_path: &str) {
         if self.elf_symbol_tables.contains_key(elf_file_path) {
             return;
@@ -202,18 +206,28 @@ impl SymbolResolver {
                     .map(|vdso_data| (vdso_data, VDSO_ELF_FILE_PATH.to_string()));
             }
             // If failed to find the original ELF file using the Build-ID, attempt to read
-            // the ELF file path directly.
+            // the ELF file path directly, if its Build-ID still matches.
             if let Ok(data) = fs::read(elf_file_path) {
-                return Some((data, elf_file_path.to_string()));
+                if self.elf_build_ids.matches_build_id(elf_file_path, &data) {
+                    return Some((data, elf_file_path.to_string()));
+                }
             }
             // Fall back to the process's FS mount exposed by the kernel /proc/<pid>/root/<path>
             // Caveats: the process needs to be owned by the same user who ran APerf, or sudo is
             // required. Also, the path will not exist anymore if the process has exited.
             if pid > 0 {
                 let process_fs_path = format!("/proc/{}/root{}", pid, elf_file_path);
+                // If this path can be read, by this point we've tried all possibilities of finding
+                // the elf file for the pid. If the build id still does not match, there's no point
+                // continuing to check its siblings below, as at best we'll just read again one of
+                // the files found above.
                 if let Ok(data) = fs::read(&process_fs_path) {
-                    return Some((data, process_fs_path));
+                    return self
+                        .elf_build_ids
+                        .matches_build_id(elf_file_path, &data)
+                        .then_some((data, process_fs_path));
                 }
+
                 // In case the process has exited, retrieve the list of PIDs that have MMAP-ed
                 // this file path and access through their file system, in case one of them is
                 // still running.
@@ -222,7 +236,10 @@ impl SymbolResolver {
                         let sibling_process_fs_path =
                             format!("/proc/{}/root{}", sibling_pid, elf_file_path);
                         if let Ok(data) = fs::read(&sibling_process_fs_path) {
-                            return Some((data, sibling_process_fs_path));
+                            return self
+                                .elf_build_ids
+                                .matches_build_id(elf_file_path, &data)
+                                .then_some((data, sibling_process_fs_path));
                         }
                     }
                 }
@@ -246,7 +263,7 @@ impl SymbolResolver {
                     );
                     // Still insert a dummy symbol table in case it could not be built, so that
                     // the resolver does not attempt to keep rebuilding the symbol table.
-                    return ElfSymbols::default();
+                    ElfSymbols::default()
                 }),
             );
         } else {
@@ -274,7 +291,7 @@ impl SymbolResolver {
 
         self.elf_symbol_tables
             .get(&elf_file_path)
-            .map_or(None, |elf_symbol_table| {
+            .and_then(|elf_symbol_table| {
                 elf_symbol_table.recover_leaf_frame_caller(leaf_file_offset, lr, fp, sp)
             })
     }

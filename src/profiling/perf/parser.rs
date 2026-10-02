@@ -11,7 +11,7 @@ use linux_perf_event_reader::{EventRecord, RawData, SampleRecord};
 use log::{debug, error, warn};
 use std::env;
 use std::fs::File;
-use std::io::{BufReader, Write};
+use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -58,7 +58,7 @@ pub fn build_perf_profiler_data(
 
     let mut stack_output_file = if let Some(events_output_path) = events_output_path {
         if let Ok(file) = File::create(events_output_path) {
-            Some(file)
+            Some(BufWriter::new(file))
         } else {
             warn!(
                 "Failed to create file {} to save the Perf events",
@@ -142,12 +142,7 @@ fn parse_perf_data(perf_data_path: &PathBuf) -> Result<Vec<PerfSample>> {
         Ok(build_ids) => {
             for dso_info in build_ids.values() {
                 let elf_file_path = String::from_utf8_lossy(&dso_info.path).to_string();
-                let build_id = dso_info
-                    .build_id
-                    .iter()
-                    .map(|b| format!("{:02x}", b))
-                    .collect::<String>();
-                symbol_resolver.add_build_id(&elf_file_path, build_id)
+                symbol_resolver.add_build_id(&elf_file_path, &dso_info.build_id)
             }
         }
         Err(e) => error!("Failed to read the Build-IDs from the Perf data: {e}"),
@@ -156,7 +151,19 @@ fn parse_perf_data(perf_data_path: &PathBuf) -> Result<Vec<PerfSample>> {
     let mut perf_samples: Vec<PerfSample> = Vec::new();
 
     let mut num_record_parsing_errors: usize = 0;
-    while let Some(record) = record_iter.next_record(&mut perf_file)? {
+    loop {
+        let record = match record_iter.next_record(&mut perf_file) {
+            Ok(Some(record)) => record,
+            Ok(None) => break,
+            Err(e) => {
+                // An error cannot be recovered from by skipping ahead.
+                error!(
+                    "Stopped parsing the raw Perf profile after {} samples: {e}",
+                    perf_samples.len()
+                );
+                break;
+            }
+        };
         match record {
             PerfFileRecord::EventRecord { attr_index, record } => {
                 let parsed_record = match record.parse() {
@@ -185,6 +192,11 @@ fn parse_perf_data(perf_data_path: &PathBuf) -> Result<Vec<PerfSample>> {
                             mmap2.page_offset,
                             rawdata_to_string(&mmap2.path),
                         );
+                    }
+                    EventRecord::Comm(comm) => {
+                        if comm.is_execve {
+                            symbol_resolver.handle_exec(comm.pid);
+                        }
                     }
                     EventRecord::Fork(fork) => {
                         if fork.ppid != fork.pid && (record.misc & PERF_RECORD_MISC_FORK_EXEC) == 0
@@ -235,7 +247,7 @@ fn handle_sample_event(
         None => return None,
     };
     let call_chain = match sample_record.callchain {
-        Some(pid) => pid,
+        Some(call_chain) => call_chain,
         None => return None,
     };
 
@@ -254,6 +266,7 @@ fn handle_sample_event(
         // from the userspace, and the next frame is the leaf frame.
         if frame_addr == PERF_CONTEXT_USER {
             leaf_frame_idx = Some(frame_addresses.len());
+            continue;
         }
         if frame_addr >= PERF_CONTEXT_MAX {
             continue;
@@ -284,19 +297,20 @@ fn handle_sample_event(
         if lr.is_none() {
             return Some(perf_sample);
         }
-        // When there are no userspace frames, there is nothing to recover.
-        if leaf_frame_idx.map_or(true, |idx| idx >= frame_addresses.len()) {
-            return Some(perf_sample);
-        }
-        let leaf_frame_idx = leaf_frame_idx.unwrap();
+
+        // Perf only attempts this when there is at least a second userspace frame.
+        let leaf_frame_idx = match leaf_frame_idx {
+            Some(idx) if idx + 1 < frame_addresses.len() => idx,
+            _ => return Some(perf_sample),
+        };
         let leaf_addr = frame_addresses[leaf_frame_idx];
-        // If the leaf caller was successfully recovered, insert it right after
-        // the leaf frame in the call chain.
+        let existing_caller_addr = frame_addresses[leaf_frame_idx + 1];
+
         if let Some(leaf_caller_addr) =
             symbol_resolver.recover_leaf_frame_caller(pid, leaf_addr, lr.unwrap(), fp, sp)
         {
             // Match perf's check: if (leaf_frame_caller && leaf_frame_caller != ip)
-            if leaf_caller_addr != 0 && leaf_caller_addr != leaf_addr {
+            if leaf_caller_addr != 0 && leaf_caller_addr != existing_caller_addr {
                 perf_sample.call_chain.insert(
                     leaf_frame_idx + 1,
                     symbol_resolver.resolve(pid, leaf_caller_addr),
