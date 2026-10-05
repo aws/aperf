@@ -3,7 +3,7 @@
 use crate::aperf_stats_flush;
 use crate::aperf_stats_initialize;
 use crate::data;
-use crate::data::common::utils::parse_cpu_list;
+use crate::data::common::utils::{get_core_perf_event_mux_interval_ms, parse_cpu_list};
 use crate::data::java_profile::JavaProfile;
 use crate::data_collection::DataCollectionEngine;
 use crate::data_collection::InitParams;
@@ -218,6 +218,13 @@ pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
             warn!(
                 "Failed to read system page size, ResidentSetSize will be reported in pages: {e}"
             );
+            0
+        }
+    };
+    init_params.perf_event_mux_interval_ms = match get_core_perf_event_mux_interval_ms() {
+        Ok(interval) => interval,
+        Err(e) => {
+            warn!("Failed to read perf event multiplexing interval: {e}");
             0
         }
     };

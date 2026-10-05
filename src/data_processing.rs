@@ -34,6 +34,8 @@ pub struct ReportParams {
     pub aperf_process_pids: Vec<u32>,
     /// System page size in bytes at collection time
     pub page_size: u64,
+    /// PMU multiplexing interval at beginning of collection time
+    pub perf_event_mux_interval_ms: u64,
 }
 
 impl ReportParams {
@@ -47,6 +49,7 @@ impl ReportParams {
             pmu_counter_mode: String::new(),
             aperf_process_pids: Vec::new(),
             page_size: 0,
+            perf_event_mux_interval_ms: 0,
         }
     }
 }

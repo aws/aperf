@@ -10,3 +10,5 @@ pub mod utils;
 pub const THP_DIR: &str = "/sys/kernel/mm/transparent_hugepage";
 #[cfg(target_os = "linux")]
 pub const HUGETLB_DIR: &str = "/sys/kernel/mm/hugepages";
+#[cfg(target_os = "linux")]
+pub const PMU_DEVICES_DIR: &str = "/sys/bus/event_source/devices";

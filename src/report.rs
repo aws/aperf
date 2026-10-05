@@ -103,6 +103,7 @@ impl RunsInfo {
                     report_params.aperf_process_pids.push(sub_process_pid);
                 }
                 report_params.page_size = meta_data.page_size;
+                report_params.perf_event_mux_interval_ms = meta_data.perf_event_mux_interval_ms;
                 if let Some(collection_start) = meta_data.collection_start {
                     report_params.collection_start = Some(collection_start);
                     self.per_run_start_time

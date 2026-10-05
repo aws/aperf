@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
 use {
     crate::data::common::utils::{get_online_cpu_ids, raise_fd_limit},
+    crate::data::common::PMU_DEVICES_DIR,
     crate::data::CollectData,
     crate::data_collection::InitParams,
     crate::CPU_INFO,
@@ -89,10 +90,7 @@ impl perf_event::events::Event for PmuConfigEvent {
 #[cfg(target_os = "linux")]
 impl PmuConfigEvent {
     fn from_event_string(event_string: &str) -> Result<Self> {
-        Self::from_event_string_at_base_path(
-            event_string,
-            PathBuf::from("/sys/bus/event_source/devices"),
-        )
+        Self::from_event_string_at_base_path(event_string, PathBuf::from(PMU_DEVICES_DIR))
     }
 
     /// Parse "pmu/field=val,field=val,.../" and build the event by reading the

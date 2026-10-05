@@ -22,7 +22,9 @@ pub use rule_templates::{
     time_series_stat_intra_run_comparison_rule, time_series_stat_run_comparison_rule,
     time_series_stat_threshold_rule,
 };
-use rules::multi_data_rules::{get_multi_data_rules, PreemptLazyDetectedRule};
+use rules::multi_data_rules::{
+    get_multi_data_rules, LowPerfEventMuxIntervalRule, PreemptLazyDetectedRule,
+};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Mutex};
 
@@ -266,7 +268,7 @@ macro_rules! multi_data_analytical_rules {
 }
 
 // Register all multi-data-type rule templates here
-multi_data_analytical_rules!(PreemptLazyDetectedRule);
+multi_data_analytical_rules!(PreemptLazyDetectedRule, LowPerfEventMuxIntervalRule);
 
 #[cfg(test)]
 mod tests {

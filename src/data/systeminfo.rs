@@ -206,6 +206,13 @@ impl ProcessData for SystemInfo {
             );
         }
 
+        if report_params.perf_event_mux_interval_ms > 0 {
+            key_values.insert(
+                "Perf Event Mux Interval".to_string(),
+                format!("{} ms", report_params.perf_event_mux_interval_ms),
+            );
+        }
+
         let mut key_value_group = KeyValueGroup::default();
         key_value_group.key_values = key_values;
         key_value_data

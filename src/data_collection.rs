@@ -391,6 +391,10 @@ pub struct InitParams {
     /// used to convert process ResidentSetSize from pages to bytes.
     #[serde(default)]
     pub page_size: u64,
+    /// Core perf event multiplexing interval collected from /sys/bus/event_source/devices
+    /// used to check for risk of high overhead when this is <100.
+    #[serde(default)]
+    pub perf_event_mux_interval_ms: u64,
     /// The signal that ends the collection. An empty string means the collection
     /// followed the specified period and ended naturally.
     pub end_signal: String,
@@ -423,6 +427,7 @@ impl InitParams {
             collection_end: None,
             pid: Some(std::process::id()),
             page_size: 0,
+            perf_event_mux_interval_ms: 0,
             sub_process_pids: HashSet::new(),
             end_signal: String::new(),
             expected_end_time: Instant::now(),

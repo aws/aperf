@@ -23,6 +23,7 @@ fn setup_test_env() -> (TempDir, PathBuf, PathBuf, ReportParams) {
         pmu_counter_mode: String::new(),
         aperf_process_pids: Vec::new(),
         page_size: 0,
+        perf_event_mux_interval_ms: 0,
     };
 
     (temp_dir, data_dir, report_dir, params)

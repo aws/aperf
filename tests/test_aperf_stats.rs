@@ -28,6 +28,7 @@ mod aperf_stats_tests {
             pmu_counter_mode: String::new(),
             aperf_process_pids: vec![4242],
             page_size: 0,
+            perf_event_mux_interval_ms: 0,
         }
     }
 

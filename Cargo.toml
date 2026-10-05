@@ -60,6 +60,7 @@ regex = "1"
 rmcp = { version = "1.5", features = ["server", "transport-io"], optional = true }
 schemars = { version = "0.8", optional = true }
 exmex = "0.21"
+versions = "8.0.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 sysinfo = "0.26.2"
