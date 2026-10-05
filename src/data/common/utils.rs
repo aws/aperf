@@ -7,7 +7,7 @@ use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 #[cfg(target_os = "linux")]
-use {anyhow::Context, log::debug};
+use {crate::data::common::PMU_DEVICES_DIR, anyhow::Context, log::debug};
 
 use crate::data::common::data_formats::{Graph, GraphData};
 use crate::data_collection::InitParams;
@@ -299,6 +299,44 @@ pub fn raise_fd_limit(num_required_fds: u64) -> Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
+fn is_core_pmu(pmu_name: &str) -> bool {
+    pmu_name == "cpu"
+        || Path::new(PMU_DEVICES_DIR)
+            .join(pmu_name)
+            .join("cpus")
+            .exists()
+}
+
+/// Attempt to retrieve the core PMU's perf_event_mux_interval_ms setting, i.e. how often
+/// the kernel rotates multiplexed hardware counter events.
+#[cfg(target_os = "linux")]
+pub fn get_core_perf_event_mux_interval_ms() -> Result<u64> {
+    let dir = Path::new(PMU_DEVICES_DIR);
+    let mut core_pmu_names: Vec<String> = fs::read_dir(dir)?
+        .flatten()
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .filter(|pmu_name| is_core_pmu(pmu_name))
+        .collect();
+    let core_pmu_name = match core_pmu_names.len() {
+        0 => bail!("No core PMU found under {}", dir.display()),
+        1 => core_pmu_names.remove(0),
+        _ => {
+            // Heterogeneous core systems not supported.
+            bail!(
+                "Expected one core PMU under {}, found {core_pmu_names:?}",
+                dir.display()
+            )
+        }
+    };
+
+    let path = dir.join(&core_pmu_name).join("perf_event_mux_interval_ms");
+    read_virtual_file(&path)?
+        .trim()
+        .parse::<u64>()
+        .with_context(|| format!("Failed to parse {}", path.display()))
+}
+
 /// Compute how long a subprocess should run for, based on the current time
 /// and the expected end time of the run.
 pub fn get_sub_process_duration_seconds(init_params: &InitParams) -> u64 {
@@ -543,6 +581,11 @@ pub fn combine_value_ranges(value_ranges: Vec<(u64, u64)>) -> (u64, u64) {
     (min, max)
 }
 
+/// Parse systeminfo instance type value to check if it is metal.
+pub fn is_metal_instance_type(instance_type: &str) -> bool {
+    instance_type.contains("metal")
+}
+
 #[cfg(test)]
 mod utils_test {
     use super::{combine_value_ranges, topological_sort};
@@ -568,6 +611,16 @@ mod utils_test {
             .collect();
         proc_stat_ids.sort_unstable();
         assert_eq!(ids, proc_stat_ids, "sysfs and /proc/stat should agree");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_get_core_perf_event_mux_interval_ms() {
+        use super::get_core_perf_event_mux_interval_ms;
+        let mux_interval_ms = get_core_perf_event_mux_interval_ms()
+            .expect("should read the core PMU perf_event_mux_interval_ms from sysfs");
+        // The kernel rejects intervals below 1ms.
+        assert!(mux_interval_ms >= 1);
     }
 
     #[cfg(target_os = "linux")]

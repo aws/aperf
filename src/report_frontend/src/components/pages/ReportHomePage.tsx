@@ -44,7 +44,14 @@ export default function () {
     </Header>
   ));
   const perRunSystemInfo = RUNS.map((runName) => (
-    <Container fitHeight header={<Header variant={"h3"}>System Info</Header>}>
+    <Container
+      fitHeight
+      header={
+        <Header variant={"h3"} info={<ReportHelpPanelLink dataType={"systeminfo"} fieldKey={"systemInfo"} />}>
+          System Info
+        </Header>
+      }
+    >
       <RunSystemInfo runName={runName} />
     </Container>
   ));

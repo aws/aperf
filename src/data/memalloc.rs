@@ -41,7 +41,7 @@ impl MemallocDataRaw {
 impl CollectData for MemallocDataRaw {
     fn prepare_data_collector(&mut self, _init_params: &InitParams) -> Result<()> {
         if read_virtual_file("/proc/buddyinfo").is_err()
-            && read_virtual_file("/proc/pagetypeinfo").is_err()
+            // && read_virtual_file("/proc/pagetypeinfo").is_err() // TEMPORARILY disabled due to high overhead
             && read_virtual_file("/proc/slabinfo").is_err()
         {
             return Err(PDError::IgnoredDataPreparationError(
@@ -55,7 +55,7 @@ impl CollectData for MemallocDataRaw {
     fn collect_data(&mut self, _init_params: &InitParams) -> Result<()> {
         self.time = TimeEnum::DateTime(Utc::now());
         self.buddyinfo_data = read_virtual_file("/proc/buddyinfo").unwrap_or_default();
-        self.pagetypeinfo_data = read_virtual_file("/proc/pagetypeinfo").unwrap_or_default();
+        // self.pagetypeinfo_data = read_virtual_file("/proc/pagetypeinfo").unwrap_or_default();
         self.slabinfo_data = read_virtual_file("/proc/slabinfo").unwrap_or_default();
         Ok(())
     }

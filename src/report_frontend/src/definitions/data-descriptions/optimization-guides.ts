@@ -211,3 +211,17 @@ and persist it under \`/etc/sysctl.d/\`.
 
 \`CONFIG_BLK_WBT\` and \`CONFIG_BLK_WBT_MQ\` are the two related kernel configs. They let the block layer hold back background writeback so that it does not delay the application's own I/O.
 `;
+
+export const PERF_MULTIPLEXING_OVERHEAD_RECOMMENDATIONS = `
+### Reduce the overhead of PMU multiplexing
+When there are more PMU counters to collect than hardware registers on a core, the kernel time-shares the registers by rotating the counters in and out every \`perf_event_mux_interval_ms\`. Each rotation costs CPU time on every core being collected:
+* On kernels older than v6.2, as high as 0.5% per CPU on metal instances and 1.2% per CPU on virtualized instances.
+* On v6.2 and newer kernels, about 0.005% per CPU on metal instances, but still around 0.6% per CPU on virtualized instances, since the cost is dominated by traps to the hypervisor.
+
+**Increase the rotation interval**
+The interval in use during the recording is shown as \`Perf Event Mux Interval\` on the Report Home page, and is usually 10ms by default (depending on OS). Raising it to 100ms before recording cuts the rotation cost by 10x, which matters most on virtualized instances:
+\`\`\`shell
+echo 100 | sudo tee /sys/bus/event_source/devices/*/perf_event_mux_interval_ms
+\`\`\`
+The setting is not persisted, so it resets to the default after a reboot. Fewer rotations also mean fewer collection windows per counter, so record for at least 600 seconds (\`aperf record -p 600\`) to keep the counter values accurate.
+`;

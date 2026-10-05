@@ -78,14 +78,14 @@ Check the `mux_counter_schedule_rate` metric in APerf report's PMU Events data f
 
 The collection of PMU events consumes different types of resources.
 
-###File descriptors 
+### File descriptors 
 Each PMU counter on each CPU creates a file descriptor to read its value. APerf's default PMU config creates more than 20 counters, so on a machine with more than 64 cores, more than 1024, which is Linux's default limit for file descriptors per process, need to be created. APerf automatically increases the fd limit to meet the need.
 
-###Counter creation time
+### Counter creation time
 Due to underoptimized v5.x kernel implementation, counter creation could lead to excessive lock contentions, which significantly increase the creation time. The issue is fixed on v6.x and v7.x kernels.
 
-###CPU usage
-When multiplexing is present, the kernel performs context rotation periodically to time share the counters running on the PMU registers. On kernels older than v6.2, the overhead can be as high as 0.6% per CPU on metal and 1.7% per CPU on virtualized hosts. After optimizations applied to v6.2, the per-CPU cost on metal drops to 0.1%. For virtualized hosts, the per-CPU cost stays at aroudn 1%, since it is dominated by traps to hypervisor.
+### CPU usage
+When multiplexing is present, the kernel performs context rotation periodically to time share the counters running on the PMU registers. On kernels older than v6.2, the overhead can be as high as 0.5% per CPU on metal and 1.2% per CPU on virtualized hosts. After optimizations applied to v6.2, the per-CPU cost on metal drops to 0.005%. For virtualized hosts, the per-CPU cost stays at around 0.6%, since it is dominated by traps to hypervisor.
 
 Therefore, **we recommend always setting `perf_event_mux_interval_ms`, which controls how often context rotation happens, to 100**. By increasing from the default value of 10ms to 100ms, the per-CPU cost is reduced by 10x, which is especially important for virtualized runs. To compensate for the reduced PMU counter accuracy caused by fewer collection windows, **we also recommend setting the collection period (`-p`) to at least 600 seconds**. Experiments showed that such settings could limit the counter error rate to from around 1% to 10%.
 

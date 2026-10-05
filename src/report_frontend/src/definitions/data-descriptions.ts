@@ -13,6 +13,7 @@ import {
   LOW_IPC_INVESTIGATION,
   LSE_OPTIMIZATION,
   NETWORK_USAGE_INVESTIGATION,
+  PERF_MULTIPLEXING_OVERHEAD_RECOMMENDATIONS,
   TLB_MISS_OPTIMIZATION,
 } from "./data-descriptions/optimization-guides";
 import { KERNEL_CONFIG_DATA_DESCRIPTION } from "./data-descriptions/kernel-config";
@@ -88,6 +89,11 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
     summary:
       "The APerf report homepage provides overviews of each recording run. In this page, you can view every run's system information, analytical findings, and statistical findings. For more details, use the side navigation panel to open a specific data's page.",
     fieldDescriptions: {
+      systemInfo: {
+        readableName: "System Info",
+        description:
+          "The system info describes the system a run was recorded on: its operating system, kernel, CPUs, and EC2 instance, along with settings that affect how APerf collects data. Check it first when comparing runs, since a different instance type, kernel, or distribution can change performance without any change to the application.",
+      },
       statisticalFinding: {
         readableName: "Statistical Findings",
         description:
@@ -417,6 +423,7 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
           "The percentage of collection time when a counter was actually scheduled on a core. The value shows the level of multiplexing during collection, which impacts the accuracy of the PMU data and consumes additional CPU time. 100% means there were no multiplexing and all PMU counters to be collected fitted in the available PMU registers.",
         unit: "Average Counter Schedule Rate (%)",
         desired: "higher",
+        optimization: [PERF_MULTIPLEXING_OVERHEAD_RECOMMENDATIONS],
         helpfulLinks: [
           "https://developer.arm.com/community/arm-community-blogs/b/architectures-and-processors-blog/posts/p2-perf-pmu-feature-armv8-cpus",
         ],
