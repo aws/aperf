@@ -7,7 +7,7 @@ use log::{debug, warn};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::Write;
+use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::time::Instant;
 
@@ -24,7 +24,7 @@ pub fn build_java_profiler_data(
 
     let mut events_output_file = if let Some(events_output_path) = events_output_path {
         if let Ok(events_output_file) = File::create(events_output_path) {
-            Some(events_output_file)
+            Some(BufWriter::new(events_output_file))
         } else {
             warn!(
                 "Failed to create file {} to save the JFR events",
@@ -54,6 +54,8 @@ pub fn build_java_profiler_data(
     let mut formatted_frame_name_cache: HashMap<(i64, u8), String> = HashMap::new();
     // Cache: class_id -> humanized class name string
     let mut humanized_class_name_cache: HashMap<i64, String> = HashMap::new();
+    // Cache: method_id -> its saved-event stack frame line, up to the line number
+    let mut event_frame_line_cache: HashMap<i64, String> = HashMap::new();
 
     let mut profiler = Profiler::new(reader.start_nanos / 1_000_000);
 
@@ -73,8 +75,13 @@ pub fn build_java_profiler_data(
                 let sample_time_ms = reader.chunk_info.event_time_to_millis(event.time());
 
                 if let Some(file) = events_output_file.as_mut() {
-                    let _ =
-                        write_jfr_out_event(file, &event, &mut humanized_class_name_cache, &reader);
+                    let _ = write_jfr_out_event(
+                        file,
+                        &event,
+                        &mut humanized_class_name_cache,
+                        &mut event_frame_line_cache,
+                        &reader,
+                    );
                 }
 
                 let (profile_type, thread_state, samples) = match &event {
@@ -156,6 +163,10 @@ pub fn build_java_profiler_data(
         }
     }
 
+    if let Some(file) = events_output_file.as_mut() {
+        let _ = file.flush();
+    }
+
     debug!(
         "Finished parsing {num_samples} JFR samples in {:?}",
         jfr_parse_start_time.elapsed()
@@ -164,7 +175,7 @@ pub fn build_java_profiler_data(
     Ok(profiler)
 }
 
-fn write_jfr_out_header(out_file: &mut File, reader: &JfrReader) -> Result<()> {
+fn write_jfr_out_header(out_file: &mut impl Write, reader: &JfrReader) -> Result<()> {
     writeln!(out_file, "start_nanos: {}", reader.start_nanos)?;
     writeln!(out_file, "end_nanos: {}", reader.end_nanos)?;
     writeln!(
@@ -185,9 +196,10 @@ fn write_jfr_out_header(out_file: &mut File, reader: &JfrReader) -> Result<()> {
 }
 
 fn write_jfr_out_event(
-    out_file: &mut File,
+    out_file: &mut impl Write,
     event: &JfrEvent,
     humanized_class_name_cache: &mut HashMap<i64, String>,
+    frame_line_cache: &mut HashMap<i64, String>,
     reader: &JfrReader,
 ) -> Result<()> {
     let time_nanos = reader.chunk_info.event_time_to_nanos(event.time());
@@ -306,23 +318,24 @@ fn write_jfr_out_event(
         for (i, &method_id) in trace.methods.iter().enumerate() {
             let loc = trace.locations[i];
             let line = loc >> 16;
-            if let Some((cls, method, sig)) = reader.resolve_method(method_id) {
-                let sig_str = if sig.is_empty() || sig.starts_with("[unknown") {
-                    String::new()
+            let frame_line = frame_line_cache.entry(method_id).or_insert_with(|| {
+                if let Some((cls, method, sig)) = reader.resolve_method(method_id) {
+                    let sig_str = if sig.is_empty() || sig.starts_with("[unknown") {
+                        String::new()
+                    } else {
+                        format_signature(&sig)
+                    };
+                    format!(
+                        "    {}.{}({}) line: ",
+                        cls.replace('/', "."),
+                        method,
+                        sig_str
+                    )
                 } else {
-                    format_signature(&sig)
-                };
-                writeln!(
-                    out_file,
-                    "    {}.{}({}) line: {}",
-                    cls.replace('/', "."),
-                    method,
-                    sig_str,
-                    line
-                )?;
-            } else {
-                writeln!(out_file, "    [unknown:{}]() line: {}", method_id, line)?;
-            }
+                    format!("    [unknown:{}]() line: ", method_id)
+                }
+            });
+            writeln!(out_file, "{}{}", frame_line, line)?;
         }
         writeln!(out_file, "  ]")?;
     }
@@ -334,7 +347,7 @@ fn write_jfr_out_event(
 }
 
 fn write_thread_field(
-    out_file: &mut File,
+    out_file: &mut impl Write,
     field: &str,
     name: &str,
     tid: i32,

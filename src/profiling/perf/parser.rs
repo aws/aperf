@@ -5,7 +5,6 @@ use crate::profiling::perf::{
 use crate::profiling::symbols::symbol_resolver::SymbolResolver;
 use crate::profiling::symbols::ResolvedSymbol;
 use crate::profiling::ThreadState;
-use anyhow::Result;
 use linux_perf_data::{PerfFileReader, PerfFileRecord};
 use linux_perf_event_reader::{EventRecord, RawData, SampleRecord};
 use log::{debug, error, warn};
@@ -17,6 +16,7 @@ use std::time::Instant;
 
 /// Parse the raw Perf profile and build the Profiler Data.
 pub fn build_perf_profiler_data(
+    profile_type: &str,
     perf_data_path: &PathBuf,
     profile_start_timestamp_ms: i64,
     events_output_path: Option<&Path>,
@@ -26,35 +26,6 @@ pub fn build_perf_profiler_data(
     let mut profiler = Profiler::new(profile_start_timestamp_ms);
 
     let perf_parse_start_time = Instant::now();
-    let perf_samples = match parse_perf_data(perf_data_path) {
-        Ok(perf_samples) => perf_samples,
-        Err(e) => {
-            error!("Error when parsing the raw Perf profile: {e}");
-            return profiler;
-        }
-    };
-    debug!(
-        "Finished parsing {} Perf samples in {:?}",
-        perf_samples.len(),
-        perf_parse_start_time.elapsed()
-    );
-
-    // By default the timestamp of each sample is nanoseconds since the system booted, so we need to
-    // convert it into epoch
-    let system_boot_timestamp_ms = match procfs::boot_time() {
-        Ok(boot_time) => boot_time.timestamp_millis(),
-        Err(e) => {
-            error!("Failed to retrieve system boot timestamp: {e}");
-            // In the rare case where the system boot timestamp cannot be retrieved, assume the
-            // first sample's epoch timestamp matches the profile start timestamp
-            perf_samples.get(0).map_or_else(
-                || 0,
-                |first_sample| {
-                    profile_start_timestamp_ms - (first_sample.timestamp / 1_000_000) as i64
-                },
-            )
-        }
-    };
 
     let mut stack_output_file = if let Some(events_output_path) = events_output_path {
         if let Ok(file) = File::create(events_output_path) {
@@ -70,9 +41,17 @@ pub fn build_perf_profiler_data(
         None
     };
 
-    let build_perf_profiler_data_start_time = Instant::now();
-    let profile_type = "cpu";
-    for perf_sample in &perf_samples {
+    let mut system_boot_timestamp_ms =
+        procfs::boot_time().map_or(0, |boot_time| boot_time.timestamp_millis());
+
+    let handle_parsed_sample = |perf_sample: PerfSample| {
+        // In the rare case where the system boot timestamp cannot be retrieved, assume the
+        // first sample's epoch timestamp matches the profile start timestamp
+        if system_boot_timestamp_ms == 0 {
+            system_boot_timestamp_ms =
+                profile_start_timestamp_ms - (perf_sample.timestamp / 1_000_000) as i64;
+        }
+
         let mut frames: Vec<String> = perf_sample
             .call_chain
             .iter()
@@ -107,26 +86,53 @@ pub fn build_perf_profiler_data(
             &frames,
             1,
         );
-    }
+    };
+
+    let num_parsed_samples = parse_perf_data(perf_data_path, handle_parsed_sample);
+
     debug!(
-        "Finished building Perf ProfilerData for {} samples in {:?}",
-        perf_samples.len(),
-        build_perf_profiler_data_start_time.elapsed()
+        "Finished parsing {num_parsed_samples} Perf samples in {:?}",
+        perf_parse_start_time.elapsed()
     );
 
     profiler
 }
 
-/// Parse every record in the raw Perf profile and collect all symbolicated samples.
-fn parse_perf_data(perf_data_path: &PathBuf) -> Result<Vec<PerfSample>> {
-    let perf_data_file = File::open(perf_data_path)?;
+/// Parse every record in the raw Perf profile and pass every parsed sample to
+/// on_parsed_sample.
+fn parse_perf_data(
+    perf_data_path: &PathBuf,
+    mut on_parsed_sample: impl FnMut(PerfSample),
+) -> usize {
+    let mut num_processed_samples: usize = 0;
+    let mut num_record_parsing_errors: usize = 0;
+
+    let perf_data_file = match File::open(perf_data_path) {
+        Ok(perf_data_file) => perf_data_file,
+        Err(e) => {
+            error!(
+                "Failed to open raw Perf data file at {}: {e}",
+                perf_data_path.display()
+            );
+            return num_processed_samples;
+        }
+    };
     // Read an 1MB chunk at a time - the raw perf data typically has a size of several MB to ~500MB.
     let buf_reader = BufReader::with_capacity(1 << 20, perf_data_file);
 
     let PerfFileReader {
         mut perf_file,
         mut record_iter,
-    } = PerfFileReader::parse_file(buf_reader)?;
+    } = match PerfFileReader::parse_file(buf_reader) {
+        Ok(perf_file_reader) => perf_file_reader,
+        Err(e) => {
+            error!(
+                "Failed to parse raw Perf data file at {}: {e}",
+                perf_data_path.display()
+            );
+            return num_processed_samples;
+        }
+    };
 
     let arch = if let Ok(Some(arch)) = perf_file.arch() {
         arch
@@ -148,9 +154,6 @@ fn parse_perf_data(perf_data_path: &PathBuf) -> Result<Vec<PerfSample>> {
         Err(e) => error!("Failed to read the Build-IDs from the Perf data: {e}"),
     };
 
-    let mut perf_samples: Vec<PerfSample> = Vec::new();
-
-    let mut num_record_parsing_errors: usize = 0;
     loop {
         let record = match record_iter.next_record(&mut perf_file) {
             Ok(Some(record)) => record,
@@ -158,8 +161,7 @@ fn parse_perf_data(perf_data_path: &PathBuf) -> Result<Vec<PerfSample>> {
             Err(e) => {
                 // An error cannot be recovered from by skipping ahead.
                 error!(
-                    "Stopped parsing the raw Perf profile after {} samples: {e}",
-                    perf_samples.len()
+                    "Stopped parsing the raw Perf profile after {num_processed_samples} samples: {e}",
                 );
                 break;
             }
@@ -214,7 +216,8 @@ fn parse_perf_data(perf_data_path: &PathBuf) -> Result<Vec<PerfSample>> {
                         if let Some(perf_sample) =
                             handle_sample_event(&sample_record, &mut symbol_resolver)
                         {
-                            perf_samples.push(perf_sample)
+                            num_processed_samples += 1;
+                            on_parsed_sample(perf_sample);
                         }
                     }
                     EventRecord::ContextSwitch(_) => {
@@ -229,7 +232,7 @@ fn parse_perf_data(perf_data_path: &PathBuf) -> Result<Vec<PerfSample>> {
 
     debug!("Number of Perf profile parsing errors: {num_record_parsing_errors}");
 
-    Ok(perf_samples)
+    num_processed_samples
 }
 
 /// Handle a Perf sample event by symbolicating every frame in the call chain and performing
