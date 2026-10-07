@@ -190,6 +190,7 @@ impl CollectData for PerfProfileRaw {
 
             // Parse raw Perf profile and build ProfilingData
             let perf_profiler_data = build_perf_profiler_data(
+                "cpu",
                 &raw_perf_on_cpu_profile_path(&init_params.run_data_dir),
                 *PROFILE_START_TIME_MS.lock().unwrap(),
                 Some(event_out_path_buf.as_path()),

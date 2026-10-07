@@ -300,23 +300,23 @@ pub fn raise_fd_limit(num_required_fds: u64) -> Result<()> {
 }
 
 #[cfg(target_os = "linux")]
-fn is_core_pmu(pmu_name: &str) -> bool {
-    pmu_name == "cpu"
-        || Path::new(PMU_DEVICES_DIR)
-            .join(pmu_name)
-            .join("cpus")
-            .exists()
+fn is_core_pmu(pmu_devices_dir: &Path, pmu_name: &str) -> bool {
+    pmu_name == "cpu" || pmu_devices_dir.join(pmu_name).join("cpus").exists()
 }
 
 /// Attempt to retrieve the core PMU's perf_event_mux_interval_ms setting, i.e. how often
 /// the kernel rotates multiplexed hardware counter events.
 #[cfg(target_os = "linux")]
 pub fn get_core_perf_event_mux_interval_ms() -> Result<u64> {
-    let dir = Path::new(PMU_DEVICES_DIR);
+    core_perf_event_mux_interval_ms(Path::new(PMU_DEVICES_DIR))
+}
+
+#[cfg(target_os = "linux")]
+fn core_perf_event_mux_interval_ms(dir: &Path) -> Result<u64> {
     let mut core_pmu_names: Vec<String> = fs::read_dir(dir)?
         .flatten()
         .filter_map(|entry| entry.file_name().into_string().ok())
-        .filter(|pmu_name| is_core_pmu(pmu_name))
+        .filter(|pmu_name| is_core_pmu(dir, pmu_name))
         .collect();
     let core_pmu_name = match core_pmu_names.len() {
         0 => bail!("No core PMU found under {}", dir.display()),
@@ -615,12 +615,38 @@ mod utils_test {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn test_get_core_perf_event_mux_interval_ms() {
-        use super::get_core_perf_event_mux_interval_ms;
-        let mux_interval_ms = get_core_perf_event_mux_interval_ms()
-            .expect("should read the core PMU perf_event_mux_interval_ms from sysfs");
-        // The kernel rejects intervals below 1ms.
-        assert!(mux_interval_ms >= 1);
+    fn test_core_perf_event_mux_interval_ms() {
+        use super::core_perf_event_mux_interval_ms;
+        use std::fs;
+
+        // Each entry is a PMU directory: its name, whether it lists the CPUs it covers (which
+        // marks a core PMU other than x86's "cpu"), and its perf_event_mux_interval_ms.
+        let pmu_devices_dir = |pmus: &[(&str, bool, &str)]| {
+            let dir = tempfile::tempdir().unwrap();
+            for &(name, has_cpus, mux_interval_ms) in pmus {
+                let pmu_dir = dir.path().join(name);
+                fs::create_dir(&pmu_dir).unwrap();
+                if has_cpus {
+                    fs::write(pmu_dir.join("cpus"), "0-63\n").unwrap();
+                }
+                fs::write(pmu_dir.join("perf_event_mux_interval_ms"), mux_interval_ms).unwrap();
+            }
+            dir
+        };
+
+        let x86 = pmu_devices_dir(&[("cpu", false, "4\n"), ("software", false, "1\n")]);
+        assert_eq!(core_perf_event_mux_interval_ms(x86.path()).unwrap(), 4);
+
+        let arm = pmu_devices_dir(&[("armv8_pmuv3_0", true, "1\n"), ("breakpoint", false, "1\n")]);
+        assert_eq!(core_perf_event_mux_interval_ms(arm.path()).unwrap(), 1);
+
+        // No core PMU, as on a virtualized instance without a vPMU.
+        let no_pmu = pmu_devices_dir(&[("software", false, "1\n")]);
+        assert!(core_perf_event_mux_interval_ms(no_pmu.path()).is_err());
+
+        // Hybrid cores are not supported.
+        let hybrid = pmu_devices_dir(&[("cpu_core", true, "4\n"), ("cpu_atom", true, "4\n")]);
+        assert!(core_perf_event_mux_interval_ms(hybrid.path()).is_err());
     }
 
     #[cfg(target_os = "linux")]
