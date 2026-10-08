@@ -32,6 +32,7 @@ export interface ReportData {
   readonly data_name: DataType;
   readonly data_format: DataFormat;
   readonly runs: { [key in string]: AperfData };
+  readonly run_errors?: { [key in string]: string };
 }
 
 export interface TimeSeriesData {

@@ -3,8 +3,9 @@ import { DataType, TimeSeriesData, TimeSeriesMetricProps } from "../../definitio
 import { useReportState } from "../ReportStateProvider";
 import { CPU_DATA_TYPES, PROCESSED_DATA, RUNS } from "../../definitions/data-config";
 import Plot from "react-plotly.js";
-import { Box, Button, Popover, SpaceBetween } from "@cloudscape-design/components";
+import { Button, Popover, SpaceBetween } from "@cloudscape-design/components";
 import { getTimeSeriesMetricUnit, shouldShowCpuSeries } from "../../utils/utils";
+import DataUnavailableBox from "./DataUnavailableBox";
 import MetricGraph from "./MetricGraph";
 import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import MetricStatsDisplay from "./MetricStatsDisplay";
@@ -62,14 +63,7 @@ export default function (props: TimeSeriesMetricProps) {
   );
 
   if (seriesData.length == 0) {
-    return (
-      <Box textAlign="center" color="inherit">
-        <b>No data collected</b>
-        <Box variant="p" color="inherit">
-          This metric was not collected in the APerf run
-        </Box>
-      </Box>
-    );
+    return <DataUnavailableBox dataType={props.dataType} runName={props.runName} />;
   }
 
   return (

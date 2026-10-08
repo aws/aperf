@@ -78,7 +78,14 @@ export default function () {
     document.documentElement.style.backgroundColor = backgroundColor;
   }, [darkMode]);
 
-  const dataFormat = dataComponent == "systeminfo" ? "home" : PROCESSED_DATA[dataComponent].data_format;
+  // Always render aperf_runlog as text, so the report generation log shows even if all runs failed
+  const dataFormat =
+    dataComponent == "systeminfo"
+      ? "home"
+      : dataComponent == "aperf_runlog"
+        ? "text"
+        : PROCESSED_DATA[dataComponent].data_format;
+  const runErrors = dataFormat == "home" ? {} : (PROCESSED_DATA[dataComponent].run_errors ?? {});
 
   return (
     <AppLayout
@@ -118,10 +125,17 @@ export default function () {
           {!preprocessing && dataFormat == "text" && <TextDataPage dataType={dataComponent} key={dataComponent} />}
           {!preprocessing && (dataFormat == "unknown" || (dataFormat as string) === "" || dataFormat === undefined) && (
             <Box textAlign="center" color="inherit">
-              <b>Unavailable Data</b>
-              <Box variant="p" color="inherit">
-                This data was not collected in any APerf runs.
-              </Box>
+              <b>{Object.keys(runErrors).length > 0 ? "Data processing failed" : "Unavailable Data"}</b>
+              {Object.keys(runErrors).length == 0 && (
+                <Box variant="p" color="inherit">
+                  This data was not collected in any APerf runs.
+                </Box>
+              )}
+              {Object.entries(runErrors).map(([runName, error]) => (
+                <Box key={runName} variant="p" color="inherit">
+                  {runName}: {error}
+                </Box>
+              ))}
             </Box>
           )}
         </>

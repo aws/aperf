@@ -1,9 +1,11 @@
 use crate::analytics::BASE_RUN_NAME;
+use crate::data::aperf_runlog::AperfRunlog;
+use crate::data::common::data_formats::TextData;
 use crate::data::common::processed_data_accessor::ProcessedDataAccessor;
 use crate::data::{TimeEnum, JS_DIR};
 use crate::data_collection::InitParams;
 use crate::data_processing::{DataProcessingEngine, ReportParams};
-use crate::{data, no_tar_gz_file_name, PDError};
+use crate::{aperf_runlog_file_path, data, get_data_name_from_type, no_tar_gz_file_name, PDError};
 use anyhow::{Context, Result};
 use chrono::Utc;
 use clap::Args;
@@ -473,7 +475,9 @@ fn generate_report_files(runs_info: RunsInfo) {
     data::initialize_data_processing_engine(&mut data_processing_engine);
 
     for run_name in &runs_info.run_names {
-        data_processing_engine.process_raw_data(run_name).unwrap();
+        if let Err(e) = data_processing_engine.process_raw_data(run_name) {
+            panic!("Processing raw data failed: {e}");
+        }
     }
     data_processing_engine.post_process_data();
 
@@ -552,6 +556,23 @@ fn generate_report_files(runs_info: RunsInfo) {
                 processed_data_js_file,
                 "{}_findings = {}",
                 data_name, out_findings
+            )
+            .unwrap();
+        }
+
+        /* Include the log of this report generation below the APerf collection runlogs */
+        if data_name == get_data_name_from_type::<AperfRunlog>() {
+            let report_log = TextData {
+                lines: fs::read_to_string(aperf_runlog_file_path(&runs_info.tmp_dir))
+                    .unwrap_or_default()
+                    .lines()
+                    .map(String::from)
+                    .collect(),
+            };
+            write!(
+                processed_data_js_file,
+                "\n\naperf_report_log = {}",
+                serde_json::to_string(&report_log).unwrap()
             )
             .unwrap();
         }

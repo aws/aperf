@@ -1,4 +1,4 @@
-import { ALL_DATA_TYPES, DataFindings, DataType, ReportData } from "./types";
+import { ALL_DATA_TYPES, DataFindings, DataType, ReportData, TextData } from "./types";
 
 declare let runs_raw: RunInfo[];
 declare let version_info;
@@ -23,6 +23,7 @@ declare let processed_aperf_stats_data;
 declare let processed_java_profile_data;
 declare let processed_aperf_runlog_data;
 declare let processed_hotline_data;
+declare let aperf_report_log;
 declare let systeminfo_findings;
 declare let cpu_utilization_findings;
 declare let vmstat_findings;
@@ -105,6 +106,8 @@ export const RUN_INFO: RunInfo[] = Array.from(runs_raw);
 export const RUNS: string[] = RUN_INFO.map((r) => r.name);
 
 export const VERSION_INFO = version_info;
+
+export const APERF_REPORT_LOG: TextData = aperf_report_log;
 
 export const CPU_DATA_TYPES: DataType[] = ["cpu_utilization", "perf_stat", "interrupts"];
 

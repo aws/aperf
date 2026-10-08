@@ -15,6 +15,14 @@ export function extractDataTypeFromFragment(fragment: string): DataType {
 }
 
 /**
+ * Get the processing error of a run for the data type, if its processing failed
+ */
+export function getRunProcessingError(dataType: DataType, runName: string): string | undefined {
+  const reportData = PROCESSED_DATA[dataType];
+  return reportData.runs[runName] === undefined ? reportData.run_errors?.[runName] : undefined;
+}
+
+/**
  * Get the list of sorted metric names that contain at least one non-zero data point
  */
 export function getDataTypeNonZeroMetricNames(dataType: DataType, sortedMetricNames: string[]): string[] {

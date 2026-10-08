@@ -32,6 +32,7 @@ import {
   frameKey,
   strippedFrameName,
 } from "./utils";
+import DataUnavailableBox from "../DataUnavailableBox";
 
 // Height in pixels reserved for the time axis label above the heatmap grid
 const AXIS_HEIGHT = 20;
@@ -103,7 +104,7 @@ function ProfilePanelBody({ dataType, profilerName, selectedProfile }: ProfilePa
                       blockWidthMs={profiler.block_width_ms}
                     />
                   ) : (
-                    <EmptyProfileState message="No profile data available for this run." />
+                    <DataUnavailableBox dataType={dataType} runName={runName} />
                   )}
                 </SpaceBetween>
               </div>

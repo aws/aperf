@@ -1,11 +1,12 @@
 import { DataPageProps, TextData } from "../../definitions/types";
-import { PROCESSED_DATA, RUNS } from "../../definitions/data-config";
-import { Box, Cards, Container } from "@cloudscape-design/components";
+import { APERF_REPORT_LOG, PROCESSED_DATA, RUNS } from "../../definitions/data-config";
+import { Cards, Container, SpaceBetween } from "@cloudscape-design/components";
 import Header from "@cloudscape-design/components/header";
 import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import React from "react";
 import { RunHeader } from "../data/RunSystemInfo";
 import { ReportHelpPanelLink } from "../misc/ReportHelpPanel";
+import DataUnavailableBox from "../data/DataUnavailableBox";
 
 /**
  * This component renders the page for text data
@@ -28,69 +29,66 @@ export default function (props: DataPageProps) {
 
   const textWidthPercentage = Math.floor(100 / RUNS.length);
 
+  const textBoxStyle: React.CSSProperties = {
+    width: "100%",
+    height: textAreaHeight,
+
+    // Enable scrolling
+    overflowY: "auto",
+    overflowX: "auto",
+
+    // Text formatting
+    whiteSpace: "pre",
+    fontFamily: "monospace",
+    fontSize: "14px",
+    lineHeight: 1.4,
+
+    // Better scrollbar experience
+    scrollbarWidth: "thin",
+    WebkitOverflowScrolling: "touch",
+  };
+
   return (
-    <Cards
-      cardsPerRow={[{ cards: 1 }]}
-      stickyHeader
-      header={
-        <Header
-          variant={"awsui-h1-sticky"}
-          info={<ReportHelpPanelLink dataType={props.dataType} fieldKey={"summary"} />}
-        >
-          {DATA_DESCRIPTIONS[props.dataType].readableName}
-        </Header>
-      }
-      variant={"full-page"}
-      items={[{ name: "content" }]}
-      cardDefinition={{
-        sections: RUNS.map((runName) => ({
-          id: runName,
-          header: <RunHeader runName={runName} />,
-          content: () => {
-            const reportData = PROCESSED_DATA[props.dataType].runs[runName] as TextData;
+    <SpaceBetween size={"l"}>
+      <Cards
+        cardsPerRow={[{ cards: 1 }]}
+        stickyHeader
+        header={
+          <Header
+            variant={"awsui-h1-sticky"}
+            info={<ReportHelpPanelLink dataType={props.dataType} fieldKey={"summary"} />}
+          >
+            {DATA_DESCRIPTIONS[props.dataType].readableName}
+          </Header>
+        }
+        variant={"full-page"}
+        items={[{ name: "content" }]}
+        cardDefinition={{
+          header: () => <Header variant={"h2"}>Data Collection Log</Header>,
+          sections: RUNS.map((runName) => ({
+            id: runName,
+            header: <RunHeader runName={runName} />,
+            content: () => {
+              const reportData = PROCESSED_DATA[props.dataType].runs[runName] as TextData;
 
-            return (
-              <div style={{ paddingTop: "10px", paddingRight: "30px" }}>
-                <Container>
-                  {!reportData && (
-                    <Box textAlign="center" color="inherit">
-                      <b>No data collected</b>
-                      <Box variant="p" color="inherit">
-                        This data was not collected in the APerf run
-                      </Box>
-                    </Box>
-                  )}
-                  {reportData && (
-                    <div
-                      style={{
-                        width: "100%",
-                        height: textAreaHeight,
-
-                        // Enable scrolling
-                        overflowY: "auto",
-                        overflowX: "auto",
-
-                        // Text formatting
-                        whiteSpace: "pre",
-                        fontFamily: "monospace",
-                        fontSize: "14px",
-                        lineHeight: 1.4,
-
-                        // Better scrollbar experience
-                        scrollbarWidth: "thin",
-                        WebkitOverflowScrolling: "touch",
-                      }}
-                    >
-                      {reportData.lines.join("\n")}
-                    </div>
-                  )}
-                </Container>
-              </div>
-            );
-          },
-          width: textWidthPercentage,
-        })),
-      }}
-    />
+              return (
+                <div style={{ paddingTop: "10px", paddingRight: "30px" }}>
+                  <Container>
+                    {!reportData && <DataUnavailableBox dataType={props.dataType} runName={runName} />}
+                    {reportData && <div style={textBoxStyle}>{reportData.lines.join("\n")}</div>}
+                  </Container>
+                </div>
+              );
+            },
+            width: textWidthPercentage,
+          })),
+        }}
+      />
+      {props.dataType == "aperf_runlog" && (
+        <Container header={<Header variant={"h2"}>Report Generation Log</Header>}>
+          <div style={textBoxStyle}>{APERF_REPORT_LOG.lines.join("\n")}</div>
+        </Container>
+      )}
+    </SpaceBetween>
   );
 }

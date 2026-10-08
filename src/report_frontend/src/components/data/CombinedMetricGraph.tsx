@@ -24,7 +24,7 @@ export default function (props: CombinedMetricGraphProps) {
 
   const seriesData: Partial<Plotly.PlotData>[] = [];
   for (const runName of RUNS) {
-    const curRunMetrics = (PROCESSED_DATA[props.dataType].runs[runName] as TimeSeriesData).metrics;
+    const curRunMetrics = (PROCESSED_DATA[props.dataType].runs[runName] as TimeSeriesData)?.metrics;
     if (curRunMetrics === undefined) continue;
     const curRunMetric = curRunMetrics[props.metricName];
     if (curRunMetric === undefined) continue;

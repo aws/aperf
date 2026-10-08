@@ -1,8 +1,9 @@
-import { Box, KeyValuePairs, KeyValuePairsProps, Popover } from "@cloudscape-design/components";
+import { KeyValuePairs, KeyValuePairsProps, Popover } from "@cloudscape-design/components";
 import { PROCESSED_DATA } from "../../definitions/data-config";
 import { KeyValueData } from "../../definitions/types";
 import React from "react";
 import Header from "@cloudscape-design/components/header";
+import DataUnavailableBox from "./DataUnavailableBox";
 
 const SYSTEM_INFO_ITEMS_CACHE = new Map<string, KeyValuePairsProps.Item[]>();
 
@@ -19,14 +20,7 @@ export function RunSystemInfo(props: { runName: string }) {
     ?.key_values;
 
   if (curRunSystemInfo == undefined) {
-    return (
-      <Box textAlign="center" color="inherit">
-        <b>No system info collected</b>
-        <Box variant="p" color="inherit">
-          The system info was not collected in the APerf run
-        </Box>
-      </Box>
-    );
+    return <DataUnavailableBox dataType={"systeminfo"} runName={props.runName} />;
   }
 
   let keyValueItems: KeyValuePairsProps.Item[];

@@ -1,5 +1,6 @@
 use crate::analytics::{AnalyticalEngine, DataFindings};
 use crate::computations::Statistics;
+use crate::data::aperf_runlog::AperfRunlog;
 use crate::data::aperf_stats::AperfStats;
 use crate::data::common::data_formats::{
     AperfData, DataFormat, ProcessedData, Series, TimeSeriesMetric,
@@ -80,20 +81,18 @@ impl DataProcessingEngine {
             .unwrap_or_else(|| panic!("Processing data with unexpected run name {run_name}"));
 
         for data_processor in self.data_processors.values_mut() {
-            if let Err(e) = data_processor.process_raw_data(report_params) {
-                error!(
-                    "Error while processing raw {} data for run {run_name}: {:#?}",
-                    data_processor.data_name, e
-                );
-            }
+            data_processor.process_raw_data(report_params);
         }
 
-        let num_unavailable_data: usize = self
-            .all_data_names()
-            .map(|data_name| !self.is_data_available(run_name, data_name) as usize)
-            .sum();
-        if num_unavailable_data == self.data_processors.len() {
-            bail!("Run {run_name} is invalid - no raw data can be processed.");
+        if self
+            .data_processors
+            .values()
+            .filter(|data_processor| !data_processor.is_aperf_native_data)
+            .map(|data_processor| data_processor.is_data_available_for_run(run_name) as usize)
+            .sum::<usize>()
+            == 0
+        {
+            bail!("Run {run_name} is invalid - no raw data could be processed.");
         }
 
         Ok(())
@@ -117,12 +116,6 @@ impl DataProcessingEngine {
         analytical_engine.run(processed_data_accessor);
 
         analytical_engine.findings
-    }
-
-    pub fn is_data_available(&self, run_name: &str, data_name: &str) -> bool {
-        self.data_processors
-            .get(data_name)
-            .is_some_and(|data_processor| data_processor.processed_data.runs.contains_key(run_name))
     }
 
     /// Logics to be run after all raw data has been processed.
@@ -313,6 +306,7 @@ pub struct DataProcessor {
     pub data_name: &'static str,
     pub data: ReportData,
     pub processed_data: ProcessedData,
+    pub is_aperf_native_data: bool,
 }
 
 impl DataProcessor {
@@ -321,18 +315,34 @@ impl DataProcessor {
             data_name,
             data,
             processed_data: ProcessedData::new(data_name.to_string()),
+            is_aperf_native_data: vec![
+                get_data_name_from_type::<AperfStats>(),
+                get_data_name_from_type::<AperfRunlog>(),
+            ]
+            .contains(&data_name),
         }
     }
 
-    pub fn process_raw_data(&mut self, report_params: &ReportParams) -> Result<()> {
-        debug!(
-            "Processing raw {} data of run {}",
-            self.data_name, report_params.run_name
-        );
+    pub fn process_raw_data(&mut self, report_params: &ReportParams) {
+        let run_name = &report_params.run_name;
+        debug!("Processing raw {} data of run {}", self.data_name, run_name);
 
-        let raw_data = match self.read_raw_data(report_params) {
-            Some(raw_data) => raw_data,
-            None => return Ok(()),
+        if let Err(e) = self.try_process_raw_data(report_params) {
+            error!(
+                "Error while processing raw {} data for run {run_name}: {:#?}",
+                self.data_name, e
+            );
+            // Record the error to be shown in the frontend.
+            self.processed_data
+                .run_errors
+                .insert(run_name.clone(), format!("{e:#}"));
+        }
+    }
+
+    fn try_process_raw_data(&mut self, report_params: &ReportParams) -> Result<()> {
+        let Some(raw_data) = self.read_raw_data(report_params)? else {
+            // None means the raw data file is missing. Chances are it was not collected.
+            return Ok(());
         };
 
         let processed_data = self.data.process_raw_data(report_params, raw_data)?;
@@ -345,15 +355,15 @@ impl DataProcessor {
     }
 
     /// Helper function to attempt to read the raw data file and deserialize them
-    /// back to a vector of Data. None if the raw data file does not exist or
-    /// cannot be read.
-    fn read_raw_data(&self, report_params: &ReportParams) -> Option<Vec<Data>> {
+    /// back to a vector of Data. None if the raw data was not collected, error if
+    /// it was collected but cannot be read.
+    fn read_raw_data(&self, report_params: &ReportParams) -> Result<Option<Vec<Data>>> {
         let mut raw_data = Vec::new();
 
         // aperf_runlog does not have a raw data file with common format but
         // it should still be processed.
         if matches!(self.data, ReportData::AperfRunlog(_)) {
-            return Some(raw_data);
+            return Ok(Some(raw_data));
         }
 
         let (mut raw_data_file, raw_data_file_path) =
@@ -364,16 +374,15 @@ impl DataProcessor {
                         "Raw {} data unavailable in run {}: {e}",
                         self.data_name, report_params.run_name
                     );
-                    return None;
+                    return Ok(None);
                 }
             };
 
         if let Err(e) = raw_data_file.seek(SeekFrom::Start(0)) {
-            error!(
+            bail!(
                 "Failed to reset seek position to zero for raw data file {}: {e}",
                 raw_data_file_path.display()
             );
-            return None;
         }
 
         loop {
@@ -391,20 +400,19 @@ impl DataProcessor {
                         break
                     }
                     e => {
-                        error!(
+                        bail!(
                             "Error when deserializing raw {} data for run {} at {}: {}",
                             self.data_name,
                             report_params.run_name,
                             raw_data_file_path.display(),
                             e
                         );
-                        break;
                     }
                 },
             };
         }
 
-        Some(raw_data)
+        Ok(Some(raw_data))
     }
 
     /// After the raw data across all runs are processed, run additional data-processing logics
@@ -417,6 +425,13 @@ impl DataProcessor {
             }
             _ => return,
         }
+    }
+
+    pub fn is_data_available_for_run(&self, run_name: &str) -> bool {
+        self.processed_data
+            .runs
+            .get(run_name)
+            .map_or(false, |processed_run_data| !processed_run_data.is_empty())
     }
 }
 

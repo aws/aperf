@@ -260,7 +260,14 @@ impl ProcessedDataAccessor {
             }
         }
 
-        buf.push_str("}}");
+        buf.push_str("},\"run_errors\":");
+        write!(
+            buf,
+            "{}",
+            serde_json::to_string(&processed_data.run_errors).unwrap()
+        )
+        .unwrap();
+        buf.push('}');
         buf
     }
 
@@ -1479,5 +1486,19 @@ mod tests {
             .unwrap();
         assert_eq!(series_stats.min, 2.0);
         assert_eq!(series_stats.max, 3.0);
+    }
+
+    #[test]
+    fn test_time_series_json_string_includes_run_errors() {
+        let mut pd = make_processed_data(vec![(
+            "cpu",
+            vec![make_series("total", vec![0, 10], vec![10.0, 20.0])],
+        )]);
+        pd.run_errors
+            .insert("run2".to_string(), "processing failed".to_string());
+        let mut accessor = ProcessedDataAccessor::new();
+        let json: serde_json::Value = serde_json::from_str(&accessor.json_string(&pd)).unwrap();
+        assert_eq!(json["run_errors"]["run2"], "processing failed");
+        assert!(json["runs"]["run1"]["metrics"]["cpu"].is_object());
     }
 }
