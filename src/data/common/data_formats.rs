@@ -28,6 +28,8 @@ pub struct ProcessedData {
     pub data_name: String,
     pub data_format: DataFormat,
     pub runs: HashMap<String, AperfData>,
+    #[serde(default)]
+    pub run_errors: HashMap<String, String>,
 }
 
 impl ProcessedData {
@@ -36,6 +38,7 @@ impl ProcessedData {
             data_name,
             data_format: DataFormat::Unknown,
             runs: HashMap::new(),
+            run_errors: HashMap::new(),
         }
     }
 }
@@ -58,6 +61,16 @@ impl AperfData {
             AperfData::KeyValue(_) => DataFormat::KeyValue,
             AperfData::Profile(_) => DataFormat::Profile,
             AperfData::Graph(_) => DataFormat::Graph,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            AperfData::TimeSeries(time_series_data) => time_series_data.metrics.is_empty(),
+            AperfData::Text(text_data) => text_data.lines.is_empty(),
+            AperfData::KeyValue(key_value_data) => key_value_data.key_value_groups.is_empty(),
+            AperfData::Profile(profiling_data) => profiling_data.profilers.is_empty(),
+            AperfData::Graph(graph_data) => graph_data.graph_groups.is_empty(),
         }
     }
 }

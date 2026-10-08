@@ -3,6 +3,7 @@ import { DataType, GraphData, GraphInfo } from "../../definitions/types";
 import { PROCESSED_DATA } from "../../definitions/data-config";
 import { Container, Icon, Link } from "@cloudscape-design/components";
 import Header from "@cloudscape-design/components/header";
+import DataUnavailableBox from "./DataUnavailableBox";
 
 // TODO: IframeGraph is a temporary component used only by GraphDataPage (hotline).
 export interface IframeGraphProps {
@@ -21,7 +22,11 @@ export default function (props: IframeGraphProps) {
   )?.graphs?.[props.graphName];
 
   if (!graphInfo) {
-    return <Container>This data was not collected in the APerf run.</Container>;
+    return (
+      <Container>
+        <DataUnavailableBox dataType={props.dataType} runName={props.runName} />
+      </Container>
+    );
   } else {
     return (
       <Container
