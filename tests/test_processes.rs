@@ -851,3 +851,52 @@ fn test_process_processes_aperf_pids_retained_beyond_top_16() {
         panic!("Expected TimeSeries data");
     }
 }
+
+#[test]
+fn test_process_processes_malformed_lines_skipped() {
+    // A command name can contain ')' and newlines, which splits a stat entry into lines
+    // that start mid-name. Those lines must be skipped without failing or panicking.
+    let fields = "S 0 0 0 0 0 0 0 0 0 0 100 50 0 0 0 0 1 0 0 1000000 500000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0";
+    let lines = [
+        format!("1 (proc) {fields}"),
+        format!("2 (a) b) {fields}"),
+        "3 (a)".to_string(),
+        format!("(y) {fields}"),
+        format!("z (y) {fields}"),
+        format!("4)(abcd {fields}"),
+        "5 (a)é".to_string(),
+        format!("é(y) {fields}"),
+        ")(".to_string(),
+        "6 (short) S 0 0".to_string(),
+    ];
+    let raw_data = vec![Data::ProcessesRaw(ProcessesRaw {
+        time: TimeEnum::DateTime(Utc.with_ymd_and_hms(2023, 1, 1, 0, 0, 0).unwrap()),
+        ticks_per_second: 100,
+        data: lines.join("\n") + "\n",
+    })];
+
+    let mut processes = Processes::new();
+    let result = processes
+        .process_raw_data(&report_params_with_page_size(PAGE_SIZE), raw_data)
+        .unwrap();
+
+    if let AperfData::TimeSeries(time_series_data) = result {
+        let threads_metric = &time_series_data.metrics[&ProcessMetric::NumberThreads.to_string()];
+        let series_names: HashSet<&str> = threads_metric
+            .series
+            .iter()
+            .map(|s| s.series_name.as_str())
+            .collect();
+        // The name ends at the last ')', so "a) b" keeps its fields aligned.
+        assert_eq!(series_names, HashSet::from(["1_proc", "2_a) b"]));
+        for series in &threads_metric.series {
+            assert_eq!(series.values, vec![1.0]);
+        }
+
+        let number_processes_metric =
+            &time_series_data.metrics[&ProcessMetric::NumberProcesses.to_string()];
+        assert_eq!(number_processes_metric.series[0].values, vec![2.0]);
+    } else {
+        panic!("Expected TimeSeries data");
+    }
+}

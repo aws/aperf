@@ -8,7 +8,7 @@ use core::f64;
 use log::warn;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use strum::IntoEnumIterator;
 #[cfg(target_os = "linux")]
 use {
@@ -75,31 +75,77 @@ impl Processes {
     }
 }
 
+/// The number of `/proc/<pid>/stat` fields after the command name that are needed; the last
+/// one read is ResidentSetSize at index 21.
+const STAT_FIELD_COUNT: usize = 22;
+
 fn get_process_metric_value(
     process_metric: ProcessMetric,
-    values: &[String],
+    values: &[&str],
     page_size: u64,
 ) -> Option<f64> {
-    // The last element we access is the 22nd element in a values vector (ResidentSetSize), make sure the index 21 exists
-    if values.len() < 21 + 1 {
-        warn!("Incomplete proc/<PID>/stat entry found, skipping...");
+    if values.len() < STAT_FIELD_COUNT {
         return None;
     }
+    let field = |index: usize| values[index].parse::<u64>().ok();
     let result = match process_metric {
-        ProcessMetric::UserSpaceTime => values[11].parse::<u64>().ok()?,
-        ProcessMetric::KernelSpaceTime => values[12].parse::<u64>().ok()?,
-        ProcessMetric::NumberThreads => values[17].parse::<u64>().ok()?,
-        ProcessMetric::VirtualMemorySize => values[20].parse::<u64>().ok()?,
-        ProcessMetric::ResidentSetSize => values[21].parse::<u64>().ok()?,
+        ProcessMetric::UserSpaceTime => field(11)?,
+        ProcessMetric::KernelSpaceTime => field(12)?,
+        ProcessMetric::NumberThreads => field(17)?,
+        ProcessMetric::VirtualMemorySize => field(20)?,
+        ProcessMetric::ResidentSetSize => field(21)?,
         ProcessMetric::ResidentSetSizeBytes => {
             if page_size == 0 {
                 return None;
             }
-            values[21].parse::<u64>().ok()? * page_size
+            field(21)? * page_size
         }
         ProcessMetric::NumberProcesses => return None,
     };
     Some(result as f64)
+}
+
+/// A `/proc/<pid>/stat` line borrowed from the raw data, with its fields left unsplit.
+struct ProcessStatLine<'a> {
+    pid: u64,
+    name: &'a str,
+    fields: &'a str,
+}
+
+impl<'a> ProcessStatLine<'a> {
+    fn parse(line: &'a str) -> Option<Self> {
+        let open_pos = line.find('(')?;
+        let close_pos = line.rfind(')')?;
+        if close_pos < open_pos {
+            return None;
+        }
+        Some(ProcessStatLine {
+            pid: line.get(..open_pos.checked_sub(1)?)?.parse().ok()?,
+            name: line.get(open_pos + 1..close_pos)?,
+            fields: line.get(close_pos + 2..)?,
+        })
+    }
+
+    /// Every stat line in `data`, skipping lines that are not properly formatted stat entries.
+    fn all(data: &'a str) -> impl Iterator<Item = Self> + 'a {
+        data.lines().filter_map(Self::parse)
+    }
+
+    fn values(&self) -> Vec<&'a str> {
+        self.fields.split_whitespace().collect()
+    }
+
+    fn key(&self) -> String {
+        format!("{}_{}", self.pid, self.name)
+    }
+}
+
+/// Lines without both user and kernel CPU ticks are treated as if the process were absent.
+fn cpu_ticks(values: &[&str], page_size: u64) -> Option<(f64, f64)> {
+    Some((
+        get_process_metric_value(ProcessMetric::UserSpaceTime, values, page_size)?,
+        get_process_metric_value(ProcessMetric::KernelSpaceTime, values, page_size)?,
+    ))
 }
 
 impl ProcessData for Processes {
@@ -111,85 +157,60 @@ impl ProcessData for Processes {
         let mut time_series_data_processor =
             time_series_data_processor_with_max_series_aggregate!(report_params.collection_start);
 
-        // For each timestamp, it stores all parsed processes data in the format of
-        // Map<pid_name, parsed_data>.
-        let mut parsed_data: Vec<(TimeEnum, HashMap<String, Vec<String>>)> = Vec::new();
-        // Track per process cpu time to filter out the top ones to retain, in the
-        // format of Map<pid_name, (utime, stime)>.
-        let mut per_process_cpu_time: HashMap<String, (f64, f64)> = HashMap::new();
+        let raw_values: Vec<&ProcessesRaw> = raw_data
+            .iter()
+            .map(|buffer| match buffer {
+                Data::ProcessesRaw(value) => value,
+                _ => panic!("Invalid Data type in raw file"),
+            })
+            .collect();
 
+        // Pass 1 ranks processes by CPU time; pass 2 re-parses only the lines of the top
+        // ones, so memory does not grow with the run length times the number of processes.
+
+        // The samples to keep, with their number of processes, and the max cpu time of each
+        // process in the format of Map<pid_name, (utime, stime)>.
+        let mut kept_samples: Vec<(&ProcessesRaw, usize)> = Vec::new();
+        let mut per_process_cpu_time: HashMap<String, (f64, f64)> = HashMap::new();
         let mut ticks_per_second_option: Option<f64> = None;
 
-        for buffer in raw_data {
-            let raw_value = match buffer {
-                Data::ProcessesRaw(ref value) => value,
-                _ => panic!("Invalid Data type in raw file"),
-            };
-
+        for raw_value in raw_values {
             // If multiple data were added at the same time diff, only keep the last one
             // Since processes data is collected once again at the end of collection,
             // this could happen if the finish stage completed fast.
-            if let Some((last_parsed_time, _)) = parsed_data.last() {
-                if raw_value.time - *last_parsed_time == TimeEnum::TimeDiff(0) {
-                    parsed_data.pop();
+            if let Some(&(last_raw_value, _)) = kept_samples.last() {
+                if raw_value.time - last_raw_value.time == TimeEnum::TimeDiff(0) {
+                    kept_samples.pop();
                 }
             }
 
             ticks_per_second_option.get_or_insert(raw_value.ticks_per_second as f64);
 
-            let mut cur_parsed_data: HashMap<String, Vec<String>> = HashMap::new();
-
+            let mut number_processes = 0;
             for line in raw_value.data.lines() {
-                let open_parenthesis = line.find('(');
-                let open_pos = match open_parenthesis {
-                    Some(v) => v,
-                    None => continue,
+                let Some(stat_line) = ProcessStatLine::parse(line) else {
+                    warn!("Malformed proc/<PID>/stat entry found, skipping...");
+                    continue;
                 };
-                let close_parenthesis = line.find(')');
-                let close_pos = match close_parenthesis {
-                    Some(v) => v,
-                    None => continue,
-                };
-                let pid = line[..open_pos - 1]
-                    .parse::<u64>()
-                    .map_err(|_| anyhow::anyhow!("Failed to parse PID"))?;
-                let name = line[open_pos + 1..close_pos].to_string();
-                let values: Vec<String> = line[close_pos + 2..]
-                    .split_whitespace()
-                    .map(String::from)
-                    .collect();
-
-                let process_pid_name = format!("{}_{}", pid, name);
-
-                let (utime, stime) = match (
-                    get_process_metric_value(
-                        ProcessMetric::UserSpaceTime,
-                        &values,
-                        report_params.page_size,
-                    ),
-                    get_process_metric_value(
-                        ProcessMetric::KernelSpaceTime,
-                        &values,
-                        report_params.page_size,
-                    ),
-                ) {
-                    (Some(utime), Some(stime)) => (utime, stime),
-                    _ => continue,
+                let values = stat_line.values();
+                let Some((utime, stime)) = cpu_ticks(&values, report_params.page_size) else {
+                    if values.len() < STAT_FIELD_COUNT {
+                        warn!("Incomplete proc/<PID>/stat entry found, skipping...");
+                    }
+                    continue;
                 };
 
-                if let Some((max_utime, max_stime)) =
-                    per_process_cpu_time.get_mut(&process_pid_name)
-                {
+                let key = stat_line.key();
+                if let Some((max_utime, max_stime)) = per_process_cpu_time.get_mut(&key) {
                     *max_utime = max_utime.max(utime);
                     *max_stime = max_stime.max(stime);
                 } else {
-                    per_process_cpu_time.insert(process_pid_name.clone(), (utime, stime));
+                    per_process_cpu_time.insert(key, (utime, stime));
                 }
-
-                cur_parsed_data.insert(process_pid_name, values);
+                number_processes += 1;
             }
 
-            parsed_data.push((raw_value.time.clone(), cur_parsed_data));
+            kept_samples.push((raw_value, number_processes));
         }
 
         // If the raw data is empty default ticks per second to 1, in which case it should never
@@ -202,7 +223,7 @@ impl ProcessData for Processes {
             .collect();
         ranking.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
         // Only retain the top 16 processes of cpu utilization.
-        let mut processes_to_include: Vec<String> =
+        let mut processes_to_include: HashSet<String> =
             ranking.into_iter().take(16).map(|(name, _)| name).collect();
 
         for pid in &report_params.aperf_process_pids {
@@ -211,35 +232,31 @@ impl ProcessData for Processes {
                 .keys()
                 .find(|name| name.starts_with(&pid_prefix))
             {
-                if !processes_to_include.contains(aperf_process) {
-                    processes_to_include.push(aperf_process.clone());
-                }
+                processes_to_include.insert(aperf_process.clone());
             }
         }
 
-        for (time, data) in parsed_data {
-            time_series_data_processor.proceed_to_time(time);
+        let number_processes_str = ProcessMetric::NumberProcesses.to_string();
 
-            let number_processes_str = ProcessMetric::NumberProcesses.to_string();
+        for (raw_value, number_processes) in kept_samples {
+            time_series_data_processor.proceed_to_time(raw_value.time);
             time_series_data_processor.add_data_point(
                 &number_processes_str,
                 &number_processes_str,
-                data.len() as f64,
+                number_processes as f64,
             );
 
-            for process in &processes_to_include {
-                let values = match data.get(process) {
-                    Some(values) => values,
-                    None => continue,
+            for stat_line in ProcessStatLine::all(&raw_value.data) {
+                let Some(process) = processes_to_include.get(stat_line.key().as_str()) else {
+                    continue;
                 };
+                let values = stat_line.values();
+
                 for process_metric in ProcessMetric::iter() {
-                    let value = match get_process_metric_value(
-                        process_metric,
-                        values,
-                        report_params.page_size,
-                    ) {
-                        Some(value) => value,
-                        None => continue,
+                    let Some(value) =
+                        get_process_metric_value(process_metric, &values, report_params.page_size)
+                    else {
+                        continue;
                     };
                     match process_metric {
                         ProcessMetric::UserSpaceTime | ProcessMetric::KernelSpaceTime => {
