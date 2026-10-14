@@ -68,6 +68,19 @@ impl Analyze for ProfileMetadataComparisonRule {
             return;
         }
 
+        // Without profilers in the base run there is no metadata to compare. This is the
+        // case for Java profiles processed through the default graph path, where the JFR
+        // metadata is not parsed. Reporting "field not found" there would claim the runs
+        // differ when nothing was compared. ProfileMetadataExpectedRule skips these runs
+        // the same way, since it only visits existing profilers.
+        if processed_data_accessor
+            .profiler_keys(processed_data, &base_run_name)
+            .is_empty()
+        {
+            debug!("{self} skipped: base run has no profiler metadata");
+            return;
+        }
+
         // Collect metadata values for a run: profiler_key -> value
         let collect_values = |processed_data: &mut ProcessedData,
                               accessor: &mut ProcessedDataAccessor,
