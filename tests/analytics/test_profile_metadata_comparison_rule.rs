@@ -1,7 +1,7 @@
 use aperf::analytics::profile_metadata_comparison_rule::ProfileMetadataComparisonRule;
 use aperf::analytics::{Analyze, DataFindings, Score, BASE_RUN_NAME};
 use aperf::data::common::data_formats::{
-    AperfData, KeyValueData, KeyValueGroup, Profiler, ProfilingData,
+    AperfData, GraphData, KeyValueData, KeyValueGroup, Profiler, ProfilingData,
 };
 use aperf::data::common::processed_data_accessor::ProcessedDataAccessor;
 use std::collections::HashMap;
@@ -217,4 +217,68 @@ fn test_multiple_non_base_runs() {
     assert!(!findings.has_findings_for_run("run1"));
     assert!(!findings.has_findings_for_run("run2"));
     assert!(findings.has_findings_for_run("run3"));
+}
+
+#[test]
+fn test_no_finding_when_base_run_has_no_profilers() {
+    // Default --profile-java processing stores Java profiles as graphs, with no
+    // profiler metadata. A required field must not be reported as missing then.
+    set_base_run("run1");
+
+    let mut processed_data = create_processed_data(
+        "test_data",
+        vec![
+            ("run1", AperfData::Graph(GraphData::default())),
+            ("run2", AperfData::Graph(GraphData::default())),
+        ],
+    );
+
+    let rule = ProfileMetadataComparisonRule {
+        rule_name: "test_rule",
+        group: "jdk.JVMInformation",
+        key: "jvmVersion",
+        should_exist: true,
+        score: Score::Critical.as_f64(),
+        message: "Test message",
+    };
+
+    let mut findings = DataFindings::default();
+    rule.analyze(
+        &mut findings,
+        &mut processed_data,
+        &mut ProcessedDataAccessor::new(),
+    );
+
+    assert_eq!(findings.num_runs_with_findings(), 0);
+}
+
+#[test]
+fn test_required_field_missing_in_base_run_profiler() {
+    // A base-run profiler that exists but lacks a required field still reports.
+    set_base_run("run1");
+
+    let profiling_data1 = create_profiling_data(vec![create_key_value_data("cpu", "mode", None)]);
+    let mut processed_data = create_processed_data(
+        "test_data",
+        vec![("run1", AperfData::Profile(profiling_data1))],
+    );
+
+    let rule = ProfileMetadataComparisonRule {
+        rule_name: "test_rule",
+        group: "cpu",
+        key: "mode",
+        should_exist: true,
+        score: Score::Bad.as_f64(),
+        message: "Test message",
+    };
+
+    let mut findings = DataFindings::default();
+    rule.analyze(
+        &mut findings,
+        &mut processed_data,
+        &mut ProcessedDataAccessor::new(),
+    );
+
+    assert_eq!(findings.num_runs_with_findings(), 1);
+    assert!(findings.has_findings_for_run("run1"));
 }
