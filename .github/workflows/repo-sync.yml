@@ -14,8 +14,8 @@ jobs:
     name: Repo Sync
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: repo-sync/github-sync@v2
+      - uses: actions/checkout@a37ce9120846195fa4ece8f58b268e6043cb2f26 # v3.7.0
+      - uses: repo-sync/github-sync@3832fe8e2be32372e1b3970bbae8e7079edeec88 # v2.3.0
         name: Sync repo to branch
         with:
           source_repo: ${{ secrets.SOURCE_REPO }}
@@ -24,7 +24,7 @@ jobs:
           github_token: ${{ secrets.WORKFLOW_TOKEN }}
           sync_tags: "true"
       - name: Ship pull request
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
           github-token: ${{ secrets.WORKFLOW_TOKEN }}
           result-encoding: string
