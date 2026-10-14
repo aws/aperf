@@ -89,6 +89,12 @@ export default function () {
 
   return (
     <AppLayout
+      ariaLabels={{
+        navigationToggle: "Open report navigation",
+        navigationClose: "Close report navigation",
+        toolsToggle: "Open report help",
+        toolsClose: "Close report help",
+      }}
       contentType={"cards"}
       toolsOpen={showHelpPanel}
       tools={<ReportHelpPanel />}

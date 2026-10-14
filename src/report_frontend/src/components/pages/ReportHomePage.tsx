@@ -32,6 +32,8 @@ export default function () {
   const perRunHeader = RUNS.map((runName) => (
     <Header
       variant={"h1"}
+      // Keep the run title's h1 styling, but place it below the page's h1 in the heading hierarchy for a11y reasons
+      headingTagOverride="h2"
       description={
         RUNS.length <= 1
           ? undefined
@@ -65,7 +67,7 @@ export default function () {
           variant={"h1"}
           info={<ReportHelpPanelLink dataType={"systeminfo"} fieldKey={"summary"} />}
           actions={
-            <Toggle checked={darkMode} onChange={({ detail }) => setDarkMode(detail.checked)}>
+            <Toggle ariaLabel="Dark mode" checked={darkMode} onChange={({ detail }) => setDarkMode(detail.checked)}>
               <DarkModeIcon />
             </Toggle>
           }

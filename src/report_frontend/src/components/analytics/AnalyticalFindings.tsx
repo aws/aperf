@@ -189,7 +189,10 @@ function FindingsSearchBarAndPagination(props: { filterProps: TextFilterProps; p
         <TextFilter {...props.filterProps} filteringPlaceholder={"Search findings"} />
       </div>
       <div style={{ marginLeft: "auto" }}>
-        <Pagination {...props.paginationProps} />
+        <Pagination
+          {...props.paginationProps}
+          ariaLabels={{ previousPageLabel: "Previous page", nextPageLabel: "Next page" }}
+        />
       </div>
     </div>
   );
