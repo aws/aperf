@@ -170,6 +170,7 @@ export function ReportHelpPanelIcon(props: ReportHelpPanelProps) {
   return (
     <div title={"View optimization guides and more information."} style={{ display: "inline-block" }}>
       <Button
+        ariaLabel={`View information for ${props.fieldKey}`}
         iconName={"status-info"}
         variant={"icon"}
         onClick={() => {

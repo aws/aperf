@@ -140,7 +140,7 @@ export function MetricGraphsPopover(props: TimeSeriesMetricProps) {
       content={content}
     >
       <div title={"Preview the metric graph."} style={{ display: "inline-block" }}>
-        <Button iconName={"zoom-in"} variant={"icon"} />
+        <Button ariaLabel={`Preview graph for ${props.metricName}`} iconName={"zoom-in"} variant={"icon"} />
       </div>
     </Popover>
   );
