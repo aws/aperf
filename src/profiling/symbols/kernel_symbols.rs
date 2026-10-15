@@ -1,6 +1,5 @@
 use crate::profiling::symbols::{
-    prefer_second_symbol, resolve_symbol, tail_symbol_bound, RawSymbol, ResolvedSymbol,
-    SymbolTableEntry,
+    prefer_second_symbol, resolve_symbol, tail_symbol_bound, RawSymbol, SymbolTableEntry,
 };
 use anyhow::Result;
 use std::fs;
@@ -44,11 +43,11 @@ impl KernelSymbols {
     }
 
     /// Resolve a Kernel address into a symbol.
-    pub fn resolve(&self, addr: u64) -> Option<ResolvedSymbol> {
+    pub fn resolve(&self, addr: u64) -> Option<String> {
         if self.symbol_table.is_empty() {
             return None;
         }
-        resolve_symbol(addr, &self.symbol_table, "kallsyms")
+        resolve_symbol(addr, &self.symbol_table)
     }
 }
 
@@ -283,9 +282,7 @@ ffff800080b00000 t bpf_prog_1234\t[bpf]
     }
 
     fn resolved_name(kernel_symbols: &KernelSymbols, addr: u64) -> Option<String> {
-        kernel_symbols
-            .resolve(addr)
-            .map(|resolved_symbol| resolved_symbol.name)
+        kernel_symbols.resolve(addr)
     }
 
     #[test]

@@ -4,7 +4,7 @@ use crate::profiling::symbols::jit_symbols::JitSymbols;
 use crate::profiling::symbols::kernel_symbols::KernelSymbols;
 use crate::profiling::symbols::mmap_resolver::MmapResolver;
 use crate::profiling::symbols::vdso_symbols::read_vdso_elf_data;
-use crate::profiling::symbols::{ResolvedSymbol, VDSO_ELF_FILE_PATH};
+use crate::profiling::symbols::{Symbol, VDSO_ELF_FILE_PATH};
 use crate::profiling::FrameType;
 use log::{debug, error, warn};
 use std::collections::HashMap;
@@ -105,7 +105,7 @@ impl SymbolResolver {
     }
 
     /// Resolve an instruction address of a PID into a symbol.
-    pub fn resolve(&mut self, pid: i32, addr: u64) -> Option<ResolvedSymbol> {
+    pub fn resolve(&mut self, pid: i32, addr: u64) -> Symbol {
         if addr >= self.kernel_space_start_address {
             self.resolve_kernel_addr(addr)
         } else {
@@ -117,17 +117,17 @@ impl SymbolResolver {
     /// 1. Attempt to resolve the address directly using the Kernel symbol table (built from /proc/kallsyms).
     /// 2. If the resolution failed, try to translate the address into file offset and ELF file
     ///    through Kernel MMAP entries, and then resolve it using ELF symbol table.
-    fn resolve_kernel_addr(&mut self, addr: u64) -> Option<ResolvedSymbol> {
-        let mut resolved_symbol = self.kernel_symbols.resolve(addr).or_else(|| {
-            match self.mmap_resolver.resolve_kernel_addr(addr) {
-                Some((file_offset, elf_file_path)) => {
-                    self.resolve_by_elf_symbols(-1, file_offset, &elf_file_path)
-                }
-                None => None,
-            }
-        })?;
-        resolved_symbol.frame_type = FrameType::Kernel;
-        Some(resolved_symbol)
+    fn resolve_kernel_addr(&mut self, addr: u64) -> Symbol {
+        if let Some(symbol_name) = self.kernel_symbols.resolve(addr) {
+            return Symbol {
+                name: symbol_name,
+                resolved: true,
+                source: Some(("kallsyms".to_string(), addr)),
+                frame_type: FrameType::Kernel,
+            };
+        }
+
+        self.resolve_by_elf_symbols(-1, addr)
     }
 
     /// Resolve an userspace instruction address through the following steps:
@@ -135,52 +135,101 @@ impl SymbolResolver {
     /// 2. Resolve the file offset into symbol through the symbol table built from the ELF file.
     /// 3. If the MMAP translation or ELF symbol resolution failed, resolve the address
     ///    directly using the JIT symbol table.
-    fn resolve_userspace_addr(&mut self, pid: i32, addr: u64) -> Option<ResolvedSymbol> {
-        let (file_offset, elf_file_path) = match self.mmap_resolver.resolve_addr(pid, addr) {
-            Some(resolved_mmap) => resolved_mmap,
-            // No MMAP entry — try JIT symbols directly, since they may not have MMAP.
-            None => return self.resolve_by_jit_symbols(pid, addr),
-        };
-        if let Some(resolved_symbol) = self.resolve_by_elf_symbols(pid, file_offset, &elf_file_path)
-        {
-            return Some(resolved_symbol);
+    fn resolve_userspace_addr(&mut self, pid: i32, addr: u64) -> Symbol {
+        let elf_symbol = self.resolve_by_elf_symbols(pid, addr);
+
+        if elf_symbol.resolved {
+            return elf_symbol;
         }
-        self.resolve_by_jit_symbols(pid, addr)
+
+        let jit_symbol = self.resolve_by_jit_symbols(pid, addr);
+
+        if jit_symbol.resolved {
+            jit_symbol
+        } else {
+            // If the symbol also cannot be resolved through JIT, return
+            // the ELF resolution result, which might contain ELF file info
+            // if MMAP entry exists for the address.
+            elf_symbol
+        }
     }
 
-    /// Resolve an instruction address from the JIT symbol table of the corresponding PID. If the
-    /// symbol table does not exist, build it from the /tmp/perf-<pid>.map file.
-    fn resolve_by_jit_symbols(&mut self, pid: i32, addr: u64) -> Option<ResolvedSymbol> {
+    fn resolve_by_jit_symbols(&mut self, pid: i32, addr: u64) -> Symbol {
         // Still insert a dummy symbol table in case it could not be built, so that
         // the resolver does not attempt to keep rebuilding the symbol table.
-        let mut resolved_symbol = self
+        let symbol_name = self
             .jit_symbol_tables
             .entry(pid)
             .or_insert_with(|| JitSymbols::from_perf_map(pid).unwrap_or_default())
-            .resolve(addr)?;
-        resolved_symbol.frame_type = FrameType::Jit;
-        Some(resolved_symbol)
+            .resolve(addr);
+
+        let (name, resolved, source, frame_type) = match symbol_name {
+            Some(symbol_name) => (
+                symbol_name,
+                true,
+                Some((format!("perf-{pid}.map"), addr)),
+                FrameType::Jit,
+            ),
+            None => (String::default(), false, None, FrameType::default()),
+        };
+
+        Symbol {
+            name,
+            resolved,
+            source,
+            frame_type,
+        }
     }
 
-    /// Resolve a file offset from the corresponding ELF symbol table. If the symbol table does not
-    /// exist, build it from the ELF file with path elf_file_path.
-    fn resolve_by_elf_symbols(
-        &mut self,
-        pid: i32,
-        file_offset: u64,
-        elf_file_path: &str,
-    ) -> Option<ResolvedSymbol> {
-        self.lazy_load_elf_file(pid, elf_file_path);
-        let mut resolved_symbol = self
+    fn resolve_by_elf_symbols(&mut self, pid: i32, addr: u64) -> Symbol {
+        let mut frame_type = if pid < 0 {
+            FrameType::Kernel
+        } else {
+            FrameType::default()
+        };
+
+        let mmap_entry = if pid < 0 {
+            self.mmap_resolver.resolve_kernel_addr(addr)
+        } else {
+            self.mmap_resolver.resolve_addr(pid, addr)
+        };
+
+        let (file_offset, elf_file_path) = match mmap_entry {
+            Some(mmap_entry) => mmap_entry,
+            None => {
+                let source = if pid < 0 {
+                    Some(("kallsyms".to_string(), addr))
+                } else {
+                    None
+                };
+                return Symbol {
+                    name: String::new(),
+                    resolved: false,
+                    source,
+                    frame_type,
+                };
+            }
+        };
+        if elf_file_path == VDSO_ELF_FILE_PATH {
+            frame_type = FrameType::Vdso;
+        }
+
+        self.lazy_load_elf_file(pid, &elf_file_path);
+
+        let symbol_name = self
             .elf_symbol_tables
-            .get(elf_file_path)
+            .get(&elf_file_path)
             .map_or(None, |elf_symbol_table| {
                 elf_symbol_table.resolve(file_offset)
-            })?;
-        if elf_file_path == VDSO_ELF_FILE_PATH {
-            resolved_symbol.frame_type = FrameType::Vdso;
+            });
+        let resolved = symbol_name.is_some();
+
+        Symbol {
+            name: symbol_name.unwrap_or_default(),
+            resolved,
+            source: Some((elf_file_path, file_offset)),
+            frame_type,
         }
-        Some(resolved_symbol)
     }
 
     /// Attempt to load the data of an ELF file and use it to build the ELF symbol table.
@@ -189,27 +238,26 @@ impl SymbolResolver {
             return;
         }
 
-        let load_elf_file_data = || -> Option<(Vec<u8>, String)> {
+        let load_elf_file_data = || -> Option<Vec<u8>> {
             // First try to find the original build of the ELF file using the Build-ID - they ensure
             // that the instruction address, MMAP entries, and symbol tables all refer to the same ELF file.
             if let Some(original_elf_file_path) =
                 self.elf_build_ids.find_original_elf_file(elf_file_path)
             {
                 if let Ok(data) = fs::read(&original_elf_file_path) {
-                    return Some((data, original_elf_file_path.to_string_lossy().into_owned()));
+                    return Some(data);
                 }
             }
             // If dealing with VDSO symbols, load them from APerf's memory - all processes
             // running on the same Kernel share the same VDSO symbol table.
             if elf_file_path == VDSO_ELF_FILE_PATH {
-                return read_vdso_elf_data()
-                    .map(|vdso_data| (vdso_data, VDSO_ELF_FILE_PATH.to_string()));
+                return read_vdso_elf_data();
             }
             // If failed to find the original ELF file using the Build-ID, attempt to read
             // the ELF file path directly, if its Build-ID still matches.
             if let Ok(data) = fs::read(elf_file_path) {
                 if self.elf_build_ids.matches_build_id(elf_file_path, &data) {
-                    return Some((data, elf_file_path.to_string()));
+                    return Some(data);
                 }
             }
             // Fall back to the process's FS mount exposed by the kernel /proc/<pid>/root/<path>
@@ -225,7 +273,7 @@ impl SymbolResolver {
                     return self
                         .elf_build_ids
                         .matches_build_id(elf_file_path, &data)
-                        .then_some((data, process_fs_path));
+                        .then_some(data);
                 }
 
                 // In case the process has exited, retrieve the list of PIDs that have MMAP-ed
@@ -239,7 +287,7 @@ impl SymbolResolver {
                             return self
                                 .elf_build_ids
                                 .matches_build_id(elf_file_path, &data)
-                                .then_some((data, sibling_process_fs_path));
+                                .then_some(data);
                         }
                     }
                 }
@@ -248,23 +296,19 @@ impl SymbolResolver {
             None
         };
 
-        if let Some((elf_data, elf_data_source)) = load_elf_file_data() {
+        if let Some(elf_data) = load_elf_file_data() {
             self.elf_symbol_tables.insert(
                 elf_file_path.to_string(),
-                ElfSymbols::from_elf_data(
-                    &elf_data,
-                    elf_data_source,
-                    self.support_leaf_caller_recovery,
-                )
-                .unwrap_or_else(|error| {
-                    debug!(
-                        "Failed to build ELF symbol table for file {elf_file_path}: {:?}",
-                        error
-                    );
-                    // Still insert a dummy symbol table in case it could not be built, so that
-                    // the resolver does not attempt to keep rebuilding the symbol table.
-                    ElfSymbols::default()
-                }),
+                ElfSymbols::from_elf_data(&elf_data, self.support_leaf_caller_recovery)
+                    .unwrap_or_else(|error| {
+                        debug!(
+                            "Failed to build ELF symbol table for file {elf_file_path}: {:?}",
+                            error
+                        );
+                        // Still insert a dummy symbol table in case it could not be built, so that
+                        // the resolver does not attempt to keep rebuilding the symbol table.
+                        ElfSymbols::default()
+                    }),
             );
         } else {
             // Same reasoning as above - we only attempt to build the tables once.

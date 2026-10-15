@@ -3,11 +3,12 @@ use crate::profiling::perf::{
     PerfSample, PERF_CONTEXT_MAX, PERF_CONTEXT_USER, PERF_RECORD_MISC_FORK_EXEC,
 };
 use crate::profiling::symbols::symbol_resolver::SymbolResolver;
-use crate::profiling::symbols::ResolvedSymbol;
+use crate::profiling::symbols::Symbol;
 use crate::profiling::ThreadState;
-use linux_perf_data::{PerfFileReader, PerfFileRecord};
+use linux_perf_data::{PerfFile, PerfFileReader, PerfFileRecord};
 use linux_perf_event_reader::{EventRecord, RawData, SampleRecord};
 use log::{debug, error, warn};
+use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
@@ -41,33 +42,20 @@ pub fn build_perf_profiler_data(
         None
     };
 
-    let mut system_boot_timestamp_ms =
-        procfs::boot_time().map_or(0, |boot_time| boot_time.timestamp_millis());
-
     let handle_parsed_sample = |perf_sample: PerfSample| {
-        // In the rare case where the system boot timestamp cannot be retrieved, assume the
-        // first sample's epoch timestamp matches the profile start timestamp
-        if system_boot_timestamp_ms == 0 {
-            system_boot_timestamp_ms =
-                profile_start_timestamp_ms - (perf_sample.timestamp / 1_000_000) as i64;
-        }
-
-        let mut frames: Vec<String> = perf_sample
-            .call_chain
-            .iter()
-            .map(|resolved_symbol| {
-                resolved_symbol
-                    .as_ref()
-                    .map_or("[unknown]".to_string(), |s| {
-                        format!("{}{}", s.name, s.frame_type.literal_suffix())
-                    })
-            })
+        // Following Perf, every stack is rooted at the sampled thread's name.
+        let frames: Vec<String> = std::iter::once(perf_sample.thread_name.replace(' ', "_"))
+            .chain(
+                // Perf sample's call chain is from leaf to root, so reverse the frames.
+                perf_sample
+                    .call_chain
+                    .into_iter()
+                    .rev()
+                    .map(|symbol| symbol.into_frame_string()),
+            )
             .collect();
-        // Perf sample's call chain is from leaf to root, so reverse the frames
-        frames.reverse();
 
-        let sample_timestamp_ms =
-            system_boot_timestamp_ms + (perf_sample.timestamp / 1_000_000) as i64;
+        let sample_timestamp_ms = (perf_sample.timestamp / 1_000_000) as i64;
 
         if let Some(file) = stack_output_file.as_mut() {
             let _ = writeln!(
@@ -141,6 +129,9 @@ fn parse_perf_data(
     };
 
     let mut symbol_resolver = SymbolResolver::for_arch(arch);
+    let epoch_offset_ns = monotonic_to_epoch_offset_ns(&perf_file);
+    // Thread names by thread ID. Idle task is named "swapper".
+    let mut thread_names: HashMap<i32, String> = HashMap::from([(0, "swapper".to_string())]);
 
     // Collect all ELF Build-IDs from the profile, which can be used to find the original
     // build version of an ELF file.
@@ -199,8 +190,14 @@ fn parse_perf_data(
                         if comm.is_execve {
                             symbol_resolver.handle_exec(comm.pid);
                         }
+                        thread_names.insert(comm.tid, rawdata_to_string(&comm.name));
                     }
                     EventRecord::Fork(fork) => {
+                        match thread_names.get(&fork.ptid).cloned() {
+                            Some(name) => thread_names.insert(fork.tid, name),
+                            // Any earlier name is stale.
+                            None => thread_names.remove(&fork.tid),
+                        };
                         if fork.ppid != fork.pid && (record.misc & PERF_RECORD_MISC_FORK_EXEC) == 0
                         {
                             symbol_resolver.handle_forked_process_mmap(fork.ppid, fork.pid);
@@ -213,9 +210,11 @@ fn parse_perf_data(
                         if attr_index != 0 {
                             continue;
                         }
-                        if let Some(perf_sample) =
-                            handle_sample_event(&sample_record, &mut symbol_resolver)
+                        if let Some(mut perf_sample) =
+                            handle_sample_event(&sample_record, &thread_names, &mut symbol_resolver)
                         {
+                            perf_sample.timestamp =
+                                perf_sample.timestamp.saturating_add_signed(epoch_offset_ns);
                             num_processed_samples += 1;
                             on_parsed_sample(perf_sample);
                         }
@@ -235,14 +234,39 @@ fn parse_perf_data(
     num_processed_samples
 }
 
+/// The offset that converts a sample's CLOCK_MONOTONIC timestamp (perf record -k 1) into epoch
+/// time. Perf records a wall-clock and a CLOCK_MONOTONIC reading taken at the same instant.
+fn monotonic_to_epoch_offset_ns(perf_file: &PerfFile) -> i64 {
+    if let Ok(Some(clock_data)) = perf_file.clock_data() {
+        if clock_data.clockid == libc::CLOCK_MONOTONIC as u32 {
+            return clock_data.wall_clock_ns as i64 - clock_data.clockid_time_ns as i64;
+        }
+    }
+    // If the pair was not recorded in Perf, read them now as a fallback.
+    let clock_ns = |clock_id| {
+        let mut time = libc::timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        };
+        unsafe { libc::clock_gettime(clock_id, &mut time) };
+        time.tv_sec * 1_000_000_000 + time.tv_nsec
+    };
+    clock_ns(libc::CLOCK_REALTIME) - clock_ns(libc::CLOCK_MONOTONIC)
+}
+
 /// Handle a Perf sample event by symbolicating every frame in the call chain and performing
 /// leaf frame recovery if needed to.
 fn handle_sample_event(
     sample_record: &SampleRecord,
+    thread_names: &HashMap<i32, String>,
     symbol_resolver: &mut SymbolResolver,
 ) -> Option<PerfSample> {
     let pid = match sample_record.pid {
         Some(pid) => pid,
+        None => return None,
+    };
+    let tid = match sample_record.tid {
+        Some(tid) => tid,
         None => return None,
     };
     let timestamp = match sample_record.timestamp {
@@ -256,7 +280,7 @@ fn handle_sample_event(
 
     let mut leaf_frame_idx: Option<usize> = None;
     let mut frame_addresses: Vec<u64> = Vec::new();
-    let mut resolved_call_chain: Vec<Option<ResolvedSymbol>> = Vec::new();
+    let mut resolved_call_chain: Vec<Symbol> = Vec::new();
 
     // Refer to add_callchain_ip in
     // https://github.com/torvalds/linux/blob/master/tools/perf/util/machine.c
@@ -281,6 +305,11 @@ fn handle_sample_event(
     let mut perf_sample = PerfSample {
         pid,
         timestamp,
+        thread_name: thread_names
+            .get(&tid)
+            .cloned()
+            // Perf's placeholder for a thread that was never named.
+            .unwrap_or_else(|| format!(":{tid}")),
         call_chain: resolved_call_chain,
     };
 

@@ -16,6 +16,12 @@ export function strippedFrameName(rawName: string): string {
   return getFrameType(rawName) === "native" ? rawName : rawName.slice(0, -4);
 }
 
+/** The Top Functions row name, where all unresolved frames of a frame type share one row. */
+export function topFunctionName(rawName: string): string {
+  const name = strippedFrameName(rawName);
+  return name.startsWith("[unknown]") ? "[unknown]" : name;
+}
+
 /** Sum all samples across all thread states in a block */
 export function blockTotal(block: { [ts: string]: { [nodeId: string]: number } }): number {
   let sum = 0;
@@ -67,18 +73,24 @@ export function aggregateByFrame(
   }
   for (let i = 0; i < tree.length; i++) total(i);
 
+  // Row key of each frame_id; different frame_ids can share a row.
+  const frameKeys = frames.map((frame) => {
+    const rawName = frame?.name || "[unknown]";
+    return frameKey(topFunctionName(rawName), getFrameType(rawName));
+  });
+  const keyOf = (frameId: number) => frameKeys[frameId] ?? frameKey("[unknown]", "native");
+
   const byFrame = new Map<string, { self: number; total: number }>();
   for (let nid = 0; nid < tree.length; nid++) {
-    const rawName = frames[tree[nid].frame_id]?.name || "[unknown]";
-    const key = frameKey(strippedFrameName(rawName), getFrameType(rawName));
+    const key = keyOf(tree[nid].frame_id);
     const entry = byFrame.get(key) || { self: 0, total: 0 };
     entry.self += nodeSelf.get(nid) || 0;
-    // Skip this node's total if any ancestor has the same frame_id, so a
+    // Skip this node's total if any ancestor is in the same row, so a
     // recursive frame counts once at its outermost call site.
     let ancestorHasSameFrame = false;
     let cur = tree[nid].parent;
     while (cur != null) {
-      if (tree[cur].frame_id === tree[nid].frame_id) {
+      if (keyOf(tree[cur].frame_id) === key) {
         ancestorHasSameFrame = true;
         break;
       }
