@@ -1,4 +1,4 @@
-use crate::profiling::symbols::{resolve_symbol, ResolvedSymbol, SymbolTableEntry};
+use crate::profiling::symbols::{resolve_symbol, SymbolTableEntry};
 use crate::run_command_and_wait;
 use anyhow::Result;
 use log::debug;
@@ -77,11 +77,11 @@ impl JitSymbols {
     }
 
     /// Resolve an address into a symbol in the symbol table.
-    pub fn resolve(&self, addr: u64) -> Option<ResolvedSymbol> {
+    pub fn resolve(&self, addr: u64) -> Option<String> {
         if self.symbol_table.is_empty() {
             return None;
         }
-        resolve_symbol(addr, &self.symbol_table, "jit")
+        resolve_symbol(addr, &self.symbol_table)
     }
 }
 

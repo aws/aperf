@@ -34,26 +34,40 @@ impl SymbolTableEntry {
     }
 }
 
-/// Information of a resolved symbol.
+/// The result of a symbol resolution attempt.
 #[derive(Debug)]
-pub struct ResolvedSymbol {
+pub struct Symbol {
     /// The human-readable name of the symbol.
     pub name: String,
-    /// The offset from the starting address of the symbol.
-    pub offset: u64,
-    /// The source file or module that the symbol belongs to.
-    pub source: String,
+    /// Whether the symbol is resolved.
+    pub resolved: bool,
+    /// The source file/module that the symbol belongs to
+    /// as well as the offset within.
+    pub source: Option<(String, u64)>,
     /// The type of the frame.
     pub frame_type: FrameType,
 }
 
+impl Symbol {
+    pub fn into_frame_string(self) -> String {
+        let mut frame_name = if self.resolved {
+            self.name
+        } else {
+            let mut unresolved_frame_name = "[unknown]".to_string();
+            if let Some((source_file, _)) = self.source {
+                unresolved_frame_name.push_str(&format!("[{source_file}]"));
+            }
+            unresolved_frame_name
+        };
+        frame_name.push_str(self.frame_type.literal_suffix());
+        frame_name
+    }
+}
+
 /// Attempt to resolve an address into a symbol in the symbol table. Entries in the symbol
 /// table is sorted by every symbol's starting address to enable binary search.
-pub fn resolve_symbol(
-    addr: u64,
-    symbol_table: &Vec<SymbolTableEntry>,
-    source: &str,
-) -> Option<ResolvedSymbol> {
+/// Returns symbol name if resolved successfully, otherwise None.  
+pub fn resolve_symbol(addr: u64, symbol_table: &Vec<SymbolTableEntry>) -> Option<String> {
     let idx = match symbol_table
         .binary_search_by_key(&addr, |symbol_table_entry| symbol_table_entry.addr)
     {
@@ -80,16 +94,12 @@ pub fn resolve_symbol(
         }
     }
 
-    Some(ResolvedSymbol {
-        name: symbol_table_entry
+    Some(
+        symbol_table_entry
             .demangled_name
             .get_or_init(|| demangle_symbol(&symbol_table_entry.name))
             .clone(),
-        offset: symbol_offset,
-        source: source.to_string(),
-        // To be overriden by the caller.
-        frame_type: FrameType::default(),
-    })
+    )
 }
 
 /// The information of a symbol retrieved from an ELF file (for userspace symbols) or

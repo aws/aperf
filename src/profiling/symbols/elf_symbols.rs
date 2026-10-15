@@ -1,6 +1,6 @@
 use crate::profiling::symbols::demangle_symbol;
 use crate::profiling::symbols::{
-    prefer_second_symbol, resolve_symbol, RawSymbol, ResolvedSymbol, SymbolTableEntry,
+    prefer_second_symbol, resolve_symbol, RawSymbol, SymbolTableEntry,
 };
 use anyhow::Result;
 use object::{
@@ -55,19 +55,13 @@ pub struct ElfSymbols {
     load_segments: Vec<LoadSegment>,
     /// All CFI rules sorted by addr for fast look up during leaf frame recovery.
     cfi_rule_table: Vec<CfiRuleTableEntry>,
-    /// The name of the ELF file.
-    elf_filename: String,
     /// True for ET_DYN (shared libraries and PIE executables).
     is_dyn: bool,
 }
 
 impl ElfSymbols {
     /// Parse the contents of an ELF file and build the symbol table.
-    pub fn from_elf_data(
-        elf_data: &[u8],
-        elf_filename: String,
-        support_leaf_frame_recovery: bool,
-    ) -> Result<Self> {
+    pub fn from_elf_data(elf_data: &[u8], support_leaf_frame_recovery: bool) -> Result<Self> {
         let elf_obj = object::File::parse(elf_data)?;
         let is_dyn = elf_obj.kind() == ObjectKind::Dynamic;
 
@@ -170,21 +164,19 @@ impl ElfSymbols {
         Ok(ElfSymbols {
             symbol_table,
             load_segments,
-            elf_filename,
             cfi_rule_table,
             is_dyn,
         })
     }
 
     /// Resolve a file_offset into a symbol in the symbol table.
-    pub fn resolve(&self, file_offset: u64) -> Option<ResolvedSymbol> {
+    pub fn resolve(&self, file_offset: u64) -> Option<String> {
         if self.symbol_table.is_empty() {
             return None;
         }
         resolve_symbol(
             self.file_offset_to_p_vaddr(file_offset)?,
             &self.symbol_table,
-            &self.elf_filename,
         )
     }
 

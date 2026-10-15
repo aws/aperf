@@ -2,7 +2,7 @@
 
 pub mod parser;
 
-use crate::profiling::symbols::ResolvedSymbol;
+use crate::profiling::symbols::Symbol;
 
 /// The information of a parsed Perf sample.
 #[derive(Default, Debug)]
@@ -11,9 +11,11 @@ struct PerfSample {
     pid: i32,
     /// The timestamp of the sample in nanoseconds from the EPOCH.
     timestamp: u64,
+    /// The name of the sampled thread.
+    thread_name: String,
     /// The symbolicated call chain of the sample.
     /// The order is from leaf to root.
-    call_chain: Vec<Option<ResolvedSymbol>>,
+    call_chain: Vec<Symbol>,
 }
 
 // See below constants in https://github.com/torvalds/linux/blob/master/include/uapi/linux/perf_event.h

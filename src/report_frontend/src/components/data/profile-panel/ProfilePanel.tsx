@@ -30,7 +30,7 @@ import {
   buildFlamegraph,
   flattenFlamegraph,
   frameKey,
-  strippedFrameName,
+  topFunctionName,
 } from "./utils";
 import DataUnavailableBox from "../DataUnavailableBox";
 
@@ -303,7 +303,7 @@ function ProfilePanelView({ analytics, baseline, isBaseRun, startTimeMs, blockWi
     }[] = [];
     const seen = new Set<string>();
     for (const frame of frames) {
-      const name = strippedFrameName(frame.name);
+      const name = topFunctionName(frame.name);
       const type = getFrameType(frame.name);
       const key = frameKey(name, type);
       if (seen.has(key)) continue;
