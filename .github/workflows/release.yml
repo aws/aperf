@@ -33,11 +33,11 @@ jobs:
 
       # Checkout repository to get kubectl-aperf script
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # Download and unpack all release artifacts
       - name: Download built binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
 
       # Create release tarballs
       - name: Create x86_64 artifacts
@@ -63,28 +63,28 @@ jobs:
 
       # Attach them to the release
       - name: Upload x86_64 artifacts
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2.11.5
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: ./aperf-${{ github.ref_name }}-x86_64.tar.gz
           tag: ${{ github.ref }}
           asset_name: aperf-${{ github.ref_name }}-x86_64.tar.gz
       - name: Upload aarch64 artifacts
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2.11.5
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: ./aperf-${{ github.ref_name }}-aarch64.tar.gz
           tag: ${{ github.ref }}
           asset_name: aperf-${{ github.ref_name }}-aarch64.tar.gz
       - name: Upload MacOS artifacts
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2.11.5
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: ./aperf-${{ github.ref_name }}-macos.tar.gz
           tag: ${{ github.ref }}
           asset_name: aperf-${{ github.ref_name }}-macos.tar.gz
       - name: Upload Windows artifacts
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2.11.5
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: ./aperf-${{ github.ref_name }}-windows.tar.gz
@@ -103,7 +103,7 @@ jobs:
 
       # Upload Krew tarball
       - name: Upload Krew kubectl plugin tarball
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2.11.5
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: ./kubectl-aperf-${{ github.ref_name }}.tar.gz
@@ -112,28 +112,28 @@ jobs:
 
       # Attach rpm and deb packages to the release
       - name: Upload x86_64 rpm
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2.11.5
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: x86_64-rpm/aperf-${{ github.ref_name }}-x86_64.rpm
           tag: ${{ github.ref }}
           asset_name: aperf-${{ github.ref_name }}-x86_64.rpm
       - name: Upload x86_64 deb
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2.11.5
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: x86_64-deb/aperf-${{ github.ref_name }}-amd64.deb
           tag: ${{ github.ref }}
           asset_name: aperf-${{ github.ref_name }}-amd64.deb
       - name: Upload aarch64 rpm
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2.11.5
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: aarch64-rpm/aperf-${{ github.ref_name }}-aarch64.rpm
           tag: ${{ github.ref }}
           asset_name: aperf-${{ github.ref_name }}-aarch64.rpm
       - name: Upload aarch64 deb
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2.11.5
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: aarch64-deb/aperf-${{ github.ref_name }}-arm64.deb

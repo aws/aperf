@@ -37,7 +37,7 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Install Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 16.16.0
       # GitHub CLI key rotation: https://github.com/cli/cli/issues/13118    
@@ -106,13 +106,13 @@ jobs:
       - name: Archive release artifacts
         run: tar -zcvf artifacts.tar.gz -C target/$(arch)-unknown-linux-musl/release aperf
       - name: Upload x86_64 release artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: ${{ matrix.platform == 'X86' }}
         with:
           name: x86_64-release-artifacts
           path: artifacts.tar.gz
       - name: Upload aarch64 release artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: ${{ matrix.platform == 'ARM' }}
         with:
           name: aarch64-release-artifacts
