@@ -224,7 +224,7 @@ pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
     init_params.perf_event_mux_interval_ms = match get_core_perf_event_mux_interval_ms() {
         Ok(interval) => interval,
         Err(e) => {
-            warn!("Failed to read perf event multiplexing interval: {e}");
+            debug!("Failed to read perf event multiplexing interval: {e}");
             0
         }
     };
