@@ -143,6 +143,30 @@ fn is_interrupt_name_mis_err(interrupt_name: &String) -> bool {
     interrupt_name.to_uppercase() == "MIS" || interrupt_name.to_uppercase() == "ERR"
 }
 
+fn sum_interrupts_by_metric_name(interrupts: Vec<Interrupt>) -> Vec<Interrupt> {
+    let mut summed_interrupts: Vec<Interrupt> = Vec::new();
+    let mut metric_index: HashMap<String, usize> = HashMap::new();
+
+    for interrupt in interrupts {
+        let metric_name = get_interrupt_metric_name(&interrupt);
+        let Some(&index) = metric_index.get(&metric_name) else {
+            metric_index.insert(metric_name, summed_interrupts.len());
+            summed_interrupts.push(interrupt);
+            continue;
+        };
+
+        let summed_interrupt = &mut summed_interrupts[index];
+        for (cpu, num_interrupts) in interrupt.per_cpu_values {
+            *summed_interrupt.per_cpu_values.entry(cpu).or_default() += num_interrupts;
+        }
+        if let Some(value) = interrupt.value {
+            *summed_interrupt.value.get_or_insert(0) += value;
+        }
+    }
+
+    summed_interrupts
+}
+
 impl ProcessData for InterruptData {
     fn process_raw_data(
         &mut self,
@@ -160,7 +184,7 @@ impl ProcessData for InterruptData {
             time_series_data_processor.proceed_to_time(raw_value.time);
 
             let per_interrupt_data = parse_raw_interrupt_data(&raw_value.data);
-            for interrupt in per_interrupt_data {
+            for interrupt in sum_interrupts_by_metric_name(per_interrupt_data) {
                 let interrupt_metric_name = get_interrupt_metric_name(&interrupt);
 
                 for (cpu, num_interrupts) in interrupt.per_cpu_values {
