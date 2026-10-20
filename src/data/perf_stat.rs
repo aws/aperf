@@ -18,7 +18,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
 use {
-    crate::data::common::utils::{get_online_cpu_ids, raise_fd_limit},
+    crate::data::common::utils::{get_online_cpu_ids, parse_cpu_list, raise_fd_limit},
     crate::data::common::PMU_DEVICES_DIR,
     crate::data::CollectData,
     crate::data_collection::InitParams,
@@ -52,25 +52,19 @@ fn get_saved_pmu_config_path(run_dir: &Path) -> PathBuf {
 /// some counters do not consume a register, and the probing result is dynamic).
 fn warn_multiplexing(required_counters_per_cpu: usize, counter_limit: usize) {
     if required_counters_per_cpu > counter_limit {
-        // TODO: before we come up with a solution so that the default config
-        // does not always trigger the warning, keep the message at debug level.
         debug!("At most {required_counters_per_cpu} counters will be collected per CPU, while {counter_limit} PMU registers are currently available. Multiplexing is likely required, in which case the accuracy of the PMU metrics is reduced and more CPU resources are consumed during collection.");
     }
 }
-
-/// Used to check for MSR events, whose counter creation has to contain include_hv(),
-/// since it does not support any exclusion bits.
-#[cfg(target_os = "linux")]
-const MSR_PMU_NAME: &str = "msr";
 
 /// Custom event type used to build the counter. It essentially duplicates perf-event2's
 /// DynamicBuilder and Event::Dynamic, which, unfortunately, fails to parse a config
 /// with multiple non-contiguous bit ranges (the format used on AMD). The implementations
 /// below fix the issue.
 #[cfg(target_os = "linux")]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct PmuConfigEvent {
     pmu_name: String,
+    pmu_device_path: PathBuf,
     pmu_type: u32,
     /// A format file could have config/config1/config2 mapping to
     /// 3 different 64-bit fields.
@@ -182,9 +176,48 @@ impl PmuConfigEvent {
 
         Ok(Self {
             pmu_name: pmu_name.to_string(),
+            pmu_device_path,
             pmu_type,
             config,
         })
+    }
+
+    /// Attempt to read and parse the CPUs of the event's PMU device. Try "cpus" first
+    /// and fall back to "cpumask". Return the intersection between the configured CPUs
+    /// of the PMU device and the list of requested CPUs. Upon any failures, the original
+    /// list of requested CPUs is returned.
+    fn get_pmu_device_cpu_ids(&self, requested_cpu_ids: &[usize]) -> Vec<usize> {
+        let raw_device_cpus = match fs::read_to_string(self.pmu_device_path.join("cpus")) {
+            Ok(raw_device_cpus) => raw_device_cpus,
+            Err(cpus_e) => match fs::read_to_string(self.pmu_device_path.join("cpumask")) {
+                Ok(raw_device_cpus) => raw_device_cpus,
+                Err(cpumask_e) => {
+                    debug!(
+                        "Failed to read CPU configs for PMU {}: {cpus_e}\n{cpumask_e}",
+                        self.pmu_name
+                    );
+                    return requested_cpu_ids.to_vec();
+                }
+            },
+        };
+
+        match parse_cpu_list(&raw_device_cpus) {
+            Ok(cpu_list) => {
+                let allowed_cpu_ids: HashSet<usize> = cpu_list.into_iter().collect();
+                requested_cpu_ids
+                    .iter()
+                    .filter(|&cpu_id| allowed_cpu_ids.contains(cpu_id))
+                    .copied()
+                    .collect()
+            }
+            Err(e) => {
+                debug!(
+                    "Failed to parse the CPU configs for PMU {}: {e}",
+                    self.pmu_name
+                );
+                requested_cpu_ids.to_vec()
+            }
+        }
     }
 }
 
@@ -269,6 +302,10 @@ impl PmuConfig {
         raise_fd_limit(num_required_fds as u64)?;
 
         let mut metric_counter_groups = Vec::new();
+        // Cache events parsed from event strings.
+        let mut parsed_events: HashMap<String, PmuConfigEvent> = HashMap::new();
+        // Cache the list of CPUs that events of a PMU device can be created on.
+        let mut per_pmu_device_cpu_ids: HashMap<String, Vec<usize>> = HashMap::new();
 
         // For each defined metric on each collected CPU, create a group that contains all the PMU event counters
         // used by the metric.
@@ -277,23 +314,52 @@ impl PmuConfig {
             // expression in the exactly same order for evaluation. Therefore, the order needs to
             // be maintained between collection and report generation.
             let event_names = metric_expression.var_names();
-            let mut event_strings: Vec<&str> = Vec::new();
+
+            let mut events: Vec<PmuConfigEvent> = Vec::new();
+            // Count the number of times that a CPU supports an event, used to
+            // get the intersection of CPUs that support all events in metric.
+            let mut cpu_id_counts: HashMap<usize, usize> = HashMap::new();
             for event_name in event_names {
-                match self.events.get(event_name) {
-                    Some(event_string) => event_strings.push(event_string),
-                    None => {
+                if !parsed_events.contains_key(event_name) {
+                    let Some(event_string) = self.events.get(event_name) else {
                         error!(
                             "Skipping metric {metric_name} due to unrecognized event name {event_name}"
                         );
                         continue 'outer;
+                    };
+                    let event = match PmuConfigEvent::from_event_string(event_string) {
+                        Ok(event) => event,
+                        Err(e) => {
+                            error!("Skipping metric {metric_name} due to failure to create config event {event_string}: {e:?}");
+                            continue 'outer;
+                        }
+                    };
+                    if !per_pmu_device_cpu_ids.contains_key(&event.pmu_name) {
+                        per_pmu_device_cpu_ids.insert(
+                            event.pmu_name.clone(),
+                            event.get_pmu_device_cpu_ids(cpu_ids),
+                        );
                     }
-                };
+                    parsed_events.insert(event_name.clone(), event);
+                }
+                let parsed_event = parsed_events.get(event_name).unwrap();
+                let cur_event_cpu_ids = per_pmu_device_cpu_ids.get(&parsed_event.pmu_name).unwrap();
+                cur_event_cpu_ids
+                    .iter()
+                    .for_each(|cpu_id| *cpu_id_counts.entry(*cpu_id).or_insert(0) += 1);
+                events.push(parsed_event.clone());
             }
 
-            for &cpu_id in cpu_ids {
+            // CPUs that support all events are retained to create the metric counter group.
+            let cur_metric_cpu_ids = cpu_id_counts
+                .into_iter()
+                .filter(|(_, count)| *count == event_names.len())
+                .map(|(cpu_id, _)| cpu_id);
+
+            for cpu_id in cur_metric_cpu_ids {
                 let pmu_metric_counter_group = match Self::create_counter_group(
                     &metric_name,
-                    &event_strings,
+                    events.clone(),
                     cpu_id,
                 ) {
                     Ok(pmu_metric_counter_group) => pmu_metric_counter_group,
@@ -327,7 +393,7 @@ impl PmuConfig {
                 warn_multiplexing(num_counters_per_cpu, pmu_counter_limit);
             }
             Err(e) => {
-                warn!("Failed to probe PMU counter limit: {:?}", e);
+                debug!("Failed to probe PMU counter limit: {:?}", e);
             }
         };
 
@@ -341,19 +407,27 @@ impl PmuConfig {
         raise_fd_limit(num_required_fds as u64)?;
 
         let mut event_counters = Vec::new();
+        // Cache the list of CPUs that events of a PMU device can be created on.
+        let mut per_pmu_device_cpu_ids: HashMap<String, Vec<usize>> = HashMap::new();
 
         'outer: for (event_name, event_string) in &self.events {
-            for &cpu_id in cpu_ids {
-                let event = match PmuConfigEvent::from_event_string(event_string) {
-                    Ok(event) => event,
-                    Err(e) => {
-                        warn!("Failed to create config event {event_string}: {e:?}");
-                        continue 'outer;
-                    }
-                };
+            let event = match PmuConfigEvent::from_event_string(event_string) {
+                Ok(event) => event,
+                Err(e) => {
+                    warn!("Failed to create config event {event_string}: {e:?}");
+                    continue;
+                }
+            };
+            if !per_pmu_device_cpu_ids.contains_key(&event.pmu_name) {
+                per_pmu_device_cpu_ids.insert(
+                    event.pmu_name.clone(),
+                    event.get_pmu_device_cpu_ids(cpu_ids),
+                );
+            }
+            let cur_event_cpu_ids = per_pmu_device_cpu_ids.get(&event.pmu_name).unwrap();
 
-                let is_msr_pmu = event.pmu_name == MSR_PMU_NAME;
-                let mut builder = perf_event::Builder::new(event);
+            for &cpu_id in cur_event_cpu_ids {
+                let mut builder = perf_event::Builder::new(event.clone());
                 builder
                     .read_format(
                         perf_event::ReadFormat::TOTAL_TIME_ENABLED
@@ -361,10 +435,8 @@ impl PmuConfig {
                     )
                     .one_cpu(cpu_id)
                     .any_pid()
-                    .include_kernel();
-                if is_msr_pmu {
-                    builder.include_hv();
-                }
+                    .include_kernel()
+                    .include_hv();
 
                 let counter = match builder.build() {
                     Ok(counter) => counter,
@@ -403,7 +475,7 @@ impl PmuConfig {
             ),
         };
 
-        let probe_event = if cpu_info.is_arm() {
+        let probe_event_string = if cpu_info.is_arm() {
             "armv8_pmuv3_0/event=0x3/"
         } else if cpu_info.is_intel() {
             "cpu/event=0x51,umask=0x1/"
@@ -415,6 +487,7 @@ impl PmuConfig {
                 cpu_info
             );
         };
+        let probe_event = PmuConfigEvent::from_event_string(probe_event_string)?;
 
         let (mut high, mut low) = (
             Self::PMU_COUNTER_LIMIT_UPPER_BOUND,
@@ -423,10 +496,11 @@ impl PmuConfig {
         while low < high {
             let mid = (low + high + 1) / 2;
 
-            let event_strings: Vec<&str> = iter::repeat_n(probe_event, mid).collect();
-
-            let mut probe_group =
-                Self::create_counter_group("pmu_counter_limit_probe", &event_strings, cpu_id)?;
+            let mut probe_group = Self::create_counter_group(
+                "pmu_counter_limit_probe",
+                iter::repeat_n(probe_event.clone(), mid).collect(),
+                cpu_id,
+            )?;
 
             probe_group.enable()?;
             thread::sleep(Duration::from_millis(10));
@@ -464,7 +538,7 @@ impl PmuConfig {
     #[cfg(target_os = "linux")]
     fn create_counter_group(
         metric_name: &str,
-        event_strings: &Vec<&str>,
+        events: Vec<PmuConfigEvent>,
         cpu_id: usize,
     ) -> std::io::Result<PmuMetricCounterGroup> {
         let mut group = perf_event::Builder::new(perf_event::events::Software::DUMMY)
@@ -479,24 +553,13 @@ impl PmuConfig {
             .build_group()?;
         let mut counters = Vec::new();
 
-        for event_string in event_strings {
-            let event = match PmuConfigEvent::from_event_string(event_string) {
-                Ok(event) => event,
-                Err(e) => {
-                    // An invalid event string should be handled the same as failed group creation.
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        format!("Failed to create config event {event_string}: {e:?}"),
-                    ));
-                }
-            };
-
-            let is_msr_pmu = event.pmu_name == MSR_PMU_NAME;
+        for event in events {
             let mut builder = perf_event::Builder::new(event);
-            builder.one_cpu(cpu_id).any_pid().include_kernel();
-            if is_msr_pmu {
-                builder.include_hv();
-            }
+            builder
+                .one_cpu(cpu_id)
+                .any_pid()
+                .include_kernel()
+                .include_hv();
 
             let counter = builder.build_with_group(&mut group)?;
 
@@ -1499,6 +1562,48 @@ mod tests {
             dir.path().to_path_buf(),
         )
         .is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_get_pmu_device_cpu_ids() {
+        let dir = make_pmu("test_pmu", 4, &[("event", "config:0-7\n")]);
+        let pmu_dir = dir.path().join("test_pmu");
+        let event = PmuConfigEvent::from_event_string_at_base_path(
+            "test_pmu/event=0x1/",
+            dir.path().to_path_buf(),
+        )
+        .unwrap();
+        let requested_cpu_ids = [0, 1, 2, 3, 4, 5, 6, 7];
+
+        // Without cpus or cpumask, all requested CPUs are kept.
+        assert_eq!(
+            event.get_pmu_device_cpu_ids(&requested_cpu_ids),
+            requested_cpu_ids
+        );
+
+        // cpumask (e.g. the designated CPU of an uncore PMU) is used when cpus is absent.
+        std::fs::write(pmu_dir.join("cpumask"), "0\n").unwrap();
+        assert_eq!(event.get_pmu_device_cpu_ids(&requested_cpu_ids), vec![0]);
+
+        // cpus (e.g. a hybrid core PMU) takes precedence over cpumask, and only the
+        // requested CPUs within it are kept.
+        std::fs::write(pmu_dir.join("cpus"), "2-3,6,8-15\n").unwrap();
+        assert_eq!(
+            event.get_pmu_device_cpu_ids(&requested_cpu_ids),
+            vec![2, 3, 6]
+        );
+
+        // An empty CPU list leaves no CPU to create the event on.
+        std::fs::write(pmu_dir.join("cpus"), "\n").unwrap();
+        assert!(event.get_pmu_device_cpu_ids(&requested_cpu_ids).is_empty());
+
+        // An unparsable CPU list falls back to all requested CPUs.
+        std::fs::write(pmu_dir.join("cpus"), "not-a-cpu-list\n").unwrap();
+        assert_eq!(
+            event.get_pmu_device_cpu_ids(&requested_cpu_ids),
+            requested_cpu_ids
+        );
     }
 
     #[cfg(target_os = "linux")]
