@@ -544,6 +544,65 @@ fn test_process_interrupts_glued_name_and_first_value() {
     }
 }
 
+/// Several IRQs can share one description, e.g. an "AMD-Vi" interrupt per IOMMU. Their counts
+/// must be summed into one series per CPU, instead of each one after the first being rejected
+/// as a duplicate data point at the same time.
+#[test]
+fn test_process_interrupts_duplicate_descriptions_summed() {
+    use aperf::data::common::data_formats::AperfData;
+
+    let header = "           CPU0       CPU1";
+    let base_time = Utc::now();
+    // (IRQ 29 counts, IRQ 30 counts, IRQ 31 counts) per sample, for CPU0 and CPU1
+    let samples: [[(u64, u64); 3]; 3] = [
+        [(1, 0), (0, 1), (0, 0)],
+        [(3, 0), (0, 4), (1, 0)],
+        [(6, 2), (0, 8), (1, 1)],
+    ];
+    let raw_data: Vec<Data> = samples
+        .iter()
+        .enumerate()
+        .map(|(sample_idx, irqs)| {
+            let mut data = format!("{header}\n");
+            for (irq, (cpu0, cpu1)) in (29..).zip(irqs) {
+                data.push_str(&format!(
+                    "  {irq}: {cpu0:>10} {cpu1:>10}  IOMMU-MSI    0-edge      AMD-Vi\n"
+                ));
+            }
+            Data::InterruptDataRaw(InterruptDataRaw {
+                time: TimeEnum::DateTime(base_time + Duration::seconds(sample_idx as i64)),
+                data,
+            })
+        })
+        .collect();
+
+    let result = InterruptData::new()
+        .process_raw_data(&ReportParams::new(), raw_data)
+        .unwrap();
+
+    let AperfData::TimeSeries(time_series_data) = result else {
+        panic!("Expected TimeSeries data");
+    };
+    let metric_name = "(IOMMU-MSI 0-edge AMD-Vi)";
+    assert_eq!(time_series_data.sorted_metric_names, vec![metric_name]);
+
+    // Summed counts: CPU0 is 1, 4, 7 and CPU1 is 1, 4, 11, so the per-second rates are the
+    // deltas of those sums, with no sample dropped.
+    let metric = &time_series_data.metrics[metric_name];
+    let expected_series_values = vec![
+        ("CPU0", vec![0.0, 3.0, 3.0]),
+        ("CPU1", vec![0.0, 3.0, 7.0]),
+        ("average", vec![0.0, 3.0, 5.0]),
+    ];
+    assert_eq!(metric.series.len(), expected_series_values.len());
+    for (series, (expected_name, expected_values)) in
+        metric.series.iter().zip(expected_series_values.iter())
+    {
+        assert_eq!(&series.series_name, expected_name);
+        assert_eq!(&series.values, expected_values, "series {expected_name}");
+    }
+}
+
 #[test]
 fn test_decreasing_counter() {
     use aperf::data::common::data_formats::AperfData;
