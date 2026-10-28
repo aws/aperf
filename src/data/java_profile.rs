@@ -24,7 +24,7 @@ use {
     serde_json::Value,
     std::fs::File,
     std::io::Write,
-    std::path::PathBuf,
+    std::path::{Path, PathBuf},
     std::process::{Child, Stdio},
     std::str::FromStr,
     std::sync::Mutex,
@@ -35,6 +35,17 @@ const PROFILE_METRICS: &[&str] = &["cpu", "alloc", "wall"];
 #[cfg(target_os = "linux")]
 lazy_static! {
     pub static ref ASPROF_CHILDREN: Mutex<Vec<Child>> = Mutex::new(Vec::new());
+}
+
+/// Rename the file, or copy and delete it when the rename fails (e.g. the tmp dir and the run
+/// data dir are on different file systems).
+#[cfg(target_os = "linux")]
+fn move_file(from: &Path, to: &Path) -> std::io::Result<()> {
+    if fs::rename(from, to).is_ok() {
+        return Ok(());
+    }
+    fs::copy(from, to)?;
+    fs::remove_file(from)
 }
 
 fn java_profiler_data_filename(pid: &str) -> String {
@@ -285,11 +296,6 @@ impl CollectData for JavaProfileRaw {
                 .join(format!("{}-java-profile-{}.jfr", init_params.run_name, key));
 
             if fs::exists(&jfr_path).expect("Can't check existence of jfr file") {
-                let jfr_dest = init_params
-                    .run_data_dir
-                    .join(format!("java-profile-{}.jfr", key));
-                fs::copy(&jfr_path, jfr_dest).ok();
-
                 // Extract metadata JSON string from JFR
                 let metadata_events = [
                     "jdk.ActiveRecording",
@@ -329,75 +335,44 @@ impl CollectData for JavaProfileRaw {
                     }
                 };
 
-                // TODO: Guard the new profile processing logic by the save_profile_events flag,
-                //       so that the new flow is only executed in tests. Remove the guardrail
-                //       after the feature is ready to launch.
-                if init_params.save_profile_events {
-                    let events_path = init_params
-                        .run_data_dir
-                        .join(format!("parsed_jfr_events_{key}.out"));
-                    // Generate Profiler from JFR
-                    match jfr::build_java_profiler_data(&jfr_path, Some(events_path.as_path())) {
-                        Ok(mut profiler) => {
-                            profiler.metadata = jfr::parse_jfr_metadata(&metadata_json);
-                            if let Ok(json) = serde_json::to_string(&profiler) {
-                                fs::write(
-                                    init_params
-                                        .run_data_dir
-                                        .join(java_profiler_data_filename(key)),
-                                    json,
-                                )
-                                .ok();
-                            }
-                        }
-                        Err(e) => {
-                            error!("Failed to build Profiler Data for {}: {}", key, e);
+                let events_pathbuf = init_params
+                    .run_data_dir
+                    .join(format!("parsed_jfr_events_{key}.out"));
+                let events_path = if init_params.save_profile_events {
+                    Some(events_pathbuf.as_path())
+                } else {
+                    None
+                };
+
+                // Generate Profiler from JFR
+                match jfr::build_java_profiler_data(&jfr_path, events_path) {
+                    Ok(mut profiler) => {
+                        profiler.metadata = jfr::parse_jfr_metadata(&metadata_json);
+                        if let Ok(json) = serde_json::to_string(&profiler) {
+                            fs::write(
+                                init_params
+                                    .run_data_dir
+                                    .join(java_profiler_data_filename(key)),
+                                json,
+                            )
+                            .ok();
                         }
                     }
-                    continue;
+                    Err(e) => {
+                        error!("Failed to build Profiler Data for {}: {}", key, e);
+                    }
                 }
 
-                // Generate heatmaps for each profiling type
-                for metric in PROFILE_METRICS {
-                    let html_path = init_params
-                        .run_data_dir
-                        .join(format!("java-profile-{}-{}.html", key, metric));
-
-                    match run_command_and_wait(
-                        "jfrconv",
-                        [
-                            &format!("--{metric}"),
-                            "-o",
-                            "heatmap",
-                            "--dot",
-                            &jfr_path.to_string_lossy(),
-                            html_path.to_str().unwrap(),
-                        ],
-                        "jfrconv",
-                        None,
-                    ) {
-                        Err(e) => {
-                            error!(
-                                "'jfrconv' command failed for {} with metric {}: {}",
-                                key, metric, e
-                            );
-                        }
-                        Ok(output) => {
-                            if !output.status.success() {
-                                error!(
-                                    "'jfrconv' failed for {} with metric {}: {}",
-                                    key,
-                                    metric,
-                                    String::from_utf8_lossy(&output.stderr)
-                                );
-                            } else {
-                                debug!(
-                                    "Successfully converted JFR to {} heatmap for {}",
-                                    metric, key
-                                );
-                            }
-                        }
-                    }
+                let jfr_dest = init_params
+                    .run_data_dir
+                    .join(format!("java-profile-{}.jfr", key));
+                if let Err(e) = move_file(&jfr_path, &jfr_dest) {
+                    error!(
+                        "Failed to move {} to {}: {}",
+                        jfr_path.display(),
+                        jfr_dest.display(),
+                        e
+                    );
                 }
             }
         }

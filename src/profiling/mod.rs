@@ -10,6 +10,9 @@ pub mod symbols;
 
 pub const BUCKET_WIDTH_MS: u64 = 20;
 
+/// How far past its start time a profile can extend, to avoid unbounded memory allocations.
+const MAX_PROFILE_DURATION_MS: u64 = 24 * 60 * 60 * 1000;
+
 use crate::data::common::data_formats::Profiler;
 use anyhow::Result;
 use regex::Regex;
@@ -332,7 +335,11 @@ impl Profile {
         let thread_state_id = thread_state.id();
         // Align blocks by width
         let start_block_ms = start_time_ms - (start_time_ms % (bucket_width_ms as i64));
-        let offset_ms = (sample_time_ms - start_block_ms).max(0) as u64;
+        let offset_ms = sample_time_ms.saturating_sub(start_block_ms).max(0) as u64;
+        // This usually means the timestamps are off, so drop it to avoid unbounded memory alloc.
+        if offset_ms > MAX_PROFILE_DURATION_MS {
+            return;
+        }
         let block_idx = (offset_ms / bucket_width_ms) as usize;
 
         while self.blocks.len() <= block_idx {
@@ -585,5 +592,41 @@ impl ThreadState {
 
     pub fn id(self) -> u8 {
         self as u8
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn samples_too_far_past_the_start_are_dropped() {
+        let frames = ["main", "work"].map(String::from);
+        let start_time_ms = 1_790_000_000_000;
+        let mut profile = Profile::new();
+        let mut insert = |sample_time_ms: i64, start_time_ms: i64| {
+            profile.insert_stack(
+                sample_time_ms,
+                start_time_ms,
+                BUCKET_WIDTH_MS,
+                ThreadState::None,
+                &frames,
+                1,
+            )
+        };
+
+        insert(start_time_ms + 1_000, start_time_ms);
+        insert(
+            start_time_ms + MAX_PROFILE_DURATION_MS as i64 + 1,
+            start_time_ms,
+        );
+        // A wrong start time of 0 puts an epoch timestamp decades past the start.
+        insert(start_time_ms, 0);
+        insert(i64::MAX, i64::MIN);
+
+        assert_eq!(profile.blocks.len(), 1_000 / BUCKET_WIDTH_MS as usize + 1);
+        let leaf = profile.context_tree.last().unwrap();
+        assert_eq!(profile.frame_map.name(leaf.frame_id), "work");
+        assert_eq!(leaf.sample_stats[&ThreadState::None.id()].self_samples, 1);
     }
 }

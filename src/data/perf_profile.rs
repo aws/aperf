@@ -15,15 +15,11 @@ use {
     crate::data::CollectData,
     crate::data_collection::InitParams,
     crate::profiling::perf::parser::build_perf_profiler_data,
+    crate::run_command,
     crate::PDError,
-    crate::{run_command, run_command_and_wait},
     chrono::Utc,
-    inferno::collapse::{perf::Folder, Collapse},
-    inferno::flamegraph::{self, Direction, Options},
     log::{debug, error, warn},
     nix::{sys::signal, unistd, unistd::Pid},
-    std::fs::File,
-    std::io::Write,
     std::process::Stdio,
     std::str::FromStr,
     std::{process::Child, sync::Mutex},
@@ -63,6 +59,10 @@ fn raw_perf_profile_path(run_data_dir: &PathBuf, profile_type: &str) -> PathBuf 
 
 fn raw_perf_on_cpu_profile_path(run_data_dir: &PathBuf) -> PathBuf {
     raw_perf_profile_path(run_data_dir, "cpu")
+}
+
+fn perf_profiler_event_output_path(run_data_dir: &PathBuf) -> PathBuf {
+    run_data_dir.join("parsed_perf_data.out")
 }
 
 fn perf_profiler_data_path(run_data_dir: &PathBuf) -> PathBuf {
@@ -182,97 +182,35 @@ impl CollectData for PerfProfileRaw {
             Ok(_) => debug!("'perf record' executed successfully."),
         }
 
-        // TODO: Guard the new profile processing logic by the save_profile_events flag,
-        //       so that the new flow is only executed in tests. Remove the guardrail
-        //       after the feature is ready to launch.
-        if init_params.save_profile_events {
-            let event_out_path_buf = init_params.run_data_dir.join("parsed_perf_data.out");
+        let event_output_path_buf = perf_profiler_event_output_path(&init_params.run_data_dir);
+        let event_output_path = if init_params.save_profile_events {
+            Some(event_output_path_buf.as_path())
+        } else {
+            None
+        };
 
-            // Parse raw Perf profile and build ProfilingData
-            let perf_profiler_data = build_perf_profiler_data(
-                "cpu",
-                &raw_perf_on_cpu_profile_path(&init_params.run_data_dir),
-                *PROFILE_START_TIME_MS.lock().unwrap(),
-                Some(event_out_path_buf.as_path()),
-            );
-            if let Ok(json) = serde_json::to_string(&perf_profiler_data) {
-                fs::write(perf_profiler_data_path(&init_params.run_data_dir), json)?;
-            }
+        let raw_perf_data_path = raw_perf_on_cpu_profile_path(&init_params.run_data_dir);
 
-            return Ok(());
-        }
-
-        debug!("Running Perf inject...");
-        let perf_jit_loc = init_params.run_data_dir.join("perf.data.jit");
-        let out_jit = run_command_and_wait(
-            "perf",
-            [
-                "inject",
-                "-j",
-                "-i",
-                &raw_perf_on_cpu_profile_path(&init_params.run_data_dir).to_string_lossy(),
-                "-o",
-                perf_jit_loc.to_str().unwrap(),
-            ],
-            "perf-inject",
-            None,
+        // Parse raw Perf profile and build ProfilingData
+        let perf_profiler_data = build_perf_profiler_data(
+            "cpu",
+            &raw_perf_data_path,
+            *PROFILE_START_TIME_MS.lock().unwrap(),
+            event_output_path,
         );
 
-        let fg_out = File::create(init_params.run_data_dir.join("flamegraph.svg"))?;
-        let reverse_fg_out = File::create(init_params.run_data_dir.join("reverse-flamegraph.svg"))?;
-
-        match out_jit {
-            Err(e) => {
-                let out = format!("Perf inject failed due to: {e}");
-                error!("{}", out);
-                write_msg_to_svg(fg_out, out)?;
-            }
-            Ok(_) => {
-                debug!("Creating flamegraph...");
-                let script_loc = init_params.run_data_dir.join("script.out");
-                let out = run_command_and_wait(
-                    "perf",
-                    ["script", "-f", "-i", perf_jit_loc.to_str().unwrap()],
-                    "perf-script",
-                    Some(&script_loc),
+        if let Ok(json) = serde_json::to_string(&perf_profiler_data) {
+            fs::write(perf_profiler_data_path(&init_params.run_data_dir), json)?;
+        }
+        // The raw Perf profile could be huge and it becomes useless once it
+        // leaves the system, so remove it from the run data, unless the profile
+        // events are saved, which are checked against it.
+        if !init_params.save_profile_events {
+            if let Err(e) = fs::remove_file(&raw_perf_data_path) {
+                error!(
+                    "Failed to remove raw Perf profile at {}: {e}",
+                    raw_perf_data_path.display()
                 );
-                match out {
-                    Err(e) => {
-                        let out = format!("Perf script failed due to: {}", e);
-                        error!("{}", out);
-                        write_msg_to_svg(fg_out, out)?;
-                    }
-                    Ok(_) => {
-                        let collapse_loc = init_params.run_data_dir.join("collapse.out");
-                        Folder::default().collapse_file(
-                            Some(script_loc.clone()),
-                            File::create(&collapse_loc)?,
-                        )?;
-
-                        // Generate icicle graph as default
-                        let mut reverse_options = Options::default();
-                        reverse_options.direction = Direction::Inverted;
-                        reverse_options.reverse_stack_order = false;
-                        flamegraph::from_files(
-                            &mut reverse_options,
-                            &[collapse_loc.to_path_buf()],
-                            fg_out,
-                        )?;
-
-                        // Generate reverse icicle graph
-                        reverse_options.reverse_stack_order = true;
-                        flamegraph::from_files(
-                            &mut reverse_options,
-                            &[collapse_loc.to_path_buf()],
-                            reverse_fg_out,
-                        )?;
-
-                        // Clean up intermediate files after creating flamegraphs and saving
-                        for file in [&script_loc, &perf_jit_loc, &collapse_loc] {
-                            fs::remove_file(file).ok();
-                        }
-                    }
-                }
             }
         }
 
@@ -282,16 +220,6 @@ impl CollectData for PerfProfileRaw {
     fn is_perf_profile() -> bool {
         true
     }
-}
-
-#[cfg(target_os = "linux")]
-fn write_msg_to_svg(mut file: File, msg: String) -> Result<()> {
-    write!(
-        file,
-        "<svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" width=\"100%\" height=\"100%\"><text x=\"0%\" y=\"1%\">{}</text></svg>",
-        msg
-    )?;
-    Ok(())
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

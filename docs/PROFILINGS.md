@@ -56,7 +56,7 @@ perf record -a -q -g -k 1 -F <perf_frequency> -e cpu-clock:pppH -o <data_file_pa
 
 #### Behavior
 
-APerf spawns a `perf record` process at the start of the recording period that runs for the collection duration. After the recording completes, the flamegraphs are generated from the `perf record` output by running `perf inject` to add the compiled code symbols and converting to SVG.
+APerf spawns a `perf record` process at the start of the recording period that runs for the collection duration. After the recording completes, APerf parses the collected samples, perform symbolications, and processes them into the format to be rendered as heatmap and flamegraphs in the report.
 
 ## Async-profiler
 
@@ -135,7 +135,7 @@ asprof -d <collection_time - elapsed_time> -o jfr -e cpu --alloc 2m --wall 100ms
 
 #### Behavior
 
-When run with arg `jps` or no args, `--profile-java` will check for new JVMs using `jps` at the beginning of record and at every sampling interval. APerf will launch an asprof process with the options specified above on any new JVMs detected. Otherwise, if a specific PID or JVM name is passed, then APerf will only attempt to launch asprof at the beginning of the record. After the record, APerf uses the `jfrconv` command to generate cpu, alloc, and wall profiling heatmaps for each JVM profiled.
+When run with arg `jps` or no args, `--profile-java` will check for new JVMs using `jps` at the beginning of record and at every sampling interval. APerf will launch an asprof process with the options specified above on any new JVMs detected. Otherwise, if a specific PID or JVM name is passed, then APerf will only attempt to launch asprof at the beginning of the record. After the record, APerf parses the cpu, alloc, and wall profiling samples from the JFR file of each JVM profiled. The samples are then processed into the format that will be rendered as heatmap and flamegraph in the report.
 
 For more detailed Java performance debugging, you can analyze the the generated JFR file further with [JDK Mission Control](https://www.oracle.com/java/technologies/jdk-mission-control.html).
 
