@@ -8,6 +8,10 @@ use std::{
     path::PathBuf,
 };
 
+// TODO: Support jitdump files (jit-<pid>.dump), the only source of JIT symbols for LLVM-based
+//       JITs such as PostgreSQL's (jit_profiling_support) and Julia's. Their code loads are
+//       timestamped and must be applied in sample order, since runtimes reuse the addresses of
+//       discarded code. Names from the JVM's perf-jvmti agent also need Perf's Java demangling.
 /// Store all JIT symbols created by application runtimes to resolve an address.
 ///
 /// Note that jitdump is not currently processed, since it requires nontrivial logics and

@@ -3492,11 +3492,6 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
         description: "The total time in us for APerf to collect the processes data during one interval.",
         desired: "lower",
       },
-      flamegraphs: {
-        readableName: "Flamegraphs collection time",
-        description: "The total time in us for APerf to collect the kernel profiling flamegraphs during one interval.",
-        desired: "lower",
-      },
       perf_profile: {
         readableName: "Top functions collection time",
         description:

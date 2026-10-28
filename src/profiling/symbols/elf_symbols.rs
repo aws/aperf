@@ -189,7 +189,9 @@ impl ElfSymbols {
         fp: Option<u64>,
         sp: Option<u64>,
     ) -> Option<u64> {
-        if self.cfi_rule_table.is_empty() {
+        // Only Skip ELF files that could not be loaded. A loaded ELF file without CFI, such as
+        // vDSO, should still take the register-based fallback below, as Perf does.
+        if self.load_segments.is_empty() {
             return None;
         }
         // Follows Perf's implementation in unwind-libdw.c, where if the ELF file is
