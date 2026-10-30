@@ -2,7 +2,7 @@ import React from "react";
 import { useReportState } from "../../ReportStateProvider";
 import { ZoomLevel } from "./utils";
 import { heatmapColor, getThemeColors } from "./colors";
-import { FlamegraphNode } from "./utils";
+import { FlamegraphNode, strippedFrameName } from "./utils";
 
 /**
  * HeatmapCanvas: renders the time-series heatmap as a canvas element.
@@ -229,6 +229,7 @@ export function HeatmapCanvas({
       numBlocks,
       groupSize,
       heatmapGridHeight,
+      axisHeight,
       bufferCellsBefore,
       numDataCells,
     ],
@@ -436,7 +437,7 @@ export function HeatmapInfoBar({
         )}
         {zoomedNode && (
           <span style={{ marginLeft: 12, color: theme.accent }}>
-            Zoomed: {zoomedNode.name}{" "}
+            Zoomed: {strippedFrameName(zoomedNode.name)}{" "}
             <span style={{ cursor: "pointer", textDecoration: "underline" }} onClick={() => setZoomedNode(null)}>
               (reset zoom)
             </span>
@@ -460,8 +461,8 @@ export function HeatmapInfoBar({
             }}
           >
             {zoomLevels.map((z) => (
-              <option key={z.id} value={z.id}>
-                {z.label}
+              <option key={z.id} value={z.id} disabled={z.disabled}>
+                {z.disabled ? `${z.label} (too long)` : z.label}
               </option>
             ))}
           </select>

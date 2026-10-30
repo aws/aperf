@@ -15,27 +15,19 @@ import {
 } from "@cloudscape-design/components";
 import { RunHeader } from "../RunSystemInfo";
 import { ProfilePanelStateProvider } from "./ProfilePanelStateProvider";
-import { useRegex, useContainerWidth, useHeatmapLayout, useHeatmapSelection } from "./utils";
+import { useContainerWidth, useHeatmapLayout, useHeatmapSelection } from "./utils";
 import { FlamegraphCanvas } from "./FlamegraphCanvas";
 import { HeatmapCanvas, HeatmapInfoBar } from "./Heatmap";
 import { TopFunctionsTable } from "./TopFunctionsTable";
 import { buildKeyValueTable } from "../KeyValueTable";
-import { FrameType, FRAME_TYPE_COLORS, FRAME_TYPE_LABELS, getFrameType, getThemeColors } from "./colors";
-import {
-  blockTotal,
-  computeNodeSelfSamples,
-  aggregateByFrame,
-  aggregateByStack,
-  FlamegraphNode,
-  buildFlamegraph,
-  flattenFlamegraph,
-  frameKey,
-  topFunctionName,
-} from "./utils";
+import { FrameType, FRAME_TYPE_COLORS, FRAME_TYPE_LABELS, getThemeColors } from "./colors";
+import { FlamegraphNode } from "./utils";
+import { createProfileViewDerivedValues } from "./profileView";
 import DataUnavailableBox from "../DataUnavailableBox";
 
 // Height in pixels reserved for the time axis label above the heatmap grid
 const AXIS_HEIGHT = 20;
+const FILTER_DEBOUNCE_MS = 1000;
 
 interface ProfilePanelProps {
   readonly dataType: DataType;
@@ -96,7 +88,7 @@ function ProfilePanelBody({ dataType, profilerName, selectedProfile }: ProfilePa
                   <RunHeader runName={runName} />
                   {profiler && profile ? (
                     <ProfilePanelView
-                      key={selectedProfile}
+                      key={`${profilerName}/${selectedProfile}`}
                       analytics={profile}
                       baseline={runIdx > 0 ? validBaseline : undefined}
                       isBaseRun={runIdx === 0}
@@ -165,11 +157,8 @@ function ProfilePanelView({ analytics, baseline, isBaseRun, startTimeMs, blockWi
   const { darkMode } = useReportState();
   const theme = getThemeColors(darkMode);
 
-  const { searchRegex, filterRegex, reverse, showDiff, viewMode, baseRunSelection, setBaseRunSelection } =
+  const { searchRe, filterRe, reverse, showDiff, viewMode, baseRunSelection, setBaseRunSelection } =
     useProfilePanelState();
-
-  const searchRe = useRegex(searchRegex);
-  const filterRe = useRegex(filterRegex);
 
   const containerRef = React.useRef<HTMLDivElement>(null);
   const containerWidth = useContainerWidth(containerRef);
@@ -181,146 +170,48 @@ function ProfilePanelView({ analytics, baseline, isBaseRun, startTimeMs, blockWi
   const sel = useHeatmapSelection(numBlocks, layout.groupSize, isBaseRun, setBaseRunSelection);
 
   const [tooltip, setTooltip] = React.useState<{ x: number; y: number; text: string } | null>(null);
+
+  const tooltipRef = React.useRef<HTMLDivElement>(null);
+  React.useLayoutEffect(() => {
+    const el = tooltipRef.current;
+    const panel = containerRef.current;
+    if (!el || !panel || !tooltip) return;
+    const below = tooltip.y - 10;
+    const fitsBelow = below + el.offsetHeight <= panel.clientHeight;
+    el.style.top = `${fitsBelow ? below : Math.max(0, tooltip.y - el.offsetHeight - 10)}px`;
+  });
   const [zoomedNode, setZoomedNode] = React.useState<FlamegraphNode | null>(null);
 
-  const blockTotals = React.useMemo(() => (analytics.blocks ?? []).map(blockTotal), [analytics.blocks]);
-
-  const cellTotals = React.useMemo(() => {
-    if (layout.groupSize === 1) return blockTotals;
-    const out = new Array<number>(layout.numDataCells).fill(0);
-    for (let i = 0; i < numBlocks; i++) {
-      out[Math.floor(i / layout.groupSize)] += blockTotals[i];
-    }
-    return out;
-  }, [blockTotals, layout.groupSize, numBlocks, layout.numDataCells]);
-
-  const maxCellTotal = React.useMemo(() => Math.max(1, ...cellTotals), [cellTotals]);
-
-  const flamegraphRoot = React.useMemo(
-    () => buildFlamegraph(analytics, sel.selection[0], sel.selection[1], filterRe, reverse),
-    [analytics, sel.selection, filterRe, reverse],
-  );
+  // Derive selections and variables per panel
+  const [deriveProfileView] = React.useState(createProfileViewDerivedValues);
+  const {
+    cellTotals,
+    maxCellTotal,
+    selSamples,
+    flamegraphRoot,
+    flatNodes,
+    baselineRoot,
+    diffing,
+    searchMatches,
+    framesList,
+    baselineByFrame,
+  } = deriveProfileView({
+    profile: analytics,
+    baseline,
+    filterRe,
+    searchRe,
+    reverse,
+    showDiff,
+    selection: sel.selection,
+    baselineSelection: sel.baselineSelection,
+    baseRunSelection,
+    groupSize: layout.groupSize,
+    numDataCells: layout.numDataCells,
+  });
 
   React.useEffect(() => {
     setZoomedNode(null);
   }, [flamegraphRoot]);
-
-  // Baseline diff: compute per-frame `totalPercent` for the baseline profile.
-  // Priority: intra-profile ctrl-drag selection > cross-profile diff (when showDiff is on).
-  // Only `totalPercent` is needed because the table's diff is a percent-vs-percent
-  // delta — comparing raw counts would be misleading when the baseline and
-  // current selections cover different durations.
-  const baselineByFrame = React.useMemo(() => {
-    let nodeSelf: Map<number, number> | null = null;
-    let target: Profile | null = null;
-    if (sel.baselineSelection) {
-      target = analytics;
-      nodeSelf = computeNodeSelfSamples(analytics, sel.baselineSelection[0], sel.baselineSelection[1]);
-    } else if (showDiff && baseline && baseline !== analytics) {
-      target = baseline;
-      const start = baseRunSelection ? baseRunSelection[0] : 0;
-      const end = baseRunSelection ? baseRunSelection[1] : baseline.blocks.length;
-      nodeSelf = computeNodeSelfSamples(baseline, start, end);
-    }
-    if (!target || !nodeSelf) return null;
-
-    let rootTotal = 0;
-    for (const v of nodeSelf.values()) rootTotal += v;
-    if (rootTotal === 0) rootTotal = 1;
-
-    const byFrame = aggregateByFrame(target, nodeSelf);
-    const result = new Map<string, number>();
-    for (const [key, stats] of byFrame) {
-      result.set(key, (stats.total / rootTotal) * 100);
-    }
-    return result;
-  }, [baseline, analytics, sel.baselineSelection, showDiff, baseRunSelection]);
-
-  // Per-stack aggregation for flamegraph diff coloring (difffolded.pl semantics)
-  const baselineByStack = React.useMemo(() => {
-    if (sel.baselineSelection) {
-      const baseSelf = computeNodeSelfSamples(analytics, sel.baselineSelection[0], sel.baselineSelection[1]);
-      return aggregateByStack(analytics, baseSelf, reverse);
-    }
-    if (!showDiff || !baseline || baseline === analytics) return null;
-    const start = baseRunSelection ? baseRunSelection[0] : 0;
-    const end = baseRunSelection ? baseRunSelection[1] : baseline.blocks.length;
-    const baseSelf = computeNodeSelfSamples(baseline, start, end);
-    return aggregateByStack(baseline, baseSelf, reverse);
-  }, [baseline, analytics, sel.baselineSelection, showDiff, baseRunSelection, reverse]);
-
-  const currentByStack = React.useMemo(() => {
-    if (!baselineByStack) return null;
-    const curSelf = computeNodeSelfSamples(analytics, sel.selection[0], sel.selection[1]);
-    return aggregateByStack(analytics, curSelf, reverse);
-  }, [analytics, sel.selection, baselineByStack, reverse]);
-
-  // Flatten the tree into a list for rendering and aggregation
-  const flatNodes = React.useMemo(() => (flamegraphRoot ? flattenFlamegraph(flamegraphRoot) : []), [flamegraphRoot]);
-
-  // Total samples in the current selection (shown in the info bar)
-  const selSamples = React.useMemo(() => {
-    let sum = 0;
-    for (let i = sel.selection[0]; i < sel.selection[1]; i++) sum += blockTotals[i] || 0;
-    return sum;
-  }, [sel.selection, blockTotals]);
-
-  // Count of frames matching the search regex and their total sample weight
-  const searchMatches = React.useMemo(() => {
-    if (!searchRe) return { count: 0, totalSamples: 0 };
-    let count = 0;
-    let totalSamples = 0;
-    for (const n of flatNodes) {
-      if (n.depth > 0 && searchRe.test(n.name)) {
-        count++;
-        totalSamples += n.totalSamples;
-      }
-    }
-    return { count, totalSamples };
-  }, [flatNodes, searchRe]);
-
-  // Per-frame summary for the Top Functions table.
-  // Each row carries the display name + type (cached once here, derived from
-  // the raw frame name in `frame_map`); `frameKey(name, type)` is the row id.
-  const framesList = React.useMemo(() => {
-    const frames = analytics.frame_map?.frame_id_to_frame;
-    if (!frames) return [];
-
-    const curSelf = computeNodeSelfSamples(analytics, sel.selection[0], sel.selection[1]);
-    const byFrame = aggregateByFrame(analytics, curSelf);
-
-    let rootTotal = 0;
-    for (const v of curSelf.values()) rootTotal += v;
-    if (rootTotal === 0) rootTotal = 1;
-
-    const rows: {
-      name: string;
-      type: FrameType;
-      self: number;
-      total: number;
-      selfPercent: number;
-      totalPercent: number;
-    }[] = [];
-    const seen = new Set<string>();
-    for (const frame of frames) {
-      const name = topFunctionName(frame.name);
-      const type = getFrameType(frame.name);
-      const key = frameKey(name, type);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const stats = byFrame.get(key);
-      if (!stats || (stats.self === 0 && stats.total === 0)) continue;
-      rows.push({
-        name,
-        type,
-        self: stats.self,
-        total: stats.total,
-        selfPercent: (stats.self / rootTotal) * 100,
-        totalPercent: (stats.total / rootTotal) * 100,
-      });
-    }
-    return rows.sort((a, b) => b.self - a.self);
-  }, [analytics, sel.selection]);
 
   if (numBlocks === 0) {
     return <EmptyProfileState message="No samples recorded for this profile." />;
@@ -389,14 +280,12 @@ function ProfilePanelView({ analytics, baseline, isBaseRun, startTimeMs, blockWi
           flatNodes={flatNodes}
           flamegraphRoot={flamegraphRoot}
           containerWidth={containerWidth}
-          baselineByStack={baselineByStack}
-          currentByStack={currentByStack}
+          baselineRoot={baselineRoot}
+          diffing={diffing}
           searchRe={searchRe}
           zoomedNode={zoomedNode}
           setZoomedNode={setZoomedNode}
           setTooltip={setTooltip}
-          heatmapGridHeight={layout.heatmapGridHeight}
-          axisHeight={AXIS_HEIGHT}
         />
       ) : (
         <TopFunctionsTable framesList={framesList} searchRe={searchRe} baselineByFrame={baselineByFrame} />
@@ -405,9 +294,10 @@ function ProfilePanelView({ analytics, baseline, isBaseRun, startTimeMs, blockWi
       {/* Floating tooltip positioned near the cursor */}
       {tooltip && (
         <div
+          ref={tooltipRef}
           style={{
             position: "absolute",
-            left: Math.min(tooltip.x + 12, containerWidth - 300),
+            ...(tooltip.x > containerWidth / 2 ? { right: containerWidth - tooltip.x + 12 } : { left: tooltip.x + 12 }),
             top: tooltip.y - 10,
             background: theme.bgSurface,
             color: theme.textPrimary,
@@ -416,7 +306,8 @@ function ProfilePanelView({ analytics, baseline, isBaseRun, startTimeMs, blockWi
             padding: "4px 8px",
             fontSize: 11,
             fontFamily: "monospace",
-            whiteSpace: "pre",
+            whiteSpace: "pre-wrap",
+            overflowWrap: "anywhere",
             pointerEvents: "none",
             zIndex: 100,
             maxWidth: 400,
@@ -442,6 +333,12 @@ function ProfilePanelToolbar() {
     setShowDiff,
     setViewMode,
   } = useProfilePanelState();
+  const [filterText, setFilterText] = React.useState(filterRegex);
+  React.useEffect(() => {
+    if (filterText === filterRegex) return;
+    const timer = setTimeout(() => setFilterRegex(filterText), FILTER_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [filterText, filterRegex, setFilterRegex]);
 
   return (
     <SpaceBetween direction="vertical" size="xs">
@@ -453,8 +350,11 @@ function ProfilePanelToolbar() {
           type="search"
         />
         <Input
-          value={filterRegex}
-          onChange={({ detail }) => setFilterRegex(detail.value)}
+          value={filterText}
+          onChange={({ detail }) => setFilterText(detail.value)}
+          onKeyDown={({ detail }) => {
+            if (detail.key === "Enter") setFilterRegex(filterText);
+          }}
           placeholder="Filter (regex)"
           type="search"
         />
@@ -482,7 +382,7 @@ function ProfilePanelToolbar() {
 function FrameTypeLegend() {
   const { darkMode } = useReportState();
   const theme = getThemeColors(darkMode);
-  const order: FrameType[] = ["interpreted", "jit", "inlined", "native", "vdso", "kernel", "c1"];
+  const order: FrameType[] = ["interpreted", "jit", "inlined", "native", "cpp", "vdso", "kernel", "c1"];
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 10, fontSize: 11, color: theme.textSubtle }}>
       {order.map((t) => (

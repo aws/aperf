@@ -64,8 +64,13 @@ impl ChunkInfo {
     }
 
     pub fn event_time_to_millis(&self, ticks: i64) -> i64 {
-        let ms_from_start = (ticks - self.start_ticks) * 1_000 / self.ticks_per_sec;
-        self.start_nanos / 1_000_000 + ms_from_start
+        let nanos_from_start = ((ticks - self.start_ticks) as i128 * 1_000_000_000)
+            / (self.ticks_per_sec.max(1) as i128);
+        ((self.start_nanos as i128 + nanos_from_start) / 1_000_000) as i64
+    }
+
+    pub fn ticks_to_nanos(&self, ticks: i64) -> i64 {
+        (ticks as i128 * 1_000_000_000 / self.ticks_per_sec.max(1) as i128) as i64
     }
 }
 
