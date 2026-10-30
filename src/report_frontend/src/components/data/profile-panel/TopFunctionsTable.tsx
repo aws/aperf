@@ -2,54 +2,41 @@ import React from "react";
 import { Box, Pagination, Table, TableProps } from "@cloudscape-design/components";
 import { useCollection } from "@cloudscape-design/collection-hooks";
 import { useReportState } from "../../ReportStateProvider";
-import { FrameType, FRAME_TYPE_COLORS, FRAME_TYPE_LABELS, diffFlamegraphColor, getThemeColors } from "./colors";
+import {
+  FRAME_TYPE_COLORS,
+  FRAME_TYPE_LABELS,
+  DIFF_EPSILON_PP,
+  diffFlamegraphColor,
+  diffTextColor,
+  getThemeColors,
+} from "./colors";
 import { frameKey } from "./utils";
-
-/**
- * One row in the Top Functions table.
- *   - `name` is the display name (frame-type suffix already stripped).
- *   - `type` is the frame type derived from the original raw name.
- *   - `(name, type)` together form the row identity — `frameKey(name, type)`
- *     is used both as `trackBy` and as the lookup key into `baselineByFrame`.
- *   - `self` / `total` are the aggregated sample counts for the current
- *     selection.
- *   - `selfPercent` / `totalPercent` are precomputed because the denominator
- *     (root-total samples) is shared across rows.
- */
-interface FrameEntry {
-  name: string;
-  type: FrameType;
-  self: number;
-  total: number;
-  selfPercent: number;
-  totalPercent: number;
-}
+import { BaselineFrameStats, FrameEntry } from "./profileView";
 
 interface Props {
   readonly framesList: FrameEntry[];
   readonly searchRe: RegExp | null;
-  // Map from `frameKey(name, type)` to the baseline's `totalPercent` for that
-  // frame. Used by the diff-tint coloring
-  readonly baselineByFrame: Map<string, number> | null;
+  // Map from `frameKey(name, type)` to the baseline's stats for that frame.
+  // Used by the diff-tint coloring and the "(baseline, compare)" counts.
+  readonly baselineByFrame: Map<string, BaselineFrameStats> | null;
 }
 
 export function TopFunctionsTable({ framesList, searchRe, baselineByFrame }: Props) {
   const { darkMode } = useReportState();
   const theme = getThemeColors(darkMode);
+  const scope = React.useId();
 
-  // Precompute normalized deltas for diff coloring. Deltas below this
-  // threshold (in percentage points) are treated as "no change". 0.01 matches
-  // the table's display precision (`toFixed(2)`).
-  const DIFF_EPSILON = 0.01;
+  // Precompute normalized deltas for diff coloring; deltas under the noise
+  // floor count as "no change".
   const frameDeltaMap = React.useMemo(() => {
     if (!baselineByFrame) return null;
     const deltas = new Map<string, number>();
     let maxAbs = 0;
     for (const f of framesList) {
       const key = frameKey(f.name, f.type);
-      const basePercent = baselineByFrame.get(key) || 0;
+      const basePercent = baselineByFrame.get(key)?.totalPercent || 0;
       const d = f.totalPercent - basePercent;
-      if (Math.abs(d) < DIFF_EPSILON) continue;
+      if (Math.abs(d) < DIFF_EPSILON_PP) continue;
       deltas.set(key, d);
       if (Math.abs(d) > maxAbs) maxAbs = Math.abs(d);
     }
@@ -59,42 +46,29 @@ export function TopFunctionsTable({ framesList, searchRe, baselineByFrame }: Pro
     return normalized;
   }, [framesList, baselineByFrame]);
 
-  // Cloudscape `Table` has no row-level style hook, so per-row search-highlight
-  // and diff-tint backgrounds are painted onto a wrapper inside each cell.
-  const cellBackground = React.useCallback(
-    (entry: FrameEntry): string => {
-      if (searchRe && searchRe.test(entry.name)) return theme.searchHighlight;
-      if (frameDeltaMap) return diffFlamegraphColor(frameDeltaMap.get(frameKey(entry.name, entry.type)) || 0);
-      return "transparent";
-    },
-    [searchRe, frameDeltaMap, theme.searchHighlight],
-  );
+  // Numeric row ids used as `data-row` hooks for the row styles below (frame
+  // names can contain any character, so they can't go into a CSS selector).
+  const rowIds = React.useMemo(() => {
+    const ids = new Map<string, number>();
+    framesList.forEach((f, i) => ids.set(frameKey(f.name, f.type), i));
+    return ids;
+  }, [framesList]);
 
   const Cell = React.useCallback(
-    (entry: FrameEntry, content: React.ReactNode, align: "left" | "right" = "left") => {
-      const background = cellBackground(entry);
-      const tinted = background !== "transparent";
-      return (
-        <div
-          style={{
-            background,
-            // The diff/search fills are always light pastel colors, so force dark
-            // text on tinted cells..
-            color: tinted ? "#111" : "inherit",
-            // Cloudscape's body cell padding is ~19px inline / ~9px block. Set margin
-            // and padding to fill a cell
-            margin: "-7px -18px",
-            padding: "7px 18px",
-            textAlign: align,
-            fontFamily: "monospace",
-            fontSize: 12,
-          }}
-        >
-          {content}
-        </div>
-      );
+    (content: React.ReactNode, align: "left" | "right" = "left") => (
+      <div style={{ textAlign: align, fontFamily: "monospace", fontSize: 12 }}>{content}</div>
+    ),
+    [],
+  );
+
+  // " (baseline, compare)" sample counts appended to Self/Total while diffing.
+  const diffCounts = React.useCallback(
+    (entry: FrameEntry, field: "self" | "total"): string => {
+      if (!baselineByFrame) return "";
+      const base = baselineByFrame.get(frameKey(entry.name, entry.type))?.[field] || 0;
+      return ` (${base.toLocaleString()}, ${entry[field].toLocaleString()})`;
     },
-    [cellBackground],
+    [baselineByFrame],
   );
 
   const columnDefinitions: TableProps.ColumnDefinition<FrameEntry>[] = React.useMemo(
@@ -104,15 +78,19 @@ export function TopFunctionsTable({ framesList, searchRe, baselineByFrame }: Pro
         header: "Frame",
         sortingField: "name",
         isRowHeader: true,
-        cell: (item) => Cell(item, <span style={{ wordBreak: "break-all" }}>{item.name}</span>),
+        cell: (item: FrameEntry) =>
+          Cell(
+            <span data-row={rowIds.get(frameKey(item.name, item.type))} style={{ wordBreak: "break-all" }}>
+              {item.name}
+            </span>,
+          ),
       },
       {
         id: "type",
         header: "Type",
         sortingField: "type",
-        cell: (item) =>
+        cell: (item: FrameEntry) =>
           Cell(
-            item,
             <span style={{ whiteSpace: "nowrap" }}>
               <span
                 style={{
@@ -134,16 +112,21 @@ export function TopFunctionsTable({ framesList, searchRe, baselineByFrame }: Pro
         id: "self",
         header: "Self",
         sortingField: "selfPercent",
-        cell: (item) => Cell(item, `${item.self.toLocaleString()} (${item.selfPercent.toFixed(2)}%)`, "right"),
+        cell: (item: FrameEntry) =>
+          Cell(`${item.self.toLocaleString()} (${item.selfPercent.toFixed(2)}%)${diffCounts(item, "self")}`, "right"),
       },
       {
         id: "total",
         header: "Total",
         sortingField: "totalPercent",
-        cell: (item) => Cell(item, `${item.total.toLocaleString()} (${item.totalPercent.toFixed(2)}%)`, "right"),
+        cell: (item: FrameEntry) =>
+          Cell(
+            `${item.total.toLocaleString()} (${item.totalPercent.toFixed(2)}%)${diffCounts(item, "total")}`,
+            "right",
+          ),
       },
     ],
-    [Cell, theme.borderSubtle],
+    [Cell, diffCounts, rowIds, theme.borderSubtle],
   );
 
   // Cloudscape Table renders every visible row synchronously without virtualization,
@@ -158,8 +141,32 @@ export function TopFunctionsTable({ framesList, searchRe, baselineByFrame }: Pro
     pagination: { pageSize: 50 },
   });
 
+  // Cloudscape `Table` has no row-level style hook, and painting a wrapper
+  // inside each cell leaves gaps at the cell padding and on wrapped rows. So
+  // emit one rule per visible row that paints the whole <tr> via `:has()`.
+  // A search match keeps its diff tint and gets an accent outline instead.
+  const rowCss = React.useMemo(() => {
+    const rules: string[] = [];
+    for (const item of items) {
+      const key = frameKey(item.name, item.type);
+      // The Frame column is the row header, so it renders as <th>.
+      const tr = `[data-scope="${scope}"] tr:has([data-row="${rowIds.get(key)}"])`;
+      const row = `${tr} > td, ${tr} > th`;
+      const delta = frameDeltaMap?.get(key) || 0;
+      const fill = frameDeltaMap ? diffFlamegraphColor(delta) : null;
+      const matched = searchRe !== null && searchRe.test(item.name);
+      const decls: string[] = [];
+      if (fill) decls.push(`background-color: ${fill} !important`, `color: ${diffTextColor(delta)} !important`);
+      else if (matched) decls.push(`background-color: ${theme.searchHighlight} !important`);
+      if (fill && matched) decls.push(`box-shadow: inset 0 2px 0 ${theme.accent}, inset 0 -2px 0 ${theme.accent}`);
+      if (decls.length > 0) rules.push(`${row} { ${decls.join("; ")}; }`);
+    }
+    return rules.join("\n");
+  }, [items, scope, rowIds, frameDeltaMap, searchRe, theme.searchHighlight, theme.accent]);
+
   return (
-    <div style={{ marginTop: 8, maxHeight: "60vh", overflowY: "auto", overflowX: "hidden" }}>
+    <div data-scope={scope} style={{ marginTop: 8, maxHeight: "60vh", overflowY: "auto", overflowX: "hidden" }}>
+      {rowCss && <style>{rowCss}</style>}
       <Table
         {...collectionProps}
         variant="embedded"

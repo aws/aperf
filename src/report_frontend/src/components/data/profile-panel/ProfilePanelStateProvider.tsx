@@ -1,10 +1,14 @@
 import React from "react";
+import { useRegex } from "./utils";
+import { clearSharedProfileResults } from "./profileView";
 
 export type ViewMode = "flamegraph" | "top_functions" | "metadata";
 
 export interface ProfilePanelState {
   searchRegex: string;
   filterRegex: string;
+  searchRe: RegExp | null;
+  filterRe: RegExp | null;
   reverse: boolean;
   showDiff: boolean;
   viewMode: ViewMode;
@@ -26,10 +30,15 @@ export function ProfilePanelStateProvider({ children }: { children: React.ReactN
   const [showDiff, setShowDiff] = React.useState(false);
   const [viewMode, setViewMode] = React.useState<ViewMode>("flamegraph");
   const [baseRunSelection, setBaseRunSelection] = React.useState<[number, number] | null>(null);
+  const searchRe = useRegex(searchRegex);
+  const filterRe = useRegex(filterRegex);
+  React.useEffect(() => clearSharedProfileResults, []);
   const value = React.useMemo(
     () => ({
       searchRegex,
       filterRegex,
+      searchRe,
+      filterRe,
       reverse,
       showDiff,
       viewMode,
@@ -41,7 +50,7 @@ export function ProfilePanelStateProvider({ children }: { children: React.ReactN
       setViewMode,
       setBaseRunSelection,
     }),
-    [searchRegex, filterRegex, reverse, showDiff, viewMode, baseRunSelection],
+    [searchRegex, filterRegex, searchRe, filterRe, reverse, showDiff, viewMode, baseRunSelection],
   );
   return <ProfilePanelContext.Provider value={value}>{children}</ProfilePanelContext.Provider>;
 }

@@ -93,10 +93,9 @@ export function heatmapColor(ratio: number): string {
 
 /**
  * Map frame name suffix to frame type color. Suffixes follow async-profiler convention:
- *   _[j] JIT, _[i] Inlined, _[k] Kernel, _[0] Interpreted, _[1] C1, _[v] vDSO,
- *   no suffix Native.
+ *   _[j] JIT, _[i] Inlined, _[k] Kernel, _[0] Interpreted, _[1] C1, no suffix Native.
  */
-export type FrameType = "jit" | "inlined" | "kernel" | "interpreted" | "c1" | "vdso" | "native";
+export type FrameType = "jit" | "inlined" | "kernel" | "interpreted" | "c1" | "vdso" | "cpp" | "native";
 
 export function getFrameType(name: string): FrameType {
   if (name.endsWith("_[j]")) return "jit";
@@ -105,6 +104,7 @@ export function getFrameType(name: string): FrameType {
   if (name.endsWith("_[0]")) return "interpreted";
   if (name.endsWith("_[1]")) return "c1";
   if (name.endsWith("_[v]")) return "vdso";
+  if (name.endsWith("_[c]")) return "cpp";
   return "native";
 }
 
@@ -113,6 +113,7 @@ export const FRAME_TYPE_COLORS: Record<FrameType, string> = {
   jit: "#50e150",
   inlined: "#50cccc",
   native: "#e15a5a",
+  cpp: "#c8c83c",
   kernel: "#e17d00",
   c1: "#cce880",
   vdso: "#918984",
@@ -123,6 +124,7 @@ export const FRAME_TYPE_LABELS: Record<FrameType, string> = {
   jit: "JIT-Compiled",
   inlined: "Inlined",
   native: "Native",
+  cpp: "C++",
   kernel: "Kernel",
   c1: "C1-Compiled",
   vdso: "vDSO",
@@ -135,20 +137,25 @@ export function defaultFlamegraphColor(name: string): string {
 /**
  * Diff color following https://github.com/brendangregg/FlameGraph/blob/41fee1f99f9276008b7cd112fca19dc3ea84ac32/difffolded.pl:
  * Takes a pre-normalized delta in [-1, 1] where the value is (samples2 - samples1) / maxAbsDelta.
- * Red = grew, Blue = shrank, saturation ∝ magnitude.
+ * Red = grew, Blue = shrank.
  */
-export function diffFlamegraphColor(delta: number): string {
-  if (Math.abs(delta) < 0.001) return `rgb(255,255,255)`;
-  const intensity = Math.min(1, Math.abs(delta));
-  if (delta > 0) {
-    const r = 200 + Math.floor(55 * intensity);
-    const g = Math.floor(180 * (1 - intensity));
-    const b = Math.floor(180 * (1 - intensity));
-    return `rgb(${r},${g},${b})`;
-  } else {
-    const r = Math.floor(180 * (1 - intensity));
-    const g = Math.floor(180 * (1 - intensity));
-    const b = 200 + Math.floor(55 * intensity);
-    return `rgb(${r},${g},${b})`;
-  }
+/**
+ * Noise floor for diffs, in percentage points of each selection's samples: smaller changes in
+ * a frame's share count as unchanged. 0.01 matches the Top Functions display precision.
+ */
+export const DIFF_EPSILON_PP = 0.01;
+
+export function diffFlamegraphColor(delta: number): string | null {
+  if (Math.abs(delta) < 0.001) return null;
+  const c = diffShade(delta);
+  return delta > 0 ? `rgb(255,${c},${c})` : `rgb(${c},${c},255)`;
+}
+
+export function diffTextColor(delta: number): string {
+  return delta < 0 && diffShade(delta) < 100 ? "#fff" : "#111";
+}
+
+/** The two non-dominant RGB channels of a diff fill: 210 for tiny deltas, 0 at |delta| = 1. */
+function diffShade(delta: number): number {
+  return Math.round(210 * (1 - Math.sqrt(Math.min(1, Math.abs(delta)))));
 }

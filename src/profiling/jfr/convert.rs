@@ -84,7 +84,7 @@ pub fn build_java_profiler_data(
                     );
                 }
 
-                let (profile_type, thread_state, samples) = match &event {
+                let (profile_type, thread_state, samples, time_span_ns) = match &event {
                     JfrEvent::ExecutionSample(e) => {
                         let ptype = match e.sample_type {
                             ExecSampleType::Execution
@@ -96,9 +96,14 @@ pub fn build_java_profiler_data(
                             .get(&e.thread_state)
                             .map(|s| s.as_str())
                             .unwrap_or("");
-                        (ptype, ThreadState::from_str(state_name), e.samples as u64)
+                        (
+                            ptype,
+                            ThreadState::from_str(state_name),
+                            e.samples.max(1) as u64,
+                            reader.chunk_info.ticks_to_nanos(e.time_span),
+                        )
                     }
-                    JfrEvent::AllocationSample(_) => ("alloc", ThreadState::None, 1u64),
+                    JfrEvent::AllocationSample(_) => ("alloc", ThreadState::None, 1u64, 0),
                     _ => continue,
                 };
 
@@ -149,13 +154,13 @@ pub fn build_java_profiler_data(
                     }
 
                     if !frames.is_empty() {
-                        profiler.insert_stack(
-                            profile_type,
+                        let splits = spread_wall_batch(
                             sample_time_ms,
-                            thread_state,
-                            &frames,
+                            time_span_ns,
                             samples,
+                            profiler.block_width_ms,
                         );
+                        profiler.insert_stack_batch(profile_type, thread_state, &frames, &splits);
                     }
                 }
             }
@@ -232,7 +237,8 @@ fn write_jfr_out_event(
                 writeln!(out_file, "  samples = {}", e.samples)?;
             }
             if e.sample_type == ExecSampleType::WallClock {
-                writeln!(out_file, "  timeSpan = {}", format_timespan(e.time_span))?;
+                let time_span_ns = reader.chunk_info.ticks_to_nanos(e.time_span);
+                writeln!(out_file, "  timeSpan = {}", format_timespan(time_span_ns))?;
             }
         }
         JfrEvent::AllocationSample(e) => {
@@ -493,7 +499,33 @@ fn format_duration_nanos(nanos: i64) -> String {
     format!("{} d {} h", hours / 24, hours % 24)
 }
 
-/// Mirrors OpenJDK's `jfr print` duration formatting (jdk.jfr.internal.util.ValueFormatter)
+/// async-profiler batches consecutive wall-clock samples of an idle thread into one
+/// `profiler.WallClockSample` with `samples` > 1, starting at the event time and covering
+/// `time_span_ns`.
+fn spread_wall_batch(
+    start_ms: i64,
+    time_span_ns: i64,
+    samples: u64,
+    block_width_ms: u64,
+) -> Vec<(i64, u64)> {
+    if samples <= 1 || time_span_ns <= 0 {
+        return vec![(start_ms, samples)];
+    }
+    let width = block_width_ms.max(1) as i64;
+    let step_ns = time_span_ns as f64 / (samples - 1) as f64;
+    let mut runs: Vec<(i64, u64)> = Vec::new();
+    for i in 0..samples {
+        let time_ms = start_ms + (i as f64 * step_ns / 1_000_000.0) as i64;
+        match runs.last_mut() {
+            Some((run_ms, count)) if run_ms.div_euclid(width) == time_ms.div_euclid(width) => {
+                *count += 1
+            }
+            _ => runs.push((time_ms, 1)),
+        }
+    }
+    runs
+}
+
 fn format_timespan(nanos: i64) -> String {
     format_duration_nanos(round_duration_nanos(nanos))
 }
@@ -646,4 +678,58 @@ pub fn parse_jfr_metadata(metadata_json: &Value) -> KeyValueData {
     }
 
     key_value_data
+}
+
+#[cfg(test)]
+mod tests {
+    use super::spread_wall_batch;
+    use crate::profiling::jfr::ChunkInfo;
+
+    #[test]
+    fn test_spread_wall_batch_single_sample() {
+        assert_eq!(spread_wall_batch(1_000, 0, 1, 20), vec![(1_000, 1)]);
+    }
+
+    #[test]
+    fn test_spread_wall_batch_without_span() {
+        // Older async-profiler versions don't record timeSpan.
+        assert_eq!(spread_wall_batch(1_000, 0, 9, 20), vec![(1_000, 9)]);
+    }
+
+    #[test]
+    fn test_spread_wall_batch_one_run_per_block() {
+        // 9 samples, 100 ms apart, over 800 ms: one per 20 ms block.
+        let runs = spread_wall_batch(1_000, 800_000_000, 9, 20);
+        assert_eq!(runs.len(), 9);
+        assert_eq!(runs[0], (1_000, 1));
+        assert_eq!(runs[8], (1_800, 1));
+        // With 1 s blocks the same batch falls into a single block.
+        assert_eq!(
+            spread_wall_batch(1_000, 800_000_000, 9, 1_000),
+            vec![(1_000, 9)]
+        );
+    }
+
+    #[test]
+    fn test_spread_wall_batch_keeps_total() {
+        // 1000 samples over 99.9 s, as async-profiler writes for a fully idle thread.
+        let runs = spread_wall_batch(1_792_636_907_510, 99_900_000_000, 1_000, 1_000);
+        assert_eq!(runs.iter().map(|(_, c)| c).sum::<u64>(), 1_000);
+        // Starting mid-block, the span touches 101 one-second blocks: 5 + 99 * 10 + 5 samples.
+        assert_eq!(runs.len(), 101);
+        assert_eq!(runs[0].1, 5);
+        assert_eq!(runs[1].1, 10);
+    }
+
+    #[test]
+    fn test_wall_span_in_tsc_ticks() {
+        let chunk = ChunkInfo {
+            ticks_per_sec: 2_900_000_000,
+            ..Default::default()
+        };
+        let span_ns = chunk.ticks_to_nanos(289_710_000_000); // 99.9 s at 2.9 GHz
+        assert_eq!(span_ns, 99_900_000_000);
+        let runs = spread_wall_batch(1_000, span_ns, 1_000, 20);
+        assert_eq!(runs.last(), Some(&(100_900, 1))); // last sample 99.9 s in, not 289.7 s
+    }
 }

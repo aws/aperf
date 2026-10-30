@@ -142,6 +142,29 @@ impl Profiler {
         );
     }
 
+    /// Insert one stack whose samples are split into `(sample_time_ms, count)` splits over
+    /// several time blocks, such as a wall-clock batch spread over its time span. See
+    /// [`Profile::insert_stack_batch`].
+    pub fn insert_stack_batch(
+        &mut self,
+        profile_type: &str,
+        thread_state: ThreadState,
+        frames: &[String],
+        splits: &[(i64, u64)],
+    ) {
+        let profile = self
+            .profiles
+            .entry(profile_type.to_string())
+            .or_insert_with(Profile::new);
+        profile.insert_stack_batch(
+            self.start_time_ms,
+            self.block_width_ms,
+            thread_state,
+            frames,
+            splits,
+        );
+    }
+
     /// Get sample count for a stack pattern in a specific profile type.
     /// Returns 0 if the profile type doesn't exist.
     pub fn get_samples(
@@ -237,7 +260,8 @@ impl Profile {
                 } else {
                     FrameType::any_regex_suffix()
                 };
-                Regex::new(&format!("^{}{}$", frame, suffix)).unwrap()
+                // Group the pattern so a top-level alternation stays anchored at both ends.
+                Regex::new(&format!("^(?:{}){}$", frame, suffix)).unwrap()
             })
             .collect();
 
@@ -331,20 +355,39 @@ impl Profile {
         frames: &[String],
         count: u64,
     ) {
-        // Calculate block index and extend blocks vec if necessary
-        let thread_state_id = thread_state.id();
+        self.insert_stack_batch(
+            start_time_ms,
+            bucket_width_ms,
+            thread_state,
+            frames,
+            &[(sample_time_ms, count)],
+        );
+    }
+
+    /// Inserts one stack whose samples are split into `(sample_time_ms, count)` splits. The call
+    /// path is walked once for the whole batch, then each run only adds its count to its time
+    /// block, so a batch spread over many blocks costs one tree walk instead of one per block.
+    pub fn insert_stack_batch(
+        &mut self,
+        start_time_ms: i64,
+        bucket_width_ms: u64,
+        thread_state: ThreadState,
+        frames: &[String],
+        splits: &[(i64, u64)],
+    ) {
         // Align blocks by width
         let start_block_ms = start_time_ms - (start_time_ms % (bucket_width_ms as i64));
-        let offset_ms = sample_time_ms.saturating_sub(start_block_ms).max(0) as u64;
-        // This usually means the timestamps are off, so drop it to avoid unbounded memory alloc.
-        if offset_ms > MAX_PROFILE_DURATION_MS {
+        let block_splits = splits.iter().filter_map(|&(sample_time_ms, samples)| {
+            let offset_ms = sample_time_ms.saturating_sub(start_block_ms).max(0) as u64;
+            // This usually means the timestamps are off, so drop it to avoid unbounded memory alloc.
+            (offset_ms <= MAX_PROFILE_DURATION_MS)
+                .then_some(((offset_ms / bucket_width_ms) as usize, samples))
+        });
+        if block_splits.clone().next().is_none() {
             return;
         }
-        let block_idx = (offset_ms / bucket_width_ms) as usize;
-
-        while self.blocks.len() <= block_idx {
-            self.blocks.push(HashMap::new());
-        }
+        let thread_state_id = thread_state.id();
+        let count: u64 = block_splits.clone().map(|(_, samples)| samples).sum();
 
         // Iterate through tree layers by frame
         let mut curr_node_id = 0usize;
@@ -393,12 +436,19 @@ impl Profile {
             })
             .self_samples += count;
 
-        // Update aggregate count in blocks vec
-        *self.blocks[block_idx]
-            .entry(thread_state_id)
-            .or_default()
-            .entry(curr_node_id)
-            .or_default() += count;
+        for (block_idx, samples) in block_splits {
+            // Extend blocks vec if necessary
+            while self.blocks.len() <= block_idx {
+                self.blocks.push(HashMap::new());
+            }
+
+            // Update aggregate count in blocks vec
+            *self.blocks[block_idx]
+                .entry(thread_state_id)
+                .or_default()
+                .entry(curr_node_id)
+                .or_default() += samples;
+        }
     }
 
     fn resolve_thread_states(&self, thread_states: &[ThreadState]) -> Vec<u8> {
@@ -519,6 +569,7 @@ pub enum FrameType {
     Interpreted, // _[0]
     C1,          // _[1]
     Vdso,        // _[v]
+    Cpp,         // _[c], a native frame whose symbol async-profiler demangled (C++ or Rust)
     #[default]
     Native, // no suffix
 }
@@ -532,6 +583,7 @@ impl FrameType {
             FrameType::Interpreted => "_[0]",
             FrameType::C1 => "_[1]",
             FrameType::Vdso => "_[v]",
+            FrameType::Cpp => "_[c]",
             FrameType::Native => "",
         }
     }
@@ -544,13 +596,14 @@ impl FrameType {
             FrameType::Interpreted => "_\\[0\\]",
             FrameType::C1 => "_\\[1\\]",
             FrameType::Vdso => "_\\[v\\]",
+            FrameType::Cpp => "_\\[c\\]",
             FrameType::Native => "",
         }
     }
 
     /// Regex pattern that matches any frame type suffix (including none).
     pub(crate) fn any_regex_suffix() -> &'static str {
-        "(_\\[(0|j|i|k|1|v)\\])?"
+        "(_\\[(0|j|i|k|1|v|c)\\])?"
     }
 
     pub(crate) fn from_jfr_name(name: &str) -> Self {
@@ -560,6 +613,7 @@ impl FrameType {
             "Inlined" => FrameType::Inlined,
             "Kernel" => FrameType::Kernel,
             "C1 compiled" => FrameType::C1,
+            "C++" => FrameType::Cpp,
             _ => FrameType::Native,
         }
     }
@@ -628,5 +682,137 @@ mod tests {
         let leaf = profile.context_tree.last().unwrap();
         assert_eq!(profile.frame_map.name(leaf.frame_id), "work");
         assert_eq!(leaf.sample_stats[&ThreadState::None.id()].self_samples, 1);
+    }
+
+    #[test]
+    fn batch_splits_too_far_past_the_start_are_dropped() {
+        let frames = ["main", "work"].map(String::from);
+        let past_ms = MAX_PROFILE_DURATION_MS as i64 + 1;
+        let mut profile = Profile::new();
+        let mut insert = |splits: &[(i64, u64)]| {
+            profile.insert_stack_batch(0, BUCKET_WIDTH_MS, ThreadState::None, &frames, splits)
+        };
+
+        insert(&[(past_ms, 1)]);
+        insert(&[(0, 2), (past_ms, 3)]);
+
+        assert_eq!(profile.blocks.len(), 1);
+        assert_eq!(profile.context_tree.len(), 3);
+        let leaf = profile.context_tree.last().unwrap();
+        assert_eq!(leaf.sample_stats[&ThreadState::None.id()].self_samples, 2);
+    }
+
+    #[test]
+    fn test_stack_pattern_is_anchored() {
+        let mut profile = Profile::new();
+        let frames: Vec<String> = ["java.lang.Thread.run_[j]", "ComplexApp.main_[0]"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        profile.insert_stack(0, 0, 20, ThreadState::AsyncRunnable, &frames, 3);
+        profile.set_time_range(0, 1).unwrap();
+
+        assert_eq!(
+            profile.get_samples(&["ComplexApp\\.main"], None, &[], true),
+            3
+        );
+        assert_eq!(
+            profile.get_samples(
+                &["ComplexApp\\.main"],
+                Some(FrameType::Interpreted),
+                &[],
+                true
+            ),
+            3
+        );
+        // A prefix of the method name must not match.
+        assert_eq!(
+            profile.get_samples(&["ComplexApp\\.ma"], None, &[], true),
+            0
+        );
+        // A top-level alternation is anchored as a whole, so "x|ComplexApp\.ma" doesn't
+        // match "ComplexApp.main" through the unanchored second branch.
+        assert_eq!(
+            profile.get_samples(&["x|ComplexApp\\.ma"], None, &[], true),
+            0
+        );
+        assert_eq!(
+            profile.get_samples(&["x|ComplexApp\\.main"], None, &[], true),
+            3
+        );
+    }
+
+    #[test]
+    fn test_cpp_frames_have_their_own_type() {
+        assert_eq!(FrameType::from_jfr_name("C++").literal_suffix(), "_[c]");
+        assert_eq!(FrameType::from_jfr_name("Native").literal_suffix(), "");
+
+        let mut profile = Profile::new();
+        let frames: Vec<String> = [
+            "java.lang.Object.wait_[j]",
+            "JVM_MonitorWait",
+            "os::PlatformEvent::park_[c]",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        profile.insert_stack(0, 0, 20, ThreadState::AsyncRunnable, &frames, 2);
+        profile.set_time_range(0, 1).unwrap();
+
+        let park = &["os::PlatformEvent::park"];
+        assert_eq!(
+            profile.get_samples(park, Some(FrameType::Cpp), &[], true),
+            2
+        );
+        assert_eq!(profile.get_samples(park, None, &[], true), 2);
+        assert_eq!(
+            profile.get_samples(park, Some(FrameType::Native), &[], true),
+            0
+        );
+        // An extern "C" entry point inside the JVM stays Native.
+        assert_eq!(
+            profile.get_samples(&["JVM_MonitorWait"], Some(FrameType::Native), &[], true),
+            2
+        );
+    }
+
+    #[test]
+    fn test_insert_stack_batch_matches_insert_stack_per_run() {
+        let frames: Vec<String> = ["java.lang.Thread.run_[j]", "java.lang.Object.wait_[j]"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let state = ThreadState::AsyncSleeping;
+        // Splits in blocks 0, 1 and 3 of 20 ms blocks starting at 1,000 ms.
+        let splits = [(1_000, 2), (1_025, 3), (1_070, 1)];
+
+        let mut batched = Profile::new();
+        batched.insert_stack_batch(1_000, 20, state, &frames, &splits);
+        let mut per_run = Profile::new();
+        for &(time_ms, count) in &splits {
+            per_run.insert_stack(time_ms, 1_000, 20, state, &frames, count);
+        }
+
+        let stats = |p: &Profile| -> Vec<Option<(u64, u64)>> {
+            p.context_tree
+                .iter()
+                .map(|n| {
+                    n.sample_stats
+                        .get(&state.id())
+                        .map(|s| (s.total_samples, s.self_samples))
+                })
+                .collect()
+        };
+        assert_eq!(batched.blocks, per_run.blocks);
+        assert_eq!(stats(&batched), stats(&per_run));
+
+        // The leaf (node 2) holds all 6 samples, split across their blocks.
+        assert_eq!(stats(&batched), vec![None, Some((6, 0)), Some((6, 6))]);
+        let leaf_count = |block: usize| batched.blocks[block].get(&state.id()).map(|m| m[&2]);
+        assert_eq!(batched.blocks.len(), 4);
+        assert_eq!(
+            (0..4).map(leaf_count).collect::<Vec<_>>(),
+            vec![Some(2), Some(3), None, Some(1)]
+        );
     }
 }
