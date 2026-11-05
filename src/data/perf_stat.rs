@@ -26,7 +26,7 @@ use {
     anyhow::{anyhow, bail},
     chrono::prelude::*,
     log::info,
-    std::{iter, thread, time::Duration},
+    std::{thread, time::Duration},
 };
 
 static DEFAULT_PMU_CONFIG_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/pmu_configs");
@@ -359,7 +359,7 @@ impl PmuConfig {
             for cpu_id in cur_metric_cpu_ids {
                 let pmu_metric_counter_group = match Self::create_counter_group(
                     &metric_name,
-                    events.clone(),
+                    &events,
                     cpu_id,
                 ) {
                     Ok(pmu_metric_counter_group) => pmu_metric_counter_group,
@@ -488,6 +488,8 @@ impl PmuConfig {
             );
         };
         let probe_event = PmuConfigEvent::from_event_string(probe_event_string)?;
+        // Check one event group first to see if probe event is valid.
+        Self::create_counter_group("pmu_counter_limit_probe", &[probe_event.clone()], cpu_id)?;
 
         let (mut high, mut low) = (
             Self::PMU_COUNTER_LIMIT_UPPER_BOUND,
@@ -496,11 +498,18 @@ impl PmuConfig {
         while low < high {
             let mid = (low + high + 1) / 2;
 
-            let mut probe_group = Self::create_counter_group(
+            let mut probe_group = match Self::create_counter_group(
                 "pmu_counter_limit_probe",
-                iter::repeat_n(probe_event.clone(), mid).collect(),
+                &vec![probe_event.clone(); mid],
                 cpu_id,
-            )?;
+            ) {
+                Ok(probe_group) => probe_group,
+                Err(e) if e.raw_os_error() == Some(libc::EINVAL) => {
+                    high = mid - 1;
+                    continue;
+                }
+                Err(e) => return Err(e.into()),
+            };
 
             probe_group.enable()?;
             thread::sleep(Duration::from_millis(10));
@@ -538,40 +547,47 @@ impl PmuConfig {
     #[cfg(target_os = "linux")]
     fn create_counter_group(
         metric_name: &str,
-        events: Vec<PmuConfigEvent>,
+        events: &[PmuConfigEvent],
         cpu_id: usize,
     ) -> std::io::Result<PmuMetricCounterGroup> {
-        let mut group = perf_event::Builder::new(perf_event::events::Software::DUMMY)
+        let (leader_event, member_events) = events.split_first().ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, "metric has no events")
+        })?;
+        let mut group = Self::counter_builder(leader_event, cpu_id)
             .read_format(
                 perf_event::ReadFormat::GROUP
                     | perf_event::ReadFormat::TOTAL_TIME_ENABLED
                     | perf_event::ReadFormat::TOTAL_TIME_RUNNING
                     | perf_event::ReadFormat::ID,
             )
-            .one_cpu(cpu_id)
-            .any_pid()
             .build_group()?;
-        let mut counters = Vec::new();
+        let mut counters = Vec::with_capacity(member_events.len());
 
-        for event in events {
-            let mut builder = perf_event::Builder::new(event);
-            builder
-                .one_cpu(cpu_id)
-                .any_pid()
-                .include_kernel()
-                .include_hv();
-
-            let counter = builder.build_with_group(&mut group)?;
+        for event in member_events {
+            let counter = Self::counter_builder(event, cpu_id)
+                .enabled(true)
+                .build_with_group(&mut group)?;
 
             counters.push(counter);
         }
 
         Ok(PmuMetricCounterGroup {
-            cpu_id: cpu_id,
+            cpu_id,
             metric_name: metric_name.to_string(),
             counters,
             group,
         })
+    }
+
+    #[cfg(target_os = "linux")]
+    fn counter_builder(event: &PmuConfigEvent, cpu_id: usize) -> perf_event::Builder<'static> {
+        let mut builder = perf_event::Builder::new(event.clone());
+        builder
+            .one_cpu(cpu_id)
+            .any_pid()
+            .include_kernel()
+            .include_hv();
+        builder
     }
 }
 
@@ -606,7 +622,9 @@ impl PmuCollector {
 pub struct PmuMetricCounterGroup {
     pub cpu_id: usize,
     pub metric_name: String,
+    /// Counters of all events other than the leader.
     pub counters: Vec<perf_event::Counter>,
+    // The first counter (group leader).
     pub group: perf_event::Group,
 }
 
@@ -638,7 +656,8 @@ impl PmuMetricCounterGroup {
             )
         })?;
 
-        let mut counter_values: Vec<u64> = Vec::with_capacity(self.counters.len());
+        let mut counter_values: Vec<u64> = Vec::with_capacity(self.counters.len() + 1);
+        counter_values.push(group_data[self.group.as_counter()]);
         for counter in &self.counters {
             counter_values.push(group_data[counter]);
         }
