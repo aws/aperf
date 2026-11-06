@@ -61,13 +61,10 @@ export function getRunCpuIds(runName: string): number[] {
     const reportData = PROCESSED_DATA[cpuDataType].runs[runName] as TimeSeriesData;
     if (reportData == undefined) continue;
     for (const metricName in reportData.metrics) {
-      const curMetricCpuIds = reportData.metrics[metricName].series
+      reportData.metrics[metricName].series
         .map((series) => getCpuIdFromSeriesName(series.series_name))
-        .filter((cpuId): cpuId is number => cpuId !== undefined);
-      if (curMetricCpuIds.length > 0) {
-        curMetricCpuIds.forEach((cpuId) => cpuIds.add(cpuId));
-        break;
-      }
+        .filter((cpuId): cpuId is number => cpuId !== undefined)
+        .forEach((cpuId) => cpuIds.add(cpuId));
     }
   }
   return [...cpuIds].sort((cpuId, otherCpuId) => cpuId - otherCpuId);

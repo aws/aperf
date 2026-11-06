@@ -1,3 +1,5 @@
 aperf (VERSION-1) unstable; urgency=medium
 
   * See https://github.com/aws/aperf/releases/tag/vVERSION
+
+ -- APerf Team <aperf-github-bot@amazon.com>  Tue, 13 Oct 2026 15:56:05 +0000

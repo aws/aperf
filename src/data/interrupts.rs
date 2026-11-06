@@ -175,6 +175,8 @@ impl ProcessData for InterruptData {
     ) -> Result<AperfData> {
         let mut time_series_data_processor =
             time_series_data_processor_with_average_aggregate!(report_params.collection_start);
+        // Every interrupt has a series for every CPU, but most interrupts only fire on a few CPUs
+        time_series_data_processor.drop_all_zero_series();
 
         for buffer in raw_data {
             let raw_value = match buffer {

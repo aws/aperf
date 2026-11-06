@@ -53,6 +53,8 @@ pub struct TimeSeriesDataProcessor {
     // Use to set every metric's value range and ignore the results collected in
     // per_metric_value_range
     fixed_value_range: Option<(u64, u64)>,
+    // Whether to drop series that only contains zero values.
+    drop_all_zero_series: bool,
     // Map<derived metric name, parsed metric expression> - used to store parsed expression
     // and compute values of all derived metrics.
     derived_metric_expressions: HashMap<String, FlatEx<f64>>,
@@ -77,6 +79,7 @@ impl TimeSeriesDataProcessor {
             ignore_first_accumulative_value: true,
             decreasing_accumulative_data: HashMap::new(),
             fixed_value_range: None,
+            drop_all_zero_series: false,
             derived_metric_expressions: HashMap::new(),
         }
     }
@@ -85,6 +88,11 @@ impl TimeSeriesDataProcessor {
     /// previous value to compute the delta.
     pub fn use_first_accumulative_value(&mut self) {
         self.ignore_first_accumulative_value = false;
+    }
+
+    /// Drop series that only contains zero values from the metric.
+    pub fn drop_all_zero_series(&mut self) {
+        self.drop_all_zero_series = true;
     }
 
     /// Override the name of the auto-generated aggregate series
@@ -401,15 +409,34 @@ impl TimeSeriesDataProcessor {
             let mut time_series_metric = TimeSeriesMetric::new(metric_name.clone());
 
             let mut all_series: Vec<Series> = cur_metric_series.into_values().collect();
+
+            // If there is only one actual series in the metric, there is no need to show the
+            // redundant auto-generated aggregate series
+            if self.aggregate_mode.is_auto_generated() && all_series.len() == 2 {
+                all_series.retain(|series| !series.is_aggregate);
+            }
+
+            all_series.retain_mut(|series| {
+                if !series.values.iter().all(|&value| value == 0.0) {
+                    return true;
+                }
+                if self.drop_all_zero_series && !series.is_aggregate {
+                    return false;
+                }
+                // If we're keeping an all-zero series, we still compress it
+                // by only keeping the first and last data points.
+                let len = series.time_diff.len();
+                if len > 2 {
+                    series.time_diff.drain(1..len - 1);
+                    series.values.drain(1..len - 1);
+                }
+                true
+            });
             all_series.sort_by(|s1, s2| cmp(&s1.series_name, &s2.series_name));
 
-            time_series_metric.stats_series_idx = if all_series.len() == 1 {
-                // Simplest case - if there is only one series then use it for stat computation
-                0
-            } else if self.aggregate_mode.is_auto_generated() && all_series.len() == 2 {
-                // If there is only one actual series in the metric, there is no need to show
-                // the redundant auto-generated aggregate series
-                all_series.retain(|series| !series.is_aggregate);
+            time_series_metric.stats_series_idx = if all_series.len() <= 1 {
+                // Simplest case - if there is only one series then use it for stat computation.
+                // Or if a metric has no data point, use 0 as the default value.
                 0
             } else if self.aggregate_mode == TimeSeriesDataAggregateMode::MaxSeries {
                 // For max-aggregate mode, find the series that has the maximum of average
@@ -443,9 +470,6 @@ impl TimeSeriesDataProcessor {
             {
                 time_series_metric.stats = Statistics::from_values(&aggregate_series.values);
             }
-            // If a time series metric only has zero values, compress the data by only showing the
-            // first and last data points of every series
-            compress_all_zero_time_series_metric(&mut time_series_metric);
 
             if let Some(fixed_value_range) = self.fixed_value_range {
                 time_series_metric.value_range = fixed_value_range;
@@ -499,25 +523,6 @@ fn update_metric_value_range(
         .or_insert_with(|| (metric_value, metric_value));
     *min = (*min).min(metric_value);
     *max = (*max).max(metric_value);
-}
-
-fn compress_all_zero_time_series_metric(time_series_metric: &mut TimeSeriesMetric) {
-    if time_series_metric.stats.min == 0.0 && time_series_metric.stats.max == 0.0 {
-        for series in &mut time_series_metric.series {
-            let time_diff_len = series.time_diff.len();
-            if time_diff_len == 0 {
-                continue;
-            }
-            let mut compressed_time_diffs: Vec<u64> = vec![series.time_diff[0]];
-            let mut compressed_values: Vec<f64> = vec![0.0];
-            if time_diff_len > 1 {
-                compressed_time_diffs.push(series.time_diff[time_diff_len - 1]);
-                compressed_values.push(0.0);
-            }
-            series.time_diff = compressed_time_diffs;
-            series.values = compressed_values;
-        }
-    }
 }
 
 /// The aggregate series of every metric is auto-generated as the average of all series values
@@ -1236,46 +1241,64 @@ mod tests {
     }
 
     // =======================================================================
-    // All-zero series compression
+    // All-zero series
     // =======================================================================
 
     #[test]
-    fn test_all_zero_series_compressed_to_first_and_last() {
-        let times = make_times(50, 1);
-        let mut p = make_processor(TimeSeriesDataAggregateMode::Average);
-
-        for t in &times {
-            p.proceed_to_time(*t);
-            p.add_data_point("m", "s1", 0.0);
-            p.add_data_point("m", "s2", 0.0);
-        }
-
-        let ts = p.get_time_series_data();
-        for s in data_series(&ts, "m") {
-            assert_eq!(s.values, vec![0.0, 0.0]);
-            assert_eq!(s.time_diff, vec![0, 49]);
-        }
-    }
-
-    #[test]
-    fn test_non_zero_series_not_compressed() {
+    fn test_all_zero_series_compressed() {
         let times = make_times(5, 1);
         let mut p = make_processor(TimeSeriesDataAggregateMode::Average);
 
         for (i, t) in times.iter().enumerate() {
             p.proceed_to_time(*t);
-            // s1 has non-zero data, s2 is all zeros — neither should be compressed
-            // because the metric as a whole is not all-zero
             p.add_data_point("m", "s1", i as f64);
             p.add_data_point("m", "s2", 0.0);
+            // Cancels s1 out in the average
+            p.add_data_point("m", "s3", -(i as f64));
         }
 
         let ts = p.get_time_series_data();
-        let s1 = data_series(&ts, "m")
-            .into_iter()
-            .find(|s| s.series_name == "s1")
-            .unwrap();
-        assert_eq!(s1.values, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
+        let series = data_series(&ts, "m");
+        let find = |name: &str| series.iter().find(|s| s.series_name == name).unwrap();
+        assert_eq!(find("s1").values, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(find("s2").time_diff, vec![0, 4]);
+        assert_eq!(find("s2").values, vec![0.0, 0.0]);
+        assert_eq!(agg_series(&ts, "m").unwrap().values, vec![0.0, 0.0]);
+    }
+
+    #[test]
+    fn test_all_zero_series_dropped() {
+        let times = make_times(5, 1);
+        let mut p = make_processor(TimeSeriesDataAggregateMode::Average);
+        p.drop_all_zero_series();
+
+        for (i, t) in times.iter().enumerate() {
+            p.proceed_to_time(*t);
+            p.add_data_point("m", "s1", 0.0);
+            p.add_data_point("m", "s2", (i * 2) as f64);
+            p.add_data_point("zero", "s1", 0.0);
+            p.add_data_point("zero", "s2", 0.0);
+            p.add_data_point("single", "s1", 0.0);
+        }
+
+        let ts = p.get_time_series_data();
+        let names: Vec<&str> = data_series(&ts, "m")
+            .iter()
+            .map(|s| s.series_name.as_str())
+            .collect();
+        assert_eq!(names, vec!["s2"]);
+        // The aggregate is kept, still averages over all series, and stays the stats series
+        let metric = &ts.metrics["m"];
+        assert!(metric.series[metric.stats_series_idx].is_aggregate);
+        assert_eq!(
+            agg_series(&ts, "m").unwrap().values,
+            vec![0.0, 1.0, 2.0, 3.0, 4.0]
+        );
+        // An all-zero metric only keeps its compressed aggregate
+        assert!(data_series(&ts, "zero").is_empty());
+        assert_eq!(agg_series(&ts, "zero").unwrap().values, vec![0.0, 0.0]);
+        // Without the redundant aggregate, a metric with one all-zero series has no series left
+        assert!(ts.metrics["single"].series.is_empty());
     }
 
     // =======================================================================
