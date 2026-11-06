@@ -62,7 +62,8 @@ export default function (props: TimeSeriesMetricProps) {
     selectedCpusPerRun[props.runName].cpus,
   );
 
-  if (seriesData.length == 0) {
+  // A metric without series (they were dropped for being all zero) is still shown, as an empty graph
+  if ((PROCESSED_DATA[props.dataType].runs[props.runName] as TimeSeriesData)?.metrics[props.metricName] === undefined) {
     return <DataUnavailableBox dataType={props.dataType} runName={props.runName} />;
   }
 
