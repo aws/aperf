@@ -3,12 +3,14 @@
     "L1_Data_Misses": "cpu/event=0x60,umask=0xc8/",
     "L1_Refills_DRAM": "cpu/event=0x43,umask=0x48/",
     "Frontend_Stalls": "cpu/event=0xa9,umask=0x0/",
-    "Instruction_TLB_TW_Misses": "cpu/event=0x85,umask=0x7/"
+    "Instruction_TLB_TW_Misses": "cpu/event=0x85,umask=0x7/",
+    "Div_Busy_Cycles": "cpu/event=0xd3,umask=0x0/"
   },
   "metrics": {
     "data-l1-mpki": "L1_Data_Misses / Instructions * 1000",
     "l3-mpki": "L1_Refills_DRAM / Instructions * 1000",
     "stall-frontend-pkc": "Frontend_Stalls / Cycles * 1000",
-    "inst-tlb-tw-pki": "Instruction_TLB_TW_Misses / Instructions * 1000"
+    "inst-tlb-tw-pki": "Instruction_TLB_TW_Misses / Instructions * 1000",
+    "div-busy-pkc": "Div_Busy_Cycles / Cycles * 1000"
   }
 }

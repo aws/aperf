@@ -417,6 +417,15 @@ export const DATA_DESCRIPTIONS: { [key in DataType]: DataDescription } = {
           "https://aws.github.io/graviton/c-c++.html#large-system-extensions-lse",
         ],
       },
+      "div-busy-pkc": {
+        readableName: "Divider Busy per Thousand Cycles",
+        description:
+          "Cycles in which the integer divider was busy per thousand cycles. Integer division and modulo take much longer than other integer operations. The divider is not fully pipelined, so it works on only one or a few divisions at a time. A high value means the workload is limited by the divider, often from division or modulo inside a hot loop.",
+        desired: "lower",
+        helpfulLinks: [
+          "https://www.agner.org/optimize/optimizing_cpp.pdf#page=153",
+        ],
+      },
       mux_counter_schedule_rate: {
         readableName: "Average Counter Collection Schedule Rate",
         description:
