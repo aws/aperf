@@ -58,6 +58,8 @@ jobs:
           name=aperf-${{ env.DEV_TAG }}-x86_64
           mkdir "$name"
           tar -zxvf x86_64-release-artifacts/artifacts.tar.gz -C "$name"
+          cp LICENSE NOTICE THIRD-PARTY-LICENSES "$name/"
+          cp src/ebpf/LICENSE-GPL-2.0 src/ebpf/LICENSE-MIT "$name/"
           tar -zcvf "$name".tar.gz "$name"
 
       - name: Create aarch64 tarball
@@ -65,6 +67,8 @@ jobs:
           name=aperf-${{ env.DEV_TAG }}-aarch64
           mkdir "$name"
           tar -zxvf aarch64-release-artifacts/artifacts.tar.gz -C "$name"
+          cp LICENSE NOTICE THIRD-PARTY-LICENSES "$name/"
+          cp src/ebpf/LICENSE-GPL-2.0 src/ebpf/LICENSE-MIT "$name/"
           tar -zcvf "$name".tar.gz "$name"
 
       - name: Create macOS tarball
@@ -83,6 +87,7 @@ jobs:
           mkdir "$name"
           cp kubectl-aperf "$name/"
           chmod +x "$name/kubectl-aperf"
+          cp LICENSE "$name/"
           tar -zcvf "$name".tar.gz "$name"
 
       - name: Rename RPM packages

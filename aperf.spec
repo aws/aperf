@@ -6,6 +6,11 @@ Summary:        A CLI tool for performance monitoring and debugging
 License:        Apache-2.0
 URL:            https://github.com/aws/aperf
 Source0:        aperf
+Source1:        LICENSE
+Source2:        NOTICE
+Source3:        THIRD-PARTY-LICENSES
+Source4:        LICENSE-GPL-2.0
+Source5:        LICENSE-MIT
 
 %description
 APerf is a CLI tool used for performance monitoring and debugging.
@@ -20,6 +25,15 @@ In the report, users can refer to the analytical findings for potential performa
 %install
 mkdir -p %{buildroot}%{_bindir}
 install -m 0755 %{SOURCE0} %{buildroot}%{_bindir}/aperf
+
+install -d %{buildroot}%{_licensedir}/%{name}
+install -m 0644 %{SOURCE1} %{buildroot}%{_licensedir}/%{name}/LICENSE
+install -m 0644 %{SOURCE4} %{buildroot}%{_licensedir}/%{name}/LICENSE-GPL-2.0
+install -m 0644 %{SOURCE5} %{buildroot}%{_licensedir}/%{name}/LICENSE-MIT
+
+install -d %{buildroot}%{_docdir}/%{name}
+install -m 0644 %{SOURCE2} %{buildroot}%{_docdir}/%{name}/NOTICE
+install -m 0644 %{SOURCE3} %{buildroot}%{_docdir}/%{name}/THIRD-PARTY-LICENSES
 
 %post
 # Install shell completions
@@ -67,4 +81,9 @@ echo "--------------------------------------------------------------------------
 echo ""
 
 %files
+%license %{_licensedir}/%{name}/LICENSE
+%license %{_licensedir}/%{name}/LICENSE-GPL-2.0
+%license %{_licensedir}/%{name}/LICENSE-MIT
+%doc %{_docdir}/%{name}/NOTICE
+%doc %{_docdir}/%{name}/THIRD-PARTY-LICENSES
 %{_bindir}/aperf

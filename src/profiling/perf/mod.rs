@@ -1,5 +1,6 @@
 #![cfg(target_os = "linux")]
 
+pub mod off_cpu;
 pub mod parser;
 
 use crate::profiling::symbols::Symbol;
@@ -16,6 +17,19 @@ struct PerfSample {
     /// The symbolicated call chain of the sample.
     /// The order is from leaf to root.
     call_chain: Vec<Symbol>,
+    /// Sample weight: 1 for a Perf sample, off-CPU microseconds for an off-CPU event.
+    samples: u64,
+}
+
+fn clock_ns(clock_id: libc::clockid_t) -> u64 {
+    let mut time = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    unsafe { libc::clock_gettime(clock_id, &mut time) };
+    (time.tv_sec as u64)
+        .saturating_mul(1_000_000_000)
+        .saturating_add(time.tv_nsec as u64)
 }
 
 // See below constants in https://github.com/torvalds/linux/blob/master/include/uapi/linux/perf_event.h

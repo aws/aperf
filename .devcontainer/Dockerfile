@@ -15,7 +15,7 @@ RUN if [ -z "$ARCH" ]; then ARCH=$(uname -m); fi && \
     echo "Using async-profiler for $ASYNC_ARCH"
 
 # Requirements
-RUN dnf install -y jq tar perf tar gzip sudo procps java-21-amazon-corretto-devel gcc nodejs npm git && \
+RUN dnf install -y jq tar perf tar gzip sudo procps java-21-amazon-corretto-devel gcc clang libbpf-devel nodejs npm git && \
     dnf clean all
 
 # Async profiler installation

@@ -72,6 +72,8 @@ jobs:
             xz-devel \
             bzip2-devel \
             libzstd-devel
+      - name: Install eBPF Dependencies
+        run: sudo yum install -y clang libbpf-devel
 
       # Tests and static analysis
       - name: Run rustfmt

@@ -29,13 +29,18 @@ sudo sysctl -w kernel.perf_event_paranoid=-1
 sudo sysctl -w kernel.kptr_restrict=0
 ```
 
+Off-CPU profiling (`--profile-off-cpu`) also loads an eBPF program, which needs a kernel with BTF (`/sys/kernel/btf/vmlinux`, Linux 5.10+ built with `CONFIG_DEBUG_INFO_BTF`) and either `root` or `CAP_BPF`+`CAP_PERFMON`. (`kptr_restrict=0` above also lets it resolve kernel stack frames.) If the eBPF program can't be loaded or attached, the recording fails; drop `--profile-off-cpu` to profile on-CPU only.
+
 **What it collects:**  
-System-wide CPU profiling data using `perf record` with call graphs. These are displayed as flamegraphs in the report.
+System-wide on-CPU profiling data using `perf record` with call graphs and, with `--profile-off-cpu`, off-CPU profiling data (the time threads spend blocked, with their blocking stacks) using eBPF. Both are displayed as flamegraphs in the report, selectable as `cpu` and `off_cpu` in the Profiling page.
 
 **Usage examples:**
 ```bash
 # Profile at default (99 Hz) sampling frequency
 aperf record --profile
+
+# Profile on-CPU and off-CPU
+aperf record --profile --profile-off-cpu
 
 # Profile at 50 Hz
 aperf record --profile --perf-frequency 50
@@ -54,9 +59,13 @@ perf record -a -q -g -k 1 -F <perf_frequency> -e cpu-clock:pppH -o <data_file_pa
 - `data_file_path`: Path where perf data is written
 - `collection_time`: Duration of the collection period in seconds
 
+For off-CPU profiling (`--profile-off-cpu`), APerf also attaches an eBPF program to the `sched:sched_switch` tracepoint that records each thread's blocked time and its kernel/user stack, aggregated in a kernel map.
+
 #### Behavior
 
 APerf spawns a `perf record` process at the start of the recording period that runs for the collection duration. After the recording completes, APerf parses the collected samples, perform symbolications, and processes them into the format to be rendered as heatmap and flamegraphs in the report.
+
+When off-CPU profiling is enabled, APerf drains the eBPF map each interval and, at the end of the record, symbolizes the off-CPU stacks against the same process mappings as the on-CPU profile. They render as the `off_cpu` profiler (weighted by microseconds blocked) next to `cpu`. Threads still off-CPU when the recording ends are counted up to its end. The `off_cpu` timeline uses blocks of a tenth of the collection interval (100 ms at the default 1 s).
 
 ## Async-profiler
 

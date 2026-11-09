@@ -1,6 +1,4 @@
-use crate::data::common::data_formats::{
-    AperfData, GraphData, GraphGroup, Profiler, ProfilingData,
-};
+use crate::data::common::data_formats::{AperfData, GraphData, GraphGroup, ProfilingData};
 use crate::data::common::utils::copy_graph_and_update_graph_data;
 use crate::data::{Data, ProcessData};
 use crate::data_processing::ReportParams;
@@ -8,13 +6,14 @@ use crate::find_file;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
 use {
     crate::data::common::utils::get_sub_process_duration_seconds,
     crate::data::CollectData,
     crate::data_collection::InitParams,
-    crate::profiling::perf::parser::build_perf_profiler_data,
+    crate::profiling::perf::off_cpu::{self, OffCpuProfiler},
+    crate::profiling::perf::parser::{build_profiling_data, OffCpuInputs, OnCpuInputs},
     crate::run_command,
     crate::PDError,
     chrono::Utc,
@@ -65,13 +64,20 @@ fn perf_profiler_event_output_path(run_data_dir: &PathBuf) -> PathBuf {
     run_data_dir.join("parsed_perf_data.out")
 }
 
+fn off_cpu_profiler_event_output_path(run_data_dir: &Path) -> PathBuf {
+    run_data_dir.join("parsed_off_cpu_data.out")
+}
+
 fn perf_profiler_data_path(run_data_dir: &PathBuf) -> PathBuf {
     run_data_dir.join("perf_profiler_data.json")
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct PerfProfileRaw {
     pub data: String,
+    #[cfg(target_os = "linux")]
+    #[serde(skip)]
+    off_cpu_profiler: Option<OffCpuProfiler>,
 }
 
 #[cfg(target_os = "linux")]
@@ -79,6 +85,7 @@ impl PerfProfileRaw {
     pub fn new() -> Self {
         PerfProfileRaw {
             data: String::new(),
+            off_cpu_profiler: None,
         }
     }
 }
@@ -122,6 +129,11 @@ impl CollectData for PerfProfileRaw {
 
         *PROFILE_START_TIME_MS.lock().unwrap() = Utc::now().timestamp_millis();
 
+        // Load before spawning perf, so a load failure is fatal without leaving a perf child.
+        if init_params.collect_off_cpu {
+            self.off_cpu_profiler = Some(OffCpuProfiler::load(init_params)?);
+        }
+
         match run_command(
             "perf",
             [
@@ -149,8 +161,17 @@ impl CollectData for PerfProfileRaw {
                 e
             ))
             .into()),
-            Ok(child) => {
+            Ok(mut child) => {
                 debug!("Recording Perf profiling data.");
+                if let Some(off_cpu) = self.off_cpu_profiler.as_mut() {
+                    if let Err(e) = off_cpu.attach(&init_params.run_data_dir) {
+                        // SIGTERM, not SIGKILL, so perf reaps its sleep child before exiting.
+                        let _ =
+                            signal::kill(Pid::from_raw(child.id() as i32), signal::Signal::SIGTERM);
+                        let _ = child.wait();
+                        return Err(e);
+                    }
+                }
                 *PERF_CHILD.lock().unwrap() = Some(child);
                 Ok(())
             }
@@ -158,6 +179,9 @@ impl CollectData for PerfProfileRaw {
     }
 
     fn collect_data(&mut self, _init_params: &InitParams) -> Result<()> {
+        if let Some(off_cpu) = self.off_cpu_profiler.as_mut() {
+            off_cpu.collect();
+        }
         Ok(())
     }
 
@@ -167,6 +191,18 @@ impl CollectData for PerfProfileRaw {
             None => return Ok(()),
             Some(_) => {}
         }
+
+        // Stop off-CPU before perf, so perf.data's mmap/exec records cover every off-CPU event.
+        let off_cpu_enabled = self.off_cpu_profiler.is_some();
+        let off_cpu_result = self.off_cpu_profiler.take().and_then(|mut off_cpu| {
+            match off_cpu.finish(init_params) {
+                Ok(result) => Some(result),
+                Err(e) => {
+                    error!("Off-CPU eBPF profiling finish failed: {e:?}");
+                    None
+                }
+            }
+        });
 
         signal::kill(
             Pid::from_raw(child.as_mut().unwrap().id() as i32),
@@ -188,19 +224,64 @@ impl CollectData for PerfProfileRaw {
         } else {
             None
         };
+        let off_cpu_event_output_path_buf =
+            off_cpu_profiler_event_output_path(&init_params.run_data_dir);
+        let off_cpu_event_output_path = if init_params.save_profile_events {
+            Some(off_cpu_event_output_path_buf.as_path())
+        } else {
+            None
+        };
 
         let raw_perf_data_path = raw_perf_on_cpu_profile_path(&init_params.run_data_dir);
+        let raw_off_cpu_data_path = off_cpu::events_file_path(&init_params.run_data_dir);
 
         // Parse raw Perf profile and build ProfilingData
-        let perf_profiler_data = build_perf_profiler_data(
-            "cpu",
-            &raw_perf_data_path,
-            *PROFILE_START_TIME_MS.lock().unwrap(),
-            event_output_path,
+        let mut profiling_data = build_profiling_data(
+            OnCpuInputs {
+                raw_data_path: &raw_perf_data_path,
+                start_time_ms: *PROFILE_START_TIME_MS.lock().unwrap(),
+                events_output_path: event_output_path,
+            },
+            off_cpu_result.as_ref().map(|capture| OffCpuInputs {
+                raw_data_path: &raw_off_cpu_data_path,
+                events_output_path: off_cpu_event_output_path,
+                capture,
+            }),
         );
 
-        if let Ok(json) = serde_json::to_string(&perf_profiler_data) {
+        if let Some(stats) = off_cpu_result.as_ref().map(|capture| &capture.stats) {
+            if let Some(off_cpu_profiler) = profiling_data.profilers.get_mut("off_cpu") {
+                let metadata = &mut off_cpu_profiler
+                    .metadata
+                    .key_value_groups
+                    .entry(String::new())
+                    .or_default()
+                    .key_values;
+                metadata.insert("unit".to_string(), "microseconds".to_string());
+                for (name, value) in stats {
+                    metadata.insert(name.to_string(), value.to_string());
+                }
+            }
+            let lost = |name: &str| {
+                stats
+                    .iter()
+                    .find(|(n, _)| *n == name)
+                    .map_or(0, |(_, v)| *v)
+            };
+            let (start_lost, counts_lost) =
+                (lost("START_UPDATE_FAILED"), lost("COUNTS_UPDATE_FAILED"));
+            if start_lost > 0 || counts_lost > 0 {
+                warn!(
+                    "Off-CPU eBPF profiling lost data in the kernel: START_UPDATE_FAILED={start_lost}, COUNTS_UPDATE_FAILED={counts_lost}"
+                );
+            }
+        }
+
+        if let Ok(json) = serde_json::to_string(&profiling_data) {
             fs::write(perf_profiler_data_path(&init_params.run_data_dir), json)?;
+        }
+        if off_cpu_enabled {
+            fs::remove_file(&raw_off_cpu_data_path).ok();
         }
         // The raw Perf profile could be huge and it becomes useless once it
         // leaves the system, so remove it from the run data, unless the profile
@@ -272,21 +353,16 @@ impl ProcessData for PerfProfile {
         });
 
         // Deserialize the ProfilerData generated at the end of record.
-        let perf_profiler_data =
+        let profiling_data =
             match fs::read_to_string(perf_profiler_data_path(&report_params.run_data_dir))
                 .ok()
-                .and_then(|json| serde_json::from_str::<Profiler>(&json).ok())
+                .and_then(|json| serde_json::from_str::<ProfilingData>(&json).ok())
             {
-                Some(perf_profiler_data) => perf_profiler_data,
+                Some(profiling_data) => profiling_data,
                 // If ProfilerData could not be read, chaces are this run was created before the
                 // introduction of ProfilingData, so fall back to the old GraphData.
                 None => return Ok(AperfData::Graph(graph_data)),
             };
-
-        let mut profiling_data = ProfilingData::default();
-        profiling_data
-            .profilers
-            .insert(String::from("cpu"), perf_profiler_data);
 
         Ok(AperfData::Profile(profiling_data))
     }
