@@ -73,6 +73,10 @@ pub struct Record {
     #[clap(help_heading = "Profiling", long, value_parser)]
     pub profile: bool,
 
+    /// Also gather off-CPU (eBPF) profiling data. Requires --profile.
+    #[clap(help_heading = "Profiling", long, value_parser, requires = "profile")]
+    pub profile_off_cpu: bool,
+
     /// Frequency for perf profiling (Hz).
     #[clap(
         help_heading = "Profiling",
@@ -254,6 +258,7 @@ pub fn record(record: &Record, tmp_dir: &Path, runlog: &Path) -> Result<()> {
     if record.profile {
         init_params.perf_frequency = record.perf_frequency;
     }
+    init_params.collect_off_cpu = record.profile_off_cpu;
     init_params.save_profile_events = record.save_profile_events;
 
     if let Err(e) = fs::create_dir(&run_data_dir) {

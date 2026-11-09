@@ -51,6 +51,8 @@ jobs:
           mkdir -p $build_dir
           tar -zxf ${artifact_dir}/artifacts.tar.gz -C $build_dir
           cp aperf.spec $build_dir/
+          cp LICENSE NOTICE THIRD-PARTY-LICENSES $build_dir/
+          cp src/ebpf/LICENSE-GPL-2.0 src/ebpf/LICENSE-MIT $build_dir/
           rpmbuild -bb $build_dir/aperf.spec \
             --target ${arch_name} \
             --define "_version $version" \
@@ -77,6 +79,8 @@ jobs:
           mkdir -p $build_dir
           tar -zxf ${artifact_dir}/artifacts.tar.gz -C $build_dir
           cp -r debian $build_dir/
+          cp LICENSE NOTICE THIRD-PARTY-LICENSES $build_dir/
+          cp src/ebpf/LICENSE-GPL-2.0 src/ebpf/LICENSE-MIT $build_dir/
           sed -i "s/VERSION/$version/g" $build_dir/debian/changelog
           (cd $build_dir && dpkg-buildpackage -b -uc -us -a ${arch_name})
           mv $build_dir/../aperf_*.deb aperf-${{ inputs.version }}-${arch_name}.deb

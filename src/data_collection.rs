@@ -370,6 +370,9 @@ pub struct InitParams {
     pub runlog: PathBuf,
     pub perf_frequency: u32,
     pub save_profile_events: bool,
+    /// Whether to collect off-CPU profiling data via eBPF alongside the on-CPU perf profile.
+    #[serde(default)]
+    pub collect_off_cpu: bool,
     pub hotline_frequency: u32,
     pub num_to_report: u32,
     /// Wall-clock start of `collect_data_serial`. `None` for archives
@@ -421,6 +424,7 @@ impl InitParams {
             runlog: PathBuf::new(),
             perf_frequency: 99,
             save_profile_events: false,
+            collect_off_cpu: false,
             hotline_frequency: 1000,
             num_to_report: 5000,
             collection_start: None,

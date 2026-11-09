@@ -7,6 +7,8 @@ pub mod computations;
 pub mod data;
 pub mod data_collection;
 pub mod data_processing;
+#[cfg(target_os = "linux")]
+pub mod ebpf;
 pub mod profiling;
 #[cfg(target_os = "linux")]
 pub mod record;

@@ -45,12 +45,16 @@ jobs:
           name=aperf-${{ github.ref_name }}-x86_64
           mkdir "$name"
           tar -zxvf x86_64-release-artifacts/artifacts.tar.gz -C "$name"
+          cp LICENSE NOTICE THIRD-PARTY-LICENSES "$name/"
+          cp src/ebpf/LICENSE-GPL-2.0 src/ebpf/LICENSE-MIT "$name/"
           tar -zcvf "$name".tar.gz "$name"
       - name: Create aarch64 artifacts
         run: |
           name=aperf-${{ github.ref_name }}-aarch64
           mkdir "$name"
           tar -zxvf aarch64-release-artifacts/artifacts.tar.gz -C "$name"
+          cp LICENSE NOTICE THIRD-PARTY-LICENSES "$name/"
+          cp src/ebpf/LICENSE-GPL-2.0 src/ebpf/LICENSE-MIT "$name/"
           tar -zcvf "$name".tar.gz "$name"
       - name: Create MacOS artifacts
         run: |

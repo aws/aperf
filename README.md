@@ -142,6 +142,10 @@ The list of performance data to be collected - the others will not be collected.
 
 Gather profiling data using the 'perf' binary. See [perf documentation](./docs/PROFILINGS.md#perf) for more details and usage.
 
+`--profile-off-cpu`
+
+Also gather off-CPU profiling data using eBPF; requires `--profile`. Fails the recording if the eBPF program can't be loaded or attached. See [perf documentation](./docs/PROFILINGS.md#perf) for more details and usage.
+
 `-F, --perf-frequency <FREQUENCY>` [default: 99] 
 
 Frequency for perf profiling in Hz.
@@ -238,7 +242,7 @@ The server exposes 8 tools: `load_report`, `get_metrics`, `get_metric_values`, `
 ## Building from source
 1. Download the source code from the [Releases](https://github.com/aws/APerf/releases) page.
 
-2. Install requirements: [Rust toolchain (v1.61.0+)](https://www.rust-lang.org/tools/install), [Node.js (v16.16.0+)](https://nodejs.org/en/download/), and build tools
+2. Install requirements: [Rust toolchain (v1.61.0+)](https://www.rust-lang.org/tools/install), [Node.js (v16.16.0+)](https://nodejs.org/en/download/), clang (v10+), the libbpf headers, and build tools
 
     ```bash
     # Install Rust
@@ -252,7 +256,7 @@ The server exposes 8 tools: `load_report`, `get_metrics`, `get_metric_values`, `
     
     # Install build tools
     # On Ubuntu:
-    sudo apt install -y build-essential # or on Amazon Linux: sudo yum install kernel-devel
+    sudo apt install -y build-essential clang libbpf-dev # or on Amazon Linux: sudo yum install kernel-devel clang libbpf-devel
     ```
 
 3. Build APerf:
@@ -344,4 +348,6 @@ See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more inform
 ## License
 
 This project is licensed under the Apache-2.0 License. See [LICENSE](LICENSE) for more information.
+
+eBPF kernel code under `src/ebpf/` is GPL-2.0-only OR MIT; the rest of APerf is Apache-2.0.
 

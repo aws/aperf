@@ -1,1 +1,8 @@
 Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+The APerf binary embeds a compiled eBPF object built from Amazon-authored
+source under src/ebpf/, licensed GPL-2.0-only OR MIT (full license texts in
+src/ebpf/LICENSE-GPL-2.0 and src/ebpf/LICENSE-MIT).
+
+Third-party components included in APerf's distributed binaries are listed in
+THIRD-PARTY-LICENSES.

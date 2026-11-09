@@ -44,6 +44,8 @@ RUN source /root/.bashrc && \
     tar zxf /opt/aperf.tar.gz -C /opt/ --strip-components=1 && \
     rm /opt/aperf.tar.gz && \
     mv /opt/aperf /usr/bin/ && \
-    chmod a+x /usr/bin/aperf
+    chmod a+x /usr/bin/aperf && \
+    mkdir -p /usr/share/doc/aperf && \
+    { cp /opt/LICENSE /opt/NOTICE /opt/THIRD-PARTY-LICENSES /opt/LICENSE-GPL-2.0 /opt/LICENSE-MIT /usr/share/doc/aperf/ 2>/dev/null || true; }
 
 CMD ["/usr/bin/aperf", "--help"]

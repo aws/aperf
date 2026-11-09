@@ -1,6 +1,7 @@
-use crate::data::common::data_formats::Profiler;
+use crate::data::common::data_formats::{Profiler, ProfilingData};
+use crate::profiling::perf::off_cpu::{self, OffCpuCapture, OffCpuEvent};
 use crate::profiling::perf::{
-    PerfSample, PERF_CONTEXT_MAX, PERF_CONTEXT_USER, PERF_RECORD_MISC_FORK_EXEC,
+    clock_ns, PerfSample, PERF_CONTEXT_MAX, PERF_CONTEXT_USER, PERF_RECORD_MISC_FORK_EXEC,
 };
 use crate::profiling::symbols::symbol_resolver::SymbolResolver;
 use crate::profiling::symbols::Symbol;
@@ -10,87 +11,117 @@ use linux_perf_event_reader::{EventRecord, RawData, SampleRecord};
 use log::{debug, error, warn};
 use std::collections::HashMap;
 use std::env;
+use std::ffi::CStr;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
-use std::path::{Path, PathBuf};
+use std::iter::Peekable;
+use std::path::Path;
 use std::time::Instant;
 
-/// Parse the raw Perf profile and build the Profiler Data.
-pub fn build_perf_profiler_data(
-    profile_type: &str,
-    perf_data_path: &PathBuf,
-    profile_start_timestamp_ms: i64,
-    events_output_path: Option<&Path>,
-) -> Profiler {
-    debug!("Start parsing raw Perf profile...");
+/// The cpu Profiler's inputs.
+pub struct OnCpuInputs<'a> {
+    pub raw_data_path: &'a Path,
+    pub start_time_ms: i64,
+    pub events_output_path: Option<&'a Path>,
+}
 
-    let mut profiler = Profiler::new(profile_start_timestamp_ms);
+/// The off_cpu Profiler's inputs.
+pub struct OffCpuInputs<'a> {
+    pub raw_data_path: &'a Path,
+    pub events_output_path: Option<&'a Path>,
+    pub capture: &'a OffCpuCapture,
+}
+
+/// Parse the raw Perf profile once and build both the cpu and (when off-CPU events are present)
+/// the off_cpu Profilers in a single chronological pass, interleaving the off-CPU events into the
+/// perf.data walk so each resolves against the resolver state at its own timestamp.
+pub fn build_profiling_data(on_cpu: OnCpuInputs, off_cpu: Option<OffCpuInputs>) -> ProfilingData {
+    debug!("Start parsing raw Perf profile...");
 
     let perf_parse_start_time = Instant::now();
 
-    let mut stack_output_file = if let Some(events_output_path) = events_output_path {
-        if let Ok(file) = File::create(events_output_path) {
-            Some(BufWriter::new(file))
-        } else {
-            warn!(
-                "Failed to create file {} to save the Perf events",
-                events_output_path.display()
-            );
-            None
+    let mut cpu_profiler = Profiler::new(on_cpu.start_time_ms);
+    let mut off_cpu_profiler = match &off_cpu {
+        Some(off_cpu) => Profiler {
+            block_width_ms: off_cpu.capture.block_width_ms,
+            ..Profiler::new(off_cpu.capture.start_time_ms)
+        },
+        None => Profiler::default(),
+    };
+    let mut cpu_output_file = open_events_file(on_cpu.events_output_path, "Perf");
+    let mut off_cpu_output_file = open_events_file(
+        off_cpu
+            .as_ref()
+            .and_then(|off_cpu| off_cpu.events_output_path),
+        "off-CPU",
+    );
+    let mut off_cpu_count: usize = 0;
+
+    let handle_parsed_sample = |sample: PerfSample| {
+        let (ts_ms, pid, samples, frames) = fold_sample(sample);
+        if let Some(file) = cpu_output_file.as_mut() {
+            let _ = writeln!(file, "{}|{}|{}", ts_ms, pid, frames.join(";"));
         }
-    } else {
-        None
+        cpu_profiler.insert_stack("cpu", ts_ms, ThreadState::None, &frames, samples);
     };
 
-    let handle_parsed_sample = |perf_sample: PerfSample| {
-        // Following Perf, every stack is rooted at the sampled thread's name.
-        let frames: Vec<String> = std::iter::once(perf_sample.thread_name.replace(' ', "_"))
-            .chain(
-                // Perf sample's call chain is from leaf to root, so reverse the frames.
-                perf_sample
-                    .call_chain
-                    .into_iter()
-                    .rev()
-                    .map(|symbol| symbol.into_frame_string()),
-            )
-            .collect();
-
-        let sample_timestamp_ms = (perf_sample.timestamp / 1_000_000) as i64;
-
-        if let Some(file) = stack_output_file.as_mut() {
-            let _ = writeln!(
-                file,
-                "{}|{}|{}",
-                sample_timestamp_ms,
-                perf_sample.pid,
-                frames.join(";")
-            );
+    let handle_resolved_off_cpu = |sample: PerfSample| {
+        off_cpu_count += 1;
+        let (ts_ms, pid, samples, frames) = fold_sample(sample);
+        if let Some(file) = off_cpu_output_file.as_mut() {
+            let _ = writeln!(file, "{}|{}|{}|{}", ts_ms, pid, samples, frames.join(";"));
         }
-
-        profiler.insert_stack(
-            profile_type,
-            sample_timestamp_ms,
-            ThreadState::None,
-            &frames,
-            1,
-        );
+        off_cpu_profiler.insert_stack("off_cpu", ts_ms, ThreadState::None, &frames, samples);
     };
 
-    let num_parsed_samples = parse_perf_data(perf_data_path, handle_parsed_sample);
+    let num_parsed_samples = parse_perf_data(
+        on_cpu.raw_data_path,
+        handle_parsed_sample,
+        off_cpu.as_ref(),
+        handle_resolved_off_cpu,
+    );
 
     debug!(
         "Finished parsing {num_parsed_samples} Perf samples in {:?}",
         perf_parse_start_time.elapsed()
     );
 
-    profiler
+    let mut profiling_data = ProfilingData::default();
+    profiling_data
+        .profilers
+        .insert(String::from("cpu"), cpu_profiler);
+    if off_cpu_count > 0 {
+        profiling_data
+            .profilers
+            .insert(String::from("off_cpu"), off_cpu_profiler);
+    }
+    profiling_data
+}
+
+fn open_events_file(events_output_path: Option<&Path>, label: &str) -> Option<BufWriter<File>> {
+    let events_output_path = events_output_path?;
+    match File::create(events_output_path) {
+        Ok(file) => Some(BufWriter::new(file)),
+        Err(_) => {
+            warn!(
+                "Failed to create file {} to save the {label} events",
+                events_output_path.display()
+            );
+            None
+        }
+    }
 }
 
 /// Parse every record in the raw Perf profile and pass every parsed sample to
 /// on_parsed_sample.
+/// Off-CPU events (empty for on-CPU-only parses) are interleaved in time order: each is resolved
+/// against the resolver state at its own timestamp and passed to `on_resolved_off_cpu`. The off-CPU
+/// flush only reads the resolver, so the cpu samples are unaffected.
 fn parse_perf_data(
-    perf_data_path: &PathBuf,
+    perf_data_path: &Path,
     mut on_parsed_sample: impl FnMut(PerfSample),
+    off_cpu: Option<&OffCpuInputs>,
+    mut on_resolved_off_cpu: impl FnMut(PerfSample),
 ) -> usize {
     let mut num_processed_samples: usize = 0;
     let mut num_record_parsing_errors: usize = 0;
@@ -145,6 +176,14 @@ fn parse_perf_data(
         Err(e) => error!("Failed to read the Build-IDs from the Perf data: {e}"),
     };
 
+    // Off-CPU events are written in switch_in_ns order, so stream them and flush each into the
+    // walk once the record cursor reaches its timestamp.
+    let mut off_cpu_events = off_cpu
+        .into_iter()
+        .flat_map(|off_cpu| off_cpu::read_events(off_cpu.raw_data_path))
+        .peekable();
+    let mut cur_on_cpu_mono_ns: u64 = 0;
+
     loop {
         let record = match record_iter.next_record(&mut perf_file) {
             Ok(Some(record)) => record,
@@ -159,6 +198,17 @@ fn parse_perf_data(
         };
         match record {
             PerfFileRecord::EventRecord { attr_index, record } => {
+                if let Some(timestamp) = record.timestamp() {
+                    cur_on_cpu_mono_ns = timestamp;
+                }
+                flush_off_cpu_events(
+                    &mut off_cpu_events,
+                    cur_on_cpu_mono_ns,
+                    &mut symbol_resolver,
+                    off_cpu,
+                    &mut on_resolved_off_cpu,
+                );
+
                 let parsed_record = match record.parse() {
                     Ok(parsed_record) => parsed_record,
                     Err(_) => {
@@ -229,9 +279,79 @@ fn parse_perf_data(
         }
     }
 
+    // Flush any off-CPU events that outlast the last perf record against the final resolver state.
+    flush_off_cpu_events(
+        &mut off_cpu_events,
+        u64::MAX,
+        &mut symbol_resolver,
+        off_cpu,
+        &mut on_resolved_off_cpu,
+    );
+
     debug!("Number of Perf profile parsing errors: {num_record_parsing_errors}");
 
     num_processed_samples
+}
+
+/// Symbolize and emit every pending off-CPU event whose timestamp is before `cur_on_cpu_mono_ns`,
+/// converting its CLOCK_MONOTONIC time to epoch with the offset the kernel bucketed on, so each
+/// lands in its bucket's block.
+fn flush_off_cpu_events(
+    off_cpu_events: &mut Peekable<impl Iterator<Item = OffCpuEvent>>,
+    cur_on_cpu_mono_ns: u64,
+    symbol_resolver: &mut SymbolResolver,
+    off_cpu: Option<&OffCpuInputs>,
+    on_resolved_off_cpu: &mut impl FnMut(PerfSample),
+) {
+    let Some(OffCpuInputs { capture, .. }) = off_cpu else {
+        return;
+    };
+    // `dedup_leaf` drops the arm64 duplicate kernel leaf.
+    let mut resolve_stack =
+        |stacks: &HashMap<u32, Vec<u64>>, id: i64, pid: i32, dedup_leaf: bool| -> Vec<Symbol> {
+            let ips: &[u64] = if id < 0 {
+                &[]
+            } else {
+                stacks
+                    .get(&(id as u32))
+                    .map(Vec::as_slice)
+                    .unwrap_or_default()
+            };
+            let ips = if dedup_leaf && ips.len() >= 2 && ips[0] == ips[1] {
+                &ips[1..]
+            } else {
+                ips
+            };
+            ips.iter()
+                .map(|&ip| symbol_resolver.resolve(pid, ip))
+                .collect()
+        };
+    while off_cpu_events
+        .peek()
+        .is_some_and(|event| event.value.switch_in_ns < cur_on_cpu_mono_ns)
+    {
+        let event = off_cpu_events.next().unwrap();
+        let pid = event.key.pid as i32;
+        let user = resolve_stack(&capture.ustacks, event.key.ustack_id, pid, false);
+        let kernel = strip_probe_frames(resolve_stack(
+            &capture.kstacks,
+            event.key.kstack_id,
+            pid,
+            true,
+        ));
+        let mut call_chain = kernel;
+        call_chain.extend(user);
+        on_resolved_off_cpu(PerfSample {
+            pid,
+            timestamp: event.value.switch_in_ns + capture.epoch_offset_ns,
+            thread_name: CStr::from_bytes_until_nul(&event.key.comm)
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned(),
+            call_chain,
+            samples: event.value.off_cpu_ns / 1000,
+        });
+    }
 }
 
 /// The offset that converts a sample's CLOCK_MONOTONIC timestamp (perf record -k 1) into epoch
@@ -243,15 +363,7 @@ fn monotonic_to_epoch_offset_ns(perf_file: &PerfFile) -> i64 {
         }
     }
     // If the pair was not recorded in Perf, read them now as a fallback.
-    let clock_ns = |clock_id| {
-        let mut time = libc::timespec {
-            tv_sec: 0,
-            tv_nsec: 0,
-        };
-        unsafe { libc::clock_gettime(clock_id, &mut time) };
-        time.tv_sec * 1_000_000_000 + time.tv_nsec
-    };
-    clock_ns(libc::CLOCK_REALTIME) - clock_ns(libc::CLOCK_MONOTONIC)
+    clock_ns(libc::CLOCK_REALTIME) as i64 - clock_ns(libc::CLOCK_MONOTONIC) as i64
 }
 
 /// Handle a Perf sample event by symbolicating every frame in the call chain and performing
@@ -311,6 +423,7 @@ fn handle_sample_event(
             // Perf's placeholder for a thread that was never named.
             .unwrap_or_else(|| format!(":{tid}")),
         call_chain: resolved_call_chain,
+        samples: 1,
     };
 
     // On ARM, the caller of the leaf frame might not be in the call chain, due
@@ -363,4 +476,142 @@ fn rawdata_to_string(raw: &RawData) -> String {
     // Strip trailing null bytes (perf data format null-terminates strings)
     let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
     String::from_utf8_lossy(&bytes[..end]).to_string()
+}
+
+/// Fold a sample into its root-to-leaf frame strings (rooted at the thread name) plus its
+/// timestamp (ms), pid, and weight.
+fn fold_sample(sample: PerfSample) -> (i64, i32, u64, Vec<String>) {
+    // Following Perf, every stack is rooted at the sampled thread's name.
+    let frames = std::iter::once(sample.thread_name.replace(' ', "_"))
+        .chain(
+            // Perf sample's call chain is from leaf to root, so reverse the frames.
+            sample
+                .call_chain
+                .into_iter()
+                .rev()
+                .map(|symbol| symbol.into_frame_string()),
+        )
+        .collect();
+    (
+        (sample.timestamp / 1_000_000) as i64,
+        sample.pid,
+        sample.samples,
+        frames,
+    )
+}
+
+/// The probe fires from `__schedule`, so drop every kernel frame leaf-ward of it. The probe is
+/// unloaded before kallsyms is read, so its own frame can't be matched by name.
+fn strip_probe_frames(mut kernel_leaf_first: Vec<Symbol>) -> Vec<Symbol> {
+    const ANCHOR_WINDOW: usize = 8;
+    let strip = kernel_leaf_first
+        .iter()
+        .take(ANCHOR_WINDOW)
+        .position(|symbol| symbol.name == "__schedule" || symbol.name.starts_with("__schedule."))
+        .unwrap_or_else(|| {
+            kernel_leaf_first
+                .iter()
+                .take_while(|symbol| {
+                    symbol.name.starts_with("bpf_prog")
+                        || symbol.name.starts_with("bpf_trace_run")
+                        || symbol.name.starts_with("__bpf_trace_")
+                })
+                .count()
+        });
+    kernel_leaf_first.drain(..strip);
+    kernel_leaf_first
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::profiling::symbols::Symbol;
+    use crate::profiling::FrameType;
+
+    fn sym(name: &str, frame_type: FrameType) -> Symbol {
+        Symbol {
+            name: name.to_string(),
+            resolved: true,
+            source: None,
+            frame_type,
+        }
+    }
+
+    fn unknown(frame_type: FrameType) -> Symbol {
+        Symbol {
+            name: String::new(),
+            resolved: false,
+            source: None,
+            frame_type,
+        }
+    }
+
+    #[test]
+    fn test_off_cpu_fold_order_suffix_and_unknown() {
+        // Off-CPU call chain is kernel-leaf-first then user-leaf-first.
+        let call_chain = vec![
+            sym("__schedule", FrameType::Kernel),
+            unknown(FrameType::Kernel),
+            sym("el0_svc", FrameType::Kernel),
+            sym("nanosleep", FrameType::Native),
+            sym("main", FrameType::Native),
+        ];
+        let (_, _, samples, frames) = fold_sample(PerfSample {
+            pid: 0,
+            timestamp: 0,
+            thread_name: "blocker".to_string(),
+            call_chain,
+            samples: 42,
+        });
+        assert_eq!(samples, 42);
+        assert_eq!(
+            frames,
+            vec![
+                "blocker".to_string(),
+                "main".to_string(),
+                "nanosleep".to_string(),
+                "el0_svc_[k]".to_string(),
+                "[unknown]_[k]".to_string(),
+                "__schedule_[k]".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn test_off_cpu_strip_probe_frames() {
+        let strip = |kernel_leaf_first: Vec<Symbol>| -> Vec<String> {
+            strip_probe_frames(kernel_leaf_first)
+                .into_iter()
+                .map(Symbol::into_frame_string)
+                .collect()
+        };
+        assert_eq!(
+            strip(vec![
+                unknown(FrameType::Kernel),
+                sym("bpf_trace_run4", FrameType::Kernel),
+                sym("__bpf_trace_sched_switch", FrameType::Kernel),
+                sym("__schedule", FrameType::Kernel),
+                sym("schedule", FrameType::Kernel),
+            ]),
+            vec!["__schedule_[k]", "schedule_[k]"]
+        );
+        assert_eq!(
+            strip(vec![
+                sym("bpf_prog_6deef7357e7b4530_off_cpu", FrameType::Kernel),
+                sym("bpf_trace_run4", FrameType::Kernel),
+                sym("__bpf_trace_sched_switch", FrameType::Kernel),
+                sym("__schedule", FrameType::Kernel),
+                sym("schedule", FrameType::Kernel),
+            ]),
+            vec!["__schedule_[k]", "schedule_[k]"]
+        );
+        assert_eq!(
+            strip(vec![
+                sym("bpf_trace_run4", FrameType::Kernel),
+                unknown(FrameType::Kernel),
+                sym("schedule", FrameType::Kernel),
+            ]),
+            vec!["[unknown]_[k]", "schedule_[k]"]
+        );
+    }
 }
