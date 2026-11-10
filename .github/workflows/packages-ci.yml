@@ -15,7 +15,7 @@ jobs:
   build_packages:
     strategy:
       matrix:
-        platform: [ubuntu-latest, ubuntu-22.04-arm]
+        platform: [ubuntu-24.04, ubuntu-24.04-arm]
     runs-on: ${{ matrix.platform }}
     steps:
       - name: Harden Runner
@@ -87,28 +87,28 @@ jobs:
 
       - name: Upload x86_64 RPM
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: ${{ matrix.platform == 'ubuntu-latest' }}
+        if: ${{ matrix.platform == 'ubuntu-24.04' }}
         with:
           name: x86_64-rpm
           path: aperf-${{ inputs.version }}-x86_64.rpm
 
       - name: Upload x86_64 DEB
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: ${{ matrix.platform == 'ubuntu-latest' }}
+        if: ${{ matrix.platform == 'ubuntu-24.04' }}
         with:
           name: x86_64-deb
           path: aperf-${{ inputs.version }}-amd64.deb
 
       - name: Upload aarch64 RPM
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: ${{ matrix.platform == 'ubuntu-22.04-arm' }}
+        if: ${{ matrix.platform == 'ubuntu-24.04-arm' }}
         with:
           name: aarch64-rpm
           path: aperf-${{ inputs.version }}-aarch64.rpm
 
       - name: Upload aarch64 DEB
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: ${{ matrix.platform == 'ubuntu-22.04-arm' }}
+        if: ${{ matrix.platform == 'ubuntu-24.04-arm' }}
         with:
           name: aarch64-deb
           path: aperf-${{ inputs.version }}-arm64.deb
