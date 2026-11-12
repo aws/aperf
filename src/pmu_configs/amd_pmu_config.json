@@ -7,7 +7,8 @@
     "L2_Demand_Misses": "cpu/event=0x64,umask=0x9/",
     "Instruction_TLB_Misses": "cpu/event=0x84,umask=0x0/",
     "Data_TLB_Misses": "cpu/event=0x45,umask=0xff/",
-    "Data_TLB_TW_Misses": "cpu/event=0x45,umask=0xf0/"
+    "Data_TLB_TW_Misses": "cpu/event=0x45,umask=0xf0/",
+    "Div_Busy_Cycles": "cpu/event=0xd3,umask=0x0/"
   },
   "metrics": {
     "ipc": "Instructions / Cycles",
@@ -16,6 +17,7 @@
     "l2-mpki": "L2_Demand_Misses / Instructions * 1000",
     "inst-tlb-mpki": "Instruction_TLB_Misses / Instructions * 1000",
     "data-tlb-mpki": "Data_TLB_Misses / Instructions * 1000",
-    "data-tlb-tw-pki": "Data_TLB_TW_Misses / Instructions * 1000"
+    "data-tlb-tw-pki": "Data_TLB_TW_Misses / Instructions * 1000",
+    "div-busy-pkc": "Div_Busy_Cycles / Cycles * 1000"
   }
 }

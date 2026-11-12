@@ -49,6 +49,7 @@ When choosing the metric names, please note that APerf has a list of preferred n
 * `data-st-tlb-tw-pki`
 * `code-sparsity`
 * `strex-spec-pki`
+* `div-busy-pkc`
 
 
 ## Collection Mode
