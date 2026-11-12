@@ -144,6 +144,15 @@ impl AnalyzeData for PerfStat {
                 score: Score::Neutral,
                 message: " The PMU events were collected under multiplexing. The accuracy of the values might be impacted and there is increased CPU utilization for the collection.",
             ),
+            time_series_stat_threshold! (
+                name: "High Divider Utilization",
+                metric: "div-busy-pkc",
+                stat: Stat::Average,
+                comparator: Comparator::Greater,
+                threshold: 100.0,
+                score: Score::Concerning,
+                message: "The integer divider is busy for a large share of cycles. Often comes from excessive division or modulo at runtime, which takes much longer than other integer operations. This can cause CPU backend stalls.",
+            ),
         ]
     }
 }
