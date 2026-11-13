@@ -35,10 +35,10 @@ impl KernelSymbols {
     /// Parse the content of /proc/kallsyms to build the Kernel symbol table.
     pub fn from_kallsyms() -> Result<Self> {
         Ok(KernelSymbols {
-            symbol_table: process_raw_kernel_symbols(
-                collect_raw_kernel_symbols(PathBuf::from("/proc/kallsyms"))?,
-                load_proc_modules(),
-            ),
+            symbol_table: build_kernel_symbol_table(
+                PathBuf::from("/proc/kallsyms"),
+                &load_proc_modules(),
+            )?,
         })
     }
 
@@ -68,8 +68,7 @@ fn is_valid_type_letter(t: char) -> bool {
         || t == '1'
 }
 
-/// Load /proc/modules so we can attribute a symbol to its module when
-/// kallsyms has duplicates at the same address from different modules.
+/// Load /proc/modules so we can tell which module an address belongs to.
 fn load_proc_modules() -> Vec<ProcModuleEntry> {
     let mut proc_module_entries: Vec<ProcModuleEntry> = Vec::new();
 
@@ -102,9 +101,19 @@ fn load_proc_modules() -> Vec<ProcModuleEntry> {
     proc_module_entries
 }
 
+/// The module whose /proc/modules range holds the address, if any.
+fn owning_module(addr: u64, proc_module_entries: &[ProcModuleEntry]) -> Option<&str> {
+    let index = proc_module_entries.partition_point(|entry| entry.base_addr <= addr);
+    let entry = proc_module_entries.get(index.checked_sub(1)?)?;
+    (addr < entry.end_addr).then_some(entry.module_name.as_str())
+}
+
 /// Read the file (/proc/kallsyms) containing all kernel symbols and parse them into
-/// a list of RawKernelSymbol sorted by the symbol address.
-fn collect_raw_kernel_symbols(path: PathBuf) -> Result<Vec<RawKernelSymbol>> {
+/// a symbol table sorted by address, with one symbol per address.
+fn build_kernel_symbol_table(
+    path: PathBuf,
+    proc_module_entries: &[ProcModuleEntry],
+) -> Result<Vec<SymbolTableEntry>> {
     let kallsyms_file = fs::File::open(path)?;
     let buf_reader = BufReader::new(kallsyms_file);
 
@@ -149,6 +158,16 @@ fn collect_raw_kernel_symbols(path: PathBuf) -> Result<Vec<RawKernelSymbol>> {
             (raw_name.to_string(), None)
         };
 
+        // If a loaded module's function at an address that now belongs to another module,
+        // it is stale and should be skipped.
+        if let Some(module) = &module {
+            if type_letter == 'T'
+                && matches!(owning_module(addr, proc_module_entries), Some(owner) if owner != module)
+            {
+                continue;
+            }
+        }
+
         raw_kernel_symbols.push(RawKernelSymbol {
             raw_symbol: RawSymbol {
                 addr,
@@ -183,72 +202,24 @@ fn collect_raw_kernel_symbols(path: PathBuf) -> Result<Vec<RawKernelSymbol>> {
         raw_kernel_symbols[i].raw_symbol.size = end_addr.saturating_sub(addr)
     }
 
-    Ok(raw_kernel_symbols)
-}
-
-/// Create the final Kernel symbol table by applying the deduplication logic on the raw symbols.
-fn process_raw_kernel_symbols(
-    raw_kernel_symbols: Vec<RawKernelSymbol>,
-    proc_module_entries: Vec<ProcModuleEntry>,
-) -> Vec<SymbolTableEntry> {
+    // Keep one symbol per address by Perf's choose_best_symbol logic.
     let mut kernel_symbol_table: Vec<SymbolTableEntry> = Vec::new();
-
-    // Deduplicate kernel symbols that share the same address.
     let mut raw_kernel_symbol_iterator = raw_kernel_symbols.into_iter().peekable();
-    while let Some(cur_raw_kernel_symbol) = raw_kernel_symbol_iterator.next() {
-        let cur_raw_kernel_symbol_addr = cur_raw_kernel_symbol.raw_symbol.addr;
-        // Attempt to retrieve the module that the address belongs to.
-        let matched_module = match proc_module_entries
-            .binary_search_by_key(&cur_raw_kernel_symbol_addr, |proc_module_entry| {
-                proc_module_entry.base_addr
-            }) {
-            Ok(i) => Some(&proc_module_entries[i].module_name),
-            Err(0) => None,
-            Err(i) => {
-                let matched_proc_module_entry = &proc_module_entries[i - 1];
-                if cur_raw_kernel_symbol_addr < matched_proc_module_entry.end_addr {
-                    Some(&matched_proc_module_entry.module_name)
-                } else {
-                    None
-                }
-            }
-        };
-
-        let mut chosen_raw_kernel_symbol = cur_raw_kernel_symbol;
-        let mut chosen_with_matched_module =
-            matched_module.is_some() && chosen_raw_kernel_symbol.module.as_ref() == matched_module;
-
-        while let Some(next_raw_kernel_symbol) = raw_kernel_symbol_iterator.peek() {
-            if next_raw_kernel_symbol.raw_symbol.addr != cur_raw_kernel_symbol_addr {
-                break;
-            }
-
-            let next_raw_kernel_symbol = raw_kernel_symbol_iterator.next().unwrap();
-            let next_raw_kernel_symbol_match_module = matched_module.is_some()
-                && next_raw_kernel_symbol.module.as_ref() == matched_module;
-
-            // When choosing between two symbols with the same address, prefer the one whose module
-            // matches the /proc/modules. If none or both of them match, apply the choose_best_symbol
-            // logic in Perf.
-            let chose_next_raw_kernel_symbol =
-                if chosen_with_matched_module != next_raw_kernel_symbol_match_module {
-                    next_raw_kernel_symbol_match_module
-                } else {
-                    prefer_second_symbol(
-                        &chosen_raw_kernel_symbol.raw_symbol,
-                        &next_raw_kernel_symbol.raw_symbol,
-                    )
-                };
-            if chose_next_raw_kernel_symbol {
+    while let Some(mut chosen_raw_kernel_symbol) = raw_kernel_symbol_iterator.next() {
+        while let Some(next_raw_kernel_symbol) = raw_kernel_symbol_iterator
+            .next_if(|next| next.raw_symbol.addr == chosen_raw_kernel_symbol.raw_symbol.addr)
+        {
+            if prefer_second_symbol(
+                &chosen_raw_kernel_symbol.raw_symbol,
+                &next_raw_kernel_symbol.raw_symbol,
+            ) {
                 chosen_raw_kernel_symbol = next_raw_kernel_symbol;
-                chosen_with_matched_module = next_raw_kernel_symbol_match_module;
             }
         }
-
         kernel_symbol_table.push(chosen_raw_kernel_symbol.to_symbol_table_entry());
     }
 
-    kernel_symbol_table
+    Ok(kernel_symbol_table)
 }
 
 #[cfg(test)]
@@ -268,16 +239,20 @@ ffff800080a00100 t nf_conntrack_insert\t[nf_conntrack]
 ffff800080b00000 t bpf_prog_1234\t[bpf]
 ";
 
-    fn kernel_symbols(kallsyms_content: &str) -> KernelSymbols {
+    fn kernel_symbols(
+        kallsyms_content: &str,
+        proc_module_entries: &[ProcModuleEntry],
+    ) -> KernelSymbols {
         let mut kallsyms_file = tempfile::NamedTempFile::new().unwrap();
         kallsyms_file
             .write_all(kallsyms_content.as_bytes())
             .unwrap();
         KernelSymbols {
-            symbol_table: process_raw_kernel_symbols(
-                collect_raw_kernel_symbols(kallsyms_file.path().to_path_buf()).unwrap(),
-                Vec::new(),
-            ),
+            symbol_table: build_kernel_symbol_table(
+                kallsyms_file.path().to_path_buf(),
+                proc_module_entries,
+            )
+            .unwrap(),
         }
     }
 
@@ -287,7 +262,7 @@ ffff800080b00000 t bpf_prog_1234\t[bpf]
 
     #[test]
     fn symbol_sizes_stop_at_a_module_boundary() {
-        let kernel_symbols = kernel_symbols(KALLSYMS);
+        let kernel_symbols = kernel_symbols(KALLSYMS, &[]);
 
         // Within the kernel text a symbol runs up to the next one.
         assert_eq!(
@@ -328,10 +303,42 @@ ffff800080b00000 t bpf_prog_1234\t[bpf]
     fn last_duplicate_symbol_at_an_address_wins() {
         // Perf keeps the last of the duplicates listed at an address; the synthesized sizes are
         // what make that happen here, so a change to them must not quietly flip the choice.
-        let kernel_symbols = kernel_symbols(KALLSYMS);
+        let kernel_symbols = kernel_symbols(KALLSYMS, &[]);
         assert_eq!(
             resolved_name(&kernel_symbols, 0xffff_8000_8001_0040).as_deref(),
             Some("do_another_thing_local")
+        );
+    }
+
+    #[test]
+    fn stale_init_function_in_another_module_is_skipped() {
+        // ftrace still lists vxlan's freed init function where nf_tables was loaded later.
+        let kallsyms = "\
+ffff800080a00000 t nft_update_chain_stats\t[nf_tables]
+ffff800080a00090 T vxlan_init_module\t[vxlan]
+ffff800080a00098 T nft_do_chain\t[nf_tables]
+ffff800080c00000 t vxlan_xmit\t[vxlan]
+";
+        let proc_module_entries = [
+            ProcModuleEntry {
+                base_addr: 0xffff_8000_80a0_0000,
+                end_addr: 0xffff_8000_80b0_0000,
+                module_name: "nf_tables".to_string(),
+            },
+            ProcModuleEntry {
+                base_addr: 0xffff_8000_80c0_0000,
+                end_addr: 0xffff_8000_80c1_0000,
+                module_name: "vxlan".to_string(),
+            },
+        ];
+        let kernel_symbols = kernel_symbols(kallsyms, &proc_module_entries);
+        assert_eq!(
+            resolved_name(&kernel_symbols, 0xffff_8000_80a0_0094).as_deref(),
+            Some("nft_update_chain_stats")
+        );
+        assert_eq!(
+            resolved_name(&kernel_symbols, 0xffff_8000_80a0_0100).as_deref(),
+            Some("nft_do_chain")
         );
     }
 }
