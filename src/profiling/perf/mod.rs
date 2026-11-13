@@ -19,6 +19,9 @@ struct PerfSample {
     call_chain: Vec<Symbol>,
     /// Sample weight: 1 for a Perf sample, off-CPU microseconds for an off-CPU event.
     samples: u64,
+    /// `samples` per block as `(time_ms, count)` over the blocks an off-CPU event touched;
+    /// empty for a Perf sample.
+    splits: Vec<(i64, u64)>,
 }
 
 fn clock_ns(clock_id: libc::clockid_t) -> u64 {

@@ -65,13 +65,14 @@ pub fn build_profiling_data(on_cpu: OnCpuInputs, off_cpu: Option<OffCpuInputs>) 
         cpu_profiler.insert_stack("cpu", ts_ms, ThreadState::None, &frames, samples);
     };
 
-    let handle_resolved_off_cpu = |sample: PerfSample| {
+    let handle_resolved_off_cpu = |mut sample: PerfSample| {
         off_cpu_count += 1;
+        let splits = std::mem::take(&mut sample.splits);
         let (ts_ms, pid, samples, frames) = fold_sample(sample);
         if let Some(file) = off_cpu_output_file.as_mut() {
             let _ = writeln!(file, "{}|{}|{}|{}", ts_ms, pid, samples, frames.join(";"));
         }
-        off_cpu_profiler.insert_stack("off_cpu", ts_ms, ThreadState::None, &frames, samples);
+        off_cpu_profiler.insert_stack_batch("off_cpu", ThreadState::None, &frames, &splits);
     };
 
     let num_parsed_samples = parse_perf_data(
@@ -341,6 +342,7 @@ fn flush_off_cpu_events(
         ));
         let mut call_chain = kernel;
         call_chain.extend(user);
+        let splits = spread_off_cpu(&event, capture.block_width_ms);
         on_resolved_off_cpu(PerfSample {
             pid,
             timestamp: event.value.switch_in_ns + capture.epoch_offset_ns,
@@ -349,9 +351,31 @@ fn flush_off_cpu_events(
                 .to_string_lossy()
                 .into_owned(),
             call_chain,
-            samples: event.value.off_cpu_ns / 1000,
+            samples: splits.iter().map(|&(_, block_us)| block_us).sum(),
+            splits,
         });
     }
+}
+
+/// Splits an off-CPU event's microseconds over the blocks its stretches touched: the first block
+/// gets `head_ns`, each middle block an equal share of `mid_ns` (every stretch covers it fully),
+/// and the wake-up block `tail_ns`.
+fn spread_off_cpu(event: &OffCpuEvent, block_width_ms: u64) -> Vec<(i64, u64)> {
+    let (key, value) = (&event.key, &event.value);
+    let block_ms = |bucket: u64| (bucket * block_width_ms) as i64;
+    let mut splits = Vec::new();
+    if value.head_ns > 0 {
+        let mid_buckets = key.mid_buckets as u64;
+        let first_bucket = key.bucket - mid_buckets - 1;
+        splits.push((block_ms(first_bucket), value.head_ns / 1000));
+        if let Some(middle_ns) = value.mid_ns.checked_div(mid_buckets) {
+            splits.extend(
+                (first_bucket + 1..key.bucket).map(|bucket| (block_ms(bucket), middle_ns / 1000)),
+            );
+        }
+    }
+    splits.push((block_ms(key.bucket), value.tail_ns / 1000));
+    splits
 }
 
 /// The offset that converts a sample's CLOCK_MONOTONIC timestamp (perf record -k 1) into epoch
@@ -424,6 +448,7 @@ fn handle_sample_event(
             .unwrap_or_else(|| format!(":{tid}")),
         call_chain: resolved_call_chain,
         samples: 1,
+        splits: Vec::new(),
     };
 
     // On ARM, the caller of the leaf frame might not be in the call chain, due
@@ -500,14 +525,21 @@ fn fold_sample(sample: PerfSample) -> (i64, i32, u64, Vec<String>) {
     )
 }
 
-/// The probe fires from `__schedule`, so drop every kernel frame leaf-ward of it. The probe is
-/// unloaded before kallsyms is read, so its own frame can't be matched by name.
+/// The probe fires from `__schedule`, so drop every kernel frame leaf-ward of it, and `__schedule`
+/// and its `schedule` caller too, so the leaf is the call that blocked. The probe is unloaded
+/// before kallsyms is read, so its own frame can't be matched by name.
 fn strip_probe_frames(mut kernel_leaf_first: Vec<Symbol>) -> Vec<Symbol> {
     const ANCHOR_WINDOW: usize = 8;
     let strip = kernel_leaf_first
         .iter()
         .take(ANCHOR_WINDOW)
         .position(|symbol| symbol.name == "__schedule" || symbol.name.starts_with("__schedule."))
+        .map(|anchor| {
+            let caller_is_schedule = kernel_leaf_first
+                .get(anchor + 1)
+                .is_some_and(|symbol| symbol.name == "schedule");
+            anchor + 1 + usize::from(caller_is_schedule)
+        })
         .unwrap_or_else(|| {
             kernel_leaf_first
                 .iter()
@@ -562,6 +594,7 @@ mod tests {
             thread_name: "blocker".to_string(),
             call_chain,
             samples: 42,
+            splits: Vec::new(),
         });
         assert_eq!(samples, 42);
         assert_eq!(
@@ -592,8 +625,9 @@ mod tests {
                 sym("__bpf_trace_sched_switch", FrameType::Kernel),
                 sym("__schedule", FrameType::Kernel),
                 sym("schedule", FrameType::Kernel),
+                sym("do_nanosleep", FrameType::Kernel),
             ]),
-            vec!["__schedule_[k]", "schedule_[k]"]
+            vec!["do_nanosleep_[k]"]
         );
         assert_eq!(
             strip(vec![
@@ -602,8 +636,18 @@ mod tests {
                 sym("__bpf_trace_sched_switch", FrameType::Kernel),
                 sym("__schedule", FrameType::Kernel),
                 sym("schedule", FrameType::Kernel),
+                sym("do_nanosleep", FrameType::Kernel),
             ]),
-            vec!["__schedule_[k]", "schedule_[k]"]
+            vec!["do_nanosleep_[k]"]
+        );
+        assert_eq!(
+            strip(vec![
+                sym("bpf_trace_run4", FrameType::Kernel),
+                sym("__schedule", FrameType::Kernel),
+                sym("preempt_schedule_irq", FrameType::Kernel),
+                sym("el1_interrupt", FrameType::Kernel),
+            ]),
+            vec!["preempt_schedule_irq_[k]", "el1_interrupt_[k]"]
         );
         assert_eq!(
             strip(vec![
@@ -612,6 +656,58 @@ mod tests {
                 sym("schedule", FrameType::Kernel),
             ]),
             vec!["[unknown]_[k]", "schedule_[k]"]
+        );
+    }
+
+    #[test]
+    fn test_spread_off_cpu() {
+        let ns_per_ms: u64 = 1_000_000;
+        let spread = |bucket, mid_buckets, head_ns, mid_ns, tail_ns| {
+            let key = off_cpu::OffCpuKey {
+                pid: 0,
+                comm: [0; 16],
+                mid_buckets,
+                kstack_id: 0,
+                ustack_id: 0,
+                bucket,
+            };
+            let value = off_cpu::OffCpuValue {
+                switch_in_ns: 0,
+                head_ns,
+                mid_ns,
+                tail_ns,
+            };
+            spread_off_cpu(&OffCpuEvent { key, value }, 100)
+        };
+        // 7 stretches over buckets 10-12 merged into 4 entries: 210 / 360 / 150 ms per block.
+        assert_eq!(spread(10, 0, 0, 0, 60 * ns_per_ms), vec![(1_000, 60_000)]);
+        assert_eq!(
+            spread(11, 0, 50 * ns_per_ms, 0, 70 * ns_per_ms),
+            vec![(1_000, 50_000), (1_100, 70_000)]
+        );
+        assert_eq!(
+            spread(12, 0, 90 * ns_per_ms, 0, 50 * ns_per_ms),
+            vec![(1_100, 90_000), (1_200, 50_000)]
+        );
+        assert_eq!(
+            spread(12, 1, 100 * ns_per_ms, 200 * ns_per_ms, 100 * ns_per_ms),
+            vec![(1_000, 100_000), (1_100, 200_000), (1_200, 100_000)]
+        );
+        // Two middle buckets; each part's sub-microsecond remainder is dropped.
+        assert_eq!(
+            spread(
+                13,
+                2,
+                90 * ns_per_ms + 700,
+                200 * ns_per_ms,
+                50 * ns_per_ms + 800
+            ),
+            vec![
+                (1_000, 90_000),
+                (1_100, 100_000),
+                (1_200, 100_000),
+                (1_300, 50_000)
+            ]
         );
     }
 }

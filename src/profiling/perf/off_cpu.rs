@@ -69,7 +69,7 @@ const OFF_CPU_BLOCK_BANDS: [(&str, u32); 8] = [
 pub struct OffCpuKey {
     pub pid: u32,
     pub comm: [u8; 16],
-    _pad: u32,
+    pub mid_buckets: u32,
     pub kstack_id: i64,
     pub ustack_id: i64,
     pub bucket: u64,
@@ -83,8 +83,10 @@ unsafe impl aya::Pod for OffCpuKey {}
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct OffCpuValue {
-    pub off_cpu_ns: u64,
     pub switch_in_ns: u64,
+    pub head_ns: u64,
+    pub mid_ns: u64,
+    pub tail_ns: u64,
 }
 
 unsafe impl aya::Pod for OffCpuValue {}
@@ -98,7 +100,7 @@ pub struct OffCpuEvent {
     pub value: OffCpuValue,
 }
 
-const _: () = assert!(size_of::<OffCpuEvent>() == 64);
+const _: () = assert!(size_of::<OffCpuEvent>() == 80);
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -239,6 +241,7 @@ impl OffCpuProfiler {
             .map("START")
             .and_then(|map| AyaHashMap::<_, u32, OffCpuStart>::try_from(map).ok())
         {
+            let end_epoch_ns = end_ns + self.epoch_offset_ns;
             for (_, s) in start.iter().flatten() {
                 let off_cpu_ns = end_ns.saturating_sub(s.ts_ns);
                 unfinished += 1;
@@ -247,18 +250,22 @@ impl OffCpuProfiler {
                     continue;
                 }
                 unfinished_ns += off_cpu_ns;
+                let (mid_buckets, head_ns, mid_ns, tail_ns) =
+                    split_off_cpu_stretch_by_bucket(end_epoch_ns, off_cpu_ns, self.bucket_ns);
                 drained.push(OffCpuEvent {
                     key: OffCpuKey {
                         pid: s.tgid,
                         comm: s.comm,
-                        _pad: 0,
+                        mid_buckets,
                         kstack_id: s.kstack_id,
                         ustack_id: s.ustack_id,
-                        bucket: (end_ns + self.epoch_offset_ns) / self.bucket_ns,
+                        bucket: end_epoch_ns / self.bucket_ns,
                     },
                     value: OffCpuValue {
-                        off_cpu_ns,
                         switch_in_ns: end_ns,
+                        head_ns,
+                        mid_ns,
+                        tail_ns,
                     },
                 });
             }
@@ -456,4 +463,63 @@ fn attach_program(ebpf: &mut aya::Ebpf, run_data_dir: &Path) -> Result<BufWriter
         .mode(0o600)
         .open(events_file_path(run_data_dir))?;
     Ok(BufWriter::new(file))
+}
+
+/// Splits one off-CPU stretch ending at `wake_epoch_ns` the way the kernel does: the buckets fully
+/// covered between its first and wake-up buckets, and its time in the first bucket (0 if it
+/// touched only one), in those middle buckets, and in the wake-up bucket.
+fn split_off_cpu_stretch_by_bucket(
+    wake_epoch_ns: u64,
+    off_cpu_ns: u64,
+    bucket_ns: u64,
+) -> (u32, u64, u64, u64) {
+    let in_bucket_ns = wake_epoch_ns % bucket_ns;
+    if off_cpu_ns <= in_bucket_ns {
+        return (0, 0, 0, off_cpu_ns);
+    }
+    let head_ns = off_cpu_ns - in_bucket_ns;
+    if head_ns <= bucket_ns {
+        return (0, head_ns, 0, in_bucket_ns);
+    }
+    let mid_buckets = (head_ns - 1) / bucket_ns;
+    let mid_ns = mid_buckets * bucket_ns;
+    (mid_buckets as u32, head_ns - mid_ns, mid_ns, in_bucket_ns)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_split_off_cpu_stretch_by_bucket() {
+        let ns_per_ms = 1_000_000;
+        // (wake-up, off-CPU ms) -> (middle buckets, head ms, mid ms, tail ms), 100 ms buckets.
+        for (wake, delta, want) in [
+            (80, 60, (0, 0, 0, 60)),
+            (170, 120, (0, 50, 0, 70)),
+            (210, 80, (0, 70, 0, 10)),
+            (240, 150, (1, 10, 100, 40)),
+            (260, 250, (1, 90, 100, 60)),
+            (300, 100, (0, 100, 0, 0)),
+            (300, 200, (1, 100, 100, 0)),
+            (301, 102, (1, 1, 100, 1)),
+            (350, 340, (2, 90, 200, 50)),
+        ] {
+            let (mid_buckets, head_ns, mid_ns, tail_ns) = split_off_cpu_stretch_by_bucket(
+                wake * ns_per_ms,
+                delta * ns_per_ms,
+                100 * ns_per_ms,
+            );
+            assert_eq!(
+                (
+                    mid_buckets,
+                    head_ns / ns_per_ms,
+                    mid_ns / ns_per_ms,
+                    tail_ns / ns_per_ms
+                ),
+                want,
+                "wake {wake} delta {delta}"
+            );
+        }
+    }
 }
