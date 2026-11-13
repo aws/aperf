@@ -22,19 +22,22 @@ struct off_cpu_start {
 	__u8 comm[16];
 };
 
-/* COUNTS aggregation key: process, comm, both stack ids, and time bucket. Mirrored by the userspace Rust OffCpuKey. */
+/* COUNTS aggregation key: process, comm, middle buckets, both stack ids, and wake-up bucket.
+ * Mirrored by the userspace Rust OffCpuKey. */
 struct off_cpu_key {
 	__u32 pid;
 	__u8 comm[16];
-	__u32 _pad;
+	__u32 mid_buckets;
 	__s64 kstack_id;
 	__s64 ustack_id;
 	__u64 bucket;
 };
 
 struct off_cpu_value {
-	__u64 off_cpu_ns;
 	__u64 switch_in_ns;
+	__u64 head_ns;
+	__u64 mid_ns;
+	__u64 tail_ns;
 };
 
 enum {
@@ -68,5 +71,6 @@ enum {
 _Static_assert(sizeof(struct off_cpu_start) == 48, "off_cpu_start layout");
 _Static_assert(sizeof(struct off_cpu_key) == 48, "off_cpu_key layout");
 _Static_assert(__builtin_offsetof(struct off_cpu_key, kstack_id) == 24, "off_cpu_key layout");
+_Static_assert(sizeof(struct off_cpu_value) == 32, "off_cpu_value layout");
 
 #endif

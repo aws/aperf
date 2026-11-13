@@ -38,7 +38,7 @@ struct {
 	__type(value, struct off_cpu_start);
 } START SEC(".maps");
 
-// COUNTS: aggregated blocked ns and first switch-in time, keyed by off_cpu_key
+// COUNTS: aggregated blocked ns (head/mid/tail) and first switch-in time, keyed by off_cpu_key
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 524288);
@@ -177,11 +177,32 @@ int BPF_PROG(off_cpu, bool preempt, struct task_struct *prev, struct task_struct
 	__builtin_memcpy(key.comm, s.comm, sizeof(key.comm));
 	key.kstack_id = s.kstack_id;
 	key.ustack_id = s.ustack_id;
-	key.bucket = bucket_ns ? (now + epoch_offset_ns) / bucket_ns : 0;
+	__u64 width_ns = bucket_ns, wake_ns = now + epoch_offset_ns;
+	__u64 bucket = width_ns ? wake_ns / width_ns : 0;
+	__u64 in_bucket_ns = wake_ns - bucket * width_ns;
+	__u64 head_ns = 0, mid_ns = 0, tail_ns = delta;
+
+	key.bucket = bucket;
+	// head: time in the first bucket if the stretch crossed a boundary; mid: in the fully
+	// covered buckets between; tail: the rest, in the wake-up bucket. They sum to delta.
+	if (delta > in_bucket_ns) {
+		head_ns = delta - in_bucket_ns;
+		tail_ns = in_bucket_ns;
+		if (head_ns > width_ns) {
+			__u64 mid_buckets = (head_ns - 1) / width_ns;
+
+			key.mid_buckets = mid_buckets;
+			mid_ns = mid_buckets * width_ns;
+			head_ns -= mid_ns;
+		}
+	}
 	// Several CPUs can update one key; an unused add result keeps 5.10's legacy XADD.
 	struct off_cpu_value *v = bpf_map_lookup_elem(&COUNTS, &key);
 	if (!v) {
-		struct off_cpu_value init = { .off_cpu_ns = delta, .switch_in_ns = now };
+		struct off_cpu_value init = {
+			.switch_in_ns = now, .head_ns = head_ns,
+			.mid_ns = mid_ns, .tail_ns = tail_ns,
+		};
 
 		if (!bpf_map_update_elem(&COUNTS, &key, &init, BPF_NOEXIST))
 			return 0;
@@ -192,6 +213,10 @@ int BPF_PROG(off_cpu, bool preempt, struct task_struct *prev, struct task_struct
 			return 0;
 		}
 	}
-	__sync_fetch_and_add(&v->off_cpu_ns, delta);
+	if (head_ns)
+		__sync_fetch_and_add(&v->head_ns, head_ns);
+	if (mid_ns)
+		__sync_fetch_and_add(&v->mid_ns, mid_ns);
+	__sync_fetch_and_add(&v->tail_ns, tail_ns);
 	return 0;
 }
