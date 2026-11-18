@@ -1,12 +1,13 @@
 import { DataType, TimeSeriesData } from "../../definitions/types";
 import { CPU_DATA_TYPES, PROCESSED_DATA, RUNS } from "../../definitions/data-config";
 import { useReportState } from "../ReportStateProvider";
-import { shouldShowCpuSeries } from "../../utils/utils";
+import { getSeriesTrace, shouldShowCpuSeries, useSeriesValues } from "../../utils/utils";
 import { MAX_SERIES_PER_GRAPH } from "../../definitions/constants";
 import { Box } from "@cloudscape-design/components";
 import React from "react";
 import Plot from "react-plotly.js";
 import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
+import { MetricDecodingStatusBox } from "./StatusBoxes";
 
 interface CombinedMetricGraphProps {
   readonly dataType: DataType;
@@ -22,30 +23,33 @@ export default function (props: CombinedMetricGraphProps) {
 
   const isCpuData = CPU_DATA_TYPES.includes(props.dataType);
 
-  const seriesData: Partial<Plotly.PlotData>[] = [];
+  const visibleSeries: { runName: string; seriesName: string; seriesIndex: number }[] = [];
   for (const runName of RUNS) {
     const curRunMetrics = (PROCESSED_DATA[props.dataType].runs[runName] as TimeSeriesData)?.metrics;
     if (curRunMetrics === undefined) continue;
     const curRunMetric = curRunMetrics[props.metricName];
     if (curRunMetric === undefined) continue;
 
-    for (const series of curRunMetric.series) {
+    curRunMetric.series.forEach((seriesName, seriesIndex) => {
       if (
         !isCpuData ||
-        shouldShowCpuSeries(series.series_name, selectedCpusPerRun[runName].aggregate, selectedCpusPerRun[runName].cpus)
+        shouldShowCpuSeries(
+          seriesName,
+          seriesIndex === curRunMetric.default_stats_series_idx,
+          selectedCpusPerRun[runName].aggregate,
+          selectedCpusPerRun[runName].cpus,
+        )
       ) {
-        seriesData.push({
-          name: `${runName}:${series.series_name || ""}`,
-          x: series.time_diff,
-          y: series.values,
-          type: "scatter",
-          visible: true,
-        });
+        visibleSeries.push({ runName, seriesName, seriesIndex });
       }
-    }
+    });
   }
 
-  if (seriesData.length > MAX_SERIES_PER_GRAPH) {
+  // Only decode the values if the graph can show them
+  const canShowSeries = visibleSeries.length > 0 && visibleSeries.length <= MAX_SERIES_PER_GRAPH;
+  const values = useSeriesValues(props.dataType, props.metricName, canShowSeries ? RUNS : []);
+
+  if (visibleSeries.length > MAX_SERIES_PER_GRAPH) {
     return (
       <Box textAlign="center" color="inherit">
         <b>Too many series</b>
@@ -54,7 +58,7 @@ export default function (props: CombinedMetricGraphProps) {
         </Box>
       </Box>
     );
-  } else if (seriesData.length == 0) {
+  } else if (visibleSeries.length == 0) {
     return (
       <Box textAlign="center" color="inherit">
         <b>No visible series</b>
@@ -64,6 +68,18 @@ export default function (props: CombinedMetricGraphProps) {
       </Box>
     );
   }
+  if (!(values instanceof Map)) {
+    return <MetricDecodingStatusBox error={values} />;
+  }
+
+  const seriesData = visibleSeries.map(({ runName, seriesName, seriesIndex }) =>
+    getSeriesTrace(
+      `${runName}:${seriesName}`,
+      (PROCESSED_DATA[props.dataType].runs[runName] as TimeSeriesData).time_diff,
+      values.get(runName)[seriesIndex],
+      true,
+    ),
+  );
 
   return (
     <Plot

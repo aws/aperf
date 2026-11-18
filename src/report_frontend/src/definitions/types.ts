@@ -35,23 +35,24 @@ export interface ReportData {
   readonly run_errors?: { [key in string]: string };
 }
 
+// TimeSeriesData and TimeSeriesMetric below are in their storage format.
+// Refer to how they are written into JSONs in src/data/common/processed_data_accessor.rs
 export interface TimeSeriesData {
+  readonly time_diff: number[];
   readonly metrics: { [key in string]: TimeSeriesMetric };
   readonly sorted_metric_names: string[];
 }
 
 export interface TimeSeriesMetric {
   readonly metric_name: string;
-  readonly series: Series[];
+  /** The names of all series */
+  readonly series: string[];
+  /** The series whose statistics are the metric's, which is its aggregate if it has one */
+  readonly default_stats_series_idx: number;
+  /** The values of all series at the times of the run, see decodeSeriesValues */
+  readonly values: string[];
   readonly value_range: number[];
   readonly stats: Statistics;
-}
-
-export interface Series {
-  readonly series_name?: string;
-  readonly time_diff: number[];
-  readonly values: number[];
-  readonly is_aggregate: boolean;
 }
 
 export interface KeyValueData {

@@ -1,4 +1,5 @@
-use crate::computations::{f64_to_fixed_2, Statistics};
+use crate::computations::{round_to_decimals, Statistics};
+use crate::data::common::compression::{base64_chunks, zlib_encoder};
 use crate::data::common::data_formats::{
     AperfData, DataFormat, KeyValueData, ProcessedData, Profiler, Series, TimeSeriesData,
     TimeSeriesMetric,
@@ -8,11 +9,12 @@ use crate::profiling::{FrameType, ThreadState};
 use regex::Regex;
 use std::collections::HashMap;
 use std::fmt::Write;
+use std::io::Write as _;
 
 /// This struct is created to allow for accessing the processed data within the specified
 /// time range, without modifying the original processed data. Such design allow APerf to
 /// hold only one copy of the processed data, and they can be accessed for any time range
-/// with minimal performance cost. Series time_diffs are calculated relative to
+/// with minimal performance cost. The time_diffs of time-series data are calculated relative to
 /// `per_run_start_time` (the record start time) when available, falling back to
 /// the first sample time for older archives that lack this timestamp.
 #[derive(Debug)]
@@ -96,22 +98,24 @@ impl ProcessedDataAccessor {
         get_time_series_data(processed_data, run_name)
             .into_iter()
             .flat_map(move |time_series_data| {
+                let (start_idx, end_idx) = compute_time_diff_index(
+                    &time_series_data.time_diff,
+                    from_time,
+                    to_time,
+                    run_duration_seconds,
+                );
                 time_series_data
                     .metrics
                     .get(&metric_name)
                     .into_iter()
                     .flat_map(move |metric| {
                         metric.series.iter().flat_map(move |series| {
-                            let (start_idx, end_idx) = compute_time_diff_index(
-                                &series.time_diff,
-                                from_time,
-                                to_time,
-                                run_duration_seconds,
-                            );
-                            series.values[start_idx..end_idx].iter()
+                            values_in_range(&series.values, start_idx, end_idx).iter()
                         })
                     })
             })
+            // NaN means no value
+            .filter(|value| !value.is_nan())
     }
 
     /// Returns the stat of a time-series metric within the time range. The computed stat
@@ -125,6 +129,7 @@ impl ProcessedDataAccessor {
         let time_series_data = get_time_series_data(processed_data, run_name)?;
         Some(self.get_or_compute_time_series_metric_stats(
             time_series_data.metrics.get(metric_name)?,
+            &time_series_data.time_diff,
             None,
             run_name,
         ))
@@ -142,6 +147,7 @@ impl ProcessedDataAccessor {
         let time_series_data = get_time_series_data(processed_data, run_name)?;
         Some(self.get_or_compute_time_series_metric_stats(
             time_series_data.metrics.get(metric_name)?,
+            &time_series_data.time_diff,
             Some(series_name),
             run_name,
         ))
@@ -194,7 +200,9 @@ impl ProcessedDataAccessor {
         }
     }
 
-    /// Serializes the processed time-series data within the time range into JSON string.
+    /// Serializes the processed time-series data within the time range into JSON string. Every run
+    /// has the times of all series, and every metric has the names of its series and their values
+    /// at these times (see [`encode_series_values`]).
     pub fn time_series_data_json_string(&mut self, processed_data: &ProcessedData) -> String {
         let mut buf = String::new();
         buf.push_str("{\"data_name\":");
@@ -225,8 +233,22 @@ impl ProcessedDataAccessor {
                 let from_time = self.per_run_from_time.get(run_name).copied();
                 let to_time = self.per_run_to_time.get(run_name).copied();
                 let run_duration_seconds = self.run_duration_seconds(run_name);
+                let (start_idx, end_idx) = compute_time_diff_index(
+                    &time_series_data.time_diff,
+                    from_time,
+                    to_time,
+                    run_duration_seconds,
+                );
 
-                buf.push_str("{\"metrics\":{");
+                buf.push_str("{\"time_diff\":");
+                write!(
+                    buf,
+                    "{}",
+                    serde_json::to_string(&time_series_data.time_diff[start_idx..end_idx]).unwrap()
+                )
+                .unwrap();
+                buf.push_str(",\"metrics\":{");
+
                 let mut first_metric = true;
                 for (metric_name, time_series_metric) in &time_series_data.metrics {
                     if !first_metric {
@@ -236,6 +258,7 @@ impl ProcessedDataAccessor {
                     write!(buf, "{}:", serde_json::to_string(metric_name).unwrap()).unwrap();
                     let stats = self.get_or_compute_time_series_metric_stats(
                         time_series_metric,
+                        &time_series_data.time_diff,
                         None,
                         run_name,
                     );
@@ -243,9 +266,8 @@ impl ProcessedDataAccessor {
                         &mut buf,
                         time_series_metric,
                         stats,
-                        from_time,
-                        to_time,
-                        run_duration_seconds,
+                        start_idx,
+                        end_idx,
                     );
                 }
 
@@ -268,26 +290,6 @@ impl ProcessedDataAccessor {
         )
         .unwrap();
         buf.push('}');
-        buf
-    }
-
-    /// Serializes the data of a time-series metric within the time range into JSON string.
-    pub fn time_series_metric_json_string(
-        &mut self,
-        time_series_metric: &TimeSeriesMetric,
-        run_name: &str,
-    ) -> String {
-        let mut buf = String::new();
-        let stats =
-            self.get_or_compute_time_series_metric_stats(time_series_metric, None, run_name);
-        write_time_series_metric_json_string(
-            &mut buf,
-            time_series_metric,
-            stats,
-            self.per_run_from_time.get(run_name).copied(),
-            self.per_run_to_time.get(run_name).copied(),
-            self.run_duration_seconds(run_name),
-        );
         buf
     }
 
@@ -448,6 +450,7 @@ impl ProcessedDataAccessor {
     fn get_or_compute_time_series_metric_stats(
         &mut self,
         time_series_metric: &TimeSeriesMetric,
+        time_diff: &[u64],
         series_name: Option<&str>,
         run_name: &str,
     ) -> Statistics {
@@ -476,13 +479,9 @@ impl ProcessedDataAccessor {
         };
 
         let stats = if let Some(stats_series) = series {
-            let (start_idx, end_idx) = compute_time_diff_index(
-                &stats_series.time_diff,
-                from_time,
-                to_time,
-                run_duration_seconds,
-            );
-            Statistics::from_values(&stats_series.values[start_idx..end_idx])
+            let (start_idx, end_idx) =
+                compute_time_diff_index(time_diff, from_time, to_time, run_duration_seconds);
+            Statistics::from_values(values_in_range(&stats_series.values, start_idx, end_idx))
         } else {
             Statistics::default()
         };
@@ -497,9 +496,8 @@ fn write_time_series_metric_json_string(
     buf: &mut String,
     time_series_metric: &TimeSeriesMetric,
     stats: Statistics,
-    from_time: Option<i64>,
-    to_time: Option<i64>,
-    run_duration_seconds: Option<u64>,
+    start_idx: usize,
+    end_idx: usize,
 ) {
     buf.push_str("{\"metric_name\":");
     write!(
@@ -509,16 +507,26 @@ fn write_time_series_metric_json_string(
     )
     .unwrap();
 
-    buf.push_str(",\"series\":[");
-    let mut first_series = true;
-    for series in &time_series_metric.series {
-        if !first_series {
-            buf.push(',');
-        }
-        first_series = false;
-        write_series_json_string(buf, series, from_time, to_time, run_duration_seconds);
-    }
-    buf.push(']');
+    let series_names: Vec<&str> = time_series_metric
+        .series
+        .iter()
+        .map(|series| series.series_name.as_str())
+        .collect();
+    buf.push_str(",\"series\":");
+    write!(buf, "{}", serde_json::to_string(&series_names).unwrap()).unwrap();
+
+    // The series whose statistics are the metric's, which is its aggregate if it has one
+    buf.push_str(",\"default_stats_series_idx\":");
+    write!(
+        buf,
+        "{}",
+        itoa::Buffer::new().format(time_series_metric.stats_series_idx)
+    )
+    .unwrap();
+
+    let values = encode_series_values(&time_series_metric.series, start_idx, end_idx);
+    buf.push_str(",\"values\":");
+    write!(buf, "{}", serde_json::to_string(&values).unwrap()).unwrap();
 
     write!(
         buf,
@@ -534,60 +542,30 @@ fn write_time_series_metric_json_string(
     buf.push('}');
 }
 
-/// Writes a single time-series series into JSON string, with time_diff and values within the time range.
-fn write_series_json_string(
-    buf: &mut String,
-    series: &Series,
-    from_time: Option<i64>,
-    to_time: Option<i64>,
-    run_duration_seconds: Option<u64>,
-) {
-    let (start, end) =
-        compute_time_diff_index(&series.time_diff, from_time, to_time, run_duration_seconds);
-    // Uses itoa/ryu for fast int/float number formatting
-    let mut itoa_buf = itoa::Buffer::new();
-    let mut ryu_buf = ryu::Buffer::new();
-
-    buf.push('{');
-
-    buf.push_str("\"series_name\":");
-    write!(
-        buf,
-        "{}",
-        serde_json::to_string(&series.series_name).unwrap()
-    )
-    .unwrap();
-    buf.push(',');
-
-    buf.push_str("\"time_diff\":[");
-    for (i, &t) in series.time_diff[start..end].iter().enumerate() {
-        if i > 0 {
-            buf.push(',');
+/// Encodes the values of all series within the index range of the times. every value is
+/// rounded to 4 decimals if not NaN. They are then compressed into a zlib stream and
+/// split into base64 chunks.
+fn encode_series_values(all_series: &[Series], start_idx: usize, end_idx: usize) -> Vec<String> {
+    let mut encoder = zlib_encoder();
+    let mut row = Vec::with_capacity((end_idx - start_idx) * size_of::<f64>());
+    for series in all_series {
+        row.clear();
+        for idx in start_idx..end_idx {
+            let value = series
+                .values
+                .get(idx)
+                .map_or(f64::NAN, |&value| round_to_decimals(value, 4));
+            let value = if value.is_finite() { value } else { f64::NAN };
+            row.extend_from_slice(&value.to_le_bytes());
         }
-        buf.push_str(itoa_buf.format(t));
+        encoder.write_all(&row).unwrap();
     }
-    buf.push(']');
+    base64_chunks(&encoder.finish().unwrap())
+}
 
-    buf.push_str(",\"values\":[");
-    for (i, &v) in series.values[start..end].iter().enumerate() {
-        if i > 0 {
-            buf.push(',');
-        }
-        if v.is_finite() {
-            buf.push_str(ryu_buf.format(f64_to_fixed_2(v)));
-        } else {
-            // ryu formats non-finite floats as bare `NaN`/`inf`/`-inf` tokens, which
-            // are invalid JSON. Emit `null` instead (matching serde_json's behavior).
-            buf.push_str("null");
-        }
-    }
-    buf.push(']');
-
-    if series.is_aggregate {
-        buf.push_str(",\"is_aggregate\":true");
-    }
-
-    buf.push('}');
+/// Returns the values of a series within the index range of the times.
+fn values_in_range(values: &[f64], start_idx: usize, end_idx: usize) -> &[f64] {
+    &values[start_idx.min(values.len())..end_idx.min(values.len())]
 }
 
 /// Retrieves the time-series data of a run from the processed data.
@@ -633,7 +611,7 @@ fn resolve_wall_ms(bound_sec: i64, start_ms: i64, end_ms: i64) -> i64 {
     }
 }
 
-/// Locate the start and end index of a series' time_diff (and values) based on
+/// Locate the start and end index of time_diff (and the series values) based on
 /// the specified time range.
 ///
 /// Negative `from_time` / `to_time` values are resolved against `run_duration_seconds` (the total
@@ -681,19 +659,24 @@ fn compute_time_diff_index(
 mod tests {
     use super::*;
 
-    fn make_series(name: &str, time_diff: Vec<u64>, values: Vec<f64>) -> Series {
+    fn make_series(name: &str, values: Vec<f64>) -> Series {
         Series {
             series_name: name.to_string(),
-            time_diff,
             values,
             is_aggregate: false,
         }
     }
 
-    fn make_series_with_stats_idx(metrics: Vec<(&str, Vec<Series>, usize)>) -> ProcessedData {
+    fn make_series_with_stats_idx(
+        time_diff: Vec<u64>,
+        metrics: Vec<(&str, Vec<Series>, usize)>,
+    ) -> ProcessedData {
         let mut pd = ProcessedData::new("test".to_string());
         pd.data_format = DataFormat::TimeSeries;
-        let mut ts = TimeSeriesData::default();
+        let mut ts = TimeSeriesData {
+            time_diff,
+            ..Default::default()
+        };
         for (name, series_list, stats_idx) in metrics {
             let mut metric = TimeSeriesMetric::new(name.to_string());
             metric.stats_series_idx = stats_idx;
@@ -706,8 +689,12 @@ mod tests {
         pd
     }
 
-    fn make_processed_data(metrics: Vec<(&str, Vec<Series>)>) -> ProcessedData {
+    fn make_processed_data(
+        time_diff: Vec<u64>,
+        metrics: Vec<(&str, Vec<Series>)>,
+    ) -> ProcessedData {
         make_series_with_stats_idx(
+            time_diff,
             metrics
                 .into_iter()
                 .map(|(name, series)| (name, series, 0))
@@ -1035,14 +1022,10 @@ mod tests {
 
     #[test]
     fn test_metric_values_no_time_range() {
-        let pd = make_processed_data(vec![(
-            "cpu",
-            vec![make_series(
-                "total",
-                vec![0, 10, 20],
-                vec![10.0, 20.0, 30.0],
-            )],
-        )]);
+        let pd = make_processed_data(
+            vec![0, 10, 20],
+            vec![("cpu", vec![make_series("total", vec![10.0, 20.0, 30.0])])],
+        );
         let accessor = ProcessedDataAccessor::new();
         let values: Vec<&f64> = accessor
             .time_series_metric_values_iterator(&pd, "run1", "cpu")
@@ -1052,14 +1035,10 @@ mod tests {
 
     #[test]
     fn test_metric_values_with_from_time() {
-        let pd = make_processed_data(vec![(
-            "cpu",
-            vec![make_series(
-                "total",
-                vec![0, 10, 20],
-                vec![10.0, 20.0, 30.0],
-            )],
-        )]);
+        let pd = make_processed_data(
+            vec![0, 10, 20],
+            vec![("cpu", vec![make_series("total", vec![10.0, 20.0, 30.0])])],
+        );
         let accessor = ProcessedDataAccessor::from_time_ranges(
             HashMap::from([("run1".to_string(), 10)]),
             HashMap::new(),
@@ -1074,13 +1053,16 @@ mod tests {
 
     #[test]
     fn test_metric_values_multiple_series() {
-        let pd = make_processed_data(vec![(
-            "cpu",
-            vec![
-                make_series("core0", vec![0, 10, 20], vec![1.0, 2.0, 3.0]),
-                make_series("core1", vec![0, 10, 20], vec![4.0, 5.0, 6.0]),
-            ],
-        )]);
+        let pd = make_processed_data(
+            vec![0, 10, 20],
+            vec![(
+                "cpu",
+                vec![
+                    make_series("core0", vec![1.0, 2.0, 3.0]),
+                    make_series("core1", vec![4.0, 5.0, 6.0]),
+                ],
+            )],
+        );
         let accessor = ProcessedDataAccessor::from_time_ranges(
             HashMap::new(),
             HashMap::from([("run1".to_string(), 10)]),
@@ -1095,7 +1077,7 @@ mod tests {
 
     #[test]
     fn test_metric_values_missing() {
-        let pd = make_processed_data(vec![]);
+        let pd = make_processed_data(vec![], vec![]);
         let accessor = ProcessedDataAccessor::new();
         assert!(accessor
             .time_series_metric_values_iterator(&pd, "run1", "nonexistent")
@@ -1107,19 +1089,32 @@ mod tests {
             .is_empty());
     }
 
+    #[test]
+    fn test_metric_values_and_stats_skip_times_without_values() {
+        // The series has no value at time 0 and its values end before time 20
+        let pd = make_processed_data(
+            vec![0, 10, 20],
+            vec![("cpu", vec![make_series("total", vec![f64::NAN, 2.0])])],
+        );
+        let mut accessor = ProcessedDataAccessor::new();
+        let values: Vec<&f64> = accessor
+            .time_series_metric_values_iterator(&pd, "run1", "cpu")
+            .collect();
+        assert_eq!(values, vec![&2.0]);
+        let stats = accessor
+            .time_series_metric_stats(&pd, "run1", "cpu")
+            .unwrap();
+        assert_eq!((stats.min, stats.max), (2.0, 2.0));
+    }
+
     // ---- stats tests ----
 
     #[test]
     fn test_metric_stat_basic() {
-        let pd = make_series_with_stats_idx(vec![(
-            "cpu",
-            vec![make_series(
-                "total",
-                vec![0, 10, 20],
-                vec![10.0, 20.0, 30.0],
-            )],
-            0,
-        )]);
+        let pd = make_series_with_stats_idx(
+            vec![0, 10, 20],
+            vec![("cpu", vec![make_series("total", vec![10.0, 20.0, 30.0])], 0)],
+        );
         let mut accessor = ProcessedDataAccessor::new();
         let stats = accessor
             .time_series_metric_stats(&pd, "run1", "cpu")
@@ -1131,15 +1126,14 @@ mod tests {
 
     #[test]
     fn test_metric_stat_with_time_range() {
-        let pd = make_series_with_stats_idx(vec![(
-            "cpu",
-            vec![make_series(
-                "total",
-                vec![0, 10, 20, 30],
-                vec![10.0, 20.0, 30.0, 40.0],
+        let pd = make_series_with_stats_idx(
+            vec![0, 10, 20, 30],
+            vec![(
+                "cpu",
+                vec![make_series("total", vec![10.0, 20.0, 30.0, 40.0])],
+                0,
             )],
-            0,
-        )]);
+        );
         let mut accessor = ProcessedDataAccessor::from_time_ranges(
             HashMap::from([("run1".to_string(), 10)]),
             HashMap::from([("run1".to_string(), 20)]),
@@ -1154,14 +1148,17 @@ mod tests {
 
     #[test]
     fn test_metric_stat_uses_stats_series_idx() {
-        let pd = make_series_with_stats_idx(vec![(
-            "cpu",
-            vec![
-                make_series("core0", vec![0, 10, 20], vec![1.0, 2.0, 3.0]),
-                make_series("aggregate", vec![0, 10, 20], vec![100.0, 200.0, 300.0]),
-            ],
-            1,
-        )]);
+        let pd = make_series_with_stats_idx(
+            vec![0, 10, 20],
+            vec![(
+                "cpu",
+                vec![
+                    make_series("core0", vec![1.0, 2.0, 3.0]),
+                    make_series("aggregate", vec![100.0, 200.0, 300.0]),
+                ],
+                1,
+            )],
+        );
         let mut accessor = ProcessedDataAccessor::new();
         let stats = accessor
             .time_series_metric_stats(&pd, "run1", "cpu")
@@ -1171,15 +1168,10 @@ mod tests {
 
     #[test]
     fn test_metric_stat_caching() {
-        let pd = make_series_with_stats_idx(vec![(
-            "cpu",
-            vec![make_series(
-                "total",
-                vec![0, 10, 20],
-                vec![10.0, 20.0, 30.0],
-            )],
-            0,
-        )]);
+        let pd = make_series_with_stats_idx(
+            vec![0, 10, 20],
+            vec![("cpu", vec![make_series("total", vec![10.0, 20.0, 30.0])], 0)],
+        );
         let mut accessor = ProcessedDataAccessor::new();
         let _ = accessor.time_series_metric_stats(&pd, "run1", "cpu");
         assert!(accessor.time_series_metric_stat_cache.contains_key(&(
@@ -1191,137 +1183,41 @@ mod tests {
 
     #[test]
     fn test_metric_stat_missing() {
-        let pd = make_processed_data(vec![]);
+        let pd = make_processed_data(vec![], vec![]);
         let mut accessor = ProcessedDataAccessor::new();
         assert!(accessor
             .time_series_metric_stats(&pd, "run1", "cpu")
             .is_none());
     }
 
-    // ---- write_series tests ----
-
-    #[test]
-    fn test_write_series_no_range() {
-        let series = make_series("total", vec![0, 10, 20], vec![1.5, 2.7, 3.223]);
-        let mut buf = String::new();
-        write_series_json_string(&mut buf, &series, None, None, None);
-        let v: serde_json::Value = serde_json::from_str(&buf).unwrap();
-        assert_eq!(v["series_name"], "total");
-        assert_eq!(v["time_diff"], serde_json::json!([0, 10, 20]));
-        assert_eq!(v["values"], serde_json::json!([1.5, 2.7, 3.22]));
-        assert!(v.get("is_aggregate").is_none());
-    }
-
-    #[test]
-    fn test_write_series_with_time_range() {
-        let series = make_series("s1", vec![0, 10, 20, 30], vec![1.0, 2.0, 3.0, 4.0]);
-        let mut buf = String::new();
-        write_series_json_string(&mut buf, &series, Some(10), Some(20), None);
-        let v: serde_json::Value = serde_json::from_str(&buf).unwrap();
-        assert_eq!(v["time_diff"], serde_json::json!([10, 20]));
-        let values: Vec<f64> = v["values"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|x| x.as_f64().unwrap())
-            .collect();
-        assert_eq!(values, vec![2.0, 3.0]);
-    }
-
-    #[test]
-    fn test_write_series_aggregate() {
-        let series = Series {
-            series_name: "avg".to_string(),
-            time_diff: vec![0],
-            values: vec![5.0],
-            is_aggregate: true,
-        };
-        let mut buf = String::new();
-        write_series_json_string(&mut buf, &series, None, None, None);
-        let v: serde_json::Value = serde_json::from_str(&buf).unwrap();
-        assert_eq!(v["is_aggregate"], true);
-    }
-
-    #[test]
-    fn test_write_series_non_finite_values_are_null() {
-        let series = make_series(
-            "total",
-            vec![0, 10, 20, 30, 40],
-            vec![1.5, f64::NAN, f64::INFINITY, f64::NEG_INFINITY, 2.5],
-        );
-        let mut buf = String::new();
-        write_series_json_string(&mut buf, &series, None, None, None);
-        // The whole line must be valid JSON.
-        let v: serde_json::Value = serde_json::from_str(&buf).unwrap();
-        assert_eq!(v["values"], serde_json::json!([1.5, null, null, null, 2.5]));
-    }
-
-    // ---- time_series_metric_json_string tests ----
-
-    #[test]
-    fn test_metric_json_string_no_range() {
-        let mut metric = TimeSeriesMetric::new("cpu".to_string());
-        metric.series = vec![make_series(
-            "total",
-            vec![0, 10, 20],
-            vec![10.0, 20.0, 30.0],
-        )];
-        let mut accessor = ProcessedDataAccessor::new();
-        let json = accessor.time_series_metric_json_string(&metric, "run1");
-        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(v["metric_name"], "cpu");
-        assert_eq!(v["series"][0]["time_diff"], serde_json::json!([0, 10, 20]));
-    }
-
-    #[test]
-    fn test_metric_json_string_with_range() {
-        let mut metric = TimeSeriesMetric::new("cpu".to_string());
-        metric.series = vec![make_series(
-            "total",
-            vec![0, 10, 20, 30],
-            vec![10.0, 20.0, 30.0, 40.0],
-        )];
-        let mut accessor = ProcessedDataAccessor::from_time_ranges(
-            HashMap::from([("run1".to_string(), 10)]),
-            HashMap::from([("run1".to_string(), 20)]),
-            HashMap::new(),
-            HashMap::new(),
-        );
-        let json = accessor.time_series_metric_json_string(&metric, "run1");
-        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(v["series"][0]["time_diff"], serde_json::json!([10, 20]));
-        assert_eq!(v["stats"]["avg"], 25.0);
-    }
-
-    #[test]
-    fn test_metric_json_string_caches_stats() {
-        let mut metric = TimeSeriesMetric::new("cpu".to_string());
-        metric.series = vec![make_series(
-            "total",
-            vec![0, 10, 20],
-            vec![10.0, 20.0, 30.0],
-        )];
-        let mut accessor = ProcessedDataAccessor::new();
-        let _ = accessor.time_series_metric_json_string(&metric, "run1");
-        assert!(accessor.time_series_metric_stat_cache.contains_key(&(
-            "run1".to_string(),
-            "cpu".to_string(),
-            String::new()
-        )));
-    }
-
     // ---- time_series_data_json_string tests ----
+
+    /// Decodes the values of all series of a metric in the report, with None for NaN.
+    fn report_metric_values(metric: &serde_json::Value) -> Vec<Option<f64>> {
+        use base64::engine::general_purpose::STANDARD as BASE64;
+        use base64::Engine;
+        use std::io::Read;
+
+        let chunks: String = serde_json::from_value::<Vec<String>>(metric["values"].clone())
+            .unwrap()
+            .concat();
+        let mut bytes = Vec::new();
+        flate2::read::ZlibDecoder::new(BASE64.decode(chunks).unwrap().as_slice())
+            .read_to_end(&mut bytes)
+            .unwrap();
+        bytes
+            .chunks_exact(size_of::<f64>())
+            .map(|value| f64::from_le_bytes(value.try_into().unwrap()))
+            .map(|value| (!value.is_nan()).then_some(value))
+            .collect()
+    }
 
     #[test]
     fn test_ts_data_json_no_range() {
-        let pd = make_processed_data(vec![(
-            "cpu",
-            vec![make_series(
-                "total",
-                vec![0, 10, 20],
-                vec![10.0, 20.0, 30.0],
-            )],
-        )]);
+        let pd = make_processed_data(
+            vec![0, 10, 20],
+            vec![("cpu", vec![make_series("total", vec![10.0, 20.0, 30.0])])],
+        );
         let mut accessor = ProcessedDataAccessor::new();
         let json = accessor.time_series_data_json_string(&pd);
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -1331,14 +1227,13 @@ mod tests {
 
     #[test]
     fn test_ts_data_json_with_range() {
-        let pd = make_processed_data(vec![(
-            "cpu",
-            vec![make_series(
-                "total",
-                vec![0, 10, 20, 30],
-                vec![10.0, 20.0, 30.0, 40.0],
+        let pd = make_processed_data(
+            vec![0, 10, 20, 30],
+            vec![(
+                "cpu",
+                vec![make_series("total", vec![10.0, 20.0, 30.0, 40.0])],
             )],
-        )]);
+        );
         let mut accessor = ProcessedDataAccessor::from_time_ranges(
             HashMap::from([("run1".to_string(), 10)]),
             HashMap::from([("run1".to_string(), 20)]),
@@ -1347,23 +1242,48 @@ mod tests {
         );
         let json = accessor.time_series_data_json_string(&pd);
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
-        let values: Vec<f64> = v["runs"]["run1"]["metrics"]["cpu"]["series"][0]["values"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|x| x.as_f64().unwrap())
-            .collect();
-        assert_eq!(values, vec![20.0, 30.0]);
+        assert_eq!(v["runs"]["run1"]["time_diff"], serde_json::json!([10, 20]));
+        assert_eq!(
+            report_metric_values(&v["runs"]["run1"]["metrics"]["cpu"]),
+            vec![Some(20.0), Some(30.0)]
+        );
+        assert_eq!(v["runs"]["run1"]["metrics"]["cpu"]["stats"]["avg"], 25.0);
+    }
+
+    #[test]
+    fn test_ts_data_json_values() {
+        // s2 has no value at time 0, a non-finite value, and ends before the last time
+        let pd = make_series_with_stats_idx(
+            vec![0, 1, 2],
+            vec![(
+                "cpu",
+                vec![
+                    make_series("s1", vec![1.0, 2.23456, 3.0]),
+                    make_series("s2", vec![f64::NAN, f64::INFINITY]),
+                ],
+                1,
+            )],
+        );
+        let mut accessor = ProcessedDataAccessor::new();
+        let json = accessor.time_series_data_json_string(&pd);
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let metric = &v["runs"]["run1"]["metrics"]["cpu"];
+        assert_eq!(metric["series"], serde_json::json!(["s1", "s2"]));
+        assert_eq!(metric["default_stats_series_idx"], serde_json::json!(1));
+        assert_eq!(
+            report_metric_values(metric),
+            vec![Some(1.0), Some(2.2346), Some(3.0), None, None, None]
+        );
     }
 
     // ---- json_string dispatch tests ----
 
     #[test]
     fn test_json_string_dispatches_time_series() {
-        let mut pd = make_processed_data(vec![(
-            "cpu",
-            vec![make_series("total", vec![0, 10], vec![1.0, 2.0])],
-        )]);
+        let mut pd = make_processed_data(
+            vec![0, 10],
+            vec![("cpu", vec![make_series("total", vec![1.0, 2.0])])],
+        );
         let mut accessor = ProcessedDataAccessor::new();
         let json = accessor.json_string(&mut pd);
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -1410,14 +1330,17 @@ mod tests {
     #[test]
     fn test_metric_and_series_stats() {
         // A metric with two series where stats_series_idx points at the second one.
-        let pd = make_series_with_stats_idx(vec![(
-            "m",
-            vec![
-                make_series("low", vec![0, 1, 2], vec![1.0, 2.0, 3.0]),
-                make_series("agg", vec![0, 1, 2], vec![10.0, 20.0, 30.0]),
-            ],
-            1,
-        )]);
+        let pd = make_series_with_stats_idx(
+            vec![0, 1, 2],
+            vec![(
+                "m",
+                vec![
+                    make_series("low", vec![1.0, 2.0, 3.0]),
+                    make_series("agg", vec![10.0, 20.0, 30.0]),
+                ],
+                1,
+            )],
+        );
         let mut accessor = ProcessedDataAccessor::new();
 
         // Metric-level stats come from the series at stats_series_idx, not series 0.
@@ -1462,14 +1385,10 @@ mod tests {
     #[test]
     fn test_metric_and_series_stats_respect_time_range() {
         // Stats honor the run's from/to time range for both query levels.
-        let pd = make_processed_data(vec![(
-            "m",
-            vec![make_series(
-                "s",
-                vec![0, 10, 20, 30],
-                vec![1.0, 2.0, 3.0, 4.0],
-            )],
-        )]);
+        let pd = make_processed_data(
+            vec![0, 10, 20, 30],
+            vec![("m", vec![make_series("s", vec![1.0, 2.0, 3.0, 4.0])])],
+        );
         let mut accessor = ProcessedDataAccessor::from_time_ranges(
             HashMap::from([("run1".to_string(), 10)]),
             HashMap::from([("run1".to_string(), 20)]),
@@ -1490,10 +1409,10 @@ mod tests {
 
     #[test]
     fn test_time_series_json_string_includes_run_errors() {
-        let mut pd = make_processed_data(vec![(
-            "cpu",
-            vec![make_series("total", vec![0, 10], vec![10.0, 20.0])],
-        )]);
+        let mut pd = make_processed_data(
+            vec![0, 10],
+            vec![("cpu", vec![make_series("total", vec![10.0, 20.0])])],
+        );
         pd.run_errors
             .insert("run2".to_string(), "processing failed".to_string());
         let mut accessor = ProcessedDataAccessor::new();

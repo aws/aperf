@@ -1,7 +1,9 @@
+import React from "react";
 import { ALL_DATA_TYPES, DataType, TimeSeriesData, FindingType } from "../definitions/types";
 import { CPU_DATA_TYPES, PROCESSED_DATA } from "../definitions/data-config";
 import { IconProps } from "@cloudscape-design/components/icon/interfaces";
 import { DATA_DESCRIPTIONS } from "../definitions/data-descriptions";
+import { DECODED_VALUES_CACHE_BYTES } from "../definitions/constants";
 
 export function extractDataTypeFromFragment(fragment: string): DataType {
   if (!fragment || !fragment.startsWith("#")) {
@@ -62,12 +64,151 @@ export function getRunCpuIds(runName: string): number[] {
     if (reportData == undefined) continue;
     for (const metricName in reportData.metrics) {
       reportData.metrics[metricName].series
-        .map((series) => getCpuIdFromSeriesName(series.series_name))
+        .map(getCpuIdFromSeriesName)
         .filter((cpuId): cpuId is number => cpuId !== undefined)
         .forEach((cpuId) => cpuIds.add(cpuId));
     }
   }
   return [...cpuIds].sort((cpuId, otherCpuId) => cpuId - otherCpuId);
+}
+
+/** Inflate a zlib stream from its base64 chunks, see src/data/common/compression.rs. */
+export async function inflate(chunks: readonly string[]): Promise<ArrayBuffer> {
+  const compressed = chunks.map((chunk) => {
+    const binary = atob(chunk);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  });
+  const stream = new Blob(compressed).stream().pipeThrough(new DecompressionStream("deflate"));
+  return new Response(stream).arrayBuffer();
+}
+
+// The decoded values of recently viewed metrics, from the least to the most recently used
+const decodedValuesCache = new Map<string, Float64Array[]>();
+let decodedValuesCacheBytes = 0;
+
+function getDecodedValuesCacheKey(dataType: DataType, runName: string, metricName: string): string {
+  return [dataType, runName, metricName].join("\n");
+}
+
+/** Cache the decoded values of a metric in a run, and drop the least recently used ones over the size limit. */
+function cacheDecodedValues(key: string, values: Float64Array[]) {
+  // All series of a metric share one buffer
+  const numBytes = (values: Float64Array[]) => values[0]?.buffer.byteLength ?? 0;
+  decodedValuesCache.delete(key);
+  decodedValuesCache.set(key, values);
+  decodedValuesCacheBytes += numBytes(values);
+  for (const [oldestKey, oldestValues] of decodedValuesCache) {
+    if (decodedValuesCacheBytes <= DECODED_VALUES_CACHE_BYTES || oldestKey === key) break;
+    decodedValuesCache.delete(oldestKey);
+    decodedValuesCacheBytes -= numBytes(oldestValues);
+  }
+}
+
+/** Decode the values of every series of a metric in a run: one value per time of the run, NaN for no value. */
+export async function decodeSeriesValues(
+  dataType: DataType,
+  runName: string,
+  metricName: string,
+): Promise<Float64Array[]> {
+  const key = getDecodedValuesCacheKey(dataType, runName, metricName);
+  const cachedValues = decodedValuesCache.get(key);
+  if (cachedValues !== undefined) {
+    // Move the values to the most recently used
+    decodedValuesCache.delete(key);
+    decodedValuesCache.set(key, cachedValues);
+    return cachedValues;
+  }
+  const runData = PROCESSED_DATA[dataType].runs[runName] as TimeSeriesData;
+  const metric = runData.metrics[metricName];
+  // The values are little-endian, as are typed arrays in browsers
+  const values = new Float64Array(await inflate(metric.values));
+  const numTimes = runData.time_diff.length;
+  const seriesValues = metric.series.map((_, i) => values.subarray(i * numTimes, (i + 1) * numTimes));
+  cacheDecodedValues(key, seriesValues);
+  return seriesValues;
+}
+
+/** The runs among the given ones that have the metric. */
+function getRunsWithMetric(dataType: DataType, metricName: string, runNames: readonly string[]): string[] {
+  return runNames.filter(
+    (runName) => (PROCESSED_DATA[dataType].runs[runName] as TimeSeriesData)?.metrics[metricName] !== undefined,
+  );
+}
+
+/** Decode the series values of a metric in every given run that has it. Undefined while decoding, or the error if it failed. */
+export function useSeriesValues(
+  dataType: DataType,
+  metricName: string,
+  runNames: readonly string[],
+): Map<string, Float64Array[]> | Error | undefined {
+  const key = [dataType, metricName, ...runNames].join("\n");
+  const [result, setResult] = React.useState<{ key: string; values: Map<string, Float64Array[]> | Error }>();
+  React.useEffect(() => {
+    let active = true;
+    const runsWithMetric = getRunsWithMetric(dataType, metricName, runNames);
+    Promise.all(runsWithMetric.map((runName) => decodeSeriesValues(dataType, runName, metricName))).then(
+      (values) => {
+        if (active) setResult({ key, values: new Map(runsWithMetric.map((runName, i) => [runName, values[i]])) });
+      },
+      (error) => {
+        if (active) setResult({ key, values: error instanceof Error ? error : new Error(String(error)) });
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [key]);
+  if (result && result.key === key) {
+    return result.values;
+  }
+  // Show the cached values right away, instead of the decoding status until the effect above finishes
+  const runsWithMetric = getRunsWithMetric(dataType, metricName, runNames);
+  const cachedValues = runsWithMetric.map((runName) =>
+    decodedValuesCache.get(getDecodedValuesCacheKey(dataType, runName, metricName)),
+  );
+  if (cachedValues.every((values): values is Float64Array[] => values !== undefined)) {
+    return new Map(runsWithMetric.map((runName, i) => [runName, cachedValues[i]]));
+  }
+  return undefined;
+}
+
+// The line of every decoded series, reused by every render, since plotly.js redraws a graph whenever its arrays are new
+const seriesLines = new WeakMap<Float64Array, { x: number[]; y: Float64Array; numValues: number }>();
+
+/** Build the plotly.js line of a series, from its first to its last value and connected across the times without a value. */
+export function getSeriesTrace(
+  name: string,
+  times: number[],
+  values: Float64Array,
+  visible: Plotly.PlotData["visible"],
+): Partial<Plotly.PlotData> {
+  let line = seriesLines.get(values);
+  if (line === undefined) {
+    let first = values.length;
+    let last = -1;
+    let numValues = 0;
+    values.forEach((value, i) => {
+      if (!Number.isNaN(value)) {
+        first = Math.min(first, i);
+        last = i;
+        numValues++;
+      }
+    });
+    line = { x: times.slice(first, last + 1), y: values.subarray(first, last + 1), numValues };
+    seriesLines.set(values, line);
+  }
+  return {
+    name,
+    x: line.x,
+    y: line.y,
+    type: "scatter",
+    // The default mode of plotly.js, but only counting the times with a value
+    mode: line.numValues < 20 ? "lines+markers" : "lines",
+    connectgaps: true,
+    visible,
+  };
 }
 
 /**
@@ -82,8 +223,13 @@ export function formatNumber(n: number) {
   return n.toFixed(2);
 }
 
-export function shouldShowCpuSeries(seriesName: string, selectedAggregate: boolean, selectedCpus: Set<number>) {
-  if (seriesName === "Aggregate") {
+export function shouldShowCpuSeries(
+  seriesName: string,
+  isAggregate: boolean,
+  selectedAggregate: boolean,
+  selectedCpus: Set<number>,
+) {
+  if (isAggregate) {
     return selectedAggregate;
   }
   const cpuId = getCpuIdFromSeriesName(seriesName);

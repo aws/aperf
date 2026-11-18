@@ -1,4 +1,4 @@
-use crate::computations::{serialize_f64_vec_fixed2, Statistics};
+use crate::computations::Statistics;
 use crate::profiling::{Profile, BUCKET_WIDTH_MS};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -46,6 +46,8 @@ impl ProcessedData {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum AperfData {
+    // Written into the report by ProcessedDataAccessor
+    #[serde(skip)]
     TimeSeries(TimeSeriesData),
     Text(TextData),
     KeyValue(KeyValueData),
@@ -80,25 +82,24 @@ impl AperfData {
 /// run and produce time series graphs in the report. Every data type contains multiple metrics,
 /// and every metric could contain multiple time series. The report renders every metric as a
 /// graph and plots every time series in the metric as a line.
-#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct TimeSeriesData {
     /// A map from the metric name to the metric's contents.
     pub metrics: HashMap<String, TimeSeriesMetric>,
+    /// The timestamp (x-axis) of each value, shared by all metrics.
+    pub time_diff: Vec<u64>,
     /// A list of all metric names to provide ordering for the graphs in the frontend.
-    #[serde(default)]
     pub sorted_metric_names: Vec<String>,
 }
 
 /// Contents of a metric, which is to be rendered as a graph in the report.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct TimeSeriesMetric {
     /// Name of the metric.
     pub metric_name: String,
     /// A list of all time series included in the metric.
     pub series: Vec<Series>,
     /// For quick access of the series responsible for the statistic computation of the metric.
-    /// Skip serialization since it is not used by the frontend.
-    #[serde(skip)]
     pub stats_series_idx: usize,
     /// The minimum and maximum data point values across all series. It offloads the computation
     /// from frontend and help decide the y-axis range of the graphs.
@@ -121,18 +122,14 @@ impl TimeSeriesMetric {
 }
 
 /// Contents of a time series, which is to be rendered as a line in the graph.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Series {
     /// The name of the series.
     pub series_name: String,
-    /// The list of all time (x-axis) values.
-    pub time_diff: Vec<u64>,
-    /// The list of all data (y-axis) values.
-    #[serde(serialize_with = "serialize_f64_vec_fixed2")]
+    /// The data (y-axis) value at each timestamp of the time-series data.
+    /// NaN if the series has no value at the timestamp.
     pub values: Vec<f64>,
     /// Indicate whether the series is aggregate.
-    #[serde(default)]
-    #[serde(skip_serializing_if = "is_false")]
     pub is_aggregate: bool,
 }
 
@@ -140,16 +137,10 @@ impl Series {
     pub fn new(series_name: String) -> Self {
         Series {
             series_name,
-            time_diff: Vec::new(),
             values: Vec::new(),
             is_aggregate: false,
         }
     }
-}
-
-// allow skipping serializing a bool field if it's false
-fn is_false(value: &bool) -> bool {
-    !(*value)
 }
 
 // ---------------------------------------- KEY-VALUE DATA -----------------------------------------

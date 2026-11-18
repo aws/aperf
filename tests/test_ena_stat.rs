@@ -250,10 +250,10 @@ fn test_ena_interface_appearing_later() {
     assert_eq!(eth0.values.len(), 4);
     assert_eq!(eth0.values, vec![0.0, 100.0, 150.0, 150.0]);
 
-    // eth1 appears at sample 2, so only 2 data points
-    assert_eq!(eth1.values.len(), 2);
-    assert_eq!(eth1.values[0], 0.0);
-    assert_eq!(eth1.values[1], 300.0); // 800 - 500
+    // eth1 appears at sample 2
+    assert_eq!(eth1.values.len(), 4);
+    assert!(eth1.values[..2].iter().all(|v| v.is_nan()));
+    assert_eq!(eth1.values[2..], [0.0, 300.0]); // 800 - 500
 }
 
 // ---------------------------------------------------------------------------
@@ -484,9 +484,7 @@ fn test_ena_time_progression_multi_interface() {
     let mut ena = EnaStat::new();
     let ts = unwrap_time_series(ena.process_raw_data(&ReportParams::new(), raw).unwrap());
 
-    for s in &ts.metrics["rx_bytes"].series {
-        assert_eq!(s.time_diff, vec![0, 5, 10]);
-    }
+    assert_eq!(ts.time_diff, vec![0, 5, 10]);
 }
 
 #[test]
@@ -554,6 +552,9 @@ fn test_ena_metric_appearing_later_multi_interface() {
     assert_eq!(nm.len(), 2); // both interfaces
     let eth0_nm = nm.iter().find(|s| s.series_name == "eth0").unwrap();
     let eth1_nm = nm.iter().find(|s| s.series_name == "eth1").unwrap();
-    assert_eq!(eth0_nm.values, vec![0.0, 40.0]); // 90-50
-    assert_eq!(eth1_nm.values, vec![0.0, 50.0]); // 130-80
+    // new_metric appears at sample 2
+    assert!(eth0_nm.values[..2].iter().all(|v| v.is_nan()));
+    assert!(eth1_nm.values[..2].iter().all(|v| v.is_nan()));
+    assert_eq!(eth0_nm.values[2..], [0.0, 40.0]); // 90-50
+    assert_eq!(eth1_nm.values[2..], [0.0, 50.0]); // 130-80
 }

@@ -39,7 +39,6 @@ ctor = "0.2.6"
 anyhow = "1.0"
 serde_json = "1.0"
 itoa = "1"
-ryu = "1"
 aws-config = "1.0.0"
 tokio = { version = "1.26.0", features = ["full"] }
 strum = "0.24"
@@ -60,6 +59,7 @@ rmcp = { version = "1.5", features = ["server", "transport-io"], optional = true
 schemars = { version = "0.8", optional = true }
 exmex = "0.21"
 versions = "8.0.1"
+base64 = "0.22.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 aya = "0.14"

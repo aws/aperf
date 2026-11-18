@@ -6,6 +6,11 @@ export const APERF_SERVICE_NAME = "APerf";
 export const NUM_METRICS_PER_PAGE = 20;
 
 /**
+ * The maximum cache size (bytes) of the decoded values of the recently viewed metrics.
+ */
+export const DECODED_VALUES_CACHE_BYTES = 512 * 2 ** 20;
+
+/**
  * The maximum number of series allowed to be included in a metric graph (if
  * the actual number is larger, skip rendering a graph to avoid performance
  * cost)

@@ -262,7 +262,7 @@ mod vmstat_tests {
                 );
 
                 // Verify time progression
-                for (i, &time_diff) in series.time_diff.iter().enumerate() {
+                for (i, &time_diff) in time_series_data.time_diff.iter().enumerate() {
                     assert_eq!(time_diff, i as u64, "Time diff mismatch at sample {}", i);
                 }
 
@@ -387,7 +387,7 @@ mod vmstat_tests {
                 };
 
                 assert_eq!(
-                    series.values.len(),
+                    series.values.iter().filter(|v| !v.is_nan()).count(),
                     expected_length,
                     "Metric {} should have {} samples",
                     metric_name,
@@ -402,7 +402,7 @@ mod vmstat_tests {
                     _ => panic!("Unexpected metric: {}", metric_name),
                 };
 
-                for (series_idx, &value) in series.values.iter().enumerate() {
+                for (series_idx, &value) in series.values[start_sample..].iter().enumerate() {
                     let sample_idx = start_sample + series_idx;
 
                     if metric_name.contains("nr_") {

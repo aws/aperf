@@ -3,7 +3,7 @@ import { DataType, GraphData, GraphInfo } from "../../definitions/types";
 import { PROCESSED_DATA } from "../../definitions/data-config";
 import { Container, Icon, Link } from "@cloudscape-design/components";
 import Header from "@cloudscape-design/components/header";
-import DataUnavailableBox from "./DataUnavailableBox";
+import { DataUnavailableBox } from "./StatusBoxes";
 
 // TODO: IframeGraph is a temporary component used only by GraphDataPage (hotline).
 export interface IframeGraphProps {

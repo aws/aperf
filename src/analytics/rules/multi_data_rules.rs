@@ -229,13 +229,15 @@ mod tests {
         pd.data_format = DataFormat::TimeSeries;
         for (run, values) in runs {
             let mut metric = TimeSeriesMetric::new("mux_counter_schedule_rate".to_string());
+            let mut ts = TimeSeriesData {
+                time_diff: (0..values.len() as u64).collect(),
+                ..Default::default()
+            };
             metric.series.push(Series {
                 series_name: "Aggregate".to_string(),
-                time_diff: (0..values.len() as u64).collect(),
                 values,
                 is_aggregate: true,
             });
-            let mut ts = TimeSeriesData::default();
             ts.metrics
                 .insert("mux_counter_schedule_rate".to_string(), metric);
             pd.runs.insert(run.to_string(), AperfData::TimeSeries(ts));

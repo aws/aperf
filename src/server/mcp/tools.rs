@@ -451,6 +451,7 @@ impl AperfMcpServer {
                         // Resolve series based on cpu_ids filtering or averaging
                         let resolved = resolve_typed_series(
                             metric,
+                            &ts_data.time_diff,
                             &req.cpu_ids,
                             &req.metric_name,
                             &accessor,
@@ -1344,7 +1345,44 @@ impl ServerHandler for AperfMcpServer {
 // Series resolution (cpu_ids filtering / averaging) using typed data
 // ---------------------------------------------------------------------------
 
+use crate::computations::round_to_decimals;
 use crate::data::common::data_formats::{Series, TimeSeriesMetric};
+
+/// The (time, value) pairs of a series, without the times it has no value at.
+fn series_points<'a>(
+    time_diff: &'a [u64],
+    series: &'a Series,
+) -> impl Iterator<Item = (u64, f64)> + 'a {
+    time_diff
+        .iter()
+        .copied()
+        .zip(series.values.iter().copied())
+        .filter(|(_, value)| !value.is_nan())
+}
+
+/// Returns the JSON of series in the tool outputs.
+fn to_series_json<'a>(
+    time_diff: &[u64],
+    all_series: impl IntoIterator<Item = &'a Series>,
+) -> Value {
+    all_series
+        .into_iter()
+        .map(|series| {
+            let (times, values): (Vec<u64>, Vec<f64>) = series_points(time_diff, series)
+                .map(|(time, value)| (time, round_to_decimals(value, 2)))
+                .unzip();
+            let mut json = json!({
+                "series_name": series.series_name,
+                "time_diff": times,
+                "values": values,
+            });
+            if series.is_aggregate {
+                json["is_aggregate"] = json!(true);
+            }
+            json
+        })
+        .collect()
+}
 
 struct ResolvedTypedSeries {
     series_json: Value,  // JSON array of series for "timeseries" output
@@ -1355,6 +1393,7 @@ struct ResolvedTypedSeries {
 /// Resolve series from a typed TimeSeriesMetric, applying cpu_ids filtering or averaging.
 fn resolve_typed_series(
     metric: &TimeSeriesMetric,
+    run_time_diff: &[u64],
     cpu_ids: &Option<Vec<String>>,
     metric_name: &str,
     _accessor: &ProcessedDataAccessor,
@@ -1381,9 +1420,10 @@ fn resolve_typed_series(
                     ids, available
                 ));
             }
-            let values = filtered[0].values.clone();
-            let time_diff: Vec<f64> = filtered[0].time_diff.iter().map(|&t| t as f64).collect();
-            let series_json = serde_json::to_value(&filtered).unwrap_or(json!([]));
+            let (time_diff, values) = series_points(run_time_diff, filtered[0])
+                .map(|(time, value)| (time as f64, value))
+                .unzip();
+            let series_json = to_series_json(run_time_diff, filtered.iter().copied());
             Ok(ResolvedTypedSeries {
                 series_json,
                 values,
@@ -1391,7 +1431,7 @@ fn resolve_typed_series(
             })
         } else {
             // Average across all series
-            let (averaged, td) = average_typed_series(&metric.series, metric_name)?;
+            let (averaged, td) = average_typed_series(&metric.series, run_time_diff, metric_name)?;
             let avg_series =
                 json!([{"series_name": "averaged", "time_diff": td, "values": averaged}]);
             Ok(ResolvedTypedSeries {
@@ -1402,10 +1442,10 @@ fn resolve_typed_series(
         }
     } else {
         // Single series
-        let s = &metric.series[0];
-        let values = s.values.clone();
-        let time_diff: Vec<f64> = s.time_diff.iter().map(|&t| t as f64).collect();
-        let series_json = serde_json::to_value(&metric.series).unwrap_or(json!([]));
+        let (time_diff, values) = series_points(run_time_diff, &metric.series[0])
+            .map(|(time, value)| (time as f64, value))
+            .unzip();
+        let series_json = to_series_json(run_time_diff, &metric.series);
         Ok(ResolvedTypedSeries {
             series_json,
             values,
@@ -1416,6 +1456,7 @@ fn resolve_typed_series(
 
 fn average_typed_series(
     series: &[Series],
+    run_time_diff: &[u64],
     metric_name: &str,
 ) -> Result<(Vec<f64>, Vec<u64>), String> {
     if series.is_empty() || series[0].values.is_empty() {
@@ -1424,20 +1465,22 @@ fn average_typed_series(
             metric_name
         ));
     }
-    let num_points = series[0].values.len();
-    let mut averaged = Vec::with_capacity(num_points);
-    for i in 0..num_points {
+    let mut averaged = Vec::new();
+    let mut td = Vec::new();
+    for (i, &time) in run_time_diff.iter().enumerate() {
         let mut sum = 0.0;
         let mut count = 0usize;
         for s in series {
-            if i < s.values.len() {
-                sum += s.values[i];
+            if let Some(&value) = s.values.get(i).filter(|value| !value.is_nan()) {
+                sum += value;
                 count += 1;
             }
         }
-        averaged.push(if count > 0 { sum / count as f64 } else { 0.0 });
+        if count > 0 {
+            averaged.push(sum / count as f64);
+            td.push(time);
+        }
     }
-    let td = series[0].time_diff.clone();
     Ok((averaged, td))
 }
 
@@ -1451,7 +1494,8 @@ fn load_processed_data(path: &std::path::Path) -> Result<ProcessedData, String> 
         std::fs::read_to_string(path).map_err(|e| format!("Error reading file: {}", e))?;
     let json_str = super::js_parser::extract_json_from_js(&content)
         .ok_or_else(|| format!("Error: No data found in {}", path.display()))?;
-    serde_json::from_str(&json_str).map_err(|e| format!("Error deserializing ProcessedData: {}", e))
+    super::js_parser::parse_processed_data(&json_str)
+        .map_err(|e| format!("Error deserializing ProcessedData: {}", e))
 }
 
 // ---------------------------------------------------------------------------
