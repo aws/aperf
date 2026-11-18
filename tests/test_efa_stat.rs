@@ -258,8 +258,10 @@ fn test_efa_driver_appearing_later() {
     assert_eq!(efa0.values.len(), 4);
     assert_eq!(efa0.values, vec![0.0, 100.0, 150.0, 150.0]);
 
-    assert_eq!(efa1.values.len(), 2);
-    assert_eq!(efa1.values, vec![0.0, 400.0]);
+    // efa1 appears at sample 2
+    assert_eq!(efa1.values.len(), 4);
+    assert!(efa1.values[..2].iter().all(|v| v.is_nan()));
+    assert_eq!(efa1.values[2..], [0.0, 400.0]);
 }
 
 // ---------------------------------------------------------------------------
@@ -503,9 +505,7 @@ fn test_efa_time_progression_multi_driver() {
     let mut efa = EfaStat::new();
     let ts = unwrap_time_series(efa.process_raw_data(&ReportParams::new(), raw).unwrap());
 
-    for s in &ts.metrics["tx_bytes"].series {
-        assert_eq!(s.time_diff, vec![0, 3, 6]);
-    }
+    assert_eq!(ts.time_diff, vec![0, 3, 6]);
 }
 
 #[test]

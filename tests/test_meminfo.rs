@@ -217,11 +217,7 @@ fn test_process_meminfo_raw_data_simple() {
         assert!((mem_free.series[0].values[2] - 4190208.0).abs() < 1e-5); // 4194304 - 4 * 1024
 
         // Check time progression
-        for metric in time_series_data.metrics.values() {
-            assert_eq!(metric.series[0].time_diff[0], 0);
-            assert_eq!(metric.series[0].time_diff[1], 1);
-            assert_eq!(metric.series[0].time_diff[2], 2);
-        }
+        assert_eq!(time_series_data.time_diff, vec![0, 1, 2]);
     } else {
         panic!("Expected TimeSeries data");
     }

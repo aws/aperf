@@ -4,8 +4,8 @@ import { useReportState } from "../ReportStateProvider";
 import { CPU_DATA_TYPES, PROCESSED_DATA, RUNS } from "../../definitions/data-config";
 import Plot from "react-plotly.js";
 import { Button, Popover, SpaceBetween } from "@cloudscape-design/components";
-import { getTimeSeriesMetricUnit, shouldShowCpuSeries } from "../../utils/utils";
-import DataUnavailableBox from "./DataUnavailableBox";
+import { getSeriesTrace, getTimeSeriesMetricUnit, shouldShowCpuSeries, useSeriesValues } from "../../utils/utils";
+import { DataUnavailableBox, MetricDecodingStatusBox } from "./StatusBoxes";
 import MetricGraph from "./MetricGraph";
 import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import MetricStatsDisplay from "./MetricStatsDisplay";
@@ -17,30 +17,27 @@ function getSeriesData(
   dataType: DataType,
   runName: string,
   metricName: string,
+  seriesValues: Float64Array[],
   selectedAggregate: boolean,
   selectedCpus: Set<number>,
 ): {
   seriesData: Partial<Plotly.PlotData>[];
   valueRange: number[];
 } {
-  const metrics = (PROCESSED_DATA[dataType].runs[runName] as TimeSeriesData)?.metrics;
-  if (metrics === undefined) return { seriesData: [], valueRange: [] };
-  const metric = metrics[metricName];
-  if (metric === undefined) return { seriesData: [], valueRange: [] };
+  const runData = PROCESSED_DATA[dataType].runs[runName] as TimeSeriesData;
+  const metric = runData.metrics[metricName];
 
   const isCpuDataType = CPU_DATA_TYPES.includes(dataType);
-  const seriesData = metric.series.map(
-    (series) =>
-      ({
-        name: series.series_name,
-        x: series.time_diff,
-        y: series.values,
-        type: "scatter",
-        visible:
-          isCpuDataType && !shouldShowCpuSeries(series.series_name, selectedAggregate, selectedCpus)
-            ? "legendonly"
-            : true,
-      }) as Partial<Plotly.PlotData>,
+  const seriesData = metric.series.map((seriesName, i) =>
+    getSeriesTrace(
+      seriesName,
+      runData.time_diff,
+      seriesValues[i],
+      isCpuDataType &&
+        !shouldShowCpuSeries(seriesName, i === metric.default_stats_series_idx, selectedAggregate, selectedCpus)
+        ? "legendonly"
+        : true,
+    ),
   );
 
   const valueRange = metric.value_range;
@@ -53,19 +50,24 @@ function getSeriesData(
  */
 export default function (props: TimeSeriesMetricProps) {
   const { selectedCpusPerRun, darkMode } = useReportState();
+  const values = useSeriesValues(props.dataType, props.metricName, [props.runName]);
+
+  const metric = (PROCESSED_DATA[props.dataType].runs[props.runName] as TimeSeriesData)?.metrics[props.metricName];
+  if (metric === undefined) {
+    return <DataUnavailableBox dataType={props.dataType} runName={props.runName} />;
+  }
+  if (!(values instanceof Map)) {
+    return <MetricDecodingStatusBox error={values} />;
+  }
 
   const { seriesData, valueRange } = getSeriesData(
     props.dataType,
     props.runName,
     props.metricName,
+    values.get(props.runName),
     selectedCpusPerRun[props.runName].aggregate,
     selectedCpusPerRun[props.runName].cpus,
   );
-
-  // A metric without series (they were dropped for being all zero) is still shown, as an empty graph
-  if ((PROCESSED_DATA[props.dataType].runs[props.runName] as TimeSeriesData)?.metrics[props.metricName] === undefined) {
-    return <DataUnavailableBox dataType={props.dataType} runName={props.runName} />;
-  }
 
   return (
     <Plot

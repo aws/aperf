@@ -6,7 +6,7 @@ import { DATA_DESCRIPTIONS } from "../../definitions/data-descriptions";
 import React from "react";
 import { RunHeader } from "../data/RunSystemInfo";
 import { ReportHelpPanelLink } from "../misc/ReportHelpPanel";
-import DataUnavailableBox from "../data/DataUnavailableBox";
+import { DataUnavailableBox } from "../data/StatusBoxes";
 
 /**
  * This component renders the page for text data

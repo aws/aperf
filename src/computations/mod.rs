@@ -24,7 +24,9 @@ pub struct Statistics {
 }
 
 impl Statistics {
+    /// Computes the statistics of the values, skipping NaN (no value).
     pub fn from_values(values: &[f64]) -> Self {
+        let values: Vec<f64> = values.iter().copied().filter(|v| !v.is_nan()).collect();
         let n = values.len();
         if n == 0 {
             return Self::default();
@@ -33,7 +35,7 @@ impl Statistics {
         let mut sum = 0.0;
         let mut min = values[0];
         let mut max = values[0];
-        for &value in values {
+        for &value in &values {
             sum += value;
             min = min.min(value);
             max = max.max(value);
@@ -41,13 +43,13 @@ impl Statistics {
         let avg = sum / n as f64;
 
         let mut sum_sq_diff = 0.0;
-        for &value in values {
+        for &value in &values {
             let diff = value - avg;
             sum_sq_diff += diff * diff;
         }
         let std = (sum_sq_diff / n as f64).sqrt();
 
-        let mut sorted_values: Vec<f64> = values.iter().copied().collect();
+        let mut sorted_values = values;
         sorted_values.sort_by(|a, b| a.partial_cmp(b).unwrap());
         let p50 = sorted_values[(0.5 * n as f64).floor() as usize];
         let p90 = sorted_values[(0.9 * n as f64).floor() as usize];
@@ -68,8 +70,9 @@ impl Statistics {
 }
 
 /// Use this function instead of Statistics::from_values when only requiring
-/// the average, so that other heavy computations can be skipped
+/// the average, so that other heavy computations can be skipped. NaN (no value) is skipped.
 pub fn get_average(values: &Vec<f64>) -> Option<f64> {
+    let values: Vec<f64> = values.iter().copied().filter(|v| !v.is_nan()).collect();
     if values.is_empty() {
         return None;
     }
@@ -134,33 +137,23 @@ impl Comparator {
 }
 
 /// Custom Serde serializations
-/// Allow f64 values to be truncated to 2 decimal places (to save spaces)
-pub fn f64_to_fixed_2(value: f64) -> f64 {
-    f64::trunc(value * 100.0) / 100.0
+/// Rounds a value to a number of decimal places, e.g. 1.23456 to 4 decimal places is 1.2346
+pub fn round_to_decimals(value: f64, decimals: i32) -> f64 {
+    let scale = 10_f64.powi(decimals);
+    (value * scale).round() / scale
 }
 
-/// Custom serializing function for Vec<f64> to truncate all elements to 2 decimal places
-pub fn serialize_f64_vec_fixed2<S>(values: &[f64], serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    values
-        .iter()
-        .map(|&v| f64_to_fixed_2(v))
-        .collect::<Vec<_>>()
-        .serialize(serializer)
-}
-/// Custom serializing function for f64 to truncate all elements to 2 decimal places
+/// Custom serializing function for f64 to round all elements to 2 decimal places
 pub fn serialize_f64_fixed2<S>(value: &f64, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
-    serializer.serialize_f64(f64_to_fixed_2(*value))
+    serializer.serialize_f64(round_to_decimals(*value, 2))
 }
 
 /// Format a ratio number into percentage delta (e.g. 0.5 is "50% greater than")
 pub fn delta_ratio_to_percentage_string(delta_ratio: f64) -> String {
-    let abs_delta_ratio = f64_to_fixed_2(delta_ratio.abs() * 100.0);
+    let abs_delta_ratio = round_to_decimals(delta_ratio.abs() * 100.0, 2);
     if delta_ratio == 0.0 {
         return String::from("equal to");
     }
@@ -194,14 +187,14 @@ pub fn formatted_number_string(value: f64) -> String {
     if value.is_nan() {
         String::from("NaN")
     } else if value >= 1e12 {
-        format!("{}T", f64_to_fixed_2(value / 1e12))
+        format!("{}T", round_to_decimals(value / 1e12, 2))
     } else if value >= 1e9 {
-        format!("{}G", f64_to_fixed_2(value / 1e9))
+        format!("{}G", round_to_decimals(value / 1e9, 2))
     } else if value >= 1e6 {
-        format!("{}M", f64_to_fixed_2(value / 1e6))
+        format!("{}M", round_to_decimals(value / 1e6, 2))
     } else if value >= 1e3 {
-        format!("{}K", f64_to_fixed_2(value / 1e3))
+        format!("{}K", round_to_decimals(value / 1e3, 2))
     } else {
-        format!("{}", f64_to_fixed_2(value))
+        format!("{}", round_to_decimals(value, 2))
     }
 }

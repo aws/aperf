@@ -376,21 +376,19 @@ mod diskstats_tests {
                 assert_eq!(sda_series.values[i], 100.0);
             }
 
-            // sdb should have length from when it first appears (sample 11 onwards)
-            let sdb_expected_length = num_samples - 11;
-            assert_eq!(sdb_series.values.len(), sdb_expected_length);
-            assert_eq!(sdb_series.values[0], 0.0); // First appearance is always 0
-            for i in 1..sdb_expected_length {
-                assert_eq!(sdb_series.values[i], 80.0);
-            }
+            // sdb only has values from when it first appears (sample 11 onwards)
+            assert!(sdb_series.values[..11].iter().all(|v| v.is_nan()));
+            let sdb_values = &sdb_series.values[11..];
+            assert_eq!(sdb_values.len(), num_samples - 11);
+            assert_eq!(sdb_values[0], 0.0); // First appearance is always 0
+            assert!(sdb_values[1..].iter().all(|&v| v == 80.0));
 
-            // nvme0n1 should have length from when it first appears (sample 31 onwards)
-            let nvme_expected_length = num_samples - 31;
-            assert_eq!(nvme_series.values.len(), nvme_expected_length);
-            assert_eq!(nvme_series.values[0], 0.0); // First appearance is always 0
-            for i in 1..nvme_expected_length {
-                assert_eq!(nvme_series.values[i], 120.0);
-            }
+            // nvme0n1 only has values from when it first appears (sample 31 onwards)
+            assert!(nvme_series.values[..31].iter().all(|v| v.is_nan()));
+            let nvme_values = &nvme_series.values[31..];
+            assert_eq!(nvme_values.len(), num_samples - 31);
+            assert_eq!(nvme_values[0], 0.0); // First appearance is always 0
+            assert!(nvme_values[1..].iter().all(|&v| v == 120.0));
         } else {
             panic!("Expected TimeSeries data");
         }
@@ -517,19 +515,20 @@ mod diskstats_tests {
                     }
                 } else {
                     for series in &metric.series {
-                        assert_eq!(series.values.len(), 2);
+                        // The decreased sample has no value
+                        assert_eq!(series.values.len(), 3);
                         assert_eq!(series.values[0], 0.0);
-                        assert_eq!(series.time_diff[0], 0);
+                        assert!(series.values[1].is_nan());
                         let expected = expected_deltas[metric.metric_name.as_str()];
                         assert_eq!(
-                            series.values[1], expected,
+                            series.values[2], expected,
                             "Metric {}: expected {}, got {}",
-                            metric.metric_name, expected, series.values[1]
+                            metric.metric_name, expected, series.values[2]
                         );
-                        assert_eq!(series.time_diff[1], 2);
                     }
                 }
             }
+            assert_eq!(time_series_data.time_diff, vec![0, 1, 2]);
         } else {
             panic!("Expected TimeSeries data");
         }

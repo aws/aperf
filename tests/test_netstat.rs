@@ -166,7 +166,7 @@ fn test_process_netstat_raw_data_complex() {
                 metric_name
             );
             assert_eq!(
-                metric.series[0].time_diff.len(),
+                time_series_data.time_diff.len(),
                 100,
                 "Should have 100 time points for {}",
                 metric_name
@@ -251,11 +251,7 @@ fn test_process_netstat_raw_data_simple() {
         assert_eq!(ip_metric.series[0].values[2], 10000.0); // Delta: 70000 - 60000
 
         // Check time progression
-        for metric in time_series_data.metrics.values() {
-            assert_eq!(metric.series[0].time_diff[0], 0);
-            assert_eq!(metric.series[0].time_diff[1], 1);
-            assert_eq!(metric.series[0].time_diff[2], 2);
-        }
+        assert_eq!(time_series_data.time_diff, vec![0, 1, 2]);
     } else {
         panic!("Expected TimeSeries data");
     }
@@ -308,16 +304,18 @@ fn test_process_netstat_dynamic_stats() {
         assert_eq!(tcp_metric.series[0].values.len(), 50);
 
         // IpExt:InOctets should have 40 data points (appears at sample 10)
-        let ip_metric = &time_series_data.metrics["IpExt:InOctets"];
-        assert_eq!(ip_metric.series[0].values.len(), 40);
-        assert_eq!(ip_metric.series[0].values[0], 0.0); // First appearance
-        assert_eq!(ip_metric.series[0].values[1], 5000.0); // Delta
+        let ip_values = &time_series_data.metrics["IpExt:InOctets"].series[0].values;
+        assert!(ip_values[..10].iter().all(|v| v.is_nan()));
+        assert_eq!(ip_values[10..].len(), 40);
+        assert_eq!(ip_values[10], 0.0); // First appearance
+        assert_eq!(ip_values[11], 5000.0); // Delta
 
         // MPTcpExt:MPCapableSYNRX should have 20 data points (appears at sample 30)
-        let mptcp_metric = &time_series_data.metrics["MPTcpExt:MPCapableSYNRX"];
-        assert_eq!(mptcp_metric.series[0].values.len(), 20);
-        assert_eq!(mptcp_metric.series[0].values[0], 0.0); // First appearance
-        assert_eq!(mptcp_metric.series[0].values[1], 2.0); // Delta
+        let mptcp_values = &time_series_data.metrics["MPTcpExt:MPCapableSYNRX"].series[0].values;
+        assert!(mptcp_values[..30].iter().all(|v| v.is_nan()));
+        assert_eq!(mptcp_values[30..].len(), 20);
+        assert_eq!(mptcp_values[30], 0.0); // First appearance
+        assert_eq!(mptcp_values[31], 2.0); // Delta
     } else {
         panic!("Expected TimeSeries data");
     }
@@ -438,20 +436,27 @@ fn test_process_netstat_input_validation() {
         // Valid samples are at t=0s and t=3s, so elapsed is 3 seconds
         let elapsed_seconds = 3.0_f64;
 
+        // The invalid samples have no values
         let tcp_pure_acks = &time_series_data.metrics["TcpExt:TCPPureAcks"];
-        assert_eq!(tcp_pure_acks.series[0].values.len(), 2);
+        assert_eq!(tcp_pure_acks.series[0].values.len(), 4);
         assert_eq!(tcp_pure_acks.series[0].values[0], 0.0); // First valid sample
+        assert!(tcp_pure_acks.series[0].values[1..3]
+            .iter()
+            .all(|v| v.is_nan()));
         assert!(
-            (tcp_pure_acks.series[0].values[1] - 100.0 / elapsed_seconds).abs() < 1e-6,
+            (tcp_pure_acks.series[0].values[3] - 100.0 / elapsed_seconds).abs() < 1e-6,
             "TCPPureAcks delta rate mismatch: got {}, expected {}",
-            tcp_pure_acks.series[0].values[1],
+            tcp_pure_acks.series[0].values[3],
             100.0 / elapsed_seconds
         ); // Delta: (200 - 100) / 3
 
         let tcp_hp_acks = &time_series_data.metrics["TcpExt:TCPHPAcks"];
-        assert_eq!(tcp_hp_acks.series[0].values.len(), 2);
+        assert_eq!(tcp_hp_acks.series[0].values.len(), 4);
         assert_eq!(tcp_hp_acks.series[0].values[0], 0.0); // First valid sample
-        assert_eq!(tcp_hp_acks.series[0].values[1], 150.0 / elapsed_seconds); // Delta: (350 - 200) / 3 = 50.0
+        assert!(tcp_hp_acks.series[0].values[1..3]
+            .iter()
+            .all(|v| v.is_nan()));
+        assert_eq!(tcp_hp_acks.series[0].values[3], 150.0 / elapsed_seconds); // Delta: (350 - 200) / 3 = 50.0
     }
 }
 
@@ -524,13 +529,13 @@ fn test_decreasing_counter() {
         // After decrease, 8000 is kept so next delta is 10450-8000=2450
         let pure_acks = &time_series_data.metrics["TcpExt:TCPPureAcks"];
         assert_eq!(pure_acks.series.len(), 1);
-        assert_eq!(pure_acks.series[0].values.len(), 5); // 6 samples minus 1 skipped
+        assert_eq!(pure_acks.series[0].values.len(), 6);
         assert_eq!(pure_acks.series[0].values[0], 0.0); // sample 0: first, no delta
         assert_eq!(pure_acks.series[0].values[1], 200.0); // sample 1: 10200 - 10000
-                                                          // sample 2 skipped (10200 -> 8000 is a decrease)
-        assert_eq!(pure_acks.series[0].values[2], 2450.0); // sample 3: 10450 - 8000
-        assert_eq!(pure_acks.series[0].values[3], 250.0); // sample 4: 10700 - 10450
-        assert_eq!(pure_acks.series[0].values[4], 300.0); // sample 5: 11000 - 10700
+        assert!(pure_acks.series[0].values[2].is_nan()); // sample 2 skipped (10200 -> 8000 is a decrease)
+        assert_eq!(pure_acks.series[0].values[3], 2450.0); // sample 3: 10450 - 8000
+        assert_eq!(pure_acks.series[0].values[4], 250.0); // sample 4: 10700 - 10450
+        assert_eq!(pure_acks.series[0].values[5], 300.0); // sample 5: 11000 - 10700
 
         // TCPTimeouts: 500 -> 502 -> 505 -> 508 -> 510 -> 513
         // No decreases, all 6 samples present
@@ -550,13 +555,13 @@ fn test_decreasing_counter() {
         // Deltas:    0         50000      50000      50000      [skipped]      50000
         let in_octets = &time_series_data.metrics["IpExt:InOctets"];
         assert_eq!(in_octets.series.len(), 1);
-        assert_eq!(in_octets.series[0].values.len(), 5); // 6 samples minus 1 skipped
+        assert_eq!(in_octets.series[0].values.len(), 6);
         assert_eq!(in_octets.series[0].values[0], 0.0); // sample 0
         assert_eq!(in_octets.series[0].values[1], 50000.0); // 1050000 - 1000000
         assert_eq!(in_octets.series[0].values[2], 50000.0); // 1100000 - 1050000
         assert_eq!(in_octets.series[0].values[3], 50000.0); // 1150000 - 1100000
-                                                            // sample 4 skipped (1150000 -> 50000 is a decrease)
-        assert_eq!(in_octets.series[0].values[4], 50000.0); // sample 5: 100000 - 50000
+        assert!(in_octets.series[0].values[4].is_nan()); // sample 4 skipped (1150000 -> 50000 is a decrease)
+        assert_eq!(in_octets.series[0].values[5], 50000.0); // sample 5: 100000 - 50000
     } else {
         panic!("Expected TimeSeries data");
     }

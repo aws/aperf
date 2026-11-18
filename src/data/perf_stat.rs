@@ -26,7 +26,6 @@ use {
     anyhow::{anyhow, bail},
     chrono::prelude::*,
     log::info,
-    std::{thread, time::Duration},
 };
 
 static DEFAULT_PMU_CONFIG_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/pmu_configs");
@@ -45,15 +44,6 @@ fn log_permission_denied_error() {
 /// Get the path to PMU config saved in the run dir.
 fn get_saved_pmu_config_path(run_dir: &Path) -> PathBuf {
     PathBuf::from(run_dir).join("pmu_config.json")
-}
-
-/// Warn user if the number of counters to be collected per CPU is more than the
-/// available registers, which means multiplexing is likely required ("likely" because
-/// some counters do not consume a register, and the probing result is dynamic).
-fn warn_multiplexing(required_counters_per_cpu: usize, counter_limit: usize) {
-    if required_counters_per_cpu > counter_limit {
-        debug!("At most {required_counters_per_cpu} counters will be collected per CPU, while {counter_limit} PMU registers are currently available. Multiplexing is likely required, in which case the accuracy of the PMU metrics is reduced and more CPU resources are consumed during collection.");
-    }
 }
 
 /// Custom event type used to build the counter. It essentially duplicates perf-event2's
@@ -281,15 +271,6 @@ impl PmuConfig {
             .map(|metric_expression| metric_expression.var_names().len())
             .sum::<usize>();
 
-        match Self::probe_pmu_counter_limit(cpu_ids.last().copied().unwrap()) {
-            Ok(pmu_counter_limit) => {
-                warn_multiplexing(num_counters_per_cpu, pmu_counter_limit);
-            }
-            Err(e) => {
-                warn!("Failed to probe PMU counter limit: {:?}", e);
-            }
-        };
-
         // Each group (one for every metric) also takes one fd.
         // Add some buffers to the expected fd requirement.
         let num_required_fds =
@@ -388,15 +369,6 @@ impl PmuConfig {
     pub fn create_event_counters(&self, cpu_ids: &[usize]) -> Result<Vec<PmuCollector>> {
         let num_counters_per_cpu = self.events.len();
 
-        match Self::probe_pmu_counter_limit(cpu_ids.last().copied().unwrap()) {
-            Ok(pmu_counter_limit) => {
-                warn_multiplexing(num_counters_per_cpu, pmu_counter_limit);
-            }
-            Err(e) => {
-                debug!("Failed to probe PMU counter limit: {:?}", e);
-            }
-        };
-
         // Add some buffers to the expected fd requirement.
         let num_required_fds = 50 + cpu_ids.len() * num_counters_per_cpu;
         debug!(
@@ -427,18 +399,13 @@ impl PmuConfig {
             let cur_event_cpu_ids = per_pmu_device_cpu_ids.get(&event.pmu_name).unwrap();
 
             for &cpu_id in cur_event_cpu_ids {
-                let mut builder = perf_event::Builder::new(event.clone());
-                builder
+                let counter = match Self::counter_builder(&event, cpu_id)
                     .read_format(
                         perf_event::ReadFormat::TOTAL_TIME_ENABLED
                             | perf_event::ReadFormat::TOTAL_TIME_RUNNING,
                     )
-                    .one_cpu(cpu_id)
-                    .any_pid()
-                    .include_kernel()
-                    .include_hv();
-
-                let counter = match builder.build() {
+                    .build()
+                {
                     Ok(counter) => counter,
                     Err(e) if is_permission_denied(&e) => {
                         log_permission_denied_error();
@@ -459,73 +426,6 @@ impl PmuConfig {
         }
 
         Ok(event_counters)
-    }
-
-    const PMU_COUNTER_LIMIT_UPPER_BOUND: usize = 16;
-    const PMU_COUNTER_LIMIT_LOWER_BOUND: usize = 1;
-    /// Probe the number of available PMU registers, i.e. the limit of counter collection
-    /// without multiplexing, through binary saerch.
-    #[cfg(target_os = "linux")]
-    pub fn probe_pmu_counter_limit(cpu_id: usize) -> Result<usize> {
-        let cpu_info = match &*CPU_INFO {
-            Ok(cpu_info) => cpu_info,
-            Err(e) => bail!(
-                "Failed to obtain CPU info to select the probing PMU event: {:?}",
-                e
-            ),
-        };
-
-        let probe_event_string = if cpu_info.is_arm() {
-            "armv8_pmuv3_0/event=0x3/"
-        } else if cpu_info.is_intel() {
-            "cpu/event=0x51,umask=0x1/"
-        } else if cpu_info.is_amd() {
-            "cpu/event=0xc2,umask=0x0/"
-        } else {
-            bail!(
-                "Unrecognized CPU type for probe event selection: {:?}",
-                cpu_info
-            );
-        };
-        let probe_event = PmuConfigEvent::from_event_string(probe_event_string)?;
-        // Check one event group first to see if probe event is valid.
-        Self::create_counter_group("pmu_counter_limit_probe", &[probe_event.clone()], cpu_id)?;
-
-        let (mut high, mut low) = (
-            Self::PMU_COUNTER_LIMIT_UPPER_BOUND,
-            Self::PMU_COUNTER_LIMIT_LOWER_BOUND,
-        );
-        while low < high {
-            let mid = (low + high + 1) / 2;
-
-            let mut probe_group = match Self::create_counter_group(
-                "pmu_counter_limit_probe",
-                &vec![probe_event.clone(); mid],
-                cpu_id,
-            ) {
-                Ok(probe_group) => probe_group,
-                Err(e) if e.raw_os_error() == Some(libc::EINVAL) => {
-                    high = mid - 1;
-                    continue;
-                }
-                Err(e) => return Err(e.into()),
-            };
-
-            probe_group.enable()?;
-            thread::sleep(Duration::from_millis(10));
-            let probed_data = probe_group.collect()?;
-
-            // The group being fully scheduled means no multiplexings
-            if probed_data.time_running >= probed_data.time_enabled {
-                low = mid;
-            } else {
-                high = mid - 1;
-            }
-        }
-
-        let counter_limit = low;
-
-        Ok(counter_limit)
     }
 
     /// Parse each PMU metric expression into exmes object, to retrieve the identifiers
@@ -979,8 +879,8 @@ impl CollectData for PerfStatRaw {
         self.time = TimeEnum::DateTime(Utc::now());
         self.data = String::new();
 
-        for pmu_metric_counter_group in &mut self.pmu_collectors {
-            let group_data = pmu_metric_counter_group.collect()?;
+        for pmu_collector in &mut self.pmu_collectors {
+            let group_data = pmu_collector.collect()?;
             write!(&mut self.data, "{}\n", group_data.to_string())?;
         }
 
@@ -1509,7 +1409,7 @@ impl ProcessData for PerfStat {
 mod tests {
     #[cfg(target_os = "linux")]
     use {
-        super::{PerfStatRaw, PmuCollectedData, PmuConfig, PmuConfigEvent},
+        super::{PerfStatRaw, PmuCollectedData, PmuConfigEvent},
         crate::data::common::utils::get_online_cpu_ids,
         crate::data::CollectData,
         crate::data_collection::InitParams,
@@ -1623,22 +1523,6 @@ mod tests {
             event.get_pmu_device_cpu_ids(&requested_cpu_ids),
             requested_cpu_ids
         );
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn test_probe_pmu_counter_limit() {
-        let cpu_id = *get_online_cpu_ids()
-            .expect("failed to read online CPUs")
-            .last()
-            .expect("expected at least one online CPU");
-        if let Ok(limit) = PmuConfig::probe_pmu_counter_limit(cpu_id) {
-            // The probed PMU register count should land in a sane range
-            assert!(
-                limit >= 1 && limit <= 8,
-                "probed PMU counter limit {limit} is outside the expected range 1..=8"
-            );
-        }
     }
 
     #[cfg(target_os = "linux")]

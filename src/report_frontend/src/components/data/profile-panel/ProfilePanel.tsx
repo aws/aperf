@@ -23,7 +23,7 @@ import { buildKeyValueTable } from "../KeyValueTable";
 import { FrameType, FRAME_TYPE_COLORS, FRAME_TYPE_LABELS, getThemeColors } from "./colors";
 import { FlamegraphNode } from "./utils";
 import { createProfileViewDerivedValues } from "./profileView";
-import DataUnavailableBox from "../DataUnavailableBox";
+import { DataUnavailableBox } from "../StatusBoxes";
 
 // Height in pixels reserved for the time axis label above the heatmap grid
 const AXIS_HEIGHT = 20;

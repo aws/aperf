@@ -3,7 +3,7 @@ import { PROCESSED_DATA } from "../../definitions/data-config";
 import { KeyValueData } from "../../definitions/types";
 import React from "react";
 import Header from "@cloudscape-design/components/header";
-import DataUnavailableBox from "./DataUnavailableBox";
+import { DataUnavailableBox } from "./StatusBoxes";
 
 const SYSTEM_INFO_ITEMS_CACHE = new Map<string, KeyValuePairsProps.Item[]>();
 

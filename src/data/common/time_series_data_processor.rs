@@ -4,7 +4,7 @@ use crate::data::TimeEnum;
 use exmex::{Express, FlatEx};
 use log::{debug, warn};
 use numeric_sort::cmp;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(PartialEq, Debug)]
 pub enum TimeSeriesDataAggregateMode {
@@ -41,8 +41,10 @@ pub struct TimeSeriesDataProcessor {
     per_metric_sum_count: HashMap<String, (f64, usize)>,
     // The initial timestamp, for the computation of every time_diff
     time_zero: Option<TimeEnum>,
-    // The current time_diff to be added to every series
+    // The time_diff of the current snapshot
     cur_time_diff: u64,
+    // The time_diff of every snapshot, where the last one is the current snapshot
+    time_diff: Vec<u64>,
     // Whether the first accumulative value, where there is no previous value to compute the delta,
     // should be ignored (the delta is 0) or used (the delta is the value itself).
     ignore_first_accumulative_value: bool,
@@ -76,6 +78,7 @@ impl TimeSeriesDataProcessor {
             per_metric_sum_count: HashMap::new(),
             time_zero,
             cur_time_diff: 0,
+            time_diff: Vec::new(),
             ignore_first_accumulative_value: true,
             decreasing_accumulative_data: HashMap::new(),
             fixed_value_range: None,
@@ -113,6 +116,7 @@ impl TimeSeriesDataProcessor {
             TimeEnum::TimeDiff(_time_diff) => _time_diff,
             TimeEnum::DateTime(_) => panic!("Unexpected TimeEnum diff"),
         };
+        self.time_diff.push(self.cur_time_diff);
     }
 
     /// Register a derived metric that will be automatically computed from the values of
@@ -187,18 +191,12 @@ impl TimeSeriesDataProcessor {
             data_value
         };
 
-        let series = self
-            .per_metric_series
-            .entry(metric_name.to_string())
-            .or_default()
-            .entry(series_name.to_string())
-            .or_insert_with(|| Series::new(series_name.to_string()));
-        series.is_aggregate = is_aggregate;
-        series.time_diff.push(self.cur_time_diff);
-        series.values.push(metric_value);
+        if !self.add_value_to_series(metric_name, series_name, metric_value, is_aggregate) {
+            return None;
+        }
 
         // Every series value in the metric accounts for its value range
-        update_metric_value_range(&mut self.per_metric_value_range, metric_name, metric_value);
+        self.update_metric_value_range(metric_name, metric_value);
 
         if self.aggregate_mode == TimeSeriesDataAggregateMode::Average
             || self.aggregate_mode == TimeSeriesDataAggregateMode::Sum
@@ -215,6 +213,46 @@ impl TimeSeriesDataProcessor {
         }
 
         Some(metric_value)
+    }
+
+    /// Adds a value to a series at the current snapshot.
+    /// Returns false when it already has a value at the current snapshot
+    /// and the new value is ignored.
+    fn add_value_to_series(
+        &mut self,
+        metric_name: &str,
+        series_name: &str,
+        value: f64,
+        is_aggregate: bool,
+    ) -> bool {
+        let cur_idx = self.time_diff.len() - 1;
+        let series = self
+            .per_metric_series
+            .entry(metric_name.to_string())
+            .or_default()
+            .entry(series_name.to_string())
+            .or_insert_with(|| Series::new(series_name.to_string()));
+
+        if series.values.len() > cur_idx {
+            return false;
+        }
+
+        series.is_aggregate = is_aggregate;
+        // For snapshots in which the series had no value, NaN is used.
+        series.values.resize(cur_idx, f64::NAN);
+        series.values.push(value);
+
+        true
+    }
+
+    /// Extends the value range of a metric to a value.
+    fn update_metric_value_range(&mut self, metric_name: &str, metric_value: f64) {
+        let (min, max) = self
+            .per_metric_value_range
+            .entry(metric_name.to_string())
+            .or_insert_with(|| (metric_value, metric_value));
+        *min = (*min).min(metric_value);
+        *max = (*max).max(metric_value);
     }
 
     /// Checks if a metric exists in the time-series data.
@@ -277,35 +315,25 @@ impl TimeSeriesDataProcessor {
                     _ => "aggregate",
                 });
 
-        for (metric_name, (sum, count)) in &self.per_metric_sum_count {
-            let aggregate_series = self
-                .per_metric_series
-                .entry(metric_name.clone())
-                .or_default()
-                .entry(aggregate_series_name.to_string())
-                .or_insert_with(|| Series::new(aggregate_series_name.to_string()));
-            aggregate_series.is_aggregate = true;
+        // Remove all entries instead of setting every sum and count to 0, since there is no
+        // guarantee that all metrics still present at the next time_diff
+        for (metric_name, (sum, count)) in std::mem::take(&mut self.per_metric_sum_count) {
             let aggregate_value = match self.aggregate_mode {
                 TimeSeriesDataAggregateMode::Average => {
-                    if *count > 0 {
-                        *sum / *count as f64
+                    if count > 0 {
+                        sum / count as f64
                     } else {
                         0.0
                     }
                 }
                 TimeSeriesDataAggregateMode::Sum => {
-                    update_metric_value_range(&mut self.per_metric_value_range, metric_name, *sum);
-                    *sum
+                    self.update_metric_value_range(&metric_name, sum);
+                    sum
                 }
                 _ => break,
             };
-            aggregate_series.values.push(aggregate_value);
-            aggregate_series.time_diff.push(self.cur_time_diff);
+            self.add_value_to_series(&metric_name, aggregate_series_name, aggregate_value, true);
         }
-
-        // Remove all entries instead of setting every sum and count to 0, since there is no
-        // guarantee that all metrics still present at the next time_diff
-        self.per_metric_sum_count.clear();
     }
 
     // Helper function to compute the value of all registered derived metrics at current time diff.
@@ -325,18 +353,13 @@ impl TimeSeriesDataProcessor {
                 };
 
                 for (series_name, series) in cur_metric_series {
-                    let (Some(time_diff), Some(value)) =
-                        (series.time_diff.last(), series.values.last())
-                    else {
+                    let Some(&value) = series.values.get(self.time_diff.len() - 1) else {
                         continue;
                     };
-                    if *time_diff != self.cur_time_diff {
-                        continue;
-                    }
                     per_series_expression_values
                         .entry(series_name.clone())
                         .or_default()
-                        .push(*value);
+                        .push(value);
                 }
             }
 
@@ -403,7 +426,10 @@ impl TimeSeriesDataProcessor {
             );
         }
 
-        let mut time_series_data = TimeSeriesData::default();
+        let mut time_series_data = TimeSeriesData {
+            time_diff: self.time_diff,
+            ..Default::default()
+        };
 
         for (metric_name, cur_metric_series) in self.per_metric_series {
             let mut time_series_metric = TimeSeriesMetric::new(metric_name.clone());
@@ -416,22 +442,15 @@ impl TimeSeriesDataProcessor {
                 all_series.retain(|series| !series.is_aggregate);
             }
 
-            all_series.retain_mut(|series| {
-                if !series.values.iter().all(|&value| value == 0.0) {
-                    return true;
-                }
-                if self.drop_all_zero_series && !series.is_aggregate {
-                    return false;
-                }
-                // If we're keeping an all-zero series, we still compress it
-                // by only keeping the first and last data points.
-                let len = series.time_diff.len();
-                if len > 2 {
-                    series.time_diff.drain(1..len - 1);
-                    series.values.drain(1..len - 1);
-                }
-                true
-            });
+            if self.drop_all_zero_series {
+                all_series.retain(|series| {
+                    series.is_aggregate
+                        || !series
+                            .values
+                            .iter()
+                            .all(|&value| value == 0.0 || value.is_nan())
+                });
+            }
             all_series.sort_by(|s1, s2| cmp(&s1.series_name, &s2.series_name));
 
             time_series_metric.stats_series_idx = if all_series.len() <= 1 {
@@ -439,8 +458,8 @@ impl TimeSeriesDataProcessor {
                 // Or if a metric has no data point, use 0 as the default value.
                 0
             } else if self.aggregate_mode == TimeSeriesDataAggregateMode::MaxSeries {
-                // For max-aggregate mode, find the series that has the maximum of average
-                // and use it for stats computation
+                // For max-aggregate mode, the series that has the maximum of average is the
+                // aggregate of the metric
                 let mut max_series_idx: usize = 0;
                 let mut max_average: f64 = 0.0;
                 for (idx, series) in all_series.iter().enumerate() {
@@ -450,6 +469,7 @@ impl TimeSeriesDataProcessor {
                         max_average = cur_series_average.unwrap();
                     }
                 }
+                all_series[max_series_idx].is_aggregate = true;
                 max_series_idx
             } else {
                 // For auto-generated aggregate mode, the average series should already be created;
@@ -513,16 +533,216 @@ impl TimeSeriesDataProcessor {
     }
 }
 
-fn update_metric_value_range(
-    per_metric_value_range: &mut HashMap<String, (f64, f64)>,
-    metric_name: &str,
-    metric_value: f64,
-) {
-    let (min, max) = per_metric_value_range
-        .entry(metric_name.to_string())
-        .or_insert_with(|| (metric_value, metric_value));
-    *min = (*min).min(metric_value);
-    *max = (*max).max(metric_value);
+/// Edits a time-series data built by a TimeSeriesDataProcessor.
+pub struct TimeSeriesDataEditor<'a> {
+    time_series_data: &'a mut TimeSeriesData,
+    // The series copy started by start_series_copy and not finished yet
+    copy_state: Option<SeriesCopyState<'a>>,
+}
+
+/// The state of a series copy, from start_series_copy to finish_series_copy.
+struct SeriesCopyState<'a> {
+    // The time-series data that series are copied from
+    source: &'a TimeSeriesData,
+    // The index in the time_diff of every time of the source
+    source_time_indices: Vec<usize>,
+    // How the aggregate series of the target metrics is computed, and its name
+    aggregate_mode: TimeSeriesDataAggregateMode,
+    aggregate_series_name: &'static str,
+    // The metrics that series are copied into
+    target_metric_names: HashSet<String>,
+}
+
+impl<'a> TimeSeriesDataEditor<'a> {
+    pub fn new(time_series_data: &'a mut TimeSeriesData) -> Self {
+        TimeSeriesDataEditor {
+            time_series_data,
+            copy_state: None,
+        }
+    }
+
+    /// Starts copying series from the source. The time diff of the two time-series data are
+    /// merged, and the exisintg values are re-placed based on the merged time_diff. upon
+    /// copy finish, the aggregate series will be recomputed based on the aggregate mode.
+    pub fn start_series_copy(
+        &mut self,
+        source: &'a TimeSeriesData,
+        aggregate_mode: TimeSeriesDataAggregateMode,
+        aggregate_series_name: &'static str,
+    ) {
+        assert!(
+            self.copy_state.is_none(),
+            "finish_series_copy must be called before another start_series_copy"
+        );
+
+        // Merge time diffs of the two time-series data.
+        let old_time_diff = std::mem::take(&mut self.time_series_data.time_diff);
+        let time_diff = &mut self.time_series_data.time_diff;
+        // The index in the merged time_diff of every old time and of every time of the source
+        let (mut old_time_indices, mut source_time_indices) = (Vec::new(), Vec::new());
+        let (mut i, mut j) = (0, 0);
+        while let Some(&time) = [old_time_diff.get(i), source.time_diff.get(j)]
+            .into_iter()
+            .flatten()
+            .min()
+        {
+            if old_time_diff.get(i) == Some(&time) {
+                old_time_indices.push(time_diff.len());
+                i += 1;
+            }
+            if source.time_diff.get(j) == Some(&time) {
+                source_time_indices.push(time_diff.len());
+                j += 1;
+            }
+            time_diff.push(time);
+        }
+
+        // Place the existing values based on the merged time diff.
+        let num_times = time_diff.len();
+        for series in self
+            .time_series_data
+            .metrics
+            .values_mut()
+            .flat_map(|metric| &mut metric.series)
+        {
+            series.values = Self::place_values(&series.values, &old_time_indices, num_times);
+        }
+
+        self.copy_state = Some(SeriesCopyState {
+            source,
+            source_time_indices,
+            aggregate_mode,
+            aggregate_series_name,
+            target_metric_names: HashSet::new(),
+        });
+    }
+
+    /// Copies a series of the source into a metric, which is created if missing.
+    pub fn copy_series(
+        &mut self,
+        source_metric_name: &str,
+        source_series_name: &str,
+        target_metric_name: &str,
+        target_series_name: &str,
+    ) {
+        let copy_state = self
+            .copy_state
+            .as_mut()
+            .expect("start_series_copy must be called first");
+        let Some(source_series) =
+            copy_state
+                .source
+                .metrics
+                .get(source_metric_name)
+                .and_then(|metric| {
+                    metric
+                        .series
+                        .iter()
+                        .find(|series| series.series_name == source_series_name)
+                })
+        else {
+            return;
+        };
+
+        let values = Self::place_values(
+            &source_series.values,
+            &copy_state.source_time_indices,
+            self.time_series_data.time_diff.len(),
+        );
+
+        if !self
+            .time_series_data
+            .sorted_metric_names
+            .iter()
+            .any(|metric_name| metric_name == target_metric_name)
+        {
+            self.time_series_data
+                .sorted_metric_names
+                .insert(0, target_metric_name.to_string());
+        }
+
+        self.time_series_data
+            .metrics
+            .entry(target_metric_name.to_string())
+            .or_insert_with(|| TimeSeriesMetric::new(target_metric_name.to_string()))
+            .series
+            .insert(
+                0,
+                Series {
+                    values,
+                    ..Series::new(target_series_name.to_string())
+                },
+            );
+
+        copy_state
+            .target_metric_names
+            .insert(target_metric_name.to_string());
+    }
+
+    /// Finishes copying series. Recompute the aggregate series, stats and value range of every
+    /// metric that was copied into.
+    pub fn finish_series_copy(&mut self) {
+        let copy_state = self
+            .copy_state
+            .take()
+            .expect("start_series_copy must be called first");
+
+        // Recompute the aggregate series.
+        let num_times = self.time_series_data.time_diff.len();
+        for metric_name in &copy_state.target_metric_names {
+            let metric = self.time_series_data.metrics.get_mut(metric_name).unwrap();
+            metric.series.retain(|series| !series.is_aggregate);
+            let aggregate_values: Vec<f64> = match copy_state.aggregate_mode {
+                // The sum of the series that have a value at every time
+                TimeSeriesDataAggregateMode::Sum => (0..num_times)
+                    .map(|i| {
+                        metric
+                            .series
+                            .iter()
+                            .filter_map(|series| series.values.get(i).copied())
+                            .filter(|value| !value.is_nan())
+                            .reduce(|sum, value| sum + value)
+                            .unwrap_or(f64::NAN)
+                    })
+                    .collect(),
+                _ => unimplemented!("{:?} aggregate of copied series", copy_state.aggregate_mode),
+            };
+
+            metric.stats = Statistics::from_values(&aggregate_values);
+
+            // Update the value range using the updated values.
+            let (min, max) = metric
+                .series
+                .iter()
+                .flat_map(|series| &series.values)
+                .chain(&aggregate_values)
+                .fold(
+                    (metric.value_range.0 as f64, metric.value_range.1 as f64),
+                    |(min, max), &value| (min.min(value), max.max(value)),
+                );
+            metric.value_range = (min.floor() as u64, max.ceil() as u64);
+
+            metric.series.insert(
+                0,
+                Series {
+                    values: aggregate_values,
+                    is_aggregate: true,
+                    ..Series::new(copy_state.aggregate_series_name.to_string())
+                },
+            );
+            metric.stats_series_idx = 0;
+        }
+    }
+
+    /// Places every value at its index in a time_diff of length num_times. NaN is used
+    /// if a value doesn't exist at a time.
+    fn place_values(values: &[f64], indices: &[usize], num_times: usize) -> Vec<f64> {
+        let mut placed_values = vec![f64::NAN; num_times];
+        for (&index, &value) in indices.iter().zip(values) {
+            placed_values[index] = value;
+        }
+        placed_values
+    }
 }
 
 /// The aggregate series of every metric is auto-generated as the average of all series values
@@ -608,6 +828,16 @@ mod tests {
         ts.metrics[metric].series.iter().find(|s| s.is_aggregate)
     }
 
+    /// The (time, value) pairs of a series, without the times it has no value at.
+    fn points(ts: &TimeSeriesData, series: &Series) -> Vec<(u64, f64)> {
+        ts.time_diff
+            .iter()
+            .copied()
+            .zip(series.values.iter().copied())
+            .filter(|(_, value)| !value.is_nan())
+            .collect()
+    }
+
     // =======================================================================
     // add_data_point (non-accumulative)
     // =======================================================================
@@ -631,7 +861,7 @@ mod tests {
         let s = data_series(&ts, "cpu");
         assert_eq!(s.len(), 1);
         assert_eq!(s[0].values, vec![0.0, 10.0, 20.0, 0.0]);
-        assert_eq!(s[0].time_diff, vec![0, 1, 2, 3]);
+        assert_eq!(ts.time_diff, vec![0, 1, 2, 3]);
     }
 
     #[test]
@@ -716,7 +946,7 @@ mod tests {
         let ts = p.get_time_series_data();
         let s = data_series(&ts, "bytes");
         // t0: 0 (first), t1: skipped, t2: 1600-400=1200
-        assert_eq!(s[0].values, vec![0.0, 1200.0]);
+        assert_eq!(points(&ts, s[0]), vec![(0, 0.0), (2, 1200.0)]);
     }
 
     #[test]
@@ -766,8 +996,10 @@ mod tests {
 
         let ts = p.get_time_series_data();
         let s = data_series(&ts, "bytes");
-        assert_eq!(s[0].values, vec![0.0, 300.0, 400.0, 300.0, 300.0]);
-        assert_eq!(s[0].time_diff, vec![0, 2, 3, 4, 5]);
+        assert_eq!(
+            points(&ts, s[0]),
+            vec![(0, 0.0), (2, 300.0), (3, 400.0), (4, 300.0), (5, 300.0)]
+        );
     }
 
     #[test]
@@ -978,7 +1210,7 @@ mod tests {
     }
 
     #[test]
-    fn test_max_series_no_aggregate_series_in_output() {
+    fn test_max_series_is_the_aggregate() {
         let times = make_times(2, 1);
         let mut p = make_processor(TimeSeriesDataAggregateMode::MaxSeries);
 
@@ -990,8 +1222,35 @@ mod tests {
         p.add_data_point("m", "a", 30.0);
         p.add_data_point("m", "b", 40.0);
 
+        // "b" has the larger average
         let ts = p.get_time_series_data();
-        assert!(agg_series(&ts, "m").is_none());
+        assert_eq!(agg_series(&ts, "m").unwrap().series_name, "b");
+        let m = &ts.metrics["m"];
+        assert_eq!(m.series[m.stats_series_idx].series_name, "b");
+    }
+
+    #[test]
+    fn test_repeated_value_ignored() {
+        for (mode, aggregate, value_range) in [
+            (TimeSeriesDataAggregateMode::Average, 65.0, (30, 100)),
+            (TimeSeriesDataAggregateMode::Sum, 130.0, (30, 130)),
+        ] {
+            let mut p = make_processor(mode);
+            p.proceed_to_time(make_times(1, 1)[0]);
+            p.add_data_point("m", "a", 100.0);
+            // "a" already has a value at this snapshot
+            p.add_data_point("m", "a", 10.0);
+            p.add_data_point("m", "b", 30.0);
+
+            let ts = p.get_time_series_data();
+            let a = data_series(&ts, "m")
+                .into_iter()
+                .find(|series| series.series_name == "a")
+                .unwrap();
+            assert_eq!(a.values, vec![100.0]);
+            assert_eq!(agg_series(&ts, "m").unwrap().values, vec![aggregate]);
+            assert_eq!(ts.metrics["m"].value_range, value_range);
+        }
     }
 
     // =======================================================================
@@ -1031,8 +1290,7 @@ mod tests {
         }
 
         let ts = p.get_time_series_data();
-        let s = data_series(&ts, "m");
-        assert_eq!(s[0].time_diff, vec![0, 5, 10, 15]);
+        assert_eq!(ts.time_diff, vec![0, 5, 10, 15]);
     }
 
     // =======================================================================
@@ -1245,28 +1503,6 @@ mod tests {
     // =======================================================================
 
     #[test]
-    fn test_all_zero_series_compressed() {
-        let times = make_times(5, 1);
-        let mut p = make_processor(TimeSeriesDataAggregateMode::Average);
-
-        for (i, t) in times.iter().enumerate() {
-            p.proceed_to_time(*t);
-            p.add_data_point("m", "s1", i as f64);
-            p.add_data_point("m", "s2", 0.0);
-            // Cancels s1 out in the average
-            p.add_data_point("m", "s3", -(i as f64));
-        }
-
-        let ts = p.get_time_series_data();
-        let series = data_series(&ts, "m");
-        let find = |name: &str| series.iter().find(|s| s.series_name == name).unwrap();
-        assert_eq!(find("s1").values, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
-        assert_eq!(find("s2").time_diff, vec![0, 4]);
-        assert_eq!(find("s2").values, vec![0.0, 0.0]);
-        assert_eq!(agg_series(&ts, "m").unwrap().values, vec![0.0, 0.0]);
-    }
-
-    #[test]
     fn test_all_zero_series_dropped() {
         let times = make_times(5, 1);
         let mut p = make_processor(TimeSeriesDataAggregateMode::Average);
@@ -1278,6 +1514,10 @@ mod tests {
             p.add_data_point("m", "s2", (i * 2) as f64);
             p.add_data_point("zero", "s1", 0.0);
             p.add_data_point("zero", "s2", 0.0);
+            if i >= 2 {
+                // All zero after the times without values
+                p.add_data_point("zero", "s3", 0.0);
+            }
             p.add_data_point("single", "s1", 0.0);
         }
 
@@ -1294,9 +1534,9 @@ mod tests {
             agg_series(&ts, "m").unwrap().values,
             vec![0.0, 1.0, 2.0, 3.0, 4.0]
         );
-        // An all-zero metric only keeps its compressed aggregate
+        // An all-zero metric only keeps its aggregate
         assert!(data_series(&ts, "zero").is_empty());
-        assert_eq!(agg_series(&ts, "zero").unwrap().values, vec![0.0, 0.0]);
+        assert_eq!(agg_series(&ts, "zero").unwrap().values, vec![0.0; 5]);
         // Without the redundant aggregate, a metric with one all-zero series has no series left
         assert!(ts.metrics["single"].series.is_empty());
     }
@@ -1497,7 +1737,7 @@ mod tests {
         assert_eq!(s.len(), 2);
         assert_eq!(s[0].series_name.as_str(), "node0");
         assert_eq!(s[0].values, vec![25.0, 50.0]);
-        assert_eq!(s[0].time_diff, vec![0, 1]);
+        assert_eq!(ts.time_diff, vec![0, 1]);
         assert_eq!(s[1].series_name.as_str(), "node1");
         assert_eq!(s[1].values, vec![15.0, 50.0]);
 
@@ -1530,10 +1770,8 @@ mod tests {
         let ts = p.get_time_series_data();
         let s = data_series(&ts, "ratio");
         assert_eq!(s.len(), 2);
-        assert_eq!(s[0].values, vec![5.0]);
-        assert_eq!(s[0].time_diff, vec![0]);
-        assert_eq!(s[1].values, vec![2.0]);
-        assert_eq!(s[1].time_diff, vec![1]);
+        assert_eq!(points(&ts, s[0]), vec![(0, 5.0)]);
+        assert_eq!(points(&ts, s[1]), vec![(1, 2.0)]);
     }
 
     #[test]
@@ -1553,5 +1791,63 @@ mod tests {
         let ts = p.get_time_series_data();
         assert!(!ts.metrics.contains_key("unbraced"));
         assert_eq!(data_series(&ts, "braced")[0].values, vec![0.25]);
+    }
+
+    // =======================================================================
+    // TimeSeriesDataEditor
+    // =======================================================================
+
+    #[test]
+    fn test_copy_series() {
+        let mut target = TimeSeriesData {
+            time_diff: vec![0, 2],
+            sorted_metric_names: vec!["m".to_string()],
+            ..Default::default()
+        };
+        let mut metric = TimeSeriesMetric::new("m".to_string());
+        metric.series.push(Series {
+            values: vec![1.0, 2.0],
+            ..Series::new("a".to_string())
+        });
+        target.metrics.insert("m".to_string(), metric);
+        // The source has two times in the same second
+        let mut source = TimeSeriesData {
+            time_diff: vec![1, 2, 2],
+            ..Default::default()
+        };
+        let mut metric = TimeSeriesMetric::new("source".to_string());
+        metric.series.push(Series {
+            values: vec![3.0, 4.0, 5.0],
+            ..Series::new("1_b".to_string())
+        });
+        source.metrics.insert("source".to_string(), metric);
+
+        let mut editor = TimeSeriesDataEditor::new(&mut target);
+        editor.start_series_copy(&source, TimeSeriesDataAggregateMode::Sum, "total");
+        editor.copy_series("source", "1_b", "m", "b");
+        editor.copy_series("source", "1_b", "new", "b");
+        editor.finish_series_copy();
+
+        assert_eq!(target.time_diff, vec![0, 1, 2, 2]);
+        assert_eq!(target.sorted_metric_names, vec!["new", "m"]);
+        let m = &target.metrics["m"];
+        let names: Vec<&str> = m.series.iter().map(|s| s.series_name.as_str()).collect();
+        assert_eq!(names, vec!["total", "b", "a"]);
+        assert_eq!(
+            points(&target, &m.series[0]),
+            vec![(0, 1.0), (1, 3.0), (2, 6.0), (2, 5.0)]
+        );
+        assert_eq!(points(&target, &m.series[2]), vec![(0, 1.0), (2, 2.0)]);
+        assert_eq!(
+            (m.stats_series_idx, m.stats.avg, m.value_range),
+            (0, 3.75, (0, 6))
+        );
+        // A new metric with one series still has the aggregate
+        let names: Vec<&str> = target.metrics["new"]
+            .series
+            .iter()
+            .map(|s| s.series_name.as_str())
+            .collect();
+        assert_eq!(names, vec!["total", "b"]);
     }
 }

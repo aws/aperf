@@ -477,13 +477,9 @@ fn test_process_all_data_types() {
             .any(|k| k.starts_with("SlabInfo")));
 
         // Verify time progression
-        for metric in time_series_data.metrics.values() {
-            for series in &metric.series {
-                assert_eq!(series.time_diff.len(), 10);
-                assert_eq!(series.time_diff[0], 0);
-                assert_eq!(series.time_diff[9], 9);
-            }
-        }
+        assert_eq!(time_series_data.time_diff.len(), 10);
+        assert_eq!(time_series_data.time_diff[0], 0);
+        assert_eq!(time_series_data.time_diff[9], 9);
     } else {
         panic!("Expected TimeSeries data");
     }

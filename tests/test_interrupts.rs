@@ -302,9 +302,12 @@ fn test_process_interrupts_raw_data_simple() {
 
         let irq_12_metric = &time_series_data.metrics["(Some info about irq 15 ACPI:Ged)"];
         assert_eq!(irq_12_metric.series.len(), 3); // 2 CPUs + 1 aggregate
-        assert_eq!(irq_12_metric.series[0].values, vec![0.0, 60.0]); // CPU0
-        assert_eq!(irq_12_metric.series[1].values, vec![0.0, 70.0]); // CPU1
-        assert_eq!(irq_12_metric.series[2].values, vec![0.0, 65.0]); // Average
+
+        // irq 15 appears at the second sample
+        assert!(irq_12_metric.series.iter().all(|s| s.values[0].is_nan()));
+        assert_eq!(irq_12_metric.series[0].values[1..], [0.0, 60.0]); // CPU0
+        assert_eq!(irq_12_metric.series[1].values[1..], [0.0, 70.0]); // CPU1
+        assert_eq!(irq_12_metric.series[2].values[1..], [0.0, 65.0]); // Average
     } else {
         panic!("Expected TimeSeries data");
     }
@@ -640,9 +643,11 @@ fn test_decreasing_counter() {
         for metric in time_series_data.metrics.values() {
             for series in &metric.series {
                 if !series.is_aggregate {
-                    assert_eq!(series.values.len(), 2);
+                    // The decreased sample has no value
+                    assert_eq!(series.values.len(), 3);
                     assert_eq!(series.values[0], 0.0);
-                    assert_eq!(series.values[1], 30.0);
+                    assert!(series.values[1].is_nan());
+                    assert_eq!(series.values[2], 30.0);
                 }
             }
         }

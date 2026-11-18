@@ -162,7 +162,6 @@ fn test_process_processes_raw_data_complex() {
                 assert_eq!(metric.series.len(), 1);
                 let series = &metric.series[0];
                 assert_eq!(series.values.len(), 50);
-                assert_eq!(series.time_diff.len(), 50);
                 assert!(series.values.iter().all(|&v| v == 3.0));
                 continue;
             }
@@ -173,7 +172,6 @@ fn test_process_processes_raw_data_complex() {
             // Each series should have 50 data points
             for series in &metric.series {
                 assert_eq!(series.values.len(), 50);
-                assert_eq!(series.time_diff.len(), 50);
             }
         }
 
@@ -799,7 +797,8 @@ fn test_process_processes_duplicate_time_diff_keeps_last() {
             &time_series_data.metrics[&ProcessMetric::NumberThreads.to_string()];
         let series = &number_threads_metric.series[0];
         // Two snapshots survive (0s and the deduped 1s), each contributing one point.
-        assert_eq!(series.time_diff, vec![0, 1]);
+        assert_eq!(time_series_data.time_diff, vec![0, 1]);
+        assert_eq!(series.values.len(), 2);
 
         // The kept 1s snapshot is the LAST one (ticks 300+150): the user time rate is
         // (300-100)/100 ticks-per-sec / 1s elapsed = 2.0 cores, not (200-100)/100 = 1.0.

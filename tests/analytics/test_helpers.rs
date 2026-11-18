@@ -20,9 +20,11 @@ pub fn create_time_series_data_multi_series(
 
         for (idx, (series_name, values)) in series_list.into_iter().enumerate() {
             let is_aggregate = idx == num_series - 1;
+            if ts_data.time_diff.len() < values.len() {
+                ts_data.time_diff = (0..values.len() as u64).collect();
+            }
             let series = Series {
                 series_name: series_name.unwrap_or("").to_string(),
-                time_diff: (0..values.len() as u64).collect(),
                 values: values.clone(),
                 is_aggregate,
             };

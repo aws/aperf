@@ -120,11 +120,12 @@ mod aperf_stats_tests {
                     .map(|series| {
                         (
                             series.series_name.clone(),
-                            series
+                            time_series_data
                                 .time_diff
                                 .iter()
                                 .copied()
                                 .zip(series.values.iter().copied())
+                                .filter(|(_, value)| !value.is_nan())
                                 .collect(),
                         )
                     })
@@ -279,7 +280,7 @@ mod aperf_stats_tests {
                 .find(|s| s.series_name == "cpu_utilization")
                 .expect("cpu_utilization series should exist");
             assert_eq!(cpu_series.values, vec![1000.0, 1100.0, 1200.0]);
-            assert_eq!(cpu_series.time_diff, vec![0, 1, 2]);
+            assert_eq!(time_series_data.time_diff, vec![0, 1, 2]);
             let total_series = collect_metric
                 .series
                 .iter()
@@ -339,7 +340,9 @@ mod aperf_stats_tests {
                     .find(|s| s.series_name == name)
                     .unwrap_or_else(|| panic!("{name} series should exist"))
                     .values
-                    .len()
+                    .iter()
+                    .filter(|value| !value.is_nan())
+                    .count()
             };
             // Series lengths match when each data series appeared.
             assert_eq!(series_len("cpu_utilization"), 50);
@@ -377,7 +380,7 @@ mod aperf_stats_tests {
             let aperf_metric = &time_series_data.metrics["aperf"];
             assert_eq!(aperf_metric.series.len(), 1);
             assert_eq!(aperf_metric.series[0].values, vec![1000.0, 1100.0, 1200.0]);
-            assert_eq!(aperf_metric.series[0].time_diff, vec![0, 1, 2]);
+            assert_eq!(time_series_data.time_diff, vec![0, 1, 2]);
         } else {
             panic!("Expected TimeSeries data");
         }
@@ -459,7 +462,7 @@ mod aperf_stats_tests {
                 .find(|s| s.series_name == "collect")
                 .expect("collect series should exist");
             assert_eq!(collect_series.values, vec![1000.0, 1100.0, 1200.0]);
-            assert_eq!(collect_series.time_diff, vec![0, 1, 2]);
+            assert_eq!(time_series_data.time_diff, vec![0, 1, 2]);
             // The legacy "print" stat is renamed to "write".
             assert!(cpu_metric.series.iter().any(|s| s.series_name == "write"));
             assert!(!cpu_metric.series.iter().any(|s| s.series_name == "print"));
@@ -603,15 +606,20 @@ mod aperf_stats_tests {
             .find(|series| series.series_name == "burn")
             .expect("the burn series should exist");
 
+        let values: Vec<f64> = series
+            .values
+            .iter()
+            .copied()
+            .filter(|value| !value.is_nan())
+            .collect();
         assert!(
-            series.values.len() >= 2,
-            "a run of over two seconds should cover more than one second, got {:?}",
-            series.time_diff
+            values.len() >= 2,
+            "a run of over two seconds should cover more than one second, got {values:?}"
         );
         // The values are per-second rates, so they add back up to the CPU seconds the busy loop
         // used. Individual values are not bounded from below, because a second the loop only
         // partly covered gets a correspondingly small share of the total.
-        let cpu_seconds: f64 = series.values.iter().sum();
+        let cpu_seconds: f64 = values.iter().sum();
         assert!(
             (0.2..6.0).contains(&cpu_seconds),
             "expected a few CPU seconds from a multi-second busy loop, got {cpu_seconds}"
@@ -663,11 +671,12 @@ mod aperf_stats_tests {
             .iter()
             .find(|series| series.series_name == series_name)
             .unwrap_or_else(|| panic!("{metric}/{series_name} should exist"));
-        series
+        time_series_data
             .time_diff
             .iter()
             .copied()
             .zip(series.values.iter().copied())
+            .filter(|(_, value)| !value.is_nan())
             .collect()
     }
 

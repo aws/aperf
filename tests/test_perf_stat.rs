@@ -181,7 +181,6 @@ fn test_legacy_format_comprehensive() {
         assert_eq!(metric.series.len(), 5);
         for series in &metric.series {
             assert_eq!(series.values.len(), 100);
-            assert_eq!(series.time_diff.len(), 100);
         }
     }
 
@@ -216,12 +215,8 @@ fn test_legacy_format_comprehensive() {
     }
 
     // Time diffs are 1s intervals.
-    for metric in ts.metrics.values() {
-        for series in &metric.series {
-            for sample in 0..100 {
-                assert_eq!(series.time_diff[sample], sample as u64);
-            }
-        }
+    for sample in 0..100 {
+        assert_eq!(ts.time_diff[sample], sample as u64);
     }
 }
 
@@ -401,7 +396,7 @@ fn test_grouped_single_metric_multi_cpu() {
     approx(agg.values[1], 6000.0 / 3000.0, "agg s1");
     approx(agg.values[2], 6000.0 / 4500.0, "agg s2");
 
-    assert_eq!(agg.time_diff, vec![0, 1, 2]);
+    assert_eq!(ts.time_diff, vec![0, 1, 2]);
 }
 
 #[test]
@@ -522,10 +517,11 @@ fn test_grouped_frozen_time_running_sample_skipped() {
     let ts = process(report_params(dir.path(), GROUPED_PMU_MODE), raw);
     let cpu0 = series(&ts.metrics["ipc"], "CPU0");
     // Only s0 and s2 produced points (s1 dropped).
-    assert_eq!(cpu0.values.len(), 2);
-    assert_eq!(cpu0.time_diff, vec![0, 2]);
+    assert_eq!(cpu0.values.len(), 3);
+    assert_eq!(ts.time_diff, vec![0, 1, 2]);
     approx(cpu0.values[0], 2.0, "frozen-tr s0");
-    approx(cpu0.values[1], 2.0, "frozen-tr s2");
+    assert!(cpu0.values[1].is_nan());
+    approx(cpu0.values[2], 2.0, "frozen-tr s2");
 }
 
 // ===========================================================================
