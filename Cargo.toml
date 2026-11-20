@@ -42,7 +42,7 @@ itoa = "1"
 aws-config = "1.0.0"
 tokio = { version = "1.26.0", features = ["full"] }
 strum = "0.24"
-strum_macros = "0.24"
+strum_macros = "0.28"
 libc = "0.2"
 flate2 = "1.0.30"
 tar = "0.4.40"
