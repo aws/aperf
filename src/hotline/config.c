@@ -98,7 +98,7 @@ void get_perf_buffer_sizes(perf_buffer_size_t *buffer_sizes) {
   uint64_t perf_record_buf_sz = 16 * cpu_system_config.page_size *
                                 sizeof(switch_cpu_wide_record_t) *
                                 profile_configuration.wakeup_period;
-  uint64_t perf_aux_buf_sz = profile_configuration.hotline_frequency *
+  uint64_t perf_aux_buf_sz = (uint64_t)profile_configuration.hotline_frequency *
                              profile_configuration.wakeup_period * sizeof(spe_record_raw_t) *
                              4;  // overestimate factor of 4x
 

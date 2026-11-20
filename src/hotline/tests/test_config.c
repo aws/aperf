@@ -55,7 +55,7 @@ void test_get_perf_buffer_sizes() {
   uint64_t expected_record_buf =
       (uint64_t)pow(2, ceil(log2((double)raw_record_size))) + cpu_system_config.page_size;
 
-  uint64_t expected_aux_buf_raw = profile_configuration.hotline_frequency *
+  uint64_t expected_aux_buf_raw = (uint64_t)profile_configuration.hotline_frequency *
                                   profile_configuration.wakeup_period * sizeof(spe_record_raw_t) *
                                   4;
 

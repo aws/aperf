@@ -1,8 +1,8 @@
-//! MCP server implementation using rmcp 1.5.
+//! MCP server implementation using rmcp 2.
 
 use rmcp::{
     handler::server::wrapper::Parameters,
-    model::{CallToolResult, Content, ServerCapabilities, ServerInfo},
+    model::{CallToolResult, ContentBlock, ServerCapabilities, ServerInfo},
     schemars, tool, tool_handler, tool_router, ErrorData as McpError, ServerHandler,
 };
 use serde_json::{json, Value};
@@ -207,11 +207,13 @@ impl AperfMcpServer {
                     .unwrap_or_else(|e| format!("Serialization error: {}", e));
                 let mut state = self.state.lock().await;
                 state.report = Some(loaded);
-                Ok(CallToolResult::success(vec![Content::text(response_str)]))
+                Ok(CallToolResult::success(vec![ContentBlock::text(
+                    response_str,
+                )]))
             }
             Err(e) => {
                 let err_response = json!({"status": "error", "message": format!("Error: {}", e)});
-                Ok(CallToolResult::success(vec![Content::text(
+                Ok(CallToolResult::success(vec![ContentBlock::text(
                     serde_json::to_string(&err_response).unwrap(),
                 )]))
             }
@@ -234,7 +236,7 @@ impl AperfMcpServer {
             Some(r) => r,
             None => {
                 let err = json!({"status": "error", "message": "Error: No report loaded. Call load_report() first."});
-                return Ok(CallToolResult::success(vec![Content::text(
+                return Ok(CallToolResult::success(vec![ContentBlock::text(
                     serde_json::to_string(&err).unwrap(),
                 )]));
             }
@@ -246,7 +248,7 @@ impl AperfMcpServer {
                 Ok(m) => loaded.metrics = m,
                 Err(e) => {
                     let err = json!({"status": "error", "message": format!("Error extracting metrics: {}", e)});
-                    return Ok(CallToolResult::success(vec![Content::text(
+                    return Ok(CallToolResult::success(vec![ContentBlock::text(
                         serde_json::to_string(&err).unwrap(),
                     )]));
                 }
@@ -268,7 +270,7 @@ impl AperfMcpServer {
                     "status": "error",
                     "message": format!("Error: No metrics found for file '{}'. Available files: {:?}", fname, available)
                 });
-                return Ok(CallToolResult::success(vec![Content::text(
+                return Ok(CallToolResult::success(vec![ContentBlock::text(
                     serde_json::to_string(&err).unwrap(),
                 )]));
             }
@@ -282,7 +284,7 @@ impl AperfMcpServer {
                     "status": "error",
                     "message": format!("Error: Category '{}' not found. Available categories: {:?}", cat, available)
                 });
-                return Ok(CallToolResult::success(vec![Content::text(
+                return Ok(CallToolResult::success(vec![ContentBlock::text(
                     serde_json::to_string(&err).unwrap(),
                 )]));
             }
@@ -318,7 +320,7 @@ impl AperfMcpServer {
             "metrics": metrics,
         });
 
-        Ok(CallToolResult::success(vec![Content::text(
+        Ok(CallToolResult::success(vec![ContentBlock::text(
             serde_json::to_string_pretty(&response).unwrap(),
         )]))
     }
@@ -2057,7 +2059,7 @@ fn build_report_args(req: &GenerateReportRequest) -> Vec<String> {
 }
 
 fn ok_json(value: Value) -> Result<CallToolResult, McpError> {
-    Ok(CallToolResult::success(vec![Content::text(
+    Ok(CallToolResult::success(vec![ContentBlock::text(
         serde_json::to_string_pretty(&value).unwrap(),
     )]))
 }
