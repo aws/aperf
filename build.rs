@@ -51,29 +51,29 @@ fn main() -> Result<()> {
 
     #[cfg(feature = "hotline")]
     {
-        println!("cargo:rerun-if-changed=src/hotline/*");
+        println!("cargo:rerun-if-changed=src/profiling/hotline/*");
         cc::Build::new()
             .files([
-                "src/hotline/bmiss_map.c",
-                "src/hotline/btree.c",
-                "src/hotline/config.c",
-                "src/hotline/finode_map.c",
-                "src/hotline/fname_binary_map.c",
-                "src/hotline/fname_map.c",
-                "src/hotline/hotline.c",
-                "src/hotline/lat_map.c",
-                "src/hotline/report.c",
-                "src/hotline/sys.c",
-                "src/hotline/vec.c",
-                "src/hotline/tests/test_bmiss_map.c",
-                "src/hotline/tests/test_config.c",
-                "src/hotline/tests/test_finode_map.c",
-                "src/hotline/tests/test_fname_binary_map.c",
-                "src/hotline/tests/test_fname_map.c",
-                "src/hotline/tests/test_lat_map.c",
-                "src/hotline/tests/test.c",
+                "src/profiling/hotline/bmiss_map.c",
+                "src/profiling/hotline/btree.c",
+                "src/profiling/hotline/config.c",
+                "src/profiling/hotline/finode_map.c",
+                "src/profiling/hotline/fname_binary_map.c",
+                "src/profiling/hotline/fname_map.c",
+                "src/profiling/hotline/hotline.c",
+                "src/profiling/hotline/lat_map.c",
+                "src/profiling/hotline/report.c",
+                "src/profiling/hotline/sys.c",
+                "src/profiling/hotline/vec.c",
+                "src/profiling/hotline/tests/test_bmiss_map.c",
+                "src/profiling/hotline/tests/test_config.c",
+                "src/profiling/hotline/tests/test_finode_map.c",
+                "src/profiling/hotline/tests/test_fname_binary_map.c",
+                "src/profiling/hotline/tests/test_fname_map.c",
+                "src/profiling/hotline/tests/test_lat_map.c",
+                "src/profiling/hotline/tests/test.c",
             ])
-            .includes(["src/hotline"])
+            .includes(["src/profiling/hotline"])
             .flag("-Werror")
             .flag("-Wextra")
             .flag("-Wall")
