@@ -1,0 +1,31 @@
+name: ECR Republish
+
+# Rebuild and push the image of an existing release, e.g. after a failed publish or a
+# Dockerfile fix, without cutting a new release.
+on:
+  workflow_dispatch:
+    inputs:
+      aperf_version:
+        description: The release tag to package, e.g. v1.0.0.
+        required: true
+        type: string
+      update_latest:
+        description: Whether to also point the "latest" tag at this image.
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  ecr-publish:
+    name: Build image and publish to ECR
+    if: github.repository == 'aws/aperf'
+    uses: ./.github/workflows/ecr-publish.yml
+    with:
+      aperf_version: ${{ inputs.aperf_version }}
+      update_latest: ${{ inputs.update_latest }}
+    secrets:
+      ecr_registry_alias: ${{ secrets.ECR_REGISTRY_ALIAS }}
+      ecr_publish_role_arn: ${{ secrets.ECR_PUBLISH_ROLE_ARN }}
