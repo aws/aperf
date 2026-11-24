@@ -54,6 +54,8 @@ jobs:
           REGISTRY: ${{ steps.login-ecr-public.outputs.registry }}
           REGISTRY_ALIAS: ${{ secrets.ecr_registry_alias }}
           IMAGE_TAG: ${{ inputs.aperf_version }}
+          # A provenance attestation turns the image into a manifest list, which docker manifest create rejects
+          BUILDX_NO_DEFAULT_ATTESTATIONS: "1"
         run: |
           if [ $(arch) = "aarch64" ]; then
             ARCH=arm64
